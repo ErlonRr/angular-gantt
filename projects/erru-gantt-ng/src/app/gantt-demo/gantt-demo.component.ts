@@ -103,7 +103,7 @@ const ANNOTATIONS: GanttAnnotation[] = [
     <div class="demo-bar">
       <div class="demo-group">
         <span class="demo-label">Theme</span>
-        <button [class.on]="dark()" (click)="dark.update(v => !v)">
+        <button [class.on]="dark()" (click)="toggleDark()">
           {{ dark() ? 'Light' : 'Dark' }}
         </button>
       </div>
@@ -187,6 +187,10 @@ export class GanttDemoComponent {
 
   toggle(key: keyof GanttOptions) {
     this._opts.update(o => ({ ...o, [key]: !o[key as keyof typeof o] }));
+  }
+
+  toggleDark(): void {
+    this.dark.update(v => !v);
   }
 
   addTask() {

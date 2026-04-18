@@ -53,7 +53,6 @@ import {
     '[style.display]':            '"block"',
     '[style.background-color]':   'theme().headerBackground',
     '[style.border-bottom]':      '"1px solid " + theme().borderColor',
-    '[style.will-change]':        '"transform"',
     '[style.overflow]':           '"hidden"',
   },
   template: `
@@ -61,8 +60,6 @@ import {
       [attr.width]="totalWidth()"
       [attr.height]="totalHeight()"
       [style.display]="'block'"
-      [style.transform]="'translateX(-' + scrollLeft() + 'px)'"
-      [style.will-change]="'transform'"
       aria-hidden="true"
     >
       <!-- ── Top row ───────────────────────────────────────── -->
@@ -70,7 +67,7 @@ import {
         @for (cell of topCells(); track cell.dateKey) {
           <g>
             <!-- Cell background -->
-            <rect
+            <svg:rect
               [attr.x]="cell.x + 0.5"
               [attr.y]="0.5"
               [attr.width]="cell.width - 1"
@@ -80,7 +77,7 @@ import {
               stroke-width="0.5"
             />
             <!-- Cell label — clipped to cell width -->
-            <text
+            <svg:text
               [attr.x]="cell.x + cell.width / 2"
               [attr.y]="topHeight() / 2"
               [attr.fill]="theme().textPrimary"
@@ -91,17 +88,17 @@ import {
               dominant-baseline="central"
               style="pointer-events: none; user-select: none;"
               [attr.clip-path]="'url(#clip-top-' + cell.dateKey + ')'"
-            >{{ cell.label }}</text>
-            <defs>
-              <clipPath [attr.id]="'clip-top-' + cell.dateKey">
-                <rect
+            >{{ cell.label }}</svg:text>
+            <svg:defs>
+              <svg:clipPath [attr.id]="'clip-top-' + cell.dateKey">
+                <svg:rect
                   [attr.x]="cell.x + 2"
                   [attr.y]="0"
                   [attr.width]="cell.width - 4"
                   [attr.height]="topHeight()"
                 />
-              </clipPath>
-            </defs>
+              </svg:clipPath>
+            </svg:defs>
           </g>
         }
       </g>
@@ -110,7 +107,7 @@ import {
       <g class="gantt-header-bottom" [attr.transform]="'translate(0,' + topHeight() + ')'">
         @for (cell of bottomCells(); track cell.dateKey) {
           <g>
-            <rect
+            <svg:rect
               [attr.x]="cell.x + 0.5"
               [attr.y]="0.5"
               [attr.width]="cell.width - 1"
@@ -121,7 +118,7 @@ import {
             />
             <!-- Only show label if cell is wide enough -->
             @if (cell.width >= minLabelWidth()) {
-              <text
+              <svg:text
                 [attr.x]="cell.x + cell.width / 2"
                 [attr.y]="bottomHeight() / 2"
                 [attr.fill]="isCurrentPeriod(cell) ? theme().todayColor : theme().textSecondary"
@@ -130,7 +127,7 @@ import {
                 text-anchor="middle"
                 dominant-baseline="central"
                 style="pointer-events: none; user-select: none;"
-              >{{ cell.label }}</text>
+              >{{ cell.label }}</svg:text>
             }
           </g>
         }
@@ -138,7 +135,7 @@ import {
 
       <!-- ── Today vertical line ────────────────────────────── -->
       @if (todayX() >= 0) {
-        <line
+        <svg:line
           [attr.x1]="todayX()"
           [attr.y1]="0"
           [attr.x2]="todayX()"
@@ -155,10 +152,6 @@ import {
     :host {
       -webkit-overflow-scrolling: touch;
     }
-
-    svg {
-      transition: transform 0ms linear; /* sync with scroll — no lag */
-    }
   `],
 })
 export class GanttHeaderComponent {
@@ -168,7 +161,6 @@ export class GanttHeaderComponent {
   readonly endDate    = input.required<Date>();
   readonly pxPerDay   = input.required<number>();
   readonly totalWidth = input.required<number>();
-  readonly scrollLeft = input<number>(0);
   readonly theme      = input.required<GanttTheme>();
 
   // ── Outputs ───────────────────────────────────────────────

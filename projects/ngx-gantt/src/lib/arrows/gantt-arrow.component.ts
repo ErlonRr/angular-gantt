@@ -27,7 +27,6 @@ import {
   Component,
   computed,
   input,
-  NO_ERRORS_SCHEMA,
 } from '@angular/core';
 import { RowGeometry, DependencyType } from '../types';
 
@@ -38,11 +37,33 @@ const ARROW_SIZE = 6;
 
 interface Point { x: number; y: number; }
 
+/**
+ * After dropping to entry row at (vx, y), add horizontal segment(s) to entryX so the
+ * final stroke runs *into* the bar. Otherwise the last segment direction is backwards
+ * and SVG marker-end points away from the task bar.
+ *
+ * - Enter from left (FS, SS): line tip sits left of bar edge; final move should be +x.
+ * - Enter from right (FF, SF): tip right of edge; final move should be −x.
+ */
+function horizontalApproachToEntry(xOnRow: number, entryX: number, enterFromLeft: boolean): string {
+  if (enterFromLeft) {
+    if (xOnRow <= entryX) {
+      return `H ${entryX}`;
+    }
+    const pre = entryX - OFFSET_X;
+    return `H ${pre} H ${entryX}`;
+  }
+  if (xOnRow >= entryX) {
+    return `H ${entryX}`;
+  }
+  const pre = entryX + OFFSET_X;
+  return `H ${pre} H ${entryX}`;
+}
+
 @Component({
   selector: 'g[ganttArrow]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: {
     '[attr.data-from]': 'fromGeo().row.task.id',
     '[attr.data-to]':   'toGeo().row.task.id',
@@ -50,17 +71,17 @@ interface Point { x: number; y: number; }
     'style': 'pointer-events: none;',
   },
   template: `
-    <defs>
+    <svg:defs>
       <!-- Arrowhead marker — reused across all arrows in the SVG defs.
            Each arrow uses a unique id to allow per-arrow colour. -->
-      <marker
+      <svg:marker
         [attr.id]="markerId()"
         viewBox="0 0 10 10"
         refX="8" refY="5"
         markerWidth="5" markerHeight="5"
         orient="auto-start-reverse"
       >
-        <path
+        <svg:path
           d="M1 1 L8 5 L1 9"
           fill="none"
           [attr.stroke]="arrowColor()"
@@ -68,11 +89,11 @@ interface Point { x: number; y: number; }
           stroke-linecap="round"
           stroke-linejoin="round"
         />
-      </marker>
-    </defs>
+      </svg:marker>
+    </svg:defs>
 
     <!-- Main path -->
-    <path
+    <svg:path
       class="gantt-arrow-path"
       [attr.d]="pathD()"
       fill="none"
@@ -86,7 +107,7 @@ interface Point { x: number; y: number; }
 
     <!-- Lag label (shown only if lag != 0) -->
     @if (lag() !== 0) {
-      <text
+      <svg:text
         [attr.x]="lagLabelPos().x"
         [attr.y]="lagLabelPos().y"
         [attr.fill]="arrowColor()"
@@ -94,11 +115,11 @@ interface Point { x: number; y: number; }
         text-anchor="middle"
         dominant-baseline="central"
         style="user-select: none;"
-      >{{ lagLabel() }}</text>
+      >{{ lagLabel() }}</svg:text>
     }
 
     <!-- Origin dot -->
-    <circle
+    <svg:circle
       [attr.cx]="exitPoint().x"
       [attr.cy]="exitPoint().y"
       r="2.5"
@@ -203,32 +224,33 @@ export class GanttArrowComponent {
       (fromRight  && vx > entryX - OFFSET_X) ||
       (!fromRight && vx < entryX + OFFSET_X);
 
+    const enterFromLeft = !toRight;
+
     if (!needsUTurn) {
-      // Simple L-bend
+      // Simple L-bend: last segment must be horizontal into the bar (correct marker-end).
       return [
         `M ${exit.x} ${exit.y}`,
         `H ${vx}`,
         `V ${entry.y}`,
-        `H ${entryX}`,
-      ].join(' ');
-    } else {
-      // U-turn: go past the bar, drop down/up, come back
-      const uTurnX = fromRight
-        ? Math.max(exit.x, entry.x) + OFFSET_X * 2
-        : Math.min(exit.x, entry.x) - OFFSET_X * 2;
-
-      // Mid Y between the two rows (to avoid crossing bars)
-      const midY = (exit.y + entry.y) / 2;
-
-      return [
-        `M ${exit.x}  ${exit.y}`,
-        `H ${uTurnX}`,
-        `V ${midY}`,
-        `H ${entryX}`,
-        `V ${entry.y}`,
-        `H ${entryX}`,
+        horizontalApproachToEntry(vx, entryX, enterFromLeft),
       ].join(' ');
     }
+
+    // U-turn: route so the final segment is horizontal toward the bar (never end on pure V).
+    const uTurnX = fromRight
+      ? Math.max(exit.x, entry.x) + OFFSET_X * 2
+      : Math.min(exit.x, entry.x) - OFFSET_X * 2;
+    const midY = (exit.y + entry.y) / 2;
+    const preAttach = enterFromLeft ? entryX - OFFSET_X : entryX + OFFSET_X;
+
+    return [
+      `M ${exit.x} ${exit.y}`,
+      `H ${uTurnX}`,
+      `V ${midY}`,
+      `H ${preAttach}`,
+      `V ${entry.y}`,
+      `H ${entryX}`,
+    ].join(' ');
   });
 
   // ── Lag label ─────────────────────────────────────────────────

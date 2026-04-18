@@ -18,7 +18,6 @@ import {
   computed,
   input,
   output,
-  NO_ERRORS_SCHEMA,
 } from '@angular/core';
 import { GanttBarContext } from '../types';
 import { GanttBarBase } from '../bar-registry';
@@ -27,7 +26,6 @@ import { GanttBarBase } from '../bar-registry';
   selector: 'g[ganttGroupBar]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: {
     '[attr.data-task-id]': 'ctx().row.task.id',
     '[attr.data-bar-type]': '"group"',
@@ -36,7 +34,7 @@ import { GanttBarBase } from '../bar-registry';
   },
   template: `
     <!-- Main bar body (slightly thicker than task bars) -->
-    <rect
+    <svg:rect
       class="gantt-group-bar"
       [attr.x]="geo().barX"
       [attr.y]="barY()"
@@ -49,7 +47,7 @@ import { GanttBarBase } from '../bar-registry';
 
     <!-- Progress fill -->
     @if (progress() > 0) {
-      <rect
+      <svg:rect
         class="gantt-group-progress"
         [attr.x]="geo().barX"
         [attr.y]="barY()"
@@ -59,33 +57,33 @@ import { GanttBarBase } from '../bar-registry';
         fill="rgba(0,0,0,0.2)"
         [attr.clip-path]="'url(#group-clip-' + taskId() + ')'"
       />
-      <defs>
-        <clipPath [attr.id]="'group-clip-' + taskId()">
-          <rect
+      <svg:defs>
+        <svg:clipPath [attr.id]="'group-clip-' + taskId()">
+          <svg:rect
             [attr.x]="geo().barX"
             [attr.y]="barY()"
             [attr.width]="barWidth()"
             [attr.height]="barHeight()"
             [attr.rx]="3"
           />
-        </clipPath>
-      </defs>
+        </svg:clipPath>
+      </svg:defs>
     }
 
     <!-- Left bracket cap -->
-    <polygon
+    <svg:polygon
       [attr.points]="leftCapPoints()"
       [attr.fill]="fill()"
     />
 
     <!-- Right bracket cap -->
-    <polygon
+    <svg:polygon
       [attr.points]="rightCapPoints()"
       [attr.fill]="fill()"
     />
 
     <!-- Label (above bar for groups, to avoid clipping with children) -->
-    <text
+    <svg:text
       class="gantt-group-label"
       [attr.x]="labelX()"
       [attr.y]="labelY()"
@@ -95,11 +93,11 @@ import { GanttBarBase } from '../bar-registry';
       [attr.font-weight]="'600'"
       dominant-baseline="central"
       style="pointer-events: none; user-select: none;"
-    >{{ labelText() }}</text>
+    >{{ labelText() }}</svg:text>
 
     <!-- Selection outline -->
     @if (isSelected()) {
-      <rect
+      <svg:rect
         fill="none"
         [attr.x]="geo().barX - 2"
         [attr.y]="barY() - 2"

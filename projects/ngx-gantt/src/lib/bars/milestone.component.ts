@@ -16,7 +16,6 @@ import {
   Component,
   computed,
   input,
-  NO_ERRORS_SCHEMA,
 } from '@angular/core';
 import { GanttBarContext } from '../types';
 import { GanttBarBase } from '../bar-registry';
@@ -25,7 +24,6 @@ import { GanttBarBase } from '../bar-registry';
   selector: 'g[ganttMilestone]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: {
     '[attr.data-task-id]': 'ctx().row.task.id',
     '[attr.data-bar-type]': '"milestone"',
@@ -34,7 +32,7 @@ import { GanttBarBase } from '../bar-registry';
   },
   template: `
     <!-- Diamond shape via polygon -->
-    <polygon
+    <svg:polygon
       class="gantt-milestone-diamond"
       [attr.points]="diamondPoints()"
       [attr.fill]="fill()"
@@ -44,7 +42,7 @@ import { GanttBarBase } from '../bar-registry';
 
     <!-- Completion ring when progress = 100 -->
     @if (isComplete()) {
-      <circle
+      <svg:circle
         [attr.cx]="cx()"
         [attr.cy]="cy()"
         [attr.r]="size() + 2"
@@ -57,7 +55,7 @@ import { GanttBarBase } from '../bar-registry';
     }
 
     <!-- Label to the right of the diamond -->
-    <text
+    <svg:text
       class="gantt-milestone-label"
       [attr.x]="labelX()"
       [attr.y]="cy()"
@@ -66,11 +64,11 @@ import { GanttBarBase } from '../bar-registry';
       [attr.font-family]="theme().fontFamily"
       dominant-baseline="central"
       style="pointer-events: none; user-select: none;"
-    >{{ task().name }}</text>
+    >{{ task().name }}</svg:text>
 
     <!-- Selected ring -->
     @if (isSelected()) {
-      <polygon
+      <svg:polygon
         [attr.points]="diamondPoints()"
         fill="none"
         [attr.stroke]="theme().selectionBorder"
@@ -80,10 +78,16 @@ import { GanttBarBase } from '../bar-registry';
     }
   `,
   styles: [`
+    /*
+     * SVG + transform-origin: default "center" uses the wrong reference box (viewport-relative),
+     * so scale(1.15) on hover appears to drift in X/Y depending on where the milestone sits.
+     * fill-box anchors the origin to this polygon's bounding box.
+     */
     .gantt-milestone-diamond {
       cursor: pointer;
-      transition: transform 0.15s;
-      transform-origin: center;
+      transform-box: fill-box;
+      transform-origin: center center;
+      transition: transform 0.15s ease-out;
     }
     .gantt-milestone-diamond:hover {
       transform: scale(1.15);

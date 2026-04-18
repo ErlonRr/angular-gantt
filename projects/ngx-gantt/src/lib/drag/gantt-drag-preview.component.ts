@@ -13,7 +13,6 @@ import {
   Component,
   computed,
   input,
-  NO_ERRORS_SCHEMA,
 } from '@angular/core';
 
 import { DragPreview }  from './gantt-drag.service';
@@ -23,12 +22,11 @@ import { GanttTheme }   from '../types';
   selector:   'g[ganttDragPreview]',
   standalone:  true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: { 'style': 'pointer-events: none;' },
   template: `
     @if (preview()) {
       <!-- Ghost bar -->
-      <rect
+      <svg:rect
         [attr.x]="preview()!.x"
         [attr.y]="preview()!.y + 4"
         [attr.width]="preview()!.width"
@@ -42,7 +40,7 @@ import { GanttTheme }   from '../types';
       />
 
       <!-- Delta label above the ghost bar -->
-      <text
+      <svg:text
         [attr.x]="preview()!.x + preview()!.width / 2"
         [attr.y]="preview()!.y"
         [attr.fill]="theme().textPrimary"
@@ -52,7 +50,7 @@ import { GanttTheme }   from '../types';
         text-anchor="middle"
         dominant-baseline="auto"
         style="user-select:none;"
-      >{{ deltaLabel() }}</text>
+      >{{ deltaLabel() }}</svg:text>
     }
   `,
 })

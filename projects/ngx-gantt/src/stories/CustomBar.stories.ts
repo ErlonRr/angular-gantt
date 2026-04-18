@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/angular';
-import { ChangeDetectionStrategy, Component, computed, input, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
   NgxGanttComponent, GanttTask, GanttBarBase, GanttBarContext,
   GanttBarRegistry, TaskType, ViewMode,
@@ -12,28 +12,27 @@ const d = (iso: string) => new Date(iso);
   selector: 'g[phaseBar]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   template: `
     <!-- Striped phase bar -->
-    <rect
+    <svg:rect
       [attr.x]="geo().barX" [attr.y]="geo().y + 4"
       [attr.width]="geo().barWidth" [attr.height]="geo().height - 8"
       rx="4" [attr.fill]="task().barColor ?? '#0EA5E9'" opacity="0.85"
     />
     <!-- Stripe overlay via repeating rect pattern simulation -->
     @for (stripe of stripes(); track $index) {
-      <rect
+      <svg:rect
         [attr.x]="geo().barX + stripe" [attr.y]="geo().y + 4"
         [attr.width]="6" [attr.height]="geo().height - 8"
         fill="rgba(255,255,255,0.08)"
       />
     }
     <!-- Label -->
-    <text
+    <svg:text
       [attr.x]="geo().barX + 8" [attr.y]="geo().y + geo().height / 2"
       fill="#fff" font-size="11" font-weight="600" dominant-baseline="central"
       style="pointer-events:none;user-select:none"
-    >◈ {{ task().name }}</text>
+    >◈ {{ task().name }}</svg:text>
   `,
 })
 class PhaseBarComponent extends GanttBarBase {

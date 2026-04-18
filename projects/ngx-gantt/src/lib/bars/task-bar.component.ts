@@ -5,7 +5,7 @@
 //    ┌──────────────────────────────┐
 //    │███████████░░░░░░  Task name  │   (progress fill + label)
 //    └──────────────────────────────┘
-//    └──────────────────────────────┘   baseline bar (below, opt.)
+//    ······························   planned baseline (dashed, below bar)
 //
 //  All coordinates come from GanttBarContext.geometry.
 //  The component only renders — no layout logic here.
@@ -16,7 +16,6 @@ import {
   Component,
   computed,
   input,
-  NO_ERRORS_SCHEMA,
 } from '@angular/core';
 import { GanttBarContext } from '../types';
 import { GanttBarBase } from '../bar-registry';
@@ -25,7 +24,6 @@ import { GanttBarBase } from '../bar-registry';
   selector: 'g[ganttTaskBar]',   // attribute selector → renders as <g> in SVG
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: {
     '[attr.data-task-id]': 'ctx().row.task.id',
     '[attr.data-bar-type]': '"task"',
@@ -35,7 +33,7 @@ import { GanttBarBase } from '../bar-registry';
   template: `
     <!-- Row background highlight (selected state) -->
     @if (isSelected()) {
-      <rect
+      <svg:rect
         [attr.x]="0"
         [attr.y]="geo().y"
         [attr.width]="'100%'"
@@ -46,7 +44,7 @@ import { GanttBarBase } from '../bar-registry';
     }
 
     <!-- Bar body -->
-    <rect
+    <svg:rect
       class="gantt-bar-bg"
       [attr.x]="geo().barX"
       [attr.y]="barY()"
@@ -60,7 +58,7 @@ import { GanttBarBase } from '../bar-registry';
 
     <!-- Progress fill -->
     @if (progress() > 0) {
-      <rect
+      <svg:rect
         class="gantt-bar-progress"
         [attr.x]="geo().barX"
         [attr.y]="barY()"
@@ -73,21 +71,21 @@ import { GanttBarBase } from '../bar-registry';
     }
 
     <!-- Clip path so progress doesn't overflow rounded corners -->
-    <defs>
-      <clipPath [attr.id]="'bar-clip-' + taskId()">
-        <rect
+    <svg:defs>
+      <svg:clipPath [attr.id]="'bar-clip-' + taskId()">
+        <svg:rect
           [attr.x]="geo().barX"
           [attr.y]="barY()"
           [attr.width]="barWidth()"
           [attr.height]="barHeight()"
           [attr.rx]="barRadius()"
         />
-      </clipPath>
-    </defs>
+      </svg:clipPath>
+    </svg:defs>
 
     <!-- Resize handle — left -->
     @if (enableResize()) {
-      <rect
+      <svg:rect
         class="gantt-resize-handle gantt-resize-left"
         [attr.x]="geo().barX"
         [attr.y]="barY()"
@@ -101,7 +99,7 @@ import { GanttBarBase } from '../bar-registry';
 
     <!-- Resize handle — right -->
     @if (enableResize()) {
-      <rect
+      <svg:rect
         class="gantt-resize-handle gantt-resize-right"
         [attr.x]="geo().barX + barWidth() - 6"
         [attr.y]="barY()"
@@ -115,7 +113,7 @@ import { GanttBarBase } from '../bar-registry';
 
     <!-- Label inside bar (only if bar is wide enough) -->
     @if (showLabel()) {
-      <text
+      <svg:text
         class="gantt-bar-label"
         [attr.x]="labelX()"
         [attr.y]="labelY()"
@@ -125,20 +123,23 @@ import { GanttBarBase } from '../bar-registry';
         text-anchor="middle"
         dominant-baseline="central"
         style="pointer-events: none; user-select: none;"
-      >{{ labelText() }}</text>
+      >{{ labelText() }}</svg:text>
     }
 
-    <!-- Baseline bar (planned vs actual) -->
+    <!-- Planned baseline (dashed rail — below the bar, no overlap with the task body) -->
     @if (showBaseline()) {
-      <rect
+      <svg:line
         class="gantt-baseline"
-        [attr.x]="baselineX()"
-        [attr.y]="baselineY()"
-        [attr.width]="baselineWidth()"
-        [attr.height]="4"
-        [attr.rx]="2"
-        [attr.fill]="theme().baselineColor"
-        [attr.opacity]="0.7"
+        [attr.x1]="baselineX()"
+        [attr.y1]="baselineLineY()"
+        [attr.x2]="baselineX() + baselineWidth()"
+        [attr.y2]="baselineLineY()"
+        [attr.stroke]="theme().baselineColor"
+        stroke-width="2"
+        stroke-dasharray="5 4"
+        stroke-linecap="round"
+        fill="none"
+        opacity="0.88"
       />
     }
   `,
@@ -151,6 +152,10 @@ import { GanttBarBase } from '../bar-registry';
     }
     .gantt-bar-bg:hover {
       opacity: 0.88;
+    }
+
+    .gantt-baseline {
+      pointer-events: none;
     }
 
     /* animate.enter applied by parent canvas via Angular 20.2 API */
@@ -255,15 +260,18 @@ export class GanttTaskBarComponent extends GanttBarBase {
     const days = (baseline.end.getTime() - baseline.start.getTime()) / 86_400_000;
     return Math.max(Math.round(days * pxPerDay), 2);
   });
-  protected readonly baselineY = computed(() =>
-    this.geo().y + this.geo().height - 6  // bottom of row
+  /** Y of the baseline stroke: in the bottom margin, fully below the main bar (bar bottom = geo.y + height - 4). */
+  protected readonly baselineLineY = computed(() =>
+    this.geo().y + this.geo().height - 2
   );
 
   // ── Accessibility ─────────────────────────────────────────────
   protected readonly ariaLabel = computed(() => {
     const t = this.task();
     const p = this.progress();
-    return `${t.name}, ${p}% complete`;
+    const baselineHint =
+      this.showBaseline() ? ', planned baseline shown' : '';
+    return `${t.name}, ${p}% complete${baselineHint}`;
   });
 
   // ── Abstract implementation ───────────────────────────────────

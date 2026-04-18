@@ -119,12 +119,16 @@ export function getTimelineRange(
     }
   }
 
-  const rawStart = addDays(new Date(minTime), -paddingDays);
-  const rawEnd   = addDays(new Date(maxTime),  paddingDays);
+  // Snap task bounds first, then apply padding. If we pad *before* snapping, a
+  // −7d nudge can land in late December and Year snap collapses to Jan 1 of
+  // the *previous* calendar year — the chart shows an empty year (e.g. 2025)
+  // while tasks sit in 2026 (bars off-screen to the right).
+  const snappedStart = snapToViewMode(new Date(minTime), viewMode, 'start');
+  const snappedEnd   = snapToViewMode(new Date(maxTime), viewMode, 'end');
 
   return {
-    start: snapToViewMode(rawStart, viewMode, 'start'),
-    end:   snapToViewMode(rawEnd,   viewMode, 'end'),
+    start: addDays(snappedStart, -paddingDays),
+    end:   addDays(snappedEnd,   paddingDays),
   };
 }
 

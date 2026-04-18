@@ -7,9 +7,9 @@
 //  ┌──────────────────────────────────────────────────────────┐
 //  │  <gantt-toolbar>          (optional, [showToolbar])      │
 //  ├─────────────────┬────────────────────────────────────────┤
-//  │                 │  <gantt-header> (sticky)               │
-//  │  <gantt-        ├────────────────────────────────────────┤
-//  │   tasklist>     │  <gantt-canvas> (scrolls X+Y)          │
+//  │                 │  #canvasEl: scroll X+Y                 │
+//  │  <gantt-        │    ├ <gantt-header> (sticky top)        │
+//  │   tasklist>     │    └ <gantt-canvas>                    │
 //  │  (scrolls Y)    │                                        │
 //  ├─────────────────┴────────────────────────────────────────┤
 //  │  <ng-content select="[ganttFooter]">                     │
@@ -261,7 +261,7 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
         </div>
       }
 
-      <!-- ── Right: header + canvas ─────────────────────────── -->
+      <!-- ── Right: one scrollport — header + bars share horizontal scroll natively ── -->
       <div
         [style.display]="'flex'"
         [style.flex-direction]="'column'"
@@ -269,47 +269,51 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
         [style.overflow]="'hidden'"
         [style.min-width]="'0'"
       >
-        <!-- Sticky timeline header -->
-        <gantt-header
-          [viewMode]="layout.viewMode()"
-          [startDate]="layout.startDate()"
-          [endDate]="layout.endDate()"
-          [pxPerDay]="layout.pxPerDay()"
-          [totalWidth]="layout.totalWidth()"
-          [scrollLeft]="scrollSvc.scrollLeft()"
-          [theme]="theme()"
-          (zoomInEvent)="zoomIn()"
-          (zoomOutEvent)="zoomOut()"
-        />
-
-        <!-- SVG canvas (scrolls horizontally and vertically) -->
         <div
           #canvasEl
+          class="gantt-timeline-scroll"
           [style.flex]="'1'"
           [style.overflow]="'auto'"
           [style.position]="'relative'"
+          [style.min-height]="'0'"
           [style.background-color]="theme().backgroundColor"
         >
-          <gantt-canvas
-            [visibleGeometries]="vsVisibleGeos()"
-            [allGeometries]="layout.rowGeometries()"
-            [totalWidth]="layout.totalWidth()"
-            [totalHeight]="layout.totalHeight()"
-            [gridLines]="layout.gridLines()"
-            [theme]="theme()"
-            [todayX]="layout.todayX()"
-            [annotations]="resolvedAnnotations()"
-            [criticalIds]="criticalIds()"
-            [layoutParams]="layout.layoutParams()"
-            [showBaseline]="layout.showBaseline()"
-            [enableResize]="enableResize()"
-            [enableDrag]="enableDrag()"
-            [tooltipEnabled]="tooltipEnabled()"
-            (taskDragged)="onTaskDragged($event)"
-            (taskResized)="onTaskResized($event)"
-            (selectionChange)="selectionChange.emit($event)"
-            (rowClick)="onCanvasRowClick($event)"
-          />
+          <div
+            [style.width.px]="layout.totalWidth()"
+            [style.minWidth.px]="layout.totalWidth()"
+            [style.display]="'block'"
+          >
+            <gantt-header
+              [viewMode]="layout.viewMode()"
+              [startDate]="layout.startDate()"
+              [endDate]="layout.endDate()"
+              [pxPerDay]="layout.pxPerDay()"
+              [totalWidth]="layout.totalWidth()"
+              [theme]="theme()"
+              (zoomInEvent)="zoomIn()"
+              (zoomOutEvent)="zoomOut()"
+            />
+            <gantt-canvas
+              [visibleGeometries]="vsVisibleGeos()"
+              [allGeometries]="layout.rowGeometries()"
+              [totalWidth]="layout.totalWidth()"
+              [totalHeight]="layout.totalHeight()"
+              [gridLines]="layout.gridLines()"
+              [theme]="theme()"
+              [todayX]="layout.todayX()"
+              [annotations]="resolvedAnnotations()"
+              [criticalIds]="criticalIds()"
+              [layoutParams]="layout.layoutParams()"
+              [showBaseline]="layout.showBaseline()"
+              [enableResize]="enableResize()"
+              [enableDrag]="enableDrag()"
+              [tooltipEnabled]="tooltipEnabled()"
+              (taskDragged)="onTaskDragged($event)"
+              (taskResized)="onTaskResized($event)"
+              (selectionChange)="selectionChange.emit($event)"
+              (rowClick)="onCanvasRowClick($event)"
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -322,6 +326,17 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
 
     .ngx-gantt-row { transition: background-color 0.08s; }
     .ngx-gantt-row:hover { filter: brightness(0.97); }
+
+    .gantt-timeline-scroll {
+      scrollbar-width: thin;
+      scrollbar-color: var(--gantt-scrollbar-thumb, #CBD5E1) var(--gantt-scrollbar-track, #F1F5F9);
+    }
+    .gantt-timeline-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .gantt-timeline-scroll::-webkit-scrollbar-track { background: var(--gantt-scrollbar-track, #F1F5F9); }
+    .gantt-timeline-scroll::-webkit-scrollbar-thumb {
+      background: var(--gantt-scrollbar-thumb, #CBD5E1);
+      border-radius: 3px;
+    }
   `],
 })
 export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDestroy {
@@ -430,9 +445,10 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
         if (cols.length) this.colSvc.setColumns(cols);
       });
 
-      // Virtual scroll: sync layout visible rows → local signals
+      // Virtual scroll: row slice follows canvas scrollTop (minus timeline header height)
       effect(() => {
         const rows = this.layout.visibleRows();
+        void this.scrollSvc.scrollTop();
         this._runVirtualScroll(rows);
       });
     });
@@ -462,18 +478,20 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
 
   // ── Virtual scroll (simple implementation on layout rows) ──
 
-  private _scrollTop    = 0;
-  private _canvasHeight = 0;
-  private _rafId        = 0;
-
   private _runVirtualScroll(rows: any[]): void {
     const rh       = this.layout.rowHeight();
-    const height   = this._canvasHeight || 500;
-    const scrollTop = this._scrollTop;
-    const overscan  = 4;
+    const hh       = this.layout.totalHeaderHeight();
+    const st       = this.scrollSvc.scrollTop();
+    const rowScroll = Math.max(0, st - hh);
+    const el       = this.canvasEl()?.nativeElement;
+    const viewH    = Math.max(rh, (el?.clientHeight ?? 500) - hh);
+    const overscan = 4;
 
-    const first  = Math.max(0, Math.floor(scrollTop / rh) - overscan);
-    const last   = Math.min(rows.length - 1, Math.ceil((scrollTop + height) / rh) + overscan);
+    const first  = Math.max(0, Math.floor(rowScroll / rh) - overscan);
+    const last   = Math.min(
+      rows.length - 1,
+      Math.ceil((rowScroll + viewH) / rh) + overscan,
+    );
 
     this._vsVisibleRows.set(rows.slice(first, last + 1));
     this._vsPaddingTop.set(first * rh);

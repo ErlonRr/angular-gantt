@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, computed, input, signal, NO_ERRORS_SCHEMA,
+  ChangeDetectionStrategy, Component, computed, input,
 } from '@angular/core';
 import {
   NgxGanttComponent, GanttTask, GanttBarBase, GanttBarContext,
@@ -11,11 +11,10 @@ import {
   selector: 'g[epicBar]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  schemas: [NO_ERRORS_SCHEMA],
   host: { 'style': 'cursor: pointer;' },
   template: `
     <!-- Thick rounded bar with gradient-like darker left edge -->
-    <rect
+    <svg:rect
       [attr.x]="geo().barX"
       [attr.y]="geo().y + 5"
       [attr.width]="geo().barWidth"
@@ -26,7 +25,7 @@ import {
     />
     <!-- Progress fill -->
     @if (progress() > 0) {
-      <rect
+      <svg:rect
         [attr.x]="geo().barX"
         [attr.y]="geo().y + 5"
         [attr.width]="geo().barWidth * progress() / 100"
@@ -36,7 +35,7 @@ import {
       />
     }
     <!-- Lightning icon + label -->
-    <text
+    <svg:text
       [attr.x]="geo().barX + 8"
       [attr.y]="geo().y + geo().height / 2"
       [attr.fill]="'#fff'"
@@ -44,10 +43,10 @@ import {
       font-weight="600"
       dominant-baseline="central"
       style="user-select:none;pointer-events:none"
-    >⚡ {{ task().name }}</text>
+    >⚡ {{ task().name }}</svg:text>
     <!-- Progress badge -->
     @if (geo().barWidth > 80) {
-      <text
+      <svg:text
         [attr.x]="geo().barX + geo().barWidth - 6"
         [attr.y]="geo().y + geo().height / 2"
         [attr.fill]="'rgba(255,255,255,0.7)'"
@@ -55,7 +54,7 @@ import {
         text-anchor="end"
         dominant-baseline="central"
         style="user-select:none;pointer-events:none"
-      >{{ progress() }}%</text>
+      >{{ progress() }}%</svg:text>
     }
   `,
 })

@@ -16,8 +16,7 @@
 //  The rAF gate prevents the "ping-pong" scroll feedback loop
 //  (panel A sets scrollTop → fires scroll on A → would set B again).
 //
-//  scrollLeft signal is used by GanttHeaderComponent to translate
-//  its sticky SVG as the canvas scrolls horizontally.
+//  Timeline header is inside the same scroll element as the chart (see NgxGanttComponent).
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -29,6 +28,7 @@ import {
 } from '@angular/core';
 
 import { dateToPixel, snapToDay } from '../gantt-math';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
 
 @Injectable()
 export class GanttScrollService {
@@ -50,6 +50,7 @@ export class GanttScrollService {
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly zone = inject(NgZone);
+  private readonly layout = inject(GanttLayoutService);
 
   // ── Registration ──────────────────────────────────────────
 
@@ -103,16 +104,20 @@ export class GanttScrollService {
 
   // ── Scroll handlers ───────────────────────────────────────
 
+  /** Right column scroll includes sticky timeline header above the bar SVG. */
+  private _timelineHeaderOffset(): number {
+    return this.layout.totalHeaderHeight();
+  }
+
   private _onPanelScroll(): void {
     if (this._syncing) return;
-    const top = this._panel!.scrollTop;
+    const rowScroll = this._panel!.scrollTop;
 
     this._rafId = requestAnimationFrame(() => {
       this._syncing = true;
-      if (this._canvas) this._canvas.scrollTop = top;
-      // Update signal inside zone so components re-render
-      this.zone.run(() => this.scrollTop.set(top));
-      // Release gate on next microtask
+      const hh = this._timelineHeaderOffset();
+      if (this._canvas) this._canvas.scrollTop = rowScroll + hh;
+      this.zone.run(() => this.scrollTop.set(this._canvas?.scrollTop ?? rowScroll + hh));
       Promise.resolve().then(() => { this._syncing = false; });
     });
   }
@@ -125,7 +130,8 @@ export class GanttScrollService {
 
     this._rafId = requestAnimationFrame(() => {
       this._syncing = true;
-      if (this._panel) this._panel.scrollTop = top;
+      const hh = this._timelineHeaderOffset();
+      if (this._panel) this._panel.scrollTop = Math.max(0, top - hh);
       this.zone.run(() => {
         this.scrollTop.set(top);
         this.scrollLeft.set(left);
@@ -178,7 +184,8 @@ export class GanttScrollService {
     behavior: ScrollBehavior = 'smooth',
   ): void {
     if (!this._canvas) return;
-    const y = rowIndex * rowHeight;
+    const hh = this._timelineHeaderOffset();
+    const y = hh + rowIndex * rowHeight;
     this._canvas.scrollTo({ top: y, behavior });
   }
 
@@ -193,8 +200,9 @@ export class GanttScrollService {
   /** Returns the currently visible row range [firstIdx, lastIdx] */
   visibleRowRange(rowHeight: number): [number, number] {
     if (!this._canvas) return [0, 0];
-    const top    = this._canvas.scrollTop;
-    const height = this._canvas.clientHeight;
+    const hh   = this._timelineHeaderOffset();
+    const top  = Math.max(0, this._canvas.scrollTop - hh);
+    const height = Math.max(rowHeight, this._canvas.clientHeight - hh);
     const first  = Math.floor(top / rowHeight);
     const last   = Math.ceil((top + height) / rowHeight);
     return [first, last];

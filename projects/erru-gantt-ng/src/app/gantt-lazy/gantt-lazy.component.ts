@@ -9,14 +9,14 @@ import {
 // ── Fake async fetcher — simulates an API ─────────────────────
 const ALL_TASKS: GanttTask[] = Array.from({ length: 120 }, (_, i) => {
   const start = new Date(2026, 0, 1 + i * 2);
-  const end   = new Date(start.getTime() + (5 + (i % 14)) * 86400000);
+  const end = new Date(start.getTime() + (5 + (i % 14)) * 86400000);
   return {
-    id:       `task-${i}`,
-    name:     `Task ${String(i + 1).padStart(3, '0')}`,
+    id: `task-${i}`,
+    name: `Task ${String(i + 1).padStart(3, '0')}`,
     start,
     end,
     progress: Math.floor(Math.random() * 100),
-    type:     i % 15 === 0 ? TaskType.Milestone : TaskType.Task,
+    type: i % 15 === 0 ? TaskType.Milestone : TaskType.Task,
     barColor: i % 3 === 0 ? '#6366F1' : i % 3 === 1 ? '#10B981' : undefined,
   };
 });
@@ -73,7 +73,7 @@ export class GanttLazyComponent {
   readonly totalCount = ALL_TASKS.length;
 
   readonly ds = createGanttDataSource({
-    fetcher:  fakeFetch,
+    fetcher: fakeFetch,
     pageSize: 25,
   });
 }
