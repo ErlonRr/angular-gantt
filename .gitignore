@@ -1,0 +1,28 @@
+# Node
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+
+# Angular build output
+dist/
+out-tsc/
+.angular/
+
+# Storybook build
+storybook-static/
+
+# IDE
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tests
+coverage/

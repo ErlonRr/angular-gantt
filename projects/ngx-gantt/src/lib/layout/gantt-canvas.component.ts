@@ -1,0 +1,305 @@
+// ─────────────────────────────────────────────────────────────
+//  ngx-gantt · layout/gantt-canvas.component.ts  (v2)
+//
+//  Adds to v1:
+//    - Pointer event routing to GanttDragService
+//    - Selection highlight via GanttSelectionService
+//    - Tooltip via GanttTooltipDirective
+//    - Drag preview overlay via GanttDragPreviewComponent
+//    - Drag handle detection (8px zones on bar edges)
+// ─────────────────────────────────────────────────────────────
+
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  input,
+  output,
+  inject,
+  ElementRef,
+  viewChild,
+  NO_ERRORS_SCHEMA,
+} from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
+
+import {
+  RowGeometry,
+  GanttTheme,
+  GanttAnnotation,
+  GanttBarContext,
+  GanttLayoutParams,
+  DependencyType,
+  SelectionChangeEvent,
+  TaskDragEvent,
+  TaskResizeEvent,
+} from '../types';
+
+import { GanttBarRegistry }          from '../bar-registry';
+import { GanttArrowComponent }       from '../arrows/gantt-arrow.component';
+import { GanttDragService }          from '../drag/gantt-drag.service';
+import { GanttDragPreviewComponent } from '../drag/gantt-drag-preview.component';
+import { GanttSelectionService }     from '../selection/gantt-selection.service';
+import { GanttTooltipDirective }     from '../tooltip/gantt-tooltip.directive';
+import { GridLine, dateToPixel }     from '../gantt-math';
+
+const RESIZE_HANDLE_PX = 8;
+
+interface ResolvedArrow {
+  id: string; fromGeo: RowGeometry; toGeo: RowGeometry;
+  depType: DependencyType; lag: number; isCritical: boolean;
+}
+
+@Component({
+  selector: 'gantt-canvas',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  schemas: [NO_ERRORS_SCHEMA],
+  imports: [GanttArrowComponent, GanttDragPreviewComponent, GanttTooltipDirective, NgComponentOutlet],
+  host: {
+    '[style.display]':           '"block"',
+    '[style.overflow]':          '"auto"',
+    '[style.position]':          '"relative"',
+    '[style.flex]':              '"1"',
+    '[style.background-color]':  'theme().backgroundColor',
+    '[style.cursor]':            'dragSvc.isDragging() ? "grabbing" : "default"',
+    'tabindex':                  '0',
+  },
+  template: `
+    <div [style.width.px]="totalWidth()" [style.min-height.px]="totalHeight()" [style.position]="'relative'">
+      <svg #svgEl [attr.width]="totalWidth()" [attr.height]="totalHeight()"
+        [style.display]="'block'" [style.overflow]="'visible'"
+        role="list" aria-label="Gantt chart timeline"
+        (pointerdown)="onSvgPointerDown($event)"
+        (click)="onSvgClick($event)">
+
+        <!-- Row backgrounds -->
+        <g aria-hidden="true">
+          @for (geo of visibleGeometries(); track geo.row.task.id) {
+            <rect [attr.x]="0" [attr.y]="geo.y" [attr.width]="totalWidth()"
+              [attr.height]="geo.height" [attr.fill]="rowBg(geo)"/>
+          }
+        </g>
+
+        <!-- Vertical grid lines -->
+        <g aria-hidden="true">
+          @for (line of gridLines(); track line.x) {
+            <line [attr.x1]="line.x" [attr.y1]="0" [attr.x2]="line.x" [attr.y2]="totalHeight()"
+              [attr.stroke]="line.isMajor ? theme().borderColor : theme().gridLine"
+              [attr.stroke-width]="line.isMajor ? 0.8 : 0.5"/>
+          }
+        </g>
+
+        <!-- Row dividers -->
+        <g aria-hidden="true">
+          @for (geo of visibleGeometries(); track geo.row.task.id) {
+            <line [attr.x1]="0" [attr.y1]="geo.y + geo.height"
+              [attr.x2]="totalWidth()" [attr.y2]="geo.y + geo.height"
+              [attr.stroke]="theme().borderColor" stroke-width="0.5"/>
+          }
+        </g>
+
+        <!-- Annotations -->
+        @if (annotations().length) {
+          <g aria-hidden="true">
+            @for (ann of resolvedAnnotations(); track ann.x1) {
+              @if (ann.x2 !== null) {
+                <rect [attr.x]="ann.x1" [attr.y]="0" [attr.width]="ann.x2 - ann.x1"
+                  [attr.height]="totalHeight()" [attr.fill]="ann.color" [attr.opacity]="ann.opacity ?? 0.08"/>
+              }
+              <line [attr.x1]="ann.x1" [attr.y1]="0" [attr.x2]="ann.x1" [attr.y2]="totalHeight()"
+                [attr.stroke]="ann.color" stroke-width="1.5"
+                [attr.stroke-dasharray]="ann.isToday ? null : '5 3'"/>
+              @if (ann.label) {
+                <text [attr.x]="ann.x1 + 4" [attr.y]="12" [attr.fill]="ann.label.color ?? ann.color"
+                  [attr.font-size]="ann.label.fontSize ?? '11px'" [attr.font-family]="theme().fontFamily"
+                  style="pointer-events:none;user-select:none">{{ ann.label.text }}</text>
+              }
+            }
+          </g>
+        }
+
+        <!-- Today marker -->
+        @if (todayX() >= 0) {
+          <g aria-hidden="true">
+            <line [attr.x1]="todayX()" [attr.y1]="0" [attr.x2]="todayX()" [attr.y2]="totalHeight()"
+              [attr.stroke]="theme().todayColor" stroke-width="1.5"/>
+            <polygon [attr.points]="todayTriangle()" [attr.fill]="theme().todayColor"/>
+          </g>
+        }
+
+        <!-- Dependency arrows -->
+        <g aria-hidden="true">
+          @for (arrow of resolvedArrows(); track arrow.id) {
+            <g ganttArrow [fromGeo]="arrow.fromGeo" [toGeo]="arrow.toGeo"
+              [depType]="arrow.depType" [lag]="arrow.lag"
+              [isCritical]="arrow.isCritical" [defaultColor]="theme().arrowColor"/>
+          }
+        </g>
+
+        <!-- Task bars with tooltip -->
+        <g>
+          @for (geo of visibleGeometries(); track geo.row.task.id) {
+            <g [ganttTooltip]="geo" [tooltipTheme]="theme()" [tooltipEnabled]="tooltipEnabled()">
+              <ng-container *ngComponentOutlet="
+                resolveBarComponent(geo.row.barType);
+                inputs: { ctx: buildBarContext(geo) }"/>
+            </g>
+          }
+        </g>
+
+        <!-- Drag preview ghost -->
+        <g ganttDragPreview [preview]="dragSvc.preview()" [theme]="theme()"/>
+
+      </svg>
+    </div>
+  `,
+  styles: [`
+    :host {
+      scrollbar-width: thin;
+      scrollbar-color: var(--gantt-scrollbar-thumb,#CBD5E1) var(--gantt-scrollbar-track,#F1F5F9);
+      outline: none;
+    }
+    :host::-webkit-scrollbar       { width: 6px; height: 6px; }
+    :host::-webkit-scrollbar-track { background: var(--gantt-scrollbar-track, #F1F5F9); }
+    :host::-webkit-scrollbar-thumb { background: var(--gantt-scrollbar-thumb, #CBD5E1); border-radius: 3px; }
+  `],
+})
+export class GanttCanvasComponent {
+
+  readonly visibleGeometries = input.required<RowGeometry[]>();
+  readonly allGeometries     = input.required<RowGeometry[]>();
+  readonly totalWidth        = input.required<number>();
+  readonly totalHeight       = input.required<number>();
+  readonly gridLines         = input.required<GridLine[]>();
+  readonly theme             = input.required<GanttTheme>();
+  readonly todayX            = input<number>(-1);
+  readonly annotations       = input<GanttAnnotation[]>([]);
+  readonly criticalIds       = input<Set<string>>(new Set());
+  readonly layoutParams      = input.required<GanttLayoutParams>();
+  readonly showBaseline      = input<boolean>(false);
+  readonly enableResize      = input<boolean>(true);
+  readonly enableDrag        = input<boolean>(true);
+  readonly tooltipEnabled    = input<boolean>(true);
+
+  readonly taskDragged     = output<TaskDragEvent>();
+  readonly taskResized     = output<TaskResizeEvent>();
+  readonly selectionChange = output<SelectionChangeEvent>();
+  readonly rowClick        = output<RowGeometry>();
+
+  private readonly svgEl    = viewChild<ElementRef<SVGSVGElement>>('svgEl');
+  private readonly registry = inject(GanttBarRegistry);
+  protected readonly dragSvc = inject(GanttDragService);
+  private readonly selSvc   = inject(GanttSelectionService);
+
+  // ── Pointer events ─────────────────────────────────────────
+
+  protected onSvgPointerDown(event: PointerEvent): void {
+    if (!this.enableDrag()) return;
+    const geo = this._geoFromPoint(event);
+    if (!geo) return;
+    const handle = this._detectHandle(event, geo);
+    const svg    = this.svgEl()?.nativeElement;
+    if (!svg) return;
+
+    this.dragSvc.configure({
+      pxPerDay:  this.layoutParams().pxPerDay,
+      origin:    this.layoutParams().origin,
+      rowHeight: this.layoutParams().rowHeight,
+    });
+    this.dragSvc.onTaskDragged = e => this.taskDragged.emit(e);
+    this.dragSvc.onTaskResized = e => this.taskResized.emit(e);
+    this.dragSvc.startDrag(event, geo, handle, svg);
+  }
+
+  protected onSvgClick(event: MouseEvent): void {
+    if (this.dragSvc.isActive()) return; // swallow click after drag
+    const geo = this._geoFromPoint(event as PointerEvent);
+    if (!geo) return;
+
+    this.selSvc.onChange = e => this.selectionChange.emit(e);
+    this.selSvc.handleClick(geo.row.task.id, event, this.visibleGeometries().map(g => g.row));
+    this.rowClick.emit(geo);
+  }
+
+  private _geoFromPoint(event: PointerEvent | MouseEvent): RowGeometry | null {
+    const svg = this.svgEl()?.nativeElement;
+    if (!svg) return null;
+    const rect  = svg.getBoundingClientRect();
+    const svgY  = event.clientY - rect.top + (svg.parentElement?.scrollTop ?? 0);
+    const rh    = this.layoutParams().rowHeight;
+    const idx   = Math.floor(svgY / rh);
+    return this.visibleGeometries()[idx] ?? null;
+  }
+
+  private _detectHandle(e: PointerEvent, geo: RowGeometry): 'bar' | 'left' | 'right' {
+    const svg  = this.svgEl()?.nativeElement;
+    if (!svg) return 'bar';
+    const rect = svg.getBoundingClientRect();
+    const svgX = e.clientX - rect.left;
+    if (svgX >= geo.barX && svgX <= geo.barX + RESIZE_HANDLE_PX) return 'left';
+    if (svgX <= geo.barX + geo.barWidth && svgX >= geo.barX + geo.barWidth - RESIZE_HANDLE_PX) return 'right';
+    return 'bar';
+  }
+
+  // ── Bar context & registry ────────────────────────────────
+
+  protected buildBarContext(geo: RowGeometry): GanttBarContext {
+    return {
+      row: geo.row, geometry: geo, theme: this.theme(),
+      layoutParams: this.layoutParams(),
+      isCritical:   this.criticalIds().has(geo.row.task.id),
+      isSelected:   this.selSvc.isSelected(geo.row.task.id),
+      enableResize: this.enableResize(),
+      showBaseline: this.showBaseline(),
+    };
+  }
+
+  protected resolveBarComponent(barType: string) {
+    return this.registry.resolve(barType);
+  }
+
+  protected rowBg(geo: RowGeometry): string {
+    if (this.selSvc.isSelected(geo.row.task.id)) return this.theme().selectionBg;
+    if (geo.row.task.rowColor) return geo.row.task.rowColor;
+    return geo.row.visibleIndex % 2 === 0 ? this.theme().rowBg : this.theme().rowBgAlt;
+  }
+
+  protected todayTriangle(): string {
+    const x = this.todayX();
+    return `${x-5},0 ${x+5},0 ${x},8`;
+  }
+
+  protected readonly resolvedAnnotations = computed(() => {
+    const { origin, pxPerDay } = this.layoutParams();
+    return this.annotations().map(ann => ({
+      x1: dateToPixel(ann.x1, origin, pxPerDay),
+      x2: ann.x2 ? dateToPixel(ann.x2, origin, pxPerDay) : null,
+      color: ann.isToday ? this.theme().todayColor : (ann.color ?? this.theme().arrowColor),
+      label: ann.label, isToday: ann.isToday ?? false, opacity: ann.opacity,
+    }));
+  });
+
+  protected readonly resolvedArrows = computed<ResolvedArrow[]>(() => {
+    const geoMap  = new Map(this.allGeometries().map(g => [g.row.task.id, g]));
+    const critIds = this.criticalIds();
+    const result: ResolvedArrow[] = [];
+    for (const geo of this.allGeometries()) {
+      const dep = geo.row.task.dependency;
+      if (!dep) continue;
+      const deps = Array.isArray(dep) ? dep
+        : typeof dep === 'string' ? [{ taskId: dep }] : [dep as any];
+      for (const d of deps) {
+        const fromGeo = geoMap.get(d.taskId);
+        if (!fromGeo) continue;
+        result.push({
+          id: `${d.taskId}->${geo.row.task.id}`,
+          fromGeo, toGeo: geo,
+          depType: d.type ?? DependencyType.FS,
+          lag: d.lag ?? 0,
+          isCritical: critIds.has(d.taskId) && critIds.has(geo.row.task.id),
+        });
+      }
+    }
+    return result;
+  });
+}

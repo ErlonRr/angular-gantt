@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowSyntheticDefaultImports": true
+  },
+  "include": [
+    "../projects/ngx-gantt/src/stories/**/*",
+    "../projects/erru-gantt-ng/src/**/*",
+    "./**/*"
+  ],
+  "exclude": [
+    "../node_modules"
+  ]
+}

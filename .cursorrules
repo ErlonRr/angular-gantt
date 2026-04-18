@@ -1,0 +1,16 @@
+## 🛑 CRITICAL OPERATIONAL RULES
+1. **No Unnecessary Builds:** NEVER run `npm run build`, `docker build`, or heavy compilation commands after minor code changes unless explicitly requested.
+2. **Batch Editing:** Apply ALL code changes across all necessary files BEFORE suggesting or attempting a run/test cycle.
+3. **Static Analysis First:** Verify code logic and imports manually. Do not rely on the compiler to find syntax errors that can be spotted by reading.
+4. **Loop Breaker:** If a build/test fails 2 times with the same error, STOP. Do not retry. Report the error to the user and ask for guidance.
+5. **Background Processes:** Never start long-running processes (e.g., `dev servers`) that block the terminal unless strictly necessary for the task.
+
+## 🛠 TERMINAL USAGE STRATEGY
+- Use `ls`, `cat`, and `grep` to understand the context.
+- Use `check` or `lint` commands instead of full `build` where possible.
+- If a task requires multiple steps, list them to the user first, then execute ONLY the code modifications.
+
+## ⚠️ EXECUTION GATEKEEPING
+Before running any command that takes >10 seconds:
+- Ask yourself: "Is the code complete enough to pass?"
+- If the answer is "No" or "Maybe", finish the code first.
