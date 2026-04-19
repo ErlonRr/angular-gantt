@@ -6,7 +6,8 @@
 //    - Selection highlight via GanttSelectionService
 //    - Tooltip via GanttTooltipDirective
 //    - Drag preview overlay via GanttDragPreviewComponent
-//    - Drag handle detection (8px zones on bar edges)
+//    - Drag handle detection (8px zones on bar edges), only when the
+//      pointer hits the bar shape — not empty row area to the left/right
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -193,7 +194,9 @@ export class GanttCanvasComponent {
     if (!this.enableDrag()) return;
     const geo = this._geoFromPoint(event);
     if (!geo) return;
-    const handle = this._detectHandle(event, geo);
+    if (!this._rowDragEnabled(geo)) return;
+    const handle = this._resolveDragHandle(event, geo);
+    if (handle === null) return;
     const svg = this.svgEl()?.nativeElement;
     if (!svg) return;
 
@@ -217,6 +220,11 @@ export class GanttCanvasComponent {
     this.rowClick.emit(geo);
   }
 
+  /** Per-task gate: `task.draggable === false` disables move/resize for that row (any depth). */
+  private _rowDragEnabled(geo: RowGeometry): boolean {
+    return this.enableDrag() && geo.row.task.draggable !== false;
+  }
+
   private _geoFromPoint(event: PointerEvent | MouseEvent): RowGeometry | null {
     const svg = this.svgEl()?.nativeElement;
     if (!svg) return null;
@@ -227,14 +235,71 @@ export class GanttCanvasComponent {
     return this.visibleGeometries()[idx] ?? null;
   }
 
-  private _detectHandle(e: PointerEvent, geo: RowGeometry): 'bar' | 'left' | 'right' {
+  /**
+   * Whether drag/resize may start — only on the bar geometry, not blank row space.
+   * Milestone: diamond (L1); group: main bar + cap drop (matches GanttGroupBarComponent).
+   */
+  private _resolveDragHandle(
+    e: PointerEvent,
+    geo: RowGeometry,
+  ): 'bar' | 'left' | 'right' | null {
     const svg = this.svgEl()?.nativeElement;
-    if (!svg) return 'bar';
+    if (!svg) return null;
     const svgX = this._svgUserX(svg, e);
-    if (svgX == null) return 'bar';
-    if (svgX >= geo.barX && svgX <= geo.barX + RESIZE_HANDLE_PX) return 'left';
-    if (svgX <= geo.barX + geo.barWidth && svgX >= geo.barX + geo.barWidth - RESIZE_HANDLE_PX) return 'right';
+    const svgY = this._svgUserY(svg, e);
+    if (svgX == null || svgY == null) return null;
+
+    switch (geo.row.barType) {
+      case 'milestone':
+        return this._hitMilestone(svgX, svgY, geo) ? 'bar' : null;
+      case 'group':
+        return this._hitGroupBar(svgX, svgY, geo) ? 'bar' : null;
+      default:
+        return this._hitTaskBar(svgX, svgY, geo);
+    }
+  }
+
+  /** Task bar: same vertical insets as GanttTaskBarComponent (4px top/bottom). */
+  private _hitTaskBar(
+    svgX: number,
+    svgY: number,
+    geo: RowGeometry,
+  ): 'bar' | 'left' | 'right' | null {
+    const barY = geo.y + 4;
+    const barH = geo.height - 8;
+    if (svgY < barY || svgY > barY + barH) return null;
+
+    const x0 = geo.barX;
+    const x1 = geo.barX + geo.barWidth;
+    if (svgX < x0 || svgX > x1) return null;
+
+    if (!this.enableResize()) return 'bar';
+
+    if (svgX <= x0 + RESIZE_HANDLE_PX) return 'left';
+    if (svgX >= x1 - RESIZE_HANDLE_PX) return 'right';
     return 'bar';
+  }
+
+  /** Diamond around (barX, row centre); |dx|+|dy| ≤ size — same as milestone template. */
+  private _hitMilestone(svgX: number, svgY: number, geo: RowGeometry): boolean {
+    const cx = geo.barX;
+    const cy = geo.y + geo.height / 2;
+    const s = Math.round((geo.height - 10) / 2);
+    const dx = svgX - cx;
+    const dy = svgY - cy;
+    return Math.abs(dx) + Math.abs(dy) <= s;
+  }
+
+  /** Group bar + bracket drop; matches GanttGroupBarComponent metrics. */
+  private _hitGroupBar(svgX: number, svgY: number, geo: RowGeometry): boolean {
+    const barH = Math.max(Math.round(geo.height * 0.45), 8);
+    const barY = geo.y + Math.round((geo.height - barH) / 2);
+    const drop = 5;
+    const bw = Math.max(geo.barWidth, 4);
+    const x0 = geo.barX;
+    const x1 = geo.barX + bw;
+    const y1 = barY + barH + drop;
+    return svgX >= x0 && svgX <= x1 && svgY >= barY && svgY <= y1;
   }
 
   /** Pointer position in SVG user space (stable with any scroll ancestor). */
@@ -255,12 +320,14 @@ export class GanttCanvasComponent {
   // ── Bar context & registry ────────────────────────────────
 
   protected buildBarContext(geo: RowGeometry): GanttBarContext {
+    const rowDrag = this._rowDragEnabled(geo);
     return {
       row: geo.row, geometry: geo, theme: this.theme(),
       layoutParams: this.layoutParams(),
       isCritical: this.criticalIds().has(geo.row.task.id),
       isSelected: this.selSvc.isSelected(geo.row.task.id),
-      enableResize: this.enableResize(),
+      draggable: rowDrag,
+      enableResize: this.enableResize() && rowDrag,
       showBaseline: this.showBaseline(),
     };
   }

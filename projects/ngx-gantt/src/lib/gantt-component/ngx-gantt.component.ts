@@ -51,25 +51,26 @@ import {
   TaskResizeEvent,
   SelectionChangeEvent,
   RowGeometry,
+  GanttFlatRow,
 } from '../types';
 
-import { GanttLayoutService }          from '../layout/gantt-layout.service';
-import { GanttCanvasComponent }        from '../layout/gantt-canvas.component';
-import { GanttHeaderComponent }        from '../header/gantt-header.component';
-import { GanttTaskListComponent }      from '../tasklist/gantt-tasklist.component';
-import { GanttToolbarComponent }       from '../annotations/gantt-toolbar.component';
-import { GanttScrollService }          from '../scroll/gantt-scroll.service';
-import { GanttThemeService }           from '../services/gantt-theme.service';
-import { GanttColumnService }          from '../columns/gantt-column.service';
-import { GanttColumnDefDirective }     from '../columns/gantt-column.directive';
-import { GanttSelectionService }       from '../selection/gantt-selection.service';
-import { GanttDragService }            from '../drag/gantt-drag.service';
-import { GanttKeyboardDirective }      from '../selection/gantt-keyboard.directive';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { GanttCanvasComponent } from '../layout/gantt-canvas.component';
+import { GanttHeaderComponent } from '../header/gantt-header.component';
+import { GanttTaskListComponent } from '../tasklist/gantt-tasklist.component';
+import { GanttToolbarComponent } from '../annotations/gantt-toolbar.component';
+import { GanttScrollService } from '../scroll/gantt-scroll.service';
+import { GanttThemeService } from '../services/gantt-theme.service';
+import { GanttColumnService } from '../columns/gantt-column.service';
+import { GanttColumnDefDirective } from '../columns/gantt-column.directive';
+import { GanttSelectionService } from '../selection/gantt-selection.service';
+import { GanttDragService } from '../drag/gantt-drag.service';
+import { GanttKeyboardDirective } from '../selection/gantt-keyboard.directive';
 import { GanttVirtualScrollDirective } from '../virtual-scroll/gantt-virtual-scroll.directive';
-import { GanttLoadMoreComponent }      from '../datasource/gantt-load-more.component';
-import { GanttDataSource }             from '../datasource/gantt-datasource';
-import { computeCriticalPath }         from '../gantt-cpm';
-import { DEFAULT_COLUMNS }             from '../gantt-data';
+import { GanttLoadMoreComponent } from '../datasource/gantt-load-more.component';
+import { GanttDataSource } from '../datasource/gantt-datasource';
+import { computeCriticalPath } from '../gantt-cpm';
+import { DEFAULT_COLUMNS } from '../gantt-data';
 
 @Component({
   selector: 'ngx-gantt',
@@ -85,7 +86,7 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
   ],
   hostDirectives: [{
     directive: GanttKeyboardDirective,
-    inputs:    ['visibleRows'],
+    inputs: ['visibleRows'],
   }],
   imports: [
     GanttToolbarComponent,
@@ -96,14 +97,14 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
     GanttLoadMoreComponent,
   ],
   host: {
-    'class':              'ngx-gantt',
-    '[style.display]':    '"flex"',
+    'class': 'ngx-gantt',
+    '[style.display]': '"flex"',
     '[style.flex-direction]': '"column"',
-    '[style.overflow]':   '"hidden"',
-    '[style.position]':   '"relative"',
-    '[attr.tabindex]':    '"0"',
+    '[style.overflow]': '"hidden"',
+    '[style.position]': '"relative"',
+    '[attr.tabindex]': '"0"',
     '[style.font-family]': 'themeSvc.resolvedTheme().fontFamily',
-    '[style.font-size]':  'themeSvc.resolvedTheme().fontSize',
+    '[style.font-size]': 'themeSvc.resolvedTheme().fontSize',
   },
   template: `
     <!-- ── Toolbar (optional) ─────────────────────────────── -->
@@ -182,7 +183,6 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
               [style.background-color]="selSvc.isSelected(row.task.id)
                 ? theme().selectionBg : (row.task.rowColor ?? (row.visibleIndex % 2 === 0 ? theme().rowBg : theme().rowBgAlt))"
               [style.border-bottom]="'1px solid ' + theme().borderColor"
-              [style.cursor]="'pointer'"
               (click)="onRowClick($event, row)"
               (dblclick)="rowDblClick.emit(row)"
             >
@@ -206,18 +206,16 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
                     >
                       @if (row.hasChildren) {
                         <button
-                          [style.background]="'none'"
-                          [style.border]="'none'"
-                          [style.cursor]="'pointer'"
-                          [style.padding]="'0 2px'"
-                          [style.color]="theme().textMuted"
-                          [style.font-size]="'10px'"
+                          type="button"
+                          class="gantt-collapse-btn"
                           [style.flex-shrink]="'0'"
-                          [style.line-height]="'1'"
+                          [style.color]="theme().textMuted"
+                          [attr.aria-expanded]="!row.isCollapsed"
+                          [attr.aria-label]="collapseAriaLabel(row)"
                           (click)="onCollapseClick($event, row.task.id)"
                         >{{ row.isCollapsed ? '▶' : '▼' }}</button>
                       } @else {
-                        <span [style.width]="'14px'" [style.flex-shrink]="'0'"></span>
+                        <span [style.width.px]="COLLAPSE_TARGET_PX" [style.flex-shrink]="'0'"></span>
                       }
                       <span
                         [style.overflow]="'hidden'"
@@ -324,7 +322,32 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
   styles: [`
     :host { box-sizing: border-box; }
 
-    .ngx-gantt-row { transition: background-color 0.08s; }
+    /* WCAG 2.2 — 2.5.8 Target Size (Minimum): ≥ 24×24 CSS px */
+    .gantt-collapse-btn {
+      box-sizing: border-box;
+      min-width: 24px;
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: none;
+      background: none;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .gantt-collapse-btn:focus-visible {
+      outline: 2px solid var(--gantt-selection-border, #3B82F6);
+      outline-offset: 2px;
+    }
+
+    .ngx-gantt-row {
+      cursor: default;
+      transition: background-color 0.08s;
+    }
     .ngx-gantt-row:hover { filter: brightness(0.97); }
 
     .gantt-timeline-scroll {
@@ -341,52 +364,55 @@ import { DEFAULT_COLUMNS }             from '../gantt-data';
 })
 export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDestroy {
 
+  /** WCAG 2.5.8 — matches .gantt-collapse-btn min width (leaf spacer) */
+  protected readonly COLLAPSE_TARGET_PX = 24;
+
   // ── Injected services ─────────────────────────────────────
-  protected readonly layout   = inject(GanttLayoutService);
+  protected readonly layout = inject(GanttLayoutService);
   protected readonly scrollSvc = inject(GanttScrollService);
-  protected readonly themeSvc  = inject(GanttThemeService);
-  protected readonly colSvc    = inject(GanttColumnService);
-  protected readonly selSvc    = inject(GanttSelectionService);
-  private   readonly dragSvc   = inject(GanttDragService);
-  private   readonly hostEl    = inject(ElementRef<HTMLElement>);
-  private   readonly injector  = inject(Injector);
+  protected readonly themeSvc = inject(GanttThemeService);
+  protected readonly colSvc = inject(GanttColumnService);
+  protected readonly selSvc = inject(GanttSelectionService);
+  private readonly dragSvc = inject(GanttDragService);
+  private readonly hostEl = inject(ElementRef<HTMLElement>);
+  private readonly injector = inject(Injector);
 
   // ── DOM references ────────────────────────────────────────
-  private readonly panelEl  = viewChild<ElementRef<HTMLElement>>('panelEl');
+  private readonly panelEl = viewChild<ElementRef<HTMLElement>>('panelEl');
   private readonly canvasEl = viewChild<ElementRef<HTMLElement>>('canvasEl');
 
   // ── Content children (column directives) ─────────────────
   private readonly columnDefs = contentChildren(GanttColumnDefDirective);
 
   // ── Inputs ────────────────────────────────────────────────
-  readonly series        = input<GanttTask[]>([]);
-  readonly dataSource    = input<GanttDataSource | null>(null);
-  readonly options       = input<GanttOptions>({});
-  readonly annotations   = input<GanttAnnotation[]>([]);
-  readonly columns       = input<ColumnDef[]>([]);
-  readonly darkMode      = input<boolean | 'auto'>(false);
-  readonly showToolbar   = input<boolean>(true);
-  readonly enableDrag    = input<boolean>(true);
-  readonly enableResize  = input<boolean>(true);
+  readonly series = input<GanttTask[]>([]);
+  readonly dataSource = input<GanttDataSource | null>(null);
+  readonly options = input<GanttOptions>({});
+  readonly annotations = input<GanttAnnotation[]>([]);
+  readonly columns = input<ColumnDef[]>([]);
+  readonly darkMode = input<boolean | 'auto'>(false);
+  readonly showToolbar = input<boolean>(true);
+  readonly enableDrag = input<boolean>(true);
+  readonly enableResize = input<boolean>(true);
   readonly tooltipEnabled = input<boolean>(true);
 
   // ── Outputs ───────────────────────────────────────────────
-  readonly taskDragged     = output<TaskDragEvent>();
-  readonly taskResized     = output<TaskResizeEvent>();
+  readonly taskDragged = output<TaskDragEvent>();
+  readonly taskResized = output<TaskResizeEvent>();
   readonly selectionChange = output<SelectionChangeEvent>();
-  readonly rowClick        = output<RowGeometry>();
-  readonly rowDblClick     = output<any>();
+  readonly rowClick = output<RowGeometry>();
+  readonly rowDblClick = output<any>();
 
   // ── Theme shortcut ────────────────────────────────────────
   protected readonly theme = computed(() => this.themeSvc.resolvedTheme());
 
   // ── Virtual scroll state ──────────────────────────────────
-  private readonly _vsVisibleRows  = signal<any[]>([]);
-  private readonly _vsPaddingTop   = signal<number>(0);
-  private readonly _vsPaddingBot   = signal<number>(0);
+  private readonly _vsVisibleRows = signal<any[]>([]);
+  private readonly _vsPaddingTop = signal<number>(0);
+  private readonly _vsPaddingBot = signal<number>(0);
 
-  protected readonly vsVisibleRows   = this._vsVisibleRows.asReadonly();
-  protected readonly vsPaddingTop    = this._vsPaddingTop.asReadonly();
+  protected readonly vsVisibleRows = this._vsVisibleRows.asReadonly();
+  protected readonly vsPaddingTop = this._vsPaddingTop.asReadonly();
   protected readonly vsPaddingBottom = this._vsPaddingBot.asReadonly();
 
   // ── Virtual-scrolled geometries (canvas) ─────────────────
@@ -429,7 +455,7 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
 
       // Sync series / dataSource → layout
       effect(() => {
-        const ds   = this.dataSource();
+        const ds = this.dataSource();
         const tasks = ds ? ds.items() : this.series();
         this.layout.setTasks(tasks);
       });
@@ -456,9 +482,9 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
 
   ngAfterViewInit(): void {
     // Register scroll elements
-    const panel  = this.panelEl()?.nativeElement;
+    const panel = this.panelEl()?.nativeElement;
     const canvas = this.canvasEl()?.nativeElement;
-    if (panel)  this.scrollSvc.registerPanel(panel);
+    if (panel) this.scrollSvc.registerPanel(panel);
     if (canvas) this.scrollSvc.registerCanvas(canvas);
 
     // Scroll to today on mount
@@ -479,16 +505,16 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
   // ── Virtual scroll (simple implementation on layout rows) ──
 
   private _runVirtualScroll(rows: any[]): void {
-    const rh       = this.layout.rowHeight();
-    const hh       = this.layout.totalHeaderHeight();
-    const st       = this.scrollSvc.scrollTop();
+    const rh = this.layout.rowHeight();
+    const hh = this.layout.totalHeaderHeight();
+    const st = this.scrollSvc.scrollTop();
     const rowScroll = Math.max(0, st - hh);
-    const el       = this.canvasEl()?.nativeElement;
-    const viewH    = Math.max(rh, (el?.clientHeight ?? 500) - hh);
+    const el = this.canvasEl()?.nativeElement;
+    const viewH = Math.max(rh, (el?.clientHeight ?? 500) - hh);
     const overscan = 4;
 
-    const first  = Math.max(0, Math.floor(rowScroll / rh) - overscan);
-    const last   = Math.min(
+    const first = Math.max(0, Math.floor(rowScroll / rh) - overscan);
+    const last = Math.min(
       rows.length - 1,
       Math.ceil((rowScroll + viewH) / rh) + overscan,
     );
@@ -499,6 +525,11 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
   }
 
   // ── Event handlers ────────────────────────────────────────
+
+  protected collapseAriaLabel(row: GanttFlatRow): string {
+    const action = row.isCollapsed ? 'Expand' : 'Collapse';
+    return `${action} ${row.task.name}`;
+  }
 
   protected onCollapseClick(event: MouseEvent, taskId: string): void {
     event.stopPropagation();
@@ -521,7 +552,7 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
   protected onTaskDragged(event: TaskDragEvent): void {
     this.layout.updateTask(event.taskId, {
       start: event.newStart,
-      end:   event.newEnd,
+      end: event.newEnd,
     });
     this.taskDragged.emit(event);
   }
@@ -529,14 +560,14 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
   protected onTaskResized(event: TaskResizeEvent): void {
     this.layout.updateTask(event.taskId, {
       start: event.newStart,
-      end:   event.newEnd,
+      end: event.newEnd,
     });
     this.taskResized.emit(event);
   }
 
   // ── Public API ────────────────────────────────────────────
 
-  zoomIn():  void { this.layout.zoomIn(); }
+  zoomIn(): void { this.layout.zoomIn(); }
   zoomOut(): void { this.layout.zoomOut(); }
 
   setViewMode(mode: ViewMode): void { this.layout.viewMode.set(mode); }
@@ -550,7 +581,7 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
   }
 
   getSelectedTasks(): GanttTask[] {
-    const ids  = this.selSvc.getSelectedIds();
+    const ids = this.selSvc.getSelectedIds();
     const tasks = this.layout.tasks();
     return tasks.filter(t => ids.includes(t.id));
   }
@@ -567,8 +598,8 @@ export class NgxGanttComponent implements OnInit, AfterViewInit, OnChanges, OnDe
 
   appendTasks(tasks: GanttTask[]): void { this.layout.appendTasks(tasks); }
 
-  collapseAll(): void  { this.layout.collapseAll(); }
-  expandAll():  void   { this.layout.expandAll(); }
+  collapseAll(): void { this.layout.collapseAll(); }
+  expandAll(): void { this.layout.expandAll(); }
 
   togglePanel(): void {
     this.layout.panelVisible.update(v => !v);

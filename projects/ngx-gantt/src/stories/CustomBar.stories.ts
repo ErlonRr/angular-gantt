@@ -12,6 +12,9 @@ const d = (iso: string) => new Date(iso);
   selector: 'g[phaseBar]',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '[class.gantt-bar-draggable]': 'interactive()',
+  },
   template: `
     <!-- Striped phase bar -->
     <svg:rect
@@ -34,11 +37,17 @@ const d = (iso: string) => new Date(iso);
       style="pointer-events:none;user-select:none"
     >◈ {{ task().name }}</svg:text>
   `,
+  styles: [`
+    :host { cursor: default; }
+    :host(.gantt-bar-draggable) rect { cursor: grab; }
+    :host(.gantt-bar-draggable:active) rect { cursor: grabbing; }
+  `],
 })
 class PhaseBarComponent extends GanttBarBase {
   readonly ctx = input.required<GanttBarContext>();
   protected readonly geo  = computed(() => this.ctx().geometry);
   protected readonly task = computed(() => this.ctx().row.task);
+  protected readonly interactive = computed(() => this.ctx().draggable !== false);
   protected readonly stripes = computed(() => {
     const w = this.geo().barWidth;
     return Array.from({ length: Math.floor(w / 20) }, (_, i) => i * 20 + 12);

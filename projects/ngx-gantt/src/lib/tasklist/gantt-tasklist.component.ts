@@ -130,7 +130,6 @@ import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
           [style.border-bottom]="'1px solid ' + theme().borderColor"
-          [style.cursor]="'pointer'"
           (click)="onRowClick($event, row)"
           (dblclick)="rowDblClick.emit(row)"
         >
@@ -159,25 +158,22 @@ import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
                   <!-- Collapse toggle -->
                   @if (row.hasChildren) {
                     <button
+                      type="button"
                       class="gantt-collapse-btn"
-                      [style.width]="'16px'"
-                      [style.height]="'16px'"
                       [style.flex-shrink]="'0'"
                       [style.border]="'none'"
                       [style.background]="'transparent'"
-                      [style.cursor]="'pointer'"
-                      [style.padding]="'0'"
                       [style.color]="theme().textSecondary"
-                      [style.font-size]="'10px'"
-                      [attr.aria-label]="row.isCollapsed ? 'Expand' : 'Collapse'"
+                      [attr.aria-expanded]="!row.isCollapsed"
+                      [attr.aria-label]="collapseAriaLabel(row)"
                       (click)="onCollapseClick($event, row)"
                       animate.enter="collapse-btn-enter"
                     >
                       {{ row.isCollapsed ? '▶' : '▼' }}
                     </button>
                   } @else {
-                    <!-- Leaf indent spacer -->
-                    <span [style.width]="'16px'" [style.flex-shrink]="'0'"></span>
+                    <!-- Leaf indent spacer (width matches collapse control column) -->
+                    <span [style.width.px]="COLLAPSE_TARGET_PX" [style.flex-shrink]="'0'"></span>
                   }
 
                   <!-- Task type icon -->
@@ -239,6 +235,7 @@ import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
     :host { box-sizing: border-box; }
 
     .gantt-tl-row {
+      cursor: default;
       transition: background-color 0.1s;
     }
     .gantt-tl-row:hover {
@@ -252,8 +249,29 @@ import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
       opacity: 1 !important;
       background: var(--gantt-border, #e2e8f0);
     }
+    /*
+     * WCAG 2.2 — 2.5.8 Target Size (Minimum): pointer target ≥ 24×24 CSS px (Level AA).
+     */
+    .gantt-collapse-btn {
+      box-sizing: border-box;
+      min-width: 24px;
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
     .gantt-collapse-btn:hover {
-      opacity: 0.7;
+      opacity: 0.75;
+    }
+    .gantt-collapse-btn:focus-visible {
+      outline: 2px solid var(--gantt-selection-border, #3B82F6);
+      outline-offset: 2px;
     }
     .gantt-panel-resize-handle:hover {
       background: var(--gantt-today, #F59E0B) !important;
@@ -267,6 +285,9 @@ import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
   `],
 })
 export class GanttTaskListComponent {
+  /** Matches .gantt-collapse-btn min width — leaf spacer alignment */
+  protected readonly COLLAPSE_TARGET_PX = 24;
+
   // ── Inputs ────────────────────────────────────────────────
   readonly visibleRows    = input.required<GanttFlatRow[]>();
   readonly columns        = input.required<ColumnDef[]>();
@@ -326,6 +347,11 @@ export class GanttTaskListComponent {
   }
 
   // ── Collapse toggle ───────────────────────────────────────
+  protected collapseAriaLabel(row: GanttFlatRow): string {
+    const action = row.isCollapsed ? 'Expand' : 'Collapse';
+    return `${action} ${row.task.name}`;
+  }
+
   protected onCollapseClick(event: MouseEvent, row: GanttFlatRow): void {
     event.stopPropagation();
     this.collapseToggle.emit(row.task.id);

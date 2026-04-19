@@ -29,6 +29,7 @@ import { GanttBarBase } from '../bar-registry';
     '[attr.data-bar-type]': '"task"',
     'role': 'listitem',
     '[attr.aria-label]': 'ariaLabel()',
+    '[class.gantt-bar-draggable]': 'interactive()',
   },
   template: `
     <!-- Row background highlight (selected state) -->
@@ -93,7 +94,7 @@ import { GanttBarBase } from '../bar-registry';
         [attr.height]="barHeight()"
         [attr.rx]="barRadius()"
         fill="transparent"
-        style="cursor: ew-resize"
+        [style.cursor]="resizeCursor()"
       />
     }
 
@@ -107,7 +108,7 @@ import { GanttBarBase } from '../bar-registry';
         [attr.height]="barHeight()"
         [attr.rx]="barRadius()"
         fill="transparent"
-        style="cursor: ew-resize"
+        [style.cursor]="resizeCursor()"
       />
     }
 
@@ -144,8 +145,16 @@ import { GanttBarBase } from '../bar-registry';
     }
   `,
   styles: [`
-    :host { cursor: grab; }
-    :host:active { cursor: grabbing; }
+    :host { cursor: default; }
+
+    :host(.gantt-bar-draggable) .gantt-bar-bg,
+    :host(.gantt-bar-draggable) .gantt-bar-progress {
+      cursor: grab;
+    }
+    :host(.gantt-bar-draggable:active) .gantt-bar-bg,
+    :host(.gantt-bar-draggable:active) .gantt-bar-progress {
+      cursor: grabbing;
+    }
 
     .gantt-bar-bg {
       transition: opacity 0.15s;
@@ -184,6 +193,13 @@ export class GanttTaskBarComponent extends GanttBarBase {
   protected readonly theme    = computed(() => this.ctx().theme);
   protected readonly task     = computed(() => this.ctx().row.task);
   protected readonly taskId   = computed(() => this.task().id);
+
+  /** Grab/grabbing only when this row may be dragged (global + per-task `draggable`). */
+  protected readonly interactive = computed(() => this.ctx().draggable !== false);
+
+  protected readonly resizeCursor = computed(() =>
+    this.interactive() ? 'ew-resize' : 'default'
+  );
 
   // ── Geometry ─────────────────────────────────────────────────
   protected readonly barHeight = computed(() =>

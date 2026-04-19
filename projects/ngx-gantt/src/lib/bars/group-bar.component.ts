@@ -31,6 +31,7 @@ import { GanttBarBase } from '../bar-registry';
     '[attr.data-bar-type]': '"group"',
     'role': 'listitem',
     '[attr.aria-label]': 'ariaLabel()',
+    '[class.gantt-bar-draggable]': 'interactive()',
   },
   template: `
     <!-- Main bar body (slightly thicker than task bars) -->
@@ -111,8 +112,17 @@ import { GanttBarBase } from '../bar-registry';
     }
   `,
   styles: [`
-    .gantt-group-bar {
-      cursor: pointer;
+    .gantt-group-bar,
+    polygon {
+      cursor: default;
+    }
+    :host(.gantt-bar-draggable) .gantt-group-bar,
+    :host(.gantt-bar-draggable) polygon {
+      cursor: grab;
+    }
+    :host(.gantt-bar-draggable:active) .gantt-group-bar,
+    :host(.gantt-bar-draggable:active) polygon {
+      cursor: grabbing;
     }
     .gantt-group-bar:hover {
       opacity: 0.78 !important;
@@ -126,6 +136,8 @@ export class GanttGroupBarComponent extends GanttBarBase {
   protected readonly theme  = computed(() => this.ctx().theme);
   protected readonly task   = computed(() => this.ctx().row.task);
   protected readonly taskId = computed(() => this.task().id);
+
+  protected readonly interactive = computed(() => this.ctx().draggable !== false);
 
   protected readonly barHeight = computed(() =>
     Math.max(Math.round(this.geo().height * 0.45), 8)

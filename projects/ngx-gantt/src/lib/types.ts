@@ -67,6 +67,13 @@ export interface GanttTask {
   /** Planned baseline dates for variance visualisation */
   baseline?: GanttBaseline;
 
+  /**
+   * Timeline drag & resize for this row. Applies to any row (root, child, group).
+   * When `false`, the bar does not move or resize; when omitted or `true`, the
+   * global `enableDrag` / `enableResize` on the gantt apply.
+   */
+  draggable?: boolean;
+
   /** Arbitrary extra data — passed through to bar components */
   data?: Record<string, unknown>;
 }
@@ -300,4 +307,9 @@ export interface GanttBarContext {
   enableResize?: boolean;
   /** Whether baseline bar should be rendered */
   showBaseline?: boolean;
+  /**
+   * Effective drag/resize for this row (`enableDrag` ∧ `task.draggable` ∧ resize option).
+   * Drives cursor and interaction affordances on the bar.
+   */
+  draggable?: boolean;
 }

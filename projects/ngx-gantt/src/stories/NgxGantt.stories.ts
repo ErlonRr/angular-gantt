@@ -36,8 +36,9 @@ export const SAMPLE_TASKS: GanttTask[] = [
     dependency: 'p1-b',
   },
   {
-    id: 'p1-c1', name: 'Backend', parentId: 'p1-c',
+    id: 'p1-c1', name: 'Backend (locked)', parentId: 'p1-c',
     start: d('2026-02-10'), end: d('2026-03-20'), progress: 80,
+    draggable: false,
   },
   {
     id: 'p1-c2', name: 'Frontend', parentId: 'p1-c',

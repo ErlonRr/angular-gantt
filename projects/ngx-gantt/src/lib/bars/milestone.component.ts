@@ -29,6 +29,7 @@ import { GanttBarBase } from '../bar-registry';
     '[attr.data-bar-type]': '"milestone"',
     'role': 'listitem',
     '[attr.aria-label]': 'ariaLabel()',
+    '[class.gantt-bar-draggable]': 'interactive()',
   },
   template: `
     <!-- Diamond shape via polygon -->
@@ -84,11 +85,18 @@ import { GanttBarBase } from '../bar-registry';
      * fill-box anchors the origin to this polygon's bounding box.
      */
     .gantt-milestone-diamond {
-      cursor: pointer;
+      cursor: default;
       transform-box: fill-box;
       transform-origin: center center;
       transition: transform 0.15s ease-out;
     }
+    :host(.gantt-bar-draggable) .gantt-milestone-diamond {
+      cursor: grab;
+    }
+    :host(.gantt-bar-draggable:active) .gantt-milestone-diamond {
+      cursor: grabbing;
+    }
+
     .gantt-milestone-diamond:hover {
       transform: scale(1.15);
     }
@@ -108,6 +116,8 @@ export class GanttMilestoneComponent extends GanttBarBase {
   protected readonly geo   = computed(() => this.ctx().geometry);
   protected readonly theme = computed(() => this.ctx().theme);
   protected readonly task  = computed(() => this.ctx().row.task);
+
+  protected readonly interactive = computed(() => this.ctx().draggable !== false);
 
   /** Centre X = barX (milestone has no width — it's a point) */
   protected readonly cx = computed(() => this.geo().barX);
