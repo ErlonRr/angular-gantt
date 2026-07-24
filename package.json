@@ -1,5 +1,5 @@
 {
-  "name": "ngx-gantt-workspace",
+  "name": "gantry-workspace",
   "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@10.33.0",
@@ -16,12 +16,12 @@
   },
   "scripts": {
     "ng": "ng",
-    "start": "ng serve erru-gantt-ng --open",
-    "build:lib": "ng build ngx-gantt",
-    "build:app": "ng build erru-gantt-ng --configuration production",
-    "watch:lib": "ng build ngx-gantt --watch",
-    "storybook": "ng run erru-gantt-ng:storybook",
-    "build:storybook": "ng run erru-gantt-ng:build-storybook",
+    "start": "ng serve gantry-demo --open",
+    "build:lib": "ng build gantry",
+    "build:app": "ng build gantry-demo --configuration production",
+    "watch:lib": "ng build gantry --watch",
+    "storybook": "ng run gantry-demo:storybook",
+    "build:storybook": "ng run gantry-demo:build-storybook",
     "test": "ng test",
     "lint": "ng lint"
   },

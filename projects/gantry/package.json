@@ -1,0 +1,22 @@
+{
+  "name": "gantry",
+  "version": "1.0.0",
+  "description": "Angular 20+ Gantt chart library — 100% free, zoneless, signal-based",
+  "keywords": ["angular", "gantt", "signals", "zoneless", "chart"],
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "esm2022": "./esm2022/gantry.mjs",
+      "default": "./fesm2022/gantry.mjs"
+    }
+  },
+  "peerDependencies": {
+    "@angular/core": ">=20.2.0",
+    "@angular/common": ">=20.2.0"
+  },
+  "dependencies": {
+    "dayjs": "^1.11.0"
+  }
+}

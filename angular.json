@@ -6,23 +6,23 @@
     "analytics": false
   },
   "projects": {
-    "ngx-gantt": {
+    "gantry": {
       "projectType": "library",
-      "root": "projects/ngx-gantt",
-      "sourceRoot": "projects/ngx-gantt/src",
+      "root": "projects/gantry",
+      "sourceRoot": "projects/gantry/src",
       "prefix": "gantt",
       "architect": {
         "build": {
           "builder": "@angular-devkit/build-angular:ng-packagr",
           "options": {
-            "project": "projects/ngx-gantt/ng-package.json"
+            "project": "projects/gantry/ng-package.json"
           },
           "configurations": {
             "production": {
-              "tsConfig": "projects/ngx-gantt/tsconfig.lib.prod.json"
+              "tsConfig": "projects/gantry/tsconfig.lib.prod.json"
             },
             "development": {
-              "tsConfig": "projects/ngx-gantt/tsconfig.lib.json"
+              "tsConfig": "projects/gantry/tsconfig.lib.json"
             }
           },
           "defaultConfiguration": "production"
@@ -30,35 +30,35 @@
         "test": {
           "builder": "@angular-devkit/build-angular:karma",
           "options": {
-            "tsConfig": "projects/ngx-gantt/tsconfig.spec.json"
+            "tsConfig": "projects/gantry/tsconfig.spec.json"
           }
         }
       }
     },
-    "erru-gantt-ng": {
+    "gantry-demo": {
       "projectType": "application",
-      "root": "projects/erru-gantt-ng",
-      "sourceRoot": "projects/erru-gantt-ng/src",
+      "root": "projects/gantry-demo",
+      "sourceRoot": "projects/gantry-demo/src",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular-devkit/build-angular:application",
           "options": {
-            "outputPath": "dist/erru-gantt-ng",
-            "index": "projects/erru-gantt-ng/src/index.html",
-            "browser": "projects/erru-gantt-ng/src/main.ts",
+            "outputPath": "dist/gantry-demo",
+            "index": "projects/gantry-demo/src/index.html",
+            "browser": "projects/gantry-demo/src/main.ts",
             "polyfills": [],
-            "tsConfig": "projects/erru-gantt-ng/tsconfig.app.json",
+            "tsConfig": "projects/gantry-demo/tsconfig.app.json",
             "assets": [
               {
                 "glob": "**/*",
-                "input": "projects/erru-gantt-ng/src/assets",
+                "input": "projects/gantry-demo/src/assets",
                 "output": "/assets"
               },
-              "projects/erru-gantt-ng/src/favicon.ico"
+              "projects/gantry-demo/src/favicon.ico"
             ],
             "styles": [
-              "projects/erru-gantt-ng/src/styles.scss"
+              "projects/gantry-demo/src/styles.scss"
             ],
             "scripts": []
           },
@@ -90,10 +90,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "erru-gantt-ng:build:production"
+              "buildTarget": "gantry-demo:build:production"
             },
             "development": {
-              "buildTarget": "erru-gantt-ng:build:development"
+              "buildTarget": "gantry-demo:build:development"
             }
           },
           "defaultConfiguration": "development"
@@ -101,21 +101,21 @@
         "storybook": {
           "builder": "@storybook/angular:start-storybook",
           "options": {
-            "browserTarget": "erru-gantt-ng:build:development",
+            "browserTarget": "gantry-demo:build:development",
             "configDir": ".storybook",
             "port": 6006,
             "compodoc": false
           },
           "configurations": {
             "production": {
-              "browserTarget": "erru-gantt-ng:build:production"
+              "browserTarget": "gantry-demo:build:production"
             }
           }
         },
         "build-storybook": {
           "builder": "@storybook/angular:build-storybook",
           "options": {
-            "browserTarget": "erru-gantt-ng:build:production",
+            "browserTarget": "gantry-demo:build:production",
             "configDir": ".storybook",
             "outputDir": "storybook-static",
             "compodoc": false

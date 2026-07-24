@@ -1,0 +1,9 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gantry-demo",
+      "url": "http://localhost:4200"
+    }
+  ]
+}

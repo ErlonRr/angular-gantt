@@ -1,6 +1,7 @@
-# ngx-gantt
+# Gantry
 
 > Angular 20+ Gantt chart library — 100% free, zoneless, signal-based, zero @angular/animations.
+> Package: `gantry` · component: `<gantry>`.
 
 ## Features
 
@@ -27,7 +28,7 @@
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGanttLib } from 'ngx-gantt';
+import { provideGanttLib } from 'gantry';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -40,12 +41,12 @@ bootstrapApplication(AppComponent, {
 
 ```ts
 // app.component.ts
-import { NgxGanttComponent, GanttTask, ViewMode } from 'ngx-gantt';
+import { GantryComponent, GanttTask, ViewMode } from 'gantry';
 
 @Component({
-  imports: [NgxGanttComponent],
+  imports: [GantryComponent],
   template: `
-    <ngx-gantt
+    <gantry
       [series]="tasks"
       [options]="{ viewMode: 'Month', rowHeight: 36, baseline: true }"
       [darkMode]="false"
@@ -63,7 +64,7 @@ export class AppComponent {
 ## NgModule style
 
 ```ts
-import { GanttModule } from 'ngx-gantt';
+import { GanttModule } from 'gantry';
 
 @NgModule({
   imports: [GanttModule.forRoot({ darkMode: 'auto' })],
@@ -77,7 +78,7 @@ export class AppModule {}
 
 ```ts
 import { Component, input, computed, ChangeDetectionStrategy } from '@angular/core';
-import { GanttBarBase, GanttBarContext, provideGanttBar } from 'ngx-gantt';
+import { GanttBarBase, GanttBarContext, provideGanttBar } from 'gantry';
 
 @Component({
   selector: 'g[epicBar]',
@@ -117,7 +118,7 @@ const ds = createGanttDataSource({
 });
 
 // Template:
-<ngx-gantt [dataSource]="ds" />
+<gantry [dataSource]="ds" />
 ```
 
 ---
@@ -155,7 +156,7 @@ gantt.setTheme(partial) / patchTheme(patch)
 ## ng-content slots
 
 ```html
-<ngx-gantt [series]="tasks">
+<gantry [series]="tasks">
   <!-- Toolbar extras -->
   <button ganttToolbar>Export CSV</button>
 
@@ -164,7 +165,7 @@ gantt.setTheme(partial) / patchTheme(patch)
 
   <!-- Below the gantt -->
   <div ganttFooter>© 2026 My Company</div>
-</ngx-gantt>
+</gantry>
 ```
 
 ---
@@ -173,7 +174,7 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ### Angular workspace vs Storybook preview
 
-The demo app (`erru-gantt-ng`) is built with `@angular-devkit/build-angular:application` (esbuild-based application builder). **That is not Vite** and it is not the same pipeline as Storybook.
+The demo app (`gantry-demo`) is built with `@angular-devkit/build-angular:application` (esbuild-based application builder). **That is not Vite** and it is not the same pipeline as Storybook.
 
 Storybook 10 runs via the Angular CLI targets `@storybook/angular:start-storybook` and `@storybook/angular:build-storybook`, which compile the preview with **Webpack 5** (`@storybook/builder-webpack5`). Expect two parallel toolchains: **`ng build` / `ng serve` for the app** vs **`ng run …:storybook` for the component workshop**. Missing a Vite dependency next to Angular does not indicate a misconfiguration for Storybook.
 
@@ -181,8 +182,8 @@ Storybook 10 runs via the Angular CLI targets `@storybook/angular:start-storyboo
 
 | Script | Effect |
 |--------|--------|
-| `pnpm storybook` | `ng run erru-gantt-ng:storybook` — dev server; uses `browserTarget` **`erru-gantt-ng:build:development`** (see [`angular.json`](angular.json)). |
-| `pnpm build:storybook` | Static Storybook under `storybook-static`; uses **`erru-gantt-ng:build:production`** unless you change the target. |
+| `pnpm storybook` | `ng run gantry-demo:storybook` — dev server; uses `browserTarget` **`gantry-demo:build:development`** (see [`angular.json`](angular.json)). |
+| `pnpm build:storybook` | Static Storybook under `storybook-static`; uses **`gantry-demo:build:production`** unless you change the target. |
 
 ### pnpm and Webpack
 
@@ -198,7 +199,7 @@ If configuration drift becomes hard to maintain, create a branch, run `pnpm crea
 
 ### Optional: Vite-based Storybook
 
-After `ng build ngx-gantt` and Storybook builds are stable, you can spike **`@storybook/builder-vite`** following [Storybook’s builder docs](https://storybook.js.org/docs/10/builders). Treat it as an optional performance experiment, not a prerequisite for fixing library TypeScript errors.
+After `ng build gantry` and Storybook builds are stable, you can spike **`@storybook/builder-vite`** following [Storybook’s builder docs](https://storybook.js.org/docs/10/builders). Treat it as an optional performance experiment, not a prerequisite for fixing library TypeScript errors.
 
 ---
 

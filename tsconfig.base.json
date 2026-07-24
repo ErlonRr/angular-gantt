@@ -21,7 +21,7 @@
     "useDefineForClassFields": false,
     "lib": ["ES2022", "dom", "dom.iterable"],
     "paths": {
-      "ngx-gantt": ["projects/ngx-gantt/src/public-api.ts"]
+      "gantry": ["projects/gantry/src/public-api.ts"]
     }
   }
 }

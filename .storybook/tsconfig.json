@@ -5,8 +5,8 @@
     "allowSyntheticDefaultImports": true
   },
   "include": [
-    "../projects/ngx-gantt/src/stories/**/*",
-    "../projects/erru-gantt-ng/src/**/*",
+    "../projects/gantry/src/stories/**/*",
+    "../projects/gantry-demo/src/**/*",
     "./**/*"
   ],
   "exclude": [

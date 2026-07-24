@@ -46,7 +46,7 @@ if (process.env['STORYBOOK_CHROMATIC'] === '1') {
 }
 
 const config: StorybookConfig = {
-  stories: ['../projects/ngx-gantt/src/stories/**/*.@(mdx|stories.@(ts))', '../projects/erru-gantt-ng/src/**/*.@(mdx|stories.@(ts))'],
+  stories: ['../projects/gantry/src/stories/**/*.@(mdx|stories.@(ts))', '../projects/gantry-demo/src/**/*.@(mdx|stories.@(ts))'],
   addons,
   framework: {
     name: '@storybook/angular',
