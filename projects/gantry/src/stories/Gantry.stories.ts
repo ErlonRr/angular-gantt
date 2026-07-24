@@ -113,7 +113,7 @@ const meta: Meta<GantryComponent> = {
 Zero zone.js · Zero @angular/animations · Signal-based · Zoneless
 
 \`\`\`ts
-import { GantryComponent, provideGanttLib } from 'gantry';
+import { GantryComponent, provideGanttLib } from 'ngx-gantry';
 \`\`\`
         `,
       },

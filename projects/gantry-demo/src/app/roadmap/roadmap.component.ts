@@ -13,7 +13,7 @@ import {
 import {
   GantryComponent, GanttTask, GanttFlatRow, ColumnDef, ColumnCellContext,
   TaskType, DependencyType, ViewMode, GanttOptions,
-} from 'gantry';
+} from 'ngx-gantry';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ── People ────────────────────────────────────────────────────

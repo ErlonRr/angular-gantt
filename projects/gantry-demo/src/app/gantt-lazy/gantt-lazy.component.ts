@@ -4,7 +4,7 @@ import {
 import {
   GantryComponent, GanttTask,
   TaskType, createGanttDataSource,
-} from 'gantry';
+} from 'ngx-gantry';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ── Fake async fetcher — simulates an API ─────────────────────

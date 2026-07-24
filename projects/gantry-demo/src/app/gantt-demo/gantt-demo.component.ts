@@ -5,7 +5,7 @@ import {
   GantryComponent, GanttTask, GanttAnnotation,
   TaskType, DependencyType, ViewMode, GanttOptions,
   TaskDragEvent, TaskResizeEvent, SelectionChangeEvent,
-} from 'gantry';
+} from 'ngx-gantry';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ── helpers ──────────────────────────────────────────────────

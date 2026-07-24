@@ -1,7 +1,14 @@
 # Gantry
 
 > Angular 20+ Gantt chart library — 100% free, zoneless, signal-based, zero @angular/animations.
-> Package: `gantry` · component: `<gantry>`.
+> npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
+
+## Install
+
+```bash
+npm i ngx-gantry
+# peer deps: @angular/core & @angular/common >= 20.2, plus dayjs
+```
 
 ## Features
 
@@ -10,7 +17,7 @@
 | **Signals** | All state via `signal()` / `computed()` / `effect()` — no RxJS |
 | **Zoneless** | Works with `provideZonelessChangeDetection()` |
 | **Bar registry** | Plug in any custom bar component via `provideGanttBar()` |
-| **Virtual scroll** | `IntersectionObserver`-based, zero CDK |
+| **Virtual scroll** | Scroll-position windowing, zero CDK |
 | **Lazy load** | Angular 20 `resource()` + `linkedSignal` accumulation |
 | **Drag & resize** | Pointer Events API + `setPointerCapture()` |
 | **Selection** | Single / Ctrl+Click toggle / Shift+Click range |
@@ -28,7 +35,7 @@
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGanttLib } from 'gantry';
+import { provideGanttLib } from 'ngx-gantry';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -41,7 +48,7 @@ bootstrapApplication(AppComponent, {
 
 ```ts
 // app.component.ts
-import { GantryComponent, GanttTask, ViewMode } from 'gantry';
+import { GantryComponent, GanttTask, ViewMode } from 'ngx-gantry';
 
 @Component({
   imports: [GantryComponent],
@@ -64,7 +71,7 @@ export class AppComponent {
 ## NgModule style
 
 ```ts
-import { GanttModule } from 'gantry';
+import { GanttModule } from 'ngx-gantry';
 
 @NgModule({
   imports: [GanttModule.forRoot({ darkMode: 'auto' })],
@@ -78,7 +85,7 @@ export class AppModule {}
 
 ```ts
 import { Component, input, computed, ChangeDetectionStrategy } from '@angular/core';
-import { GanttBarBase, GanttBarContext, provideGanttBar } from 'gantry';
+import { GanttBarBase, GanttBarContext, provideGanttBar } from 'ngx-gantry';
 
 @Component({
   selector: 'g[epicBar]',

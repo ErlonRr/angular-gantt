@@ -8,5 +8,5 @@
     "cssUrl": "inline"
   },
   "deleteDestPath": true,
-  "dest": "../../dist/gantry"
+  "dest": "../../dist/ngx-gantry"
 }

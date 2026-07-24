@@ -4,7 +4,7 @@ import {
 import {
   GantryComponent, GanttTask, GanttBarBase, GanttBarContext,
   GanttBarRegistry, TaskType,
-} from 'gantry';
+} from 'ngx-gantry';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ─── Custom "Epic" bar component ─────────────────────────────
