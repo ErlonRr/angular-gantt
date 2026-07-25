@@ -31,6 +31,7 @@ import {
 
 import { RowGeometry, GanttTheme } from '../types';
 import { formatDate, durationLabel }              from '../gantt-math';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 // ─── Tooltip directive ────────────────────────────────────────
 
@@ -60,6 +61,7 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
 
   private readonly doc  = inject(DOCUMENT);
   private readonly el   = inject(ElementRef);
+  private readonly i18n = inject(GanttI18nService);
 
   private _popover: HTMLElement | null = null;
   private _showTimer = 0;
@@ -198,15 +200,18 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
 
   private _buildHTML(): string {
     const task  = this.ganttTooltip().row.task;
-    const start = formatDate(task.start);
-    const end   = formatDate(task.end);
-    const dur   = durationLabel(task.start, task.end);
+    const labels = this.i18n.labels();
+    const locale = this.i18n.locale();
+    const fmt    = this.i18n.formats().dateFormat;
+    const start = formatDate(task.start, fmt, locale);
+    const end   = formatDate(task.end, fmt, locale);
+    const dur   = durationLabel(task.start, task.end, labels);
     const prog  = task.progress ?? 0;
 
     const progressBar = task.progress != null ? `
       <div style="margin-top:6px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-          <span style="opacity:0.6">Progress</span>
+          <span style="opacity:0.6">${this._esc(labels.ttProgress)}</span>
           <span>${prog}%</span>
         </div>
         <div style="height:3px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden;">
@@ -215,7 +220,7 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
       </div>` : '';
 
     const milestone = task.type === 'milestone'
-      ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ Milestone</div>`
+      ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ ${this._esc(labels.ttMilestone)}</div>`
       : '';
 
     return `
@@ -224,13 +229,13 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
         ${this._esc(task.name)}
       </div>
       <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
-        <span style="opacity:0.6">Start</span><span>${start}</span>
+        <span style="opacity:0.6">${this._esc(labels.ttStart)}</span><span>${start}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
-        <span style="opacity:0.6">End</span><span>${end}</span>
+        <span style="opacity:0.6">${this._esc(labels.ttEnd)}</span><span>${end}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:12px;">
-        <span style="opacity:0.6">Duration</span><span>${dur}</span>
+        <span style="opacity:0.6">${this._esc(labels.ttDuration)}</span><span>${dur}</span>
       </div>
       ${progressBar}
       ${milestone}

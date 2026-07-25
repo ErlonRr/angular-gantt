@@ -39,6 +39,7 @@ import { GanttArrowComponent } from '../arrows/gantt-arrow.component';
 import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttDragPreviewComponent } from '../drag/gantt-drag-preview.component';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttTooltipDirective } from '../tooltip/gantt-tooltip.directive';
 import { GridLine, dateToPixel } from '../gantt-math';
 
@@ -70,7 +71,7 @@ interface ResolvedArrow {
     <div [style.width.px]="totalWidth()" [style.min-height.px]="totalHeight()" [style.position]="'relative'">
       <svg #svgEl [attr.width]="totalWidth()" [attr.height]="totalHeight()"
         [style.display]="'block'" [style.overflow]="'visible'"
-        role="list" aria-label="Gantt chart timeline"
+        role="list" [attr.aria-label]="i18n.labels().ariaChart"
         (pointerdown)="onSvgPointerDown($event)"
         (click)="onSvgClick($event)">
 
@@ -187,6 +188,7 @@ export class GanttCanvasComponent {
   private readonly registry = inject(GanttBarRegistry);
   protected readonly dragSvc = inject(GanttDragService);
   private readonly selSvc = inject(GanttSelectionService);
+  protected readonly i18n = inject(GanttI18nService);
 
   // ── Pointer events ─────────────────────────────────────────
 

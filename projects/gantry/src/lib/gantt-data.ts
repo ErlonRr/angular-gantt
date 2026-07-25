@@ -186,7 +186,7 @@ export function collectDescendants(id: string, rows: GanttFlatRow[]): string[] {
 
 // ─── Default column definitions ───────────────────────────────
 
-import { ColumnDef } from './types';
+import { ColumnDef, GanttLabels } from './types';
 import { formatDate, durationLabel } from './gantt-math';
 
 export const DEFAULT_COLUMNS: ColumnDef[] = [
@@ -231,3 +231,21 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     render:  r => `${r.task.progress ?? 0}%`,
   },
 ];
+
+/**
+ * Build the default columns with localised headers and date/duration cells.
+ * Falls back to English (`DEFAULT_COLUMNS`) equivalents when no i18n is given.
+ */
+export function buildDefaultColumns(
+  labels: GanttLabels,
+  locale?: string,
+  dateFormat = 'MMM D, YYYY',
+): ColumnDef[] {
+  return [
+    { key: 'name',     label: labels.colName,     width: 240, minWidth: 120, builtin: true, render: r => r.task.name },
+    { key: 'start',    label: labels.colStart,    width: 96,  minWidth: 72,  builtin: true, render: r => formatDate(r.task.start, dateFormat, locale) },
+    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, render: r => formatDate(r.task.end, dateFormat, locale) },
+    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, render: r => durationLabel(r.task.start, r.task.end, labels) },
+    { key: 'progress', label: labels.colProgress, width: 56,  minWidth: 44,  builtin: true, render: r => `${r.task.progress ?? 0}%` },
+  ];
+}

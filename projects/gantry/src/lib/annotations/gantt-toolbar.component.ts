@@ -16,10 +16,11 @@ import {
   Component,
   input,
   output,
-  computed,
+  inject,
 } from '@angular/core';
 
 import { ViewMode, GanttTheme } from '../types';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 const VIEW_MODES: ViewMode[] = [
   ViewMode.Day,
@@ -49,12 +50,12 @@ const VIEW_MODES: ViewMode[] = [
       <button class="gantt-tb-btn" [style.color]="theme().textSecondary"
         [style.border-color]="theme().borderColor"
         [style.background]="theme().panelBg"
-        [attr.title]="'Zoom out'" (click)="zoomOut.emit()">−
+        [attr.title]="labels().zoomOut" (click)="zoomOut.emit()">−
       </button>
       <button class="gantt-tb-btn" [style.color]="theme().textSecondary"
         [style.border-color]="theme().borderColor"
         [style.background]="theme().panelBg"
-        [attr.title]="'Zoom in'" (click)="zoomIn.emit()">+
+        [attr.title]="labels().zoomIn" (click)="zoomIn.emit()">+
       </button>
     </div>
 
@@ -72,7 +73,7 @@ const VIEW_MODES: ViewMode[] = [
           [style.border-color]="currentView() === vm ? theme().barColor : theme().borderColor"
           [style.font-family]="theme().fontFamily"
           (click)="viewModeChange.emit(vm)"
-        >{{ vm }}</button>
+        >{{ labels().viewModes[vm] }}</button>
       }
     </div>
 
@@ -85,7 +86,7 @@ const VIEW_MODES: ViewMode[] = [
       [style.border-color]="theme().todayColor + '66'"
       [style.background]="theme().panelBg"
       (click)="scrollToToday.emit()">
-      ◎ Today
+      ◎ {{ labels().todayButton }}
     </button>
 
     <!-- Consumer custom controls slot -->
@@ -133,4 +134,5 @@ export class GanttToolbarComponent {
   readonly scrollToToday  = output<void>();
 
   protected readonly viewModes = VIEW_MODES;
+  protected readonly labels = inject(GanttI18nService).labels;
 }

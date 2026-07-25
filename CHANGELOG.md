@@ -24,14 +24,17 @@ First public release.
 - **Annotations** (vertical lines & shaded regions) and a **today marker**.
 - **Legend** overlay (`showLegend`) describing the today line and annotations.
 - **Theming** — light / dark / auto via CSS custom properties, live-patchable at runtime.
+- **Internationalisation** — every UI string is overridable via `options.labels`
+  (or `provideGanttLib({ labels })`), month/day names follow a dayjs `locale`, and
+  dates/header labels accept custom `formats` (`dateFormat`, per-view `header`).
 - Public math/data/CPM core is framework-free and unit-tested with Vitest.
+
+### Fixed
+- Header period labels no longer render as clipped "slivers" at the timeline edges
+  in Month/Quarter/Year: sub-period padding is applied only in Day/Week views, so
+  coarse views snap to whole periods.
 
 ### Dependencies
 - Runtime: `dayjs` only. Peer: `@angular/core` & `@angular/common` `>=20.2.0`.
-
-### Known issues
-- Header period labels (top row) can still render sub-optimally at the extreme
-  left/right edges of the timeline in some scroll positions. Tracked for a
-  follow-up patch release.
 
 [1.0.0]: https://github.com/ErlonRr/angular-gantt/releases/tag/v1.0.0

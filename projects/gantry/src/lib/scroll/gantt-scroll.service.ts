@@ -40,9 +40,6 @@ export class GanttScrollService {
   /** Current vertical scroll offset shared by both panels (px) */
   readonly scrollTop  = signal<number>(0);
 
-  /** Visible width of the canvas viewport (px) — tracked for sticky header labels */
-  readonly viewportWidth = signal<number>(0);
-
   // ── Private refs ──────────────────────────────────────────
   private _panel: HTMLElement | null  = null;
   private _canvas: HTMLElement | null = null;
@@ -72,16 +69,6 @@ export class GanttScrollService {
    */
   registerCanvas(el: HTMLElement): void {
     this._canvas = el;
-    this.viewportWidth.set(el.clientWidth);
-
-    // Track viewport width so header labels can stay centred in the
-    // visible portion of edge cells (sticky-label behaviour).
-    const ro = new ResizeObserver(() => {
-      this.zone.run(() => this.viewportWidth.set(el.clientWidth));
-    });
-    ro.observe(el);
-    this.destroyRef.onDestroy(() => ro.disconnect());
-
     this._attachCanvasListeners();
   }
 

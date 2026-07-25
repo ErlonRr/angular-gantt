@@ -60,6 +60,7 @@ import { GanttTaskListComponent } from '../tasklist/gantt-tasklist.component';
 import { GanttToolbarComponent } from '../annotations/gantt-toolbar.component';
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttThemeService } from '../services/gantt-theme.service';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttColumnService } from '../columns/gantt-column.service';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
 import { GanttDragService } from '../drag/gantt-drag.service';
@@ -77,6 +78,7 @@ import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
     GanttLayoutService,
     GanttScrollService,
     GanttThemeService,
+    GanttI18nService,
     GanttColumnService,
     GanttSelectionService,
     GanttDragService,
@@ -199,8 +201,6 @@ import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
               [pxPerDay]="layout.pxPerDay()"
               [totalWidth]="layout.totalWidth()"
               [theme]="theme()"
-              [scrollLeft]="scrollSvc.scrollLeft()"
-              [viewportWidth]="scrollSvc.viewportWidth()"
               [todayX]="layout.todayX()"
               (zoomInEvent)="zoomIn()"
               (zoomOutEvent)="zoomOut()"
@@ -238,7 +238,7 @@ import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
         [style.border]="'1px solid ' + theme().borderColor"
         [style.color]="theme().textSecondary"
       >
-        <span class="gantt-legend-title" [style.color]="theme().textMuted">Legend</span>
+        <span class="gantt-legend-title" [style.color]="theme().textMuted">{{ i18n.labels().legend }}</span>
         @for (item of legendItems(); track item.label) {
           <span class="gantt-legend-item">
             <svg width="18" height="12" aria-hidden="true">
@@ -307,6 +307,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   protected readonly layout = inject(GanttLayoutService);
   protected readonly scrollSvc = inject(GanttScrollService);
   protected readonly themeSvc = inject(GanttThemeService);
+  protected readonly i18n = inject(GanttI18nService);
   protected readonly colSvc = inject(GanttColumnService);
   protected readonly selSvc = inject(GanttSelectionService);
   private readonly dragSvc = inject(GanttDragService);
@@ -373,14 +374,15 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   // ── Legend items (today marker + user annotations) ───────
   protected readonly legendItems = computed<{ color: string; label: string; dashed: boolean }[]>(() => {
     const t = this.theme();
+    const lbl = this.i18n.labels();
     const items: { color: string; label: string; dashed: boolean }[] = [];
     if (this.layout.showToday() && this.layout.todayX() >= 0) {
-      items.push({ color: t.todayColor, label: 'Today', dashed: false });
+      items.push({ color: t.todayColor, label: lbl.today, dashed: false });
     }
     for (const ann of this.annotations()) {
       items.push({
         color: ann.color ?? t.arrowColor,
-        label: ann.label?.text ?? 'Annotation',
+        label: ann.label?.text ?? lbl.annotation,
         dashed: true,
       });
     }
@@ -407,9 +409,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
         this.layout.setTasks(tasks);
       });
 
-      // Sync options → layout
+      // Sync options → layout + i18n
       effect(() => {
-        this.layout.applyOptions(this.options());
+        const opts = this.options();
+        this.layout.applyOptions(opts);
+        this.i18n.apply(opts);
       });
 
       // Sync columns input → column service

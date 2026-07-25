@@ -143,9 +143,18 @@ describe('flattenTree', () => {
 });
 
 describe('getTimelineRange', () => {
-  it('pads correctly in Month mode', () => {
+  it('encompasses tasks in Month mode (snapped to period, no sub-period padding)', () => {
     const tasks = makeTasks();
     const range = getTimelineRange(tasks, ViewMode.Month, 7);
+    // Month/Quarter/Year snap to the period boundary and do NOT add sub-period
+    // padding (it would create unreadable "sliver" cells in the header).
+    expect(range.start.getTime()).toBeLessThanOrEqual(tasks[0].start.getTime());
+    expect(range.end.getTime()).toBeGreaterThanOrEqual(tasks[tasks.length - 1].end.getTime());
+  });
+
+  it('adds day padding in Day mode', () => {
+    const tasks = makeTasks();
+    const range = getTimelineRange(tasks, ViewMode.Day, 7);
     expect(range.start.getTime()).toBeLessThan(tasks[0].start.getTime());
     expect(range.end.getTime()).toBeGreaterThan(tasks[tasks.length - 1].end.getTime());
   });

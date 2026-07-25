@@ -21,6 +21,7 @@ import {
 } from '@angular/core';
 
 import { GanttTheme } from '../types';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
   selector:   'gantt-load-more',
@@ -39,7 +40,7 @@ import { GanttTheme } from '../types';
            [style.color]="theme().textMuted" [style.font-size]="theme().fontSize"
            [style.font-family]="theme().fontFamily">
         <div class="gantt-spinner"></div>
-        <span>Loading…</span>
+        <span>{{ labels().loading }}</span>
       </div>
     } @else if (hasMore()) {
       @if (autoLoad()) {
@@ -60,7 +61,7 @@ import { GanttTheme } from '../types';
           [style.cursor]="'pointer'"
           (click)="loadMore.emit()"
         >
-          ↓ Load more ({{ loadedCount() }} / {{ totalCount() > 0 ? totalCount() : '?' }})
+          ↓ {{ labels().loadMore }} ({{ loadedCount() }} / {{ totalCount() > 0 ? totalCount() : '?' }})
         </button>
       }
     } @else {
@@ -68,7 +69,7 @@ import { GanttTheme } from '../types';
       <div [style.text-align]="'center'" [style.color]="theme().textMuted"
            [style.font-size]="'11px'" [style.padding]="'4px 0'"
            [style.font-family]="theme().fontFamily">
-        ✓ All {{ loadedCount() }} tasks loaded
+        ✓ {{ labels().allLoaded(loadedCount()) }}
       </div>
     }
   `,
@@ -101,6 +102,7 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
 
   readonly loadMore = output<void>();
 
+  protected readonly labels = inject(GanttI18nService).labels;
   private readonly el = inject(ElementRef<HTMLElement>);
   private _observer?: IntersectionObserver;
 

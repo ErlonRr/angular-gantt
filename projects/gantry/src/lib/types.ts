@@ -228,6 +228,123 @@ export interface GanttTheme {
   scrollbarThumb:   string;
 }
 
+// ─── i18n: UI labels ─────────────────────────────────────────
+
+/**
+ * Every user-facing string in the chart. Override any subset via
+ * `GanttOptions.labels` (per instance) or `provideGanttLib({ labels })` (global).
+ * Interpolated strings are functions so translators keep full control.
+ */
+export interface GanttLabels {
+  // Load-more (lazy datasource)
+  loading:    string;
+  loadMore:   string;
+  allLoaded:  (count: number) => string;
+  // Toolbar
+  zoomIn:     string;
+  zoomOut:    string;
+  todayButton: string;
+  viewModes:  Record<ViewMode, string>;
+  // Legend
+  legend:     string;
+  today:      string;
+  annotation: string;
+  // Tooltip
+  ttStart:    string;
+  ttEnd:      string;
+  ttDuration: string;
+  ttProgress: string;
+  ttMilestone: string;
+  // Header period prefixes (e.g. W12, Q2, H1)
+  weekPrefix:    string;
+  quarterPrefix: string;
+  halfPrefix:    string;
+  // Duration label (tooltip + Duration column)
+  durationLessThanDay: string;
+  durationDay:  string;
+  durationDays: (n: number) => string;
+  durationWeeks: (w: number) => string;
+  durationWeeksDays: (w: number, d: number) => string;
+  // Default column headers
+  colName:     string;
+  colStart:    string;
+  colEnd:      string;
+  colDuration: string;
+  colProgress: string;
+  // Accessibility
+  ariaChart:    string;
+  ariaExpand:   (name: string) => string;
+  ariaCollapse: (name: string) => string;
+}
+
+export const DEFAULT_LABELS: GanttLabels = {
+  loading:   'Loading…',
+  loadMore:  'Load more',
+  allLoaded: (n) => `All ${n} tasks loaded`,
+  zoomIn:    'Zoom in',
+  zoomOut:   'Zoom out',
+  todayButton: 'Today',
+  viewModes: {
+    [ViewMode.Day]:     'Day',
+    [ViewMode.Week]:    'Week',
+    [ViewMode.Month]:   'Month',
+    [ViewMode.Quarter]: 'Quarter',
+    [ViewMode.Year]:    'Year',
+  },
+  legend:     'Legend',
+  today:      'Today',
+  annotation: 'Annotation',
+  ttStart:    'Start',
+  ttEnd:      'End',
+  ttDuration: 'Duration',
+  ttProgress: 'Progress',
+  ttMilestone: 'Milestone',
+  weekPrefix:    'W',
+  quarterPrefix: 'Q',
+  halfPrefix:    'H',
+  durationLessThanDay: '< 1 day',
+  durationDay:  '1 day',
+  durationDays: (n) => `${n} days`,
+  durationWeeks: (w) => `${w}w`,
+  durationWeeksDays: (w, d) => `${w}w ${d}d`,
+  colName:     'Task Name',
+  colStart:    'Start',
+  colEnd:      'End',
+  colDuration: 'Duration',
+  colProgress: '%',
+  ariaChart:    'Gantt chart timeline',
+  ariaExpand:   (name) => `Expand ${name}`,
+  ariaCollapse: (name) => `Collapse ${name}`,
+};
+
+// ─── i18n: date & header formats ─────────────────────────────
+
+/** Builds a header label for a given period start date. */
+export type HeaderFormatFn = (date: Date) => string;
+
+export interface GanttHeaderFormats {
+  top?:    HeaderFormatFn;
+  bottom?: HeaderFormatFn;
+}
+
+export interface GanttFormats {
+  /** dayjs format string for dates in columns & tooltip */
+  dateFormat: string;
+  /** Per-view header label overrides — omitted rows use the built-in formatter */
+  header?: Partial<Record<ViewMode, GanttHeaderFormats>>;
+}
+
+export const DEFAULT_FORMATS: GanttFormats = {
+  dateFormat: 'MMM D, YYYY',
+};
+
+/** Resolved i18n bundle passed to the pure header/date formatters. */
+export interface GanttI18n {
+  locale?: string;
+  labels:  GanttLabels;
+  formats: GanttFormats;
+}
+
 // ─── Global options ───────────────────────────────────────────
 
 export interface GanttOptions {
@@ -253,6 +370,17 @@ export interface GanttOptions {
 
   /** Extra padding (days) added before first task and after last */
   timelinePadding?: number;
+
+  // ── i18n / formatting ──
+  /**
+   * dayjs locale id (e.g. `'it'`). Month/day names in the header follow it.
+   * Load the locale first in your app: `import 'dayjs/locale/it';`
+   */
+  locale?:  string;
+  /** Override any subset of the UI strings */
+  labels?:  Partial<GanttLabels>;
+  /** Override date / header formats */
+  formats?: Partial<GanttFormats>;
 
   /** Drag & resize */
   enableDrag?:      boolean;

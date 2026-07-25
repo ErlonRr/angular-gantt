@@ -39,6 +39,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 
 import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
   selector: 'gantt-tasklist',
@@ -319,6 +320,7 @@ export class GanttTaskListComponent {
   private _resizingColKey: string | null = null;
 
   private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly i18n = inject(GanttI18nService);
 
   // ── Derived ───────────────────────────────────────────────
   protected readonly visibleColumns = computed(() =>
@@ -353,8 +355,8 @@ export class GanttTaskListComponent {
 
   // ── Collapse toggle ───────────────────────────────────────
   protected collapseAriaLabel(row: GanttFlatRow): string {
-    const action = row.isCollapsed ? 'Expand' : 'Collapse';
-    return `${action} ${row.task.name}`;
+    const lbl = this.i18n.labels();
+    return row.isCollapsed ? lbl.ariaExpand(row.task.name) : lbl.ariaCollapse(row.task.name);
   }
 
   protected onCollapseClick(event: MouseEvent, row: GanttFlatRow): void {

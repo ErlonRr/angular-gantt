@@ -130,6 +130,181 @@ const ds = createGanttDataSource({
 
 ---
 
+## Custom columns (left panel)
+
+Two ways to define the columns of the task list panel.
+
+**a) Plain columns via the `columns` input** — `render` returns a text string:
+
+```ts
+import { ColumnDef } from 'ngx-gantry';
+
+columns: ColumnDef[] = [
+  { key: 'name',  label: 'Task', width: 220 },              // built-in name cell
+  { key: 'owner', label: 'Owner', width: 120,
+    render: r => (r.task.data?.['owner'] as string) ?? '' },
+];
+```
+
+**b) Rich cell templates** — for avatars, badges, progress bars, use `cellTemplate`
+(from a `viewChild` `TemplateRef`) or the declarative `<ng-template ganttColumn>`:
+
+```html
+<ng-template #statusCell let-row>
+  <span class="badge" [class]="row.task.data?.['status']">{{ row.task.data?.['status'] }}</span>
+</ng-template>
+
+<gantry [series]="tasks" [columns]="columns()" />
+```
+```ts
+statusTpl = viewChild<TemplateRef<ColumnCellContext>>('statusCell');
+columns = computed<ColumnDef[]>(() => [
+  { key: 'name',   label: 'Initiative', width: 210 },
+  { key: 'status', label: 'Status', width: 100, cellTemplate: this.statusTpl() },
+]);
+```
+
+The cell template context is `{ $implicit: row, row }` where `row: GanttFlatRow`
+(so `row.task` is your `GanttTask`).
+
+---
+
+## Legend
+
+```html
+<gantry [series]="tasks" [annotations]="annotations" [showLegend]="true" />
+```
+
+A floating legend lists the **today** marker and every **annotation** (with its
+colour and label). Its strings are localisable (`labels.legend`, `labels.today`,
+`labels.annotation`).
+
+---
+
+## Theming
+
+Every colour/metric is a CSS custom property set on the `<gantry>` host, so you can
+override in plain CSS, or use `setTheme()` / `patchTheme()` / `provideGantt({ theme })`.
+
+```css
+gantry {
+  --gantt-bar: #6366f1;
+  --gantt-today: #f59e0b;
+  --gantt-font: 'Inter', system-ui, sans-serif;
+}
+```
+
+```ts
+gantt.patchTheme({ barColor: '#6366F1', todayColor: '#F59E0B' }); // runtime, one shot
+provideGantt({ darkMode: 'auto', theme: { barColor: '#6366F1' } }); // global default
+```
+
+Dark/light is driven by `[darkMode]="true | false | 'auto'"`. Built-in themes
+`LightTheme` / `DarkTheme` are exported. Full token map:
+
+| `GanttTheme` field | CSS variable | | `GanttTheme` field | CSS variable |
+|---|---|---|---|---|
+| `backgroundColor` | `--gantt-bg` | | `borderColor` | `--gantt-border` |
+| `headerBackground` | `--gantt-header-bg` | | `gridLine` | `--gantt-grid-line` |
+| `rowBg` | `--gantt-row-bg` | | `todayColor` | `--gantt-today` |
+| `rowBgAlt` | `--gantt-row-bg-alt` | | `textPrimary` | `--gantt-text` |
+| `barColor` | `--gantt-bar` | | `textSecondary` | `--gantt-text-sec` |
+| `barTextColor` | `--gantt-bar-text` | | `textMuted` | `--gantt-text-muted` |
+| `barRadius` | `--gantt-bar-radius` | | `fontFamily` | `--gantt-font` |
+| `milestoneColor` | `--gantt-milestone` | | `fontSize` | `--gantt-font-size` |
+| `baselineColor` | `--gantt-baseline` | | `arrowColor` | `--gantt-arrow` |
+| `criticalColor` | `--gantt-critical` | | `tooltipBg` | `--gantt-tooltip-bg` |
+| `panelBg` | `--gantt-panel-bg` | | `tooltipBorder` | `--gantt-tooltip-bdr` |
+| `panelBorder` | `--gantt-panel-border` | | `tooltipText` | `--gantt-tooltip-txt` |
+| `selectionBg` | `--gantt-sel-bg` | | `selectionBorder` | `--gantt-sel-border` |
+| `scrollbarTrack` | `--gantt-scrollbar-track` | | `scrollbarThumb` | `--gantt-scrollbar-thumb` |
+
+---
+
+## Internationalisation & date formats
+
+Everything user-facing is translatable, and dates follow a dayjs locale + format.
+Set per instance via `options`, or globally via `provideGanttLib`.
+
+```ts
+import 'dayjs/locale/it';           // load the dayjs locale you need, once
+
+<gantry
+  [series]="tasks"
+  [options]="{
+    locale: 'it',                                  // month/day names → Italian
+    formats: { dateFormat: 'D MMM YYYY' },         // columns & tooltip dates
+    labels: {                                      // any subset — rest stays English
+      loadMore: 'Carica altro', todayButton: 'Oggi',
+      viewModes: { Day: 'Giorno', Week: 'Settimana', Month: 'Mese', Quarter: 'Trimestre', Year: 'Anno' },
+      quarterPrefix: 'T', halfPrefix: 'S',
+    },
+  }" />
+```
+
+- `locale` — a dayjs locale id; **import the locale first** (`import 'dayjs/locale/it'`).
+- `labels: Partial<GanttLabels>` — override any UI string (buttons, tooltip, legend,
+  header prefixes `W`/`Q`/`H`, duration text, column headers, aria-labels).
+- `formats: { dateFormat, header }` — `dateFormat` for columns/tooltip; `header`
+  for per-view custom header formatters `(date) => string`.
+
+Global defaults: `provideGanttLib({ locale: 'it', labels: {…}, formats: {…} })`.
+
+---
+
+## Providers & setup
+
+| Provider | Use |
+|---|---|
+| `provideGanttLib(config?)` | One call in `bootstrapApplication` — registers built-in bars + global config (`theme`, `darkMode`, `locale`, `labels`, `formats`). |
+| `GanttModule.forRoot(config?)` | Same, for NgModule apps. |
+| `provideGantt(config?)` | Global config only (no bar registration). |
+| `provideGanttBar({ type, component })` | Register a custom bar type (see above). |
+| `createGanttDataSource({ fetcher, pageSize })` | Build a lazy `GanttDataSource`. |
+
+---
+
+## Injectable services
+
+Provided per `<gantry>` instance — inject them from a custom bar/child to read or drive state.
+
+| Service | What it exposes |
+|---|---|
+| `GanttThemeService` | `resolvedTheme`, `isDark`, `setDarkMode`, `patchTheme`, `setCustomTheme` |
+| `GanttI18nService` | `locale`, `labels`, `formats` (resolved signals) |
+| `GanttColumnService` | column defs: `columns`, `visibleColumns`, `setColumnWidth`, `setVisible` |
+| `GanttSelectionService` | `selectedIds`, `handleClick`, `selectAll`, `clear` |
+| `GanttLayoutService` | geometry & view state: `viewMode`, `visibleRows`, `rowGeometries`, `todayX` |
+| `GanttScrollService` | `scrollLeft`, `scrollTop`, `scrollToDate`, `scrollToToday` |
+| `GanttDragService` | drag/resize FSM state |
+| `GanttBarRegistry` | custom bar registration (`register`, `resolve`) |
+
+---
+
+## Inputs & Outputs
+
+| Input | Type | Default |
+|---|---|---|
+| `series` | `GanttTask[]` | `[]` |
+| `dataSource` | `GanttDataSource \| null` | `null` |
+| `options` | `GanttOptions` | `{}` |
+| `annotations` | `GanttAnnotation[]` | `[]` |
+| `columns` | `ColumnDef[]` | `[]` |
+| `darkMode` | `boolean \| 'auto'` | `false` |
+| `showToolbar` | `boolean` | `true` |
+| `enableDrag` / `enableResize` | `boolean` | `true` |
+| `tooltipEnabled` | `boolean` | `true` |
+| `showLegend` | `boolean` | `false` |
+
+| Output | Payload |
+|---|---|
+| `taskDragged` | `TaskDragEvent` |
+| `taskResized` | `TaskResizeEvent` |
+| `selectionChange` | `SelectionChangeEvent` |
+| `rowClick` / `rowDblClick` | row / geometry |
+
+---
+
 ## Public API
 
 ```ts

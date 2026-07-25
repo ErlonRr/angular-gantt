@@ -28,7 +28,7 @@ import {
   EnvironmentProviders,
   makeEnvironmentProviders,
 } from '@angular/core';
-import { GanttTheme } from '../types';
+import { GanttTheme, GanttLabels, GanttFormats } from '../types';
 
 // ─── Built-in themes ─────────────────────────────────────────
 
@@ -99,6 +99,12 @@ export const DarkTheme: Readonly<GanttTheme> = {
 export interface GanttGlobalConfig {
   theme?:    Partial<GanttTheme>;
   darkMode?: boolean | 'auto';
+  /** Default dayjs locale id (e.g. 'it') — load it first: import 'dayjs/locale/it' */
+  locale?:   string;
+  /** Default UI string overrides (i18n) */
+  labels?:   Partial<GanttLabels>;
+  /** Default date / header format overrides */
+  formats?:  Partial<GanttFormats>;
 }
 
 export const GANTT_GLOBAL_CONFIG = new InjectionToken<GanttGlobalConfig>(

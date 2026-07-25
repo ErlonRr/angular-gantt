@@ -12,16 +12,36 @@
 //  (not the SVG canvas).
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect, inject } from '@angular/core';
 import { ColumnDef } from '../types';
-import { DEFAULT_COLUMNS } from '../gantt-data';
+import { buildDefaultColumns } from '../gantt-data';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Injectable()
 export class GanttColumnService {
+  private readonly i18n = inject(GanttI18nService);
+
+  /** Localised default columns for the current i18n config. */
+  private defaults(): ColumnDef[] {
+    return buildDefaultColumns(
+      this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat,
+    ).map(c => ({ ...c, visible: true }));
+  }
+
+  /** True once the consumer supplies their own columns (stops auto-localising). */
+  private _hasCustom = false;
+
   // ── State ────────────────────────────────────────────────
-  private readonly _columns = signal<ColumnDef[]>(
-    DEFAULT_COLUMNS.map(c => ({ ...c, visible: true }))
-  );
+  private readonly _columns = signal<ColumnDef[]>(this.defaults());
+
+  constructor() {
+    // Re-seed default columns when the locale / labels / date format change,
+    // unless the consumer has taken over via setColumns().
+    effect(() => {
+      const cols = this.defaults();
+      if (!this._hasCustom) this._columns.set(cols);
+    });
+  }
 
   // ── Public signals ────────────────────────────────────────
   /** All column defs (including hidden) */
@@ -50,17 +70,20 @@ export class GanttColumnService {
    * Merges with defaults so consumers only need to specify overrides.
    */
   setColumns(defs: ColumnDef[]): void {
-    // Merge consumer defs onto defaults
+    this._hasCustom = true;
+    // Merge consumer defs onto the (localised) defaults
+    const base = this.defaults();
     const merged = defs.map(def => {
-      const base = DEFAULT_COLUMNS.find(d => d.key === def.key) ?? {};
-      return { ...base, ...def, visible: def.visible ?? true };
+      const b = base.find(d => d.key === def.key) ?? {};
+      return { ...b, ...def, visible: def.visible ?? true };
     });
     this._columns.set(merged);
   }
 
   /** Reset to library defaults */
   resetColumns(): void {
-    this._columns.set(DEFAULT_COLUMNS.map(c => ({ ...c, visible: true })));
+    this._hasCustom = false;
+    this._columns.set(this.defaults());
   }
 
   // ── Runtime mutation ──────────────────────────────────────

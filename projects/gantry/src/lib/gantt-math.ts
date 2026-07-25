@@ -12,7 +12,7 @@ import quarterOfYear from 'dayjs/plugin/quarterOfYear';
 dayjs.extend(isoWeek);
 dayjs.extend(quarterOfYear);
 
-import { ViewMode, HeaderCell, HeaderRow, GanttTask } from './types';
+import { ViewMode, HeaderCell, HeaderRow, GanttTask, GanttI18n, GanttLabels } from './types';
 
 /** Re-exported for consumers of `generateHeaderRows` / public-api. */
 export type { HeaderCell, HeaderRow };
@@ -129,16 +129,19 @@ export function getTimelineRange(
     return { start: addDays(today, -30), end: addDays(today, 60) };
   }
 
-  // Snap task bounds first, then apply padding. If we pad *before* snapping, a
-  // −7d nudge can land in late December and Year snap collapses to Jan 1 of
-  // the *previous* calendar year — the chart shows an empty year (e.g. 2025)
-  // while tasks sit in 2026 (bars off-screen to the right).
+  // Snap task bounds to the view-mode period first.
   const snappedStart = snapToViewMode(new Date(minTime), viewMode, 'start');
   const snappedEnd   = snapToViewMode(new Date(maxTime), viewMode, 'end');
 
+  // Sub-period padding only helps the fine views (Day/Week), where snapping to a
+  // day/week leaves no breathing room. For Month/Quarter/Year the snap to the
+  // period boundary already gives room, and adding a few days would spill into a
+  // tiny partial period at each edge — an unreadable "sliver" cell in the header.
+  const pad = (viewMode === ViewMode.Day || viewMode === ViewMode.Week) ? paddingDays : 0;
+
   return {
-    start: addDays(snappedStart, -paddingDays),
-    end:   addDays(snappedEnd,   paddingDays),
+    start: addDays(snappedStart, -pad),
+    end:   addDays(snappedEnd,   pad),
   };
 }
 
@@ -166,23 +169,46 @@ function snapToViewMode(date: Date, mode: ViewMode, edge: 'start' | 'end'): Date
 // ─── Header cell generation ───────────────────────────────────
 
 /**
+ * Build a header cell label: uses the consumer's per-view override when set,
+ * otherwise the built-in formatter — always with the configured dayjs locale.
+ */
+function headerLabel(
+  i18n: GanttI18n | undefined,
+  view: ViewMode,
+  edge: 'top' | 'bottom',
+  date: Date,
+  builtin: (d: Dayjs) => string,
+): string {
+  const override = i18n?.formats?.header?.[view]?.[edge];
+  if (override) return override(date);
+  const d = i18n?.locale ? dayjs(date).locale(i18n.locale) : dayjs(date);
+  return builtin(d);
+}
+
+/** Header period prefix (W / Q / H), localised via labels. */
+function prefix(i18n: GanttI18n | undefined, key: 'weekPrefix' | 'quarterPrefix' | 'halfPrefix'): string {
+  return i18n?.labels?.[key] ?? { weekPrefix: 'W', quarterPrefix: 'Q', halfPrefix: 'H' }[key];
+}
+
+/**
  * Generate the two-row header cells for the given timeline.
- * Returns [topRow, bottomRow].
+ * Returns [topRow, bottomRow]. Pass `i18n` to localise labels/formats.
  */
 export function generateHeaderRows(
   viewMode: ViewMode,
   start: Date,
   end: Date,
   pxPerDay: number,
+  i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const [topH, botH] = HEADER_HEIGHTS[viewMode];
 
   switch (viewMode) {
-    case ViewMode.Day:     return generateDayHeader(start, end, pxPerDay, topH, botH);
-    case ViewMode.Week:    return generateWeekHeader(start, end, pxPerDay, topH, botH);
-    case ViewMode.Month:   return generateMonthHeader(start, end, pxPerDay, topH, botH);
-    case ViewMode.Quarter: return generateQuarterHeader(start, end, pxPerDay, topH, botH);
-    case ViewMode.Year:    return generateYearHeader(start, end, pxPerDay, topH, botH);
+    case ViewMode.Day:     return generateDayHeader(start, end, pxPerDay, topH, botH, i18n);
+    case ViewMode.Week:    return generateWeekHeader(start, end, pxPerDay, topH, botH, i18n);
+    case ViewMode.Month:   return generateMonthHeader(start, end, pxPerDay, topH, botH, i18n);
+    case ViewMode.Quarter: return generateQuarterHeader(start, end, pxPerDay, topH, botH, i18n);
+    case ViewMode.Year:    return generateYearHeader(start, end, pxPerDay, topH, botH, i18n);
   }
 }
 
@@ -190,7 +216,7 @@ export function generateHeaderRows(
 
 function generateDayHeader(
   start: Date, end: Date, pxPerDay: number,
-  topH: number, botH: number,
+  topH: number, botH: number, i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const origin = snapToDay(start);
   const topCells: HeaderCell[] = [];
@@ -206,7 +232,7 @@ function generateDayHeader(
     const clampEnd   = monthEnd   > end    ? end    : monthEnd;
     const x     = dateToPixel(clampStart, origin, pxPerDay);
     const width = dateToPixel(clampEnd,   origin, pxPerDay) - x;
-    topCells.push({ label: cur.format('MMMM YYYY'), x, width, dateKey: cur.toISOString() });
+    topCells.push({ label: headerLabel(i18n, ViewMode.Day, 'top', monthStart, d => d.format('MMMM YYYY')), x, width, dateKey: cur.toISOString() });
     cur = cur.add(1, 'month');
   }
 
@@ -214,7 +240,7 @@ function generateDayHeader(
   while (dayCur.isBefore(finish)) {
     const d     = dayCur.toDate();
     const x     = dateToPixel(d, origin, pxPerDay);
-    const label = dayCur.format('D');
+    const label = headerLabel(i18n, ViewMode.Day, 'bottom', d, dd => dd.format('D'));
     botCells.push({ label, x, width: pxPerDay, dateKey: dayCur.toISOString() });
     dayCur = dayCur.add(1, 'day');
   }
@@ -226,7 +252,7 @@ function generateDayHeader(
 
 function generateWeekHeader(
   start: Date, end: Date, pxPerDay: number,
-  topH: number, botH: number,
+  topH: number, botH: number, i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const origin = snapToDay(start);
   const topCells: HeaderCell[] = [];
@@ -241,7 +267,7 @@ function generateWeekHeader(
     const clampE = mEnd > end ? end : mEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    topCells.push({ label: mCur.format('MMM YYYY'), x, width, dateKey: mCur.toISOString() });
+    topCells.push({ label: headerLabel(i18n, ViewMode.Week, 'top', mCur.toDate(), d => d.format('MMM YYYY')), x, width, dateKey: mCur.toISOString() });
     mCur = mCur.add(1, 'month');
   }
 
@@ -253,7 +279,7 @@ function generateWeekHeader(
     const clampE = wEnd > end ? end : wEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    botCells.push({ label: `W${wCur.isoWeek()}`, x, width, dateKey: wCur.toISOString() });
+    botCells.push({ label: headerLabel(i18n, ViewMode.Week, 'bottom', wCur.toDate(), d => `${prefix(i18n, 'weekPrefix')}${d.isoWeek()}`), x, width, dateKey: wCur.toISOString() });
     wCur = wCur.add(1, 'week');
   }
 
@@ -264,7 +290,7 @@ function generateWeekHeader(
 
 function generateMonthHeader(
   start: Date, end: Date, pxPerDay: number,
-  topH: number, botH: number,
+  topH: number, botH: number, i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const origin = snapToDay(start);
   const topCells: HeaderCell[] = [];
@@ -279,7 +305,7 @@ function generateMonthHeader(
     const clampE = qEnd > end ? end : qEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    topCells.push({ label: `Q${qCur.quarter()} ${qCur.format('YYYY')}`, x, width, dateKey: qCur.toISOString() });
+    topCells.push({ label: headerLabel(i18n, ViewMode.Month, 'top', qCur.toDate(), d => `${prefix(i18n, 'quarterPrefix')}${d.quarter()} ${d.format('YYYY')}`), x, width, dateKey: qCur.toISOString() });
     qCur = qCur.add(1, 'quarter');
   }
 
@@ -291,7 +317,7 @@ function generateMonthHeader(
     const clampE = mEnd > end ? end : mEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    botCells.push({ label: mCur.format('MMM'), x, width, dateKey: mCur.toISOString() });
+    botCells.push({ label: headerLabel(i18n, ViewMode.Month, 'bottom', mCur.toDate(), d => d.format('MMM')), x, width, dateKey: mCur.toISOString() });
     mCur = mCur.add(1, 'month');
   }
 
@@ -302,7 +328,7 @@ function generateMonthHeader(
 
 function generateQuarterHeader(
   start: Date, end: Date, pxPerDay: number,
-  topH: number, botH: number,
+  topH: number, botH: number, i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const origin = snapToDay(start);
   const topCells: HeaderCell[] = [];
@@ -316,7 +342,7 @@ function generateQuarterHeader(
     const clampE = yEnd > end ? end : yEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    topCells.push({ label: yCur.format('YYYY'), x, width, dateKey: yCur.toISOString() });
+    topCells.push({ label: headerLabel(i18n, ViewMode.Quarter, 'top', yCur.toDate(), d => d.format('YYYY')), x, width, dateKey: yCur.toISOString() });
     yCur = yCur.add(1, 'year');
   }
 
@@ -327,7 +353,7 @@ function generateQuarterHeader(
     const clampE = qEnd > end ? end : qEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    botCells.push({ label: `Q${qCur.quarter()}`, x, width, dateKey: qCur.toISOString() });
+    botCells.push({ label: headerLabel(i18n, ViewMode.Quarter, 'bottom', qCur.toDate(), d => `${prefix(i18n, 'quarterPrefix')}${d.quarter()}`), x, width, dateKey: qCur.toISOString() });
     qCur = qCur.add(1, 'quarter');
   }
 
@@ -338,7 +364,7 @@ function generateQuarterHeader(
 
 function generateYearHeader(
   start: Date, end: Date, pxPerDay: number,
-  topH: number, botH: number,
+  topH: number, botH: number, i18n?: GanttI18n,
 ): [HeaderRow, HeaderRow] {
   const origin = snapToDay(start);
   const topCells: HeaderCell[] = [];
@@ -352,7 +378,7 @@ function generateYearHeader(
     const clampE = yEnd > end ? end : yEnd;
     const x     = dateToPixel(clampS, origin, pxPerDay);
     const width = dateToPixel(clampE, origin, pxPerDay) - x;
-    topCells.push({ label: yCur.format('YYYY'), x, width, dateKey: yCur.toISOString() });
+    topCells.push({ label: headerLabel(i18n, ViewMode.Year, 'top', yCur.toDate(), d => d.format('YYYY')), x, width, dateKey: yCur.toISOString() });
 
     // Two semesters per year
     for (const sem of [yCur.startOf('year'), yCur.month(6)]) {
@@ -362,7 +388,8 @@ function generateYearHeader(
       if (scS >= scE) continue;
       const sx     = dateToPixel(scS, origin, pxPerDay);
       const sw     = dateToPixel(scE, origin, pxPerDay) - sx;
-      botCells.push({ label: `H${sem.month() === 0 ? 1 : 2}`, x: sx, width: sw, dateKey: sem.toISOString() });
+      const half   = sem.month() === 0 ? 1 : 2;
+      botCells.push({ label: headerLabel(i18n, ViewMode.Year, 'bottom', sem.toDate(), () => `${prefix(i18n, 'halfPrefix')}${half}`), x: sx, width: sw, dateKey: sem.toISOString() });
     }
 
     yCur = yCur.add(1, 'year');
@@ -432,17 +459,17 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-export function formatDate(date: Date, fmt = 'MMM D, YYYY'): string {
-  return dayjs(date).format(fmt);
+export function formatDate(date: Date, fmt = 'MMM D, YYYY', locale?: string): string {
+  return (locale ? dayjs(date).locale(locale) : dayjs(date)).format(fmt);
 }
 
-export function durationLabel(start: Date, end: Date): string {
+export function durationLabel(start: Date, end: Date, labels?: Partial<GanttLabels>): string {
   const days = diffDays(start, end);
-  if (days < 1)  return '< 1 day';
-  if (days === 1) return '1 day';
-  if (days < 7)  return `${days} days`;
+  if (days < 1)   return labels?.durationLessThanDay ?? '< 1 day';
+  if (days === 1) return labels?.durationDay ?? '1 day';
+  if (days < 7)   return labels?.durationDays ? labels.durationDays(days) : `${days} days`;
   const weeks = Math.floor(days / 7);
   const rem   = days % 7;
-  if (rem === 0) return `${weeks}w`;
-  return `${weeks}w ${rem}d`;
+  if (rem === 0) return labels?.durationWeeks ? labels.durationWeeks(weeks) : `${weeks}w`;
+  return labels?.durationWeeksDays ? labels.durationWeeksDays(weeks, rem) : `${weeks}w ${rem}d`;
 }

@@ -62,6 +62,14 @@ export class AppComponent {
 - Views: Day / Week / Month / Quarter / Year with zoom
 - Annotations, today marker, optional legend
 - Light / dark / auto theming via CSS custom properties
+- **i18n** — localisable UI strings + dayjs `locale` + custom date/header formats
+
+## i18n
+
+```ts
+import 'dayjs/locale/it';
+<gantry [options]="{ locale: 'it', labels: { todayButton: 'Oggi' } }" />
+```
 
 ## Documentation & source
 

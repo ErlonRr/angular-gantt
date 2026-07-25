@@ -40,6 +40,7 @@ import {
   zoomOut,
   HEADER_HEIGHTS,
 } from '../gantt-math';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
   selector: 'gantt-header',
@@ -76,29 +77,20 @@ import {
               [attr.stroke]="theme().borderColor"
               stroke-width="0.5"
             />
-            <!-- Cell label — sticky-centred in visible portion, clipped to cell -->
-            <svg:text
-              [attr.x]="labelX(cell)"
-              [attr.y]="topHeight() / 2"
-              [attr.fill]="theme().textPrimary"
-              [attr.font-size]="theme().fontSize"
-              [attr.font-family]="theme().fontFamily"
-              font-weight="600"
-              text-anchor="middle"
-              dominant-baseline="central"
-              style="pointer-events: none; user-select: none;"
-              [attr.clip-path]="'url(#clip-top-' + cell.dateKey + ')'"
-            >{{ cell.label }}</svg:text>
-            <svg:defs>
-              <svg:clipPath [attr.id]="'clip-top-' + cell.dateKey">
-                <svg:rect
-                  [attr.x]="cell.x + 2"
-                  [attr.y]="0"
-                  [attr.width]="cell.width - 4"
-                  [attr.height]="topHeight()"
-                />
-              </svg:clipPath>
-            </svg:defs>
+            <!-- Cell label — centred; hidden when the cell is too narrow -->
+            @if (cell.width >= minLabelWidth()) {
+              <svg:text
+                [attr.x]="cell.x + cell.width / 2"
+                [attr.y]="topHeight() / 2"
+                [attr.fill]="theme().textPrimary"
+                [attr.font-size]="theme().fontSize"
+                [attr.font-family]="theme().fontFamily"
+                font-weight="600"
+                text-anchor="middle"
+                dominant-baseline="central"
+                style="pointer-events: none; user-select: none;"
+              >{{ cell.label }}</svg:text>
+            }
           </g>
         }
       </g>
@@ -119,7 +111,7 @@ import {
             <!-- Only show label if cell is wide enough -->
             @if (cell.width >= minLabelWidth()) {
               <svg:text
-                [attr.x]="labelX(cell)"
+                [attr.x]="cell.x + cell.width / 2"
                 [attr.y]="bottomHeight() / 2"
                 [attr.fill]="isCurrentPeriod(cell) ? theme().todayColor : theme().textSecondary"
                 [attr.font-size]="subFontSize()"
@@ -127,18 +119,7 @@ import {
                 text-anchor="middle"
                 dominant-baseline="central"
                 style="pointer-events: none; user-select: none;"
-                [attr.clip-path]="'url(#clip-bot-' + cell.dateKey + ')'"
               >{{ cell.label }}</svg:text>
-              <svg:defs>
-                <svg:clipPath [attr.id]="'clip-bot-' + cell.dateKey">
-                  <svg:rect
-                    [attr.x]="cell.x + 2"
-                    [attr.y]="0"
-                    [attr.width]="cell.width - 4"
-                    [attr.height]="bottomHeight()"
-                  />
-                </svg:clipPath>
-              </svg:defs>
             }
           </g>
         }
@@ -171,14 +152,12 @@ export class GanttHeaderComponent {
   readonly pxPerDay   = input.required<number>();
   readonly totalWidth = input.required<number>();
   readonly theme      = input.required<GanttTheme>();
-  /** Horizontal scroll offset of the canvas (px) — for sticky edge labels */
-  readonly scrollLeft    = input<number>(0);
-  /** Visible width of the canvas viewport (px) — for sticky edge labels */
-  readonly viewportWidth = input<number>(0);
 
   // ── Outputs ───────────────────────────────────────────────
   readonly zoomInEvent  = output<void>();
   readonly zoomOutEvent = output<void>();
+
+  private readonly i18n = inject(GanttI18nService);
 
   // ── Computed header rows ──────────────────────────────────
   private readonly headerRows = computed(() =>
@@ -187,6 +166,7 @@ export class GanttHeaderComponent {
       this.startDate(),
       this.endDate(),
       this.pxPerDay(),
+      this.i18n.bundle(),
     )
   );
 
@@ -201,24 +181,6 @@ export class GanttHeaderComponent {
     const base = parseInt(this.theme().fontSize, 10) || 13;
     return `${base - 1}px`;
   });
-
-  /**
-   * X position for a cell label. Normally the cell centre, but for cells
-   * partially scrolled off either edge the label is centred within the
-   * VISIBLE portion so it stays readable (sticky-label behaviour).
-   */
-  protected labelX(cell: HeaderCell): number {
-    const cellLeft  = cell.x;
-    const cellRight = cell.x + cell.width;
-    const vw = this.viewportWidth();
-    if (vw <= 0) return cellLeft + cell.width / 2;      // no viewport info yet
-
-    const sl = this.scrollLeft();
-    const visStart = Math.max(cellLeft, sl);
-    const visEnd   = Math.min(cellRight, sl + vw);
-    if (visEnd <= visStart) return cellLeft + cell.width / 2;   // fully off-screen
-    return (visStart + visEnd) / 2;
-  }
 
   /** Minimum cell width (px) to show a label — avoids overlap */
   protected readonly minLabelWidth = computed(() => {

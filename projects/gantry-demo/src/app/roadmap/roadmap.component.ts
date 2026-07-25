@@ -8,13 +8,39 @@
 // ─────────────────────────────────────────────────────────────
 
 import {
-  ChangeDetectionStrategy, Component, computed, inject, viewChild, TemplateRef,
+  ChangeDetectionStrategy, Component, computed, inject, signal, viewChild, TemplateRef,
 } from '@angular/core';
 import {
   GantryComponent, GanttTask, GanttFlatRow, ColumnDef, ColumnCellContext,
-  TaskType, DependencyType, ViewMode, GanttOptions,
+  GanttLabels, TaskType, DependencyType, ViewMode, GanttOptions,
 } from 'ngx-gantry';
+import 'dayjs/locale/it';
 import { AppThemeService } from '../shell/app-theme.service';
+
+// ── Italian translation (partial override — the rest falls back to EN) ──
+const IT_LABELS: Partial<GanttLabels> = {
+  loading: 'Caricamento…',
+  loadMore: 'Carica altro',
+  allLoaded: (n) => `Tutte le ${n} attività caricate`,
+  zoomIn: 'Ingrandisci',
+  zoomOut: 'Riduci',
+  todayButton: 'Oggi',
+  viewModes: {
+    [ViewMode.Day]: 'Giorno', [ViewMode.Week]: 'Settimana', [ViewMode.Month]: 'Mese',
+    [ViewMode.Quarter]: 'Trimestre', [ViewMode.Year]: 'Anno',
+  },
+  legend: 'Legenda', today: 'Oggi', annotation: 'Annotazione',
+  ttStart: 'Inizio', ttEnd: 'Fine', ttDuration: 'Durata',
+  ttProgress: 'Avanzamento', ttMilestone: 'Traguardo',
+  quarterPrefix: 'T', halfPrefix: 'S',
+  durationLessThanDay: '< 1 giorno', durationDay: '1 giorno',
+  durationDays: (n) => `${n} giorni`,
+  durationWeeks: (w) => `${w} sett`,
+  durationWeeksDays: (w, d) => `${w} sett ${d}g`,
+  colName: 'Attività', colStart: 'Inizio', colEnd: 'Fine', colDuration: 'Durata', colProgress: '%',
+  ariaChart: 'Diagramma di Gantt',
+  ariaExpand: (n) => `Espandi ${n}`, ariaCollapse: (n) => `Comprimi ${n}`,
+};
 
 // ── People ────────────────────────────────────────────────────
 interface Owner { name: string; initials: string; color: string; }
@@ -143,6 +169,10 @@ const TASKS: GanttTask[] = [
         <span class="lg"><i class="dot" style="background:#059669"></i>Done</span>
         <span class="lg"><i class="dot" style="background:#4f46e5"></i>On track</span>
         <span class="lg"><i class="dot" style="background:#d97706"></i>At risk</span>
+        <span class="rm-lang">
+          <button type="button" [class.on]="lang() === 'en'" (click)="lang.set('en')">EN</button>
+          <button type="button" [class.on]="lang() === 'it'" (click)="lang.set('it')">IT</button>
+        </span>
       </div>
     </div>
 
@@ -165,7 +195,7 @@ const TASKS: GanttTask[] = [
     <gantry
       [series]="tasks"
       [columns]="columns()"
-      [options]="opts"
+      [options]="opts()"
       [darkMode]="theme.mode()"
       [showToolbar]="true"
       [enableDrag]="true"
@@ -195,6 +225,13 @@ const TASKS: GanttTask[] = [
       font-size: 11.5px; color: hsl(var(--muted-fg)); font-weight: 500;
     }
     .rm-legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .rm-lang { display: inline-flex; gap: 2px; margin-left: 6px; }
+    .rm-lang button {
+      padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer;
+      border: 1px solid hsl(var(--border)); background: hsl(var(--muted));
+      color: hsl(var(--muted-fg)); border-radius: var(--app-radius-sm);
+    }
+    .rm-lang button.on { background: hsl(var(--primary)); border-color: hsl(var(--primary)); color: hsl(var(--primary-fg)); }
 
     /* Custom cells */
     .cell-owner { display: inline-flex; align-items: center; gap: 7px; overflow: hidden; width: 100%; }
@@ -223,21 +260,30 @@ export class RoadmapComponent {
   private readonly ownerTpl  = viewChild<TemplateRef<ColumnCellContext>>('ownerCell');
   private readonly statusTpl = viewChild<TemplateRef<ColumnCellContext>>('statusCell');
 
-  readonly opts: GanttOptions = {
+  /** UI language toggle (EN default). */
+  readonly lang = signal<'en' | 'it'>('en');
+
+  readonly opts = computed<GanttOptions>(() => ({
     viewMode:     ViewMode.Month,
     rowHeight:    40,
     panelWidth:   440,
     baseline:     true,
     showToday:    true,
     criticalPath: false,
-  };
+    ...(this.lang() === 'it'
+      ? { locale: 'it', labels: IT_LABELS, formats: { dateFormat: 'D MMM YYYY' } }
+      : {}),
+  }));
 
   /** Column set with rich custom cells — updates once the templates resolve. */
-  readonly columns = computed<ColumnDef[]>(() => [
-    { key: 'name',   label: 'Initiative', width: 210, minWidth: 150 },
-    { key: 'owner',  label: 'Owner',      width: 128, cellTemplate: this.ownerTpl() },
-    { key: 'status', label: 'Status',     width: 100, cellTemplate: this.statusTpl() },
-  ]);
+  readonly columns = computed<ColumnDef[]>(() => {
+    const it = this.lang() === 'it';
+    return [
+      { key: 'name',   label: it ? 'Iniziativa' : 'Initiative', width: 210, minWidth: 150 },
+      { key: 'owner',  label: it ? 'Responsabile' : 'Owner',    width: 128, cellTemplate: this.ownerTpl() },
+      { key: 'status', label: it ? 'Stato' : 'Status',          width: 100, cellTemplate: this.statusTpl() },
+    ];
+  });
 
   protected owner(row: GanttFlatRow): Owner | null {
     const id = (row.task.data as Meta | undefined)?.ownerId;
