@@ -22,7 +22,8 @@
     "watch:lib": "ng build gantry --watch",
     "storybook": "ng run gantry-demo:storybook",
     "build:storybook": "ng run gantry-demo:build-storybook",
-    "test": "ng test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "ng lint"
   },
   "dependencies": {
@@ -43,10 +44,11 @@
     "@angular/cli": "^20.0.0",
     "@angular/compiler-cli": "^20.0.0",
     "@chromatic-com/storybook": "^5.1.2",
-    "@storybook/angular": "^10.3.5",
     "@storybook/addon-docs": "^10.3.5",
+    "@storybook/angular": "^10.3.5",
     "ng-packagr": "^20.0.0",
     "storybook": "^10.3.5",
-    "typescript": "~5.8.0"
+    "typescript": "~5.8.0",
+    "vitest": "^4.1.10"
   }
 }

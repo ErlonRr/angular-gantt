@@ -354,6 +354,21 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ## Development tooling
 
+### Testing
+
+The framework-free core (`gantt-math` / `gantt-data` / `gantt-cpm` + the i18n
+formatters) is unit-tested with **Vitest** in plain Node — no Angular TestBed,
+no browser.
+
+```bash
+pnpm test          # run once
+pnpm test:watch    # watch mode
+```
+
+Specs live in `projects/gantry/src/lib/__tests__/*.test.ts` and cover
+date↔pixel math, tree flattening, the Critical Path Method, timeline-range
+padding, and i18n (locale, labels, header/date formats).
+
 ### Angular workspace vs Storybook preview
 
 The demo app (`gantry-demo`) is built with `@angular-devkit/build-angular:application` (esbuild-based application builder). **That is not Vite** and it is not the same pipeline as Storybook.
