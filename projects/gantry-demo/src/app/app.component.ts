@@ -1,17 +1,15 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
 import { DemoSidebarComponent } from './shell/demo-sidebar.component';
+import { DemoFrameComponent } from './shell/demo-frame.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterOutlet, DemoSidebarComponent],
+  imports: [DemoSidebarComponent, DemoFrameComponent],
   template: `
     <app-demo-sidebar />
-    <main class="ide-content">
-      <router-outlet />
-    </main>
+    <app-demo-frame class="ide-content" />
   `,
   styles: [`
     :host {

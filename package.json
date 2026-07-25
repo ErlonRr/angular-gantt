@@ -19,6 +19,7 @@
     "start": "ng serve gantry-demo --open",
     "build:lib": "ng build gantry",
     "build:app": "ng build gantry-demo --configuration production",
+    "build:demo": "ng build gantry-demo --configuration production --base-href ./",
     "watch:lib": "ng build gantry --watch",
     "storybook": "ng run gantry-demo:storybook",
     "build:storybook": "ng run gantry-demo:build-storybook",

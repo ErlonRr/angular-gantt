@@ -352,6 +352,23 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ---
 
+## Live showcase (the demo app)
+
+`projects/gantry-demo` is a small **custom showcase** (a "semi-Storybook"): an
+IDE-style sidebar lists the demos, each renders the live `<gantry>`, and a
+docs panel shows a copy-pasteable **Usage** snippet plus install/GitHub/npm links.
+It doubles as living documentation and as the site you can deploy next to the blog.
+
+```bash
+pnpm start                 # dev server (ng serve gantry-demo)
+pnpm build:demo            # static build → dist/gantry-demo (relative base href)
+```
+
+Deploy `dist/gantry-demo/browser` to any static host (GitHub Pages, Netlify,
+Vercel). For deep-link refresh on a static host, add an SPA fallback
+(`404.html` = `index.html`, or a `_redirects` / rewrite rule) — landing on `/`
+and navigating via the sidebar works without it.
+
 ## Development tooling
 
 ### Testing
