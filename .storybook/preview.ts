@@ -2,7 +2,6 @@ import { applicationConfig, type Preview } from '@storybook/angular';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideGanttLib } from '../projects/gantry/src/public-api';
-import './preview.css';
 
 const preview: Preview = {
   decorators: [
