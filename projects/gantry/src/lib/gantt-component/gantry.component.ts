@@ -346,6 +346,10 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   private readonly _vsVisibleRows = signal<any[]>([]);
   private readonly _vsPaddingTop = signal<number>(0);
   private readonly _vsPaddingBot = signal<number>(0);
+  /** Canvas viewport height (px), tracked via ResizeObserver so the visible
+   *  row window recomputes once the layout settles / the container resizes. */
+  private readonly _viewportH = signal<number>(0);
+  private _canvasRO?: ResizeObserver;
 
   protected readonly vsVisibleRows = this._vsVisibleRows.asReadonly();
   protected readonly vsPaddingTop = this._vsPaddingTop.asReadonly();
@@ -422,10 +426,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
         if (cols.length) this.colSvc.setColumns(cols);
       });
 
-      // Virtual scroll: row slice follows canvas scrollTop (minus timeline header height)
+      // Virtual scroll: row slice follows canvas scrollTop + viewport height
       effect(() => {
         const rows = this.layout.visibleRows();
         void this.scrollSvc.scrollTop();
+        void this._viewportH();
         this._runVirtualScroll(rows);
       });
     });
@@ -437,6 +442,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
     const canvas = this.canvasEl()?.nativeElement;
     if (panel) this.scrollSvc.registerPanel(panel);
     if (canvas) this.scrollSvc.registerCanvas(canvas);
+
+    // Track the canvas height so the virtual-scroll window recomputes once the
+    // flex layout settles (initial clientHeight can be smaller than final).
+    if (canvas) {
+      this._viewportH.set(canvas.clientHeight);
+      this._canvasRO = new ResizeObserver(() => this._viewportH.set(canvas.clientHeight));
+      this._canvasRO.observe(canvas);
+    }
 
     // Scroll to today on mount
     requestAnimationFrame(() => {
@@ -450,7 +463,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   }
 
   ngOnDestroy(): void {
-    // Services clean up via DestroyRef — nothing needed here.
+    this._canvasRO?.disconnect();
+    // Other services clean up via DestroyRef.
   }
 
   // ── Virtual scroll (shared window math on layout rows) ────
@@ -461,7 +475,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
     const st = this.scrollSvc.scrollTop();
     const rowScroll = Math.max(0, st - hh);
     const el = this.canvasEl()?.nativeElement;
-    const viewH = Math.max(rh, (el?.clientHeight ?? 500) - hh);
+    const clientH = this._viewportH() || el?.clientHeight || 500;
+    const viewH = Math.max(rh, clientH - hh);
 
     const win = computeVirtualWindow(rowScroll, rh, viewH, rows.length, 4);
 

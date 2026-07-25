@@ -33,6 +33,10 @@ First public release.
 - Header period labels no longer render as clipped "slivers" at the timeline edges
   in Month/Quarter/Year: sub-period padding is applied only in Day/Week views, so
   coarse views snap to whole periods.
+- Virtual scroll no longer under-renders the last rows when the canvas height
+  settles after the initial layout — a `ResizeObserver` recomputes the visible
+  window, so dependency arrows always connect to real rows (no arrows drawn into
+  empty space below the list).
 
 ### Dependencies
 - Runtime: `dayjs` only. Peer: `@angular/core` & `@angular/common` `>=20.2.0`.
