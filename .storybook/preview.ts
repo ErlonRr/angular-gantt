@@ -2,6 +2,7 @@ import { applicationConfig, type Preview } from '@storybook/angular';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { provideHttpClient } from '@angular/common/http';
 import { provideGanttLib } from '../projects/gantry/src/public-api';
+import './preview.css';
 
 const preview: Preview = {
   decorators: [
@@ -24,17 +25,18 @@ const preview: Preview = {
     layout: 'fullscreen',
     backgrounds: {
       options: {
-        light: { name: 'light', value: '#f8fafc' },
-        dark: { name: 'dark',  value: '#0f172a' }
-      }
+        // Match the gantry-demo palette (tokens.scss)
+        light: { name: 'light', value: '#ffffff' },
+        dark:  { name: 'dark',  value: '#100E15' },
+      },
     },
   },
 
   initialGlobals: {
     backgrounds: {
-      value: 'light'
-    }
-  }
+      value: 'dark',
+    },
+  },
 };
 
 export default preview;
