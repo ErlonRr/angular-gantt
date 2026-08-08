@@ -6,7 +6,8 @@
 5. **No Heavy Builds:** Use `pnpm test` (Vitest) for logic verification instead of full `ng build`.
 6. **Static Analysis First:** Verify logic, imports, and Angular 20 signals manually before compiling.
 7. **Loop Breaker:** If a build/test fails 2 times with the same error, STOP execution.
+8. **Release Accordion:** Maintain the `<details><summary>Recent Releases</summary>...</details>` accordion in `README.md` and `projects/gantry/README.md` updated with the last 5 releases on every release.
 
 ## 🛠 TERMINAL USAGE STRATEGY
 - Use `pnpm test` for core logic unit tests (`gantt-math`, `gantt-data`, `gantt-cpm`).
-- Activate skills in `.agents/skills/` (`planning-first-development`, `angular-developer`, `javascript-pro`, `modern-web-guidance`, `accessibility`, `memory-leak-debugging`).
+- Activate skills in `.agents/skills/` (`planning-first-development`, `angular-developer`, `javascript-pro`, `modern-web-guidance`, `accessibility`, `memory-leak-debugging`, `git-commit-workflow`, `release-management`).

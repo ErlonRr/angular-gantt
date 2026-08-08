@@ -83,3 +83,28 @@ Full docs, demos and issues:
 ## License
 
 [MIT](https://github.com/ErlonRr/angular-gantt/blob/main/LICENSE) © Erlon Rrustemaj
+
+---
+
+## 📋 Changelog
+
+<details>
+<summary><b>Recent Releases (Click to expand)</b></summary>
+<br/>
+
+### [1.0.1] — 2026-08-08
+- **Scroll Tearing & Ping-Pong**: Resolved visual bar duplication during vertical scrolling by replacing fragile microtask lock with a robust scroll-source timeout lock.
+- **Vertical Scroll Alignment**: Synchronized task list and SVG canvas vertical scroll positions 1:1 without header height distortion.
+- **Today Marker**: Removed top vertical line from header to avoid obscuring date labels, and updated positioning to reflect exact time-of-day.
+- **Hit Testing**: Fixed `_geoFromPoint` pointer event row lookup for virtual scrolled rows.
+- **Group Bar Defaults**: Ensured `TaskType.Group` resolves to `'group'` bar type by default.
+
+### [1.0.0] — 2026-07-25
+- **Initial Public Release**: Zoneless, signal-based Angular 20+ Gantt chart.
+
+---
+
+For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
+
+</details>
+
