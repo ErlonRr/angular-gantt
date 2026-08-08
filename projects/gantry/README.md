@@ -3,6 +3,10 @@
 > A free, **zoneless**, **signal-based** Gantt chart for **Angular 20+**.
 > Zero `@angular/animations`, zero CDK, zero RxJS — only `dayjs`.
 
+![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
+
+![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.gif)
+
 ```bash
 npm i ngx-gantry
 ```

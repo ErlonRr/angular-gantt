@@ -1,7 +1,11 @@
 # Gantry
 
-> Angular 20+ Gantt chart library — 100% free, zoneless, signal-based, zero @angular/animations.
+> Angular 20+ Gantt chart library — 100% free, zoneless, signal-based, zero `@angular/animations`, zero `@angular/cdk`.
 > npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
+
+![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
+
+![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.gif)
 
 ## Install
 
