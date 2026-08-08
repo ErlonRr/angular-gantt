@@ -5,6 +5,15 @@ All notable changes to **Gantry** (`ngx-gantry`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-08-08
+
+### Fixed
+- **Scroll Tearing & Ping-Pong**: Resolved visual bar duplication during vertical scrolling by replacing fragile microtask lock with a robust scroll-source timeout lock.
+- **Vertical Scroll Alignment**: Synchronized task list and SVG canvas vertical scroll positions 1:1 without header height distortion.
+- **Today Marker**: Removed top vertical line from header to avoid obscuring date labels, and updated positioning to reflect exact time-of-day.
+- **Hit Testing**: Fixed `_geoFromPoint` pointer event row lookup for virtual scrolled rows.
+- **Group Bar Defaults**: Ensured `TaskType.Group` resolves to `'group'` bar type by default.
+
 ## [1.0.0] — 2026-07-25
 
 First public release.
@@ -41,4 +50,5 @@ First public release.
 ### Dependencies
 - Runtime: `dayjs` only. Peer: `@angular/core` & `@angular/common` `>=20.2.0`.
 
+[1.0.1]: https://github.com/ErlonRr/angular-gantt/releases/tag/v1.0.1
 [1.0.0]: https://github.com/ErlonRr/angular-gantt/releases/tag/v1.0.0
