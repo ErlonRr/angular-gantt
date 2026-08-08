@@ -1,16 +1,12 @@
 ## 🛑 CRITICAL OPERATIONAL RULES
-1. **No Unnecessary Builds:** NEVER run `npm run build`, `docker build`, or heavy compilation commands after minor code changes unless explicitly requested.
-2. **Batch Editing:** Apply ALL code changes across all necessary files BEFORE suggesting or attempting a run/test cycle.
-3. **Static Analysis First:** Verify code logic and imports manually. Do not rely on the compiler to find syntax errors that can be spotted by reading.
-4. **Loop Breaker:** If a build/test fails 2 times with the same error, STOP. Do not retry. Report the error to the user and ask for guidance.
-5. **Background Processes:** Never start long-running processes (e.g., `dev servers`) that block the terminal unless strictly necessary for the task.
+1. **No Automatic Commits:** NEVER execute `git commit` or `git push` automatically. Always await explicit user instruction.
+2. **No Verbose Commits:** Use short, single-line Conventional Commits (e.g., `feat(gantry): ...`, `fix(tasklist): ...`).
+3. **Tag-Driven Releases:** Releases must be tagged with `vX.Y.Z`. Use patch (`v1.0.x`) for routine fixes, minor (`v1.x.0`) for substantial features, major (`vX.0.0`) for breaking updates.
+4. **Planning-First:** Activate `planning-first-development` skill before making ANY code change.
+5. **No Heavy Builds:** Use `pnpm test` (Vitest) for logic verification instead of full `ng build`.
+6. **Static Analysis First:** Verify logic, imports, and Angular 20 signals manually before compiling.
+7. **Loop Breaker:** If a build/test fails 2 times with the same error, STOP execution.
 
 ## 🛠 TERMINAL USAGE STRATEGY
-- Use `ls`, `cat`, and `grep` to understand the context.
-- Use `check` or `lint` commands instead of full `build` where possible.
-- If a task requires multiple steps, list them to the user first, then execute ONLY the code modifications.
-
-## ⚠️ EXECUTION GATEKEEPING
-Before running any command that takes >10 seconds:
-- Ask yourself: "Is the code complete enough to pass?"
-- If the answer is "No" or "Maybe", finish the code first.
+- Use `pnpm test` for core logic unit tests (`gantt-math`, `gantt-data`, `gantt-cpm`).
+- Activate skills in `.agents/skills/` (`planning-first-development`, `angular-developer`, `javascript-pro`, `modern-web-guidance`, `accessibility`, `memory-leak-debugging`).

@@ -125,17 +125,6 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         }
       </g>
 
-      <!-- ── Today vertical line (continuous with the canvas marker) ── -->
-      @if (todayX() >= 0) {
-        <svg:line
-          [attr.x1]="todayX()"
-          [attr.y1]="0"
-          [attr.x2]="todayX()"
-          [attr.y2]="totalHeight()"
-          [attr.stroke]="theme().todayColor"
-          stroke-width="1.5"
-        />
-      }
     </svg>
   `,
   styles: [`

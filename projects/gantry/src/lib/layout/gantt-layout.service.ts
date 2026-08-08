@@ -249,7 +249,7 @@ export class GanttLayoutService {
 
   readonly todayX = computed<number>(() => {
     if (!this.showToday()) return -1;
-    const today  = snapToDay(new Date());
+    const today  = new Date();
     const start  = this.startDate();
     const px     = this.pxPerDay();
     const x      = dateToPixel(today, start, px);

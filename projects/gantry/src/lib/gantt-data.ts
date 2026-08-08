@@ -64,7 +64,7 @@ export function flattenTree(
     const isCollapsed  = collapsedIds.has(task.id);
     const hidden       = parentHidden;
     const barType      = task.barType
-      ?? (task.type === TaskType.Milestone ? TaskType.Milestone : TaskType.Task);
+      ?? (task.type === TaskType.Milestone ? TaskType.Milestone : task.type === TaskType.Group ? TaskType.Group : TaskType.Task);
 
     const row: GanttFlatRow = {
       task,

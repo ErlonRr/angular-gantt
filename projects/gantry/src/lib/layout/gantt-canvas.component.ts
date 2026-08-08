@@ -234,7 +234,7 @@ export class GanttCanvasComponent {
     if (svgY == null) return null;
     const rh = this.layoutParams().rowHeight;
     const idx = Math.floor(svgY / rh);
-    return this.visibleGeometries()[idx] ?? null;
+    return this.allGeometries()[idx] ?? null;
   }
 
   /**

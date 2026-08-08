@@ -44,8 +44,7 @@ export class GanttScrollService {
   private _panel: HTMLElement | null  = null;
   private _canvas: HTMLElement | null = null;
 
-  /** rAF gate — prevents ping-pong sync loop */
-  private _syncing = false;
+  /** rAF id */
   private _rafId   = 0;
 
   private readonly destroyRef = inject(DestroyRef);
@@ -109,34 +108,49 @@ export class GanttScrollService {
     return this.layout.totalHeaderHeight();
   }
 
+  private _scrollSource: 'panel' | 'canvas' | null = null;
+  private _scrollTimeout: any;
+
   private _onPanelScroll(): void {
-    if (this._syncing) return;
-    const rowScroll = this._panel!.scrollTop;
+    if (this._scrollSource === 'canvas') return;
+    this._scrollSource = 'panel';
+
+    const top = this._panel!.scrollTop;
 
     this._rafId = requestAnimationFrame(() => {
-      this._syncing = true;
-      const hh = this._timelineHeaderOffset();
-      if (this._canvas) this._canvas.scrollTop = rowScroll + hh;
-      this.zone.run(() => this.scrollTop.set(this._canvas?.scrollTop ?? rowScroll + hh));
-      Promise.resolve().then(() => { this._syncing = false; });
+      if (this._canvas && this._canvas.scrollTop !== top) {
+        this._canvas.scrollTop = top;
+      }
+      this.zone.run(() => this.scrollTop.set(top));
+
+      clearTimeout(this._scrollTimeout);
+      this._scrollTimeout = setTimeout(() => {
+        this._scrollSource = null;
+      }, 60);
     });
   }
 
   private _onCanvasScroll(): void {
-    if (this._syncing) return;
+    if (this._scrollSource === 'panel') return;
+    this._scrollSource = 'canvas';
+
     const el  = this._canvas!;
     const top  = el.scrollTop;
     const left = el.scrollLeft;
 
     this._rafId = requestAnimationFrame(() => {
-      this._syncing = true;
-      const hh = this._timelineHeaderOffset();
-      if (this._panel) this._panel.scrollTop = Math.max(0, top - hh);
+      if (this._panel && this._panel.scrollTop !== top) {
+        this._panel.scrollTop = top;
+      }
       this.zone.run(() => {
         this.scrollTop.set(top);
         this.scrollLeft.set(left);
       });
-      Promise.resolve().then(() => { this._syncing = false; });
+
+      clearTimeout(this._scrollTimeout);
+      this._scrollTimeout = setTimeout(() => {
+        this._scrollSource = null;
+      }, 60);
     });
   }
 
@@ -183,10 +197,9 @@ export class GanttScrollService {
     rowHeight: number,
     behavior: ScrollBehavior = 'smooth',
   ): void {
-    if (!this._canvas) return;
-    const hh = this._timelineHeaderOffset();
-    const y = hh + rowIndex * rowHeight;
-    this._canvas.scrollTo({ top: y, behavior });
+    const y = rowIndex * rowHeight;
+    this._panel?.scrollTo({ top: y, behavior });
+    this._canvas?.scrollTo({ top: y, behavior });
   }
 
   /** Scroll both panels back to top-left */

@@ -473,7 +473,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
     const rh = this.layout.rowHeight();
     const hh = this.layout.totalHeaderHeight();
     const st = this.scrollSvc.scrollTop();
-    const rowScroll = Math.max(0, st - hh);
+    const rowScroll = Math.max(0, st);
     const el = this.canvasEl()?.nativeElement;
     const clientH = this._viewportH() || el?.clientHeight || 500;
     const viewH = Math.max(rh, clientH - hh);
