@@ -1,0 +1,22 @@
+{
+  "name": "demo-vue",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --force",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "@gantry/vue": "workspace:*",
+    "@gantry/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.2.2",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

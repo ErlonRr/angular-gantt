@@ -1,0 +1,32 @@
+{
+  "name": "@gantry/vue",
+  "version": "1.0.0",
+  "main": "dist/vue.umd.js",
+  "module": "dist/vue.es.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/vue.es.js",
+      "require": "./dist/vue.umd.js"
+    }
+  },
+  "scripts": {
+    "build": "vue-tsc && vite build"
+  },
+  "dependencies": {
+    "@gantry/vanilla": "workspace:*",
+    "@gantry/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "devDependencies": {
+    "vue": "^3.0.0",
+    "vue-tsc": "^2.0.0",
+    "vite": "^6.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite-plugin-dts": "^4.0.0"
+  }
+}

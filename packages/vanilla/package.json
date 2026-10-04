@@ -1,0 +1,26 @@
+{
+  "name": "@gantry/vanilla",
+  "version": "1.0.0",
+  "main": "dist/gantry.umd.js",
+  "module": "dist/gantry.es.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/gantry.es.js",
+      "require": "./dist/gantry.umd.js"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "@gantry/core": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0",
+    "vite-plugin-dts": "^4.0.0"
+  }
+}

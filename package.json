@@ -25,7 +25,12 @@
     "build:storybook": "ng run gantry-demo:build-storybook",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "ng lint"
+    "lint": "ng lint",
+    "dev:angular": "ng serve gantry-demo --open",
+    "dev:vanilla": "pnpm --filter demo-vanilla dev",
+    "dev:react": "pnpm --filter demo-react dev",
+    "dev:vue": "pnpm --filter demo-vue dev",
+    "dev:svelte": "pnpm --filter demo-svelte dev"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",
@@ -36,6 +41,7 @@
     "@angular/platform-browser": "^20.0.0",
     "@angular/router": "^20.0.0",
     "dayjs": "^1.11.13",
+    "puppeteer": "^25.5.0",
     "rxjs": "^7.8.2",
     "tslib": "^2.8.1",
     "zone.js": "~0.15.0"

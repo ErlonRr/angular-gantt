@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gantry Vanilla Demo</title>
+    <style>
+      body, html {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0f172a;
+        color: white;
+        font-family: system-ui, sans-serif;
+      }
+      .app {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 1rem;
+        background: #1e293b;
+        border-bottom: 1px solid #334155;
+      }
+      .gantt-wrapper {
+        flex: 1;
+        overflow: hidden;
+        padding: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header>
+        <h1>Gantry Vanilla JS</h1>
+      </header>
+      <div class="gantt-wrapper">
+        <gantry-element id="myGantt"></gantry-element>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
