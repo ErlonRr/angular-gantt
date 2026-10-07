@@ -6,19 +6,13 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.tsx'),
-      name: 'GantryReact',
-      fileName: (format) => `react.${format}.js`
+      formats: ['es'],
+      fileName: () => 'index.js',
     },
     rollupOptions: {
-      external: ['react', '@gantry/vanilla', '@gantry/core'],
-      output: {
-        globals: {
-          react: 'React',
-          '@gantry/vanilla': 'GantryVanilla',
-          '@gantry/core': 'GantryCore'
-        }
-      }
-    }
+      external: [/^react(\/|$)/, /^react-dom/, /^@gantry\//],
+    },
+    sourcemap: true,
   },
-  plugins: [dts({ insertTypesEntry: true })]
+  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], rollupTypes: true })],
 });

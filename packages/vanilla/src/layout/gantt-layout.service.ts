@@ -1,15 +1,19 @@
 /**
  * @file gantt-layout.service.ts
  * Vanilla JS layout engine — single source of truth for Gantt geometry calculations.
+ *
+ * Derived values (rows, geometries, timeline range…) are memoised and
+ * invalidated whenever any input state changes, so a render pass can read
+ * them as often as it likes without re-flattening the tree.
  */
 
 import {
   GanttTask, GanttFlatRow, GanttOptions, RowGeometry, ViewMode,
   dateToPixel, getTimelineRange, generateGridLines, generateHeaderRows,
   PX_PER_DAY, GridLine, TimelineRange, HeaderRow, zoomIn, zoomOut,
-  flattenTree, filterVisible, reindexVisible
+  flattenTree, filterVisible, reindexVisible, sortRoots, columnComparator, SortDirection,
 } from '@gantry/core';
-import { createState } from '../core/state';
+import { createState, WritableState } from '../core/state';
 
 const DEFAULT_ROW_HEIGHT = 36;
 const DEFAULT_HEADER_HEIGHT = 32;
@@ -17,12 +21,12 @@ const DEFAULT_SUBHEADER_HEIGHT = 28;
 const DEFAULT_PANEL_WIDTH = 320;
 const DEFAULT_TIMELINE_PAD = 7;
 
+export interface SortState { key: string; dir: SortDirection }
+
 export class GanttLayoutService {
   readonly tasks = createState<GanttTask[]>([]);
   readonly collapsedIds = createState<Set<string>>(new Set());
   readonly viewMode = createState<ViewMode>(ViewMode.Month);
-  readonly canvasWidth = createState<number>(800);
-  readonly canvasHeight = createState<number>(500);
   readonly panelWidth = createState<number>(DEFAULT_PANEL_WIDTH);
   readonly panelVisible = createState<boolean>(true);
   readonly rowHeight = createState<number>(DEFAULT_ROW_HEIGHT);
@@ -32,13 +36,33 @@ export class GanttLayoutService {
   readonly showBaseline = createState<boolean>(false);
   readonly showCriticalPath = createState<boolean>(false);
   readonly showToday = createState<boolean>(true);
+  readonly sort = createState<SortState | null>(null);
+
+  private cache = new Map<string, unknown>();
+
+  constructor() {
+    const states: WritableState<unknown>[] = [
+      this.tasks, this.collapsedIds, this.viewMode, this.rowHeight,
+      this.timelinePadding, this.showToday, this.sort,
+    ] as WritableState<unknown>[];
+    for (const s of states) s.subscribe(() => this.cache.clear());
+  }
+
+  private memo<T>(key: string, fn: () => T): T {
+    if (!this.cache.has(key)) this.cache.set(key, fn());
+    return this.cache.get(key) as T;
+  }
 
   get allRows(): GanttFlatRow[] {
-    return flattenTree(this.tasks(), this.collapsedIds());
+    return this.memo('allRows', () => {
+      const rows = flattenTree(this.tasks(), this.collapsedIds());
+      const sort = this.sort();
+      return sort ? sortRoots(rows, columnComparator(sort.key, sort.dir)) : rows;
+    });
   }
 
   get visibleRows(): GanttFlatRow[] {
-    return reindexVisible(filterVisible(this.allRows));
+    return this.memo('visibleRows', () => reindexVisible(filterVisible(this.allRows)));
   }
 
   get rowCount(): number {
@@ -46,12 +70,12 @@ export class GanttLayoutService {
   }
 
   get timelineRange(): TimelineRange {
-    return getTimelineRange(
+    return this.memo('range', () => getTimelineRange(
       this.tasks(),
       this.viewMode(),
       this.timelinePadding(),
-      this.showToday() ? new Date() : null
-    );
+      this.showToday() ? new Date() : null,
+    ));
   }
 
   get startDate(): Date {
@@ -80,48 +104,32 @@ export class GanttLayoutService {
   }
 
   get rowGeometries(): RowGeometry[] {
-    const rows = this.visibleRows;
-    const start = this.startDate;
-    const pxPerDay = this.pxPerDay;
-    const rh = this.rowHeight();
-    const result: RowGeometry[] = [];
+    return this.memo('geometries', () => {
+      const start = this.startDate;
+      const pxPerDay = this.pxPerDay;
+      const rh = this.rowHeight();
 
-    for (const row of rows) {
-      const y = row.visibleIndex * rh;
-      const taskStart = row.task.start;
-      const taskEnd = row.task.end ?? row.task.start;
-
-      const barX = dateToPixel(taskStart, start, pxPerDay);
-      const barW = Math.max(
-        dateToPixel(taskEnd, start, pxPerDay) - barX,
-        row.barType === 'milestone' ? 0 : 4
-      );
-
-      const progressWidth = Math.max((barW * (row.task.progress ?? 0)) / 100, 0);
-
-      result.push({
-        row,
-        y,
-        height: rh,
-        barX,
-        barWidth: barW,
-        progressWidth,
+      return this.visibleRows.map(row => {
+        const taskEnd = row.task.end ?? row.task.start;
+        const barX = dateToPixel(row.task.start, start, pxPerDay);
+        const barWidth = Math.max(
+          dateToPixel(taskEnd, start, pxPerDay) - barX,
+          row.barType === 'milestone' ? 0 : 4,
+        );
+        const progressWidth = Math.max((barWidth * (row.task.progress ?? 0)) / 100, 0);
+        return { row, y: row.visibleIndex * rh, height: rh, barX, barWidth, progressWidth };
       });
-    }
-
-    return result;
+    });
   }
 
   get geometryById(): Map<string, RowGeometry> {
-    const map = new Map<string, RowGeometry>();
-    for (const g of this.rowGeometries) {
-      map.set(g.row.task.id, g);
-    }
-    return map;
+    return this.memo('geometryById', () =>
+      new Map(this.rowGeometries.map(g => [g.row.task.id, g])));
   }
 
   get gridLines(): GridLine[] {
-    return generateGridLines(this.viewMode(), this.startDate, this.endDate, this.pxPerDay);
+    return this.memo('gridLines', () =>
+      generateGridLines(this.viewMode(), this.startDate, this.endDate, this.pxPerDay));
   }
 
   get headerRows(): [HeaderRow, HeaderRow] {
@@ -130,8 +138,7 @@ export class GanttLayoutService {
 
   get todayX(): number {
     if (!this.showToday()) return -1;
-    const today = new Date();
-    const x = dateToPixel(today, this.startDate, this.pxPerDay);
+    const x = dateToPixel(new Date(), this.startDate, this.pxPerDay);
     return x >= 0 && x <= this.totalWidth ? x : -1;
   }
 
@@ -158,7 +165,9 @@ export class GanttLayoutService {
   }
 
   collapseAll(): void {
-    const parentIds = this.allRows.filter(r => r.hasChildren).map(r => r.task.id);
+    const parentIds = flattenTree(this.tasks(), new Set())
+      .filter(r => r.hasChildren)
+      .map(r => r.task.id);
     this.collapsedIds.set(new Set(parentIds));
   }
 
@@ -174,10 +183,22 @@ export class GanttLayoutService {
     this.viewMode.update(zoomOut);
   }
 
+  /** Cycle a column's sort: ascending → descending → original order. */
+  toggleSort(key: string): void {
+    this.sort.update(cur => {
+      if (cur?.key !== key) return { key, dir: 'asc' };
+      return cur.dir === 'asc' ? { key, dir: 'desc' } : null;
+    });
+  }
+
   updateTask(taskId: string, patch: Partial<GanttTask>): void {
     this.tasks.update(tasks =>
       tasks.map(t => t.id === taskId ? { ...t, ...patch } : t)
     );
+  }
+
+  appendTasks(tasks: GanttTask[]): void {
+    if (tasks.length) this.tasks.update(cur => [...cur, ...tasks]);
   }
 
   setTasks(tasks: GanttTask[]): void {

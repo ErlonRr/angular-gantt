@@ -1,49 +1,64 @@
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Gantry } from '@gantry/vue';
-import { DEMO_TASKS } from '@gantry/core';
-import type { GanttTask } from '@gantry/core';
+import { computed, ref, shallowRef } from 'vue';
+import { Gantry, ViewMode, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/vue';
+import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+import '../../demo.css';
 
-const tasks = ref<GanttTask[]>(DEMO_TASKS);
-const viewMode = ref<'Day' | 'Week' | 'Month'>('Month');
+const gantt = shallowRef<InstanceType<typeof Gantry> | null>(null);
+const tasks = ref<GanttTask[]>([...DEMO_TASKS]);
+const viewMode = ref<ViewMode>(ViewMode.Month);
+const baseline = ref(false);
+const criticalPath = ref(false);
+const dark = ref(true);
+const log = ref('');
 
-const columns = [
-  { key: 'name', label: 'Initiative', width: 250 },
-  { key: 'progress', label: 'Progress (%)', width: 100 }
-];
+const options = computed(() => ({ viewMode: viewMode.value, baseline: baseline.value, criticalPath: criticalPath.value }));
 
-const handleTaskUpdate = (task: GanttTask) => {
-  const index = tasks.value.findIndex(t => t.id === task.id);
-  if (index !== -1) {
-    tasks.value[index] = task;
-  }
-};
+function applyDates(e: TaskDragEvent | TaskResizeEvent) {
+  const task = tasks.value.find(t => t.id === e.taskId);
+  if (task) Object.assign(task, { start: e.newStart, end: e.newEnd });
+}
+function onDragged(e: TaskDragEvent) {
+  applyDates(e);
+  log.value = `moved ${e.taskId} by ${e.daysMoved} day(s)`;
+}
+function onResized(e: TaskResizeEvent) {
+  applyDates(e);
+  log.value = `resized ${e.taskId} (${e.handle}) by ${e.daysDelta} day(s)`;
+}
 </script>
 
 <template>
-  <div style="height: 100vh; display: flex; flex-direction: column; background: #0f172a; color: #f1f5f9; margin: 0; font-family: system-ui, sans-serif;">
-    <header style="display: flex; align-items: center; gap: 16px; padding: 8px 14px; background: #1e293b; border-bottom: 1px solid #334155; flex-shrink: 0;">
-      <div style="display: flex; align-items: center; gap: 5px;">
-        <span style="font-family: monospace; font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Features</span>
-        <button style="padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; background: #334155; color: #f1f5f9; border: 1px solid #475569;">Baseline</button>
-        <button style="padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; background: #334155; color: #f1f5f9; border: 1px solid #475569;">Critical path</button>
+  <div class="demo">
+    <header class="demo-header">
+      <h1>Gantry · Vue</h1>
+      <div class="demo-group">
+        <span class="demo-label">Features</span>
+        <button :aria-pressed="baseline" @click="baseline = !baseline">Baseline</button>
+        <button :aria-pressed="criticalPath" @click="criticalPath = !criticalPath">Critical path</button>
+        <button :aria-pressed="dark" @click="dark = !dark">Dark</button>
+        <button @click="gantt?.element?.scrollToToday()">Today</button>
       </div>
-      <div style="display: flex; align-items: center; gap: 5px;">
-        <span style="font-family: monospace; font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">View</span>
-        <select v-model="viewMode" style="padding: 4px; border-radius: 4px; background: #334155; color: white; border: 1px solid #475569;">
-          <option value="Day">Day</option>
-          <option value="Week">Week</option>
-          <option value="Month">Month</option>
+      <div class="demo-group">
+        <span class="demo-label">View</span>
+        <select v-model="viewMode">
+          <option v-for="v in Object.values(ViewMode)" :key="v">{{ v }}</option>
         </select>
       </div>
+      <span class="demo-log">{{ log }}</span>
     </header>
-    <div style="flex: 1; overflow: hidden;">
-      <Gantry 
-        :tasks="tasks" 
-        :columns="columns"
-        :options="{ viewMode }"
-        @task-updated="handleTaskUpdate" 
-      />
-    </div>
+    <Gantry
+      ref="gantt"
+      class="demo-chart"
+      :tasks="tasks"
+      :annotations="DEMO_ANNOTATIONS"
+      :options="options"
+      :dark-mode="dark"
+      show-legend
+      @task-dragged="onDragged"
+      @task-resized="onResized"
+      @selection-change="e => (log = `selected: ${e.selectedIds.join(', ') || 'none'}`)"
+      @view-mode-change="e => (viewMode = e.viewMode)"
+    />
   </div>
 </template>

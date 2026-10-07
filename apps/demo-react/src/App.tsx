@@ -1,46 +1,60 @@
-import React, { useState } from 'react';
-import { Gantry } from '@gantry/react';
-import { DEMO_TASKS } from '@gantry/core';
-import type { GanttTask } from '@gantry/core';
+import { useMemo, useRef, useState } from 'react';
+import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantry/react';
+import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+import '../../demo.css';
 
 export default function App() {
+  const gantt = useRef<GantryElement>(null);
   const [tasks, setTasks] = useState<GanttTask[]>(DEMO_TASKS);
-  const [viewMode, setViewMode] = useState<'Day' | 'Week' | 'Month'>('Month');
-  
-  const columns = [
-    { key: 'name', label: 'Initiative', width: 250 },
-    { key: 'progress', label: 'Progress (%)', width: 100 }
-  ];
+  const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
+  const [baseline, setBaseline] = useState(false);
+  const [criticalPath, setCriticalPath] = useState(false);
+  const [dark, setDark] = useState(true);
+  const [log, setLog] = useState('');
 
-  const handleTaskUpdate = (task: GanttTask) => {
-    setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-  };
+  const options = useMemo(() => ({ viewMode, baseline, criticalPath }), [viewMode, baseline, criticalPath]);
+
+  const applyDates = (taskId: string, start: Date, end: Date) =>
+    setTasks(prev => prev.map(t => (t.id === taskId ? { ...t, start, end } : t)));
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#0f172a', color: '#f1f5f9', margin: 0, fontFamily: 'system-ui, sans-serif' }}>
-      <header style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '8px 14px', background: '#1e293b', borderBottom: '1px solid #334155', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Features</span>
-          <button style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', background: '#334155', color: '#f1f5f9', border: '1px solid #475569' }}>Baseline</button>
-          <button style={{ padding: '4px 10px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', background: '#334155', color: '#f1f5f9', border: '1px solid #475569' }}>Critical path</button>
+    <div className="demo">
+      <header className="demo-header">
+        <h1>Gantry · React</h1>
+        <div className="demo-group">
+          <span className="demo-label">Features</span>
+          <button aria-pressed={baseline} onClick={() => setBaseline(b => !b)}>Baseline</button>
+          <button aria-pressed={criticalPath} onClick={() => setCriticalPath(c => !c)}>Critical path</button>
+          <button aria-pressed={dark} onClick={() => setDark(d => !d)}>Dark</button>
+          <button onClick={() => gantt.current?.scrollToToday()}>Today</button>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <span style={{ fontFamily: 'monospace', fontSize: '10px', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>View</span>
-          <select value={viewMode} onChange={(e) => setViewMode(e.target.value as any)} style={{ padding: '4px', borderRadius: '4px', background: '#334155', color: 'white', border: '1px solid #475569' }}>
-            <option value="Day">Day</option>
-            <option value="Week">Week</option>
-            <option value="Month">Month</option>
+        <div className="demo-group">
+          <span className="demo-label">View</span>
+          <select value={viewMode} onChange={e => setViewMode(e.target.value as ViewMode)}>
+            {Object.values(ViewMode).map(v => <option key={v}>{v}</option>)}
           </select>
         </div>
+        <span className="demo-log">{log}</span>
       </header>
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        <Gantry 
-          tasks={tasks} 
-          columns={columns}
-          options={{ viewMode }} 
-          onTaskUpdated={handleTaskUpdate} 
-        />
-      </div>
+      <Gantry
+        ref={gantt}
+        className="demo-chart"
+        tasks={tasks}
+        annotations={DEMO_ANNOTATIONS}
+        options={options}
+        darkMode={dark}
+        showLegend
+        onTaskDragged={e => {
+          applyDates(e.taskId, e.newStart, e.newEnd);
+          setLog(`moved ${e.taskId} by ${e.daysMoved} day(s)`);
+        }}
+        onTaskResized={e => {
+          applyDates(e.taskId, e.newStart, e.newEnd);
+          setLog(`resized ${e.taskId} (${e.handle}) by ${e.daysDelta} day(s)`);
+        }}
+        onSelectionChange={e => setLog(`selected: ${e.selectedIds.join(', ') || 'none'}`)}
+        onViewModeChange={e => setViewMode(e.viewMode)}
+      />
     </div>
   );
 }

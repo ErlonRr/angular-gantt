@@ -46,6 +46,7 @@ export type { GanttGlobalConfig } from './lib/services/gantt-theme.service';
 export { GanttI18nService } from './lib/services/gantt-i18n.service';
 
 export { GanttLayoutService } from './lib/layout/gantt-layout.service';
+export type { GanttSortState } from './lib/layout/gantt-layout.service';
 export { GanttScrollService } from './lib/scroll/gantt-scroll.service';
 export { GanttVirtualScrollDirective } from './lib/virtual-scroll/gantt-virtual-scroll.directive';
 export { GanttDragService } from './lib/drag/gantt-drag.service';

@@ -1,4 +1,6 @@
 export * from './gantry.element';
+export * from './types';
+export * from './datasource';
 export * from './core';
 export * from './services';
 export * from './virtual-scroll';

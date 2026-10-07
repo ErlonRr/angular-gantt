@@ -156,6 +156,30 @@ function getRootId(row: GanttFlatRow, allRows: GanttFlatRow[]): string {
   return parent ? getRootId(parent, allRows) : row.task.id;
 }
 
+export type SortDirection = 'asc' | 'desc';
+
+/**
+ * Comparator for sorting rows by a column key: a task field, or the derived
+ * `duration` column. Dates and numbers compare by value, everything else as
+ * localised strings; empty values always sort last.
+ */
+export function columnComparator(key: string, dir: SortDirection = 'asc'): SortComparator {
+  const sign = dir === 'asc' ? 1 : -1;
+  const value = (row: GanttFlatRow): unknown => key === 'duration'
+    ? (row.task.end ?? row.task.start).getTime() - row.task.start.getTime()
+    : (row.task as unknown as Record<string, unknown>)[key];
+  return (a, b) => {
+    const va = value(a);
+    const vb = value(b);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (va instanceof Date && vb instanceof Date) return sign * (va.getTime() - vb.getTime());
+    if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
+    return sign * String(va).localeCompare(String(vb));
+  };
+}
+
 // ─── Task lookup helpers ──────────────────────────────────────
 
 export function findRowById(rows: GanttFlatRow[], id: string): GanttFlatRow | undefined {
@@ -196,6 +220,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     width:   240,
     minWidth: 120,
     builtin: true,
+    sortable: true,
     render:  r => r.task.name,
   },
   {
@@ -204,6 +229,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     width:   96,
     minWidth: 72,
     builtin: true,
+    sortable: true,
     render:  r => formatDate(r.task.start),
   },
   {
@@ -212,6 +238,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     width:   96,
     minWidth: 72,
     builtin: true,
+    sortable: true,
     render:  r => formatDate(r.task.end),
   },
   {
@@ -220,6 +247,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     width:   80,
     minWidth: 60,
     builtin: true,
+    sortable: true,
     render:  r => durationLabel(r.task.start, r.task.end),
   },
   {
@@ -228,6 +256,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     width:   56,
     minWidth: 44,
     builtin: true,
+    sortable: true,
     render:  r => `${r.task.progress ?? 0}%`,
   },
 ];
@@ -242,10 +271,10 @@ export function buildDefaultColumns(
   dateFormat = 'MMM D, YYYY',
 ): ColumnDef[] {
   return [
-    { key: 'name',     label: labels.colName,     width: 240, minWidth: 120, builtin: true, render: r => r.task.name },
-    { key: 'start',    label: labels.colStart,    width: 96,  minWidth: 72,  builtin: true, render: r => formatDate(r.task.start, dateFormat, locale) },
-    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, render: r => formatDate(r.task.end, dateFormat, locale) },
-    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, render: r => durationLabel(r.task.start, r.task.end, labels) },
-    { key: 'progress', label: labels.colProgress, width: 56,  minWidth: 44,  builtin: true, render: r => `${r.task.progress ?? 0}%` },
+    { key: 'name',     label: labels.colName,     width: 240, minWidth: 120, builtin: true, sortable: true, render: r => r.task.name },
+    { key: 'start',    label: labels.colStart,    width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.start, dateFormat, locale) },
+    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.end, dateFormat, locale) },
+    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, sortable: true, render: r => durationLabel(r.task.start, r.task.end, labels) },
+    { key: 'progress', label: labels.colProgress, width: 56,  minWidth: 44,  builtin: true, sortable: true, render: r => `${r.task.progress ?? 0}%` },
   ];
 }

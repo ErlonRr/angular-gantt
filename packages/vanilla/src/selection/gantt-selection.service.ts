@@ -80,6 +80,12 @@ export class GanttSelectionService {
     this.emit([...this._selectedIds()]);
   }
 
+  setSelected(ids: string[]): void {
+    this._selectedIds.set(new Set(ids));
+    this._lastSelected.set(ids.at(-1) ?? null);
+    this.emit([...ids]);
+  }
+
   clear(): void {
     this._selectedIds.set(new Set());
     this._lastSelected.set(null);

@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@gantry/vanilla": "workspace:*",
-    "@gantry/core": "workspace:*"
+    "@gantry/vanilla": "workspace:^",
+    "@gantry/core": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

@@ -3,13 +3,21 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "declaration": true,
-    "outDir": "./dist",
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "jsx": "react",
-    "lib": ["DOM", "DOM.Iterable", "ESNext"]
+    "jsx": "react-jsx",
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "ESNext"
+    ],
+    "noEmit": true,
+    "customConditions": [
+      "@gantry/source"
+    ]
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*"
+  ]
 }

@@ -5,6 +5,17 @@ All notable changes to **Gantry** (`ngx-gantry`) are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Multi-framework packages**: `@gantry/core` (framework-free logic), `@gantry/vanilla` (`<gantry-element>` Web Component), and `@gantry/react`, `@gantry/vue`, `@gantry/svelte` bindings, each with a demo app under `apps/`.
+- **Column sorting** (`ngx-gantry` and the Web Component): built-in columns are sortable; clicking a header cycles ascending → descending → original order.
+- Release tooling with Changesets, CI workflow, and Web Component tests (happy-dom).
+
+### Changed
+- `ngx-gantry` now imports its types, timeline math, tree helpers and critical path from `@gantry/core` (no public API change).
+- `rowClick` now always emits a `RowGeometry` (the task list previously emitted a flat row); `rowDblClick` is typed `GanttFlatRow`.
+
 ## [1.0.1] — 2026-08-08
 
 ### Fixed

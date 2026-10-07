@@ -7,7 +7,12 @@
     "declarationMap": true,
     "inlineSources": true,
     "types": [],
-    "lib": ["ES2022", "dom", "dom.iterable"]
+    "lib": [
+      "ES2022",
+      "dom",
+      "dom.iterable"
+    ],
+    "paths": {}
   },
   "angularCompilerOptions": {
     "compilationMode": "partial"

@@ -1,0 +1,43 @@
+# @gantry/core
+
+Framework-free core of the [Gantry](https://github.com/ErlonRr/angular-gantt/tree/main#readme) Gantt chart: domain types,
+timeline math, tree helpers and critical-path computation. No DOM, no framework —
+runs in browsers, Node, workers and SSR. Only dependency: `dayjs`.
+
+You usually don't install this directly: it powers [`ngx-gantry`](https://github.com/ErlonRr/angular-gantt/tree/main/projects/gantry)
+(Angular) and [`@gantry/vanilla`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) (Web Component, used by the React, Vue and
+Svelte bindings), and every binding re-exports it. Use it on its own to compute
+schedules server-side or to build your own renderer.
+
+## Install
+
+```bash
+npm i @gantry/core
+```
+
+## What's inside
+
+| Area | Exports |
+|---|---|
+| Types | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and the `ViewMode`, `TaskType`, `DependencyType` enums |
+| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel` |
+| Tree data | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns` |
+| Scheduling | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain` |
+| i18n | `DEFAULT_LABELS`, `DEFAULT_FORMATS` |
+
+```ts
+import { computeCriticalPath, DependencyType } from '@gantry/core';
+
+const { criticalIds } = computeCriticalPath([
+  { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
+  { id: 'b', name: 'Build', start: new Date('2026-01-21'), end: new Date('2026-02-28'),
+    dependency: { taskId: 'a', type: DependencyType.FS } },
+]);
+```
+
+Sample data for demos and docs lives in a separate entry point:
+`import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo'`.
+
+## License
+
+MIT

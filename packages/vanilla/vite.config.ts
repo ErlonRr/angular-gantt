@@ -6,17 +6,13 @@ export default defineConfig({
   build: {
     lib: {
       entry: resolve(__dirname, 'src/index.ts'),
-      name: 'Gantry',
-      fileName: (format) => `gantry.${format}.js`
+      formats: ['es'],
+      fileName: () => 'index.js',
     },
     rollupOptions: {
-      external: ['@gantry/core'],
-      output: {
-        globals: {
-          '@gantry/core': 'GantryCore'
-        }
-      }
-    }
+      external: [/^@gantry\//, /^dayjs/],
+    },
+    sourcemap: true,
   },
-  plugins: [dts({ insertTypesEntry: true })]
+  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], rollupTypes: true })],
 });

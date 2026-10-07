@@ -53,7 +53,16 @@ import {
   flattenTree,
   filterVisible,
   reindexVisible,
+  sortRoots,
+  columnComparator,
+  SortDirection,
 } from '../gantt-data';
+
+/** Active column sort (null = original task order) */
+export interface GanttSortState {
+  key: string;
+  dir: SortDirection;
+}
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -116,10 +125,15 @@ export class GanttLayoutService {
   //  Derived: tree processing
   // ══════════════════════════════════════════════════════════
 
+  /** Active column sort — root groups are reordered, children stay under their parent */
+  readonly sort = signal<GanttSortState | null>(null);
+
   /** All rows (DFS flat, including hidden) */
-  readonly allRows = computed<GanttFlatRow[]>(() =>
-    flattenTree(this.tasks(), this.collapsedIds())
-  );
+  readonly allRows = computed<GanttFlatRow[]>(() => {
+    const rows = flattenTree(this.tasks(), this.collapsedIds());
+    const sort = this.sort();
+    return sort ? sortRoots(rows, columnComparator(sort.key, sort.dir)) : rows;
+  });
 
   /** Visible rows only (hidden === false) */
   readonly visibleRows = computed<GanttFlatRow[]>(() =>
@@ -290,6 +304,14 @@ export class GanttLayoutService {
       if (next.has(taskId)) next.delete(taskId);
       else next.add(taskId);
       return next;
+    });
+  }
+
+  /** Cycle a column's sort: ascending → descending → original order. */
+  toggleSort(key: string): void {
+    this.sort.update(cur => {
+      if (cur?.key !== key) return { key, dir: 'asc' };
+      return cur.dir === 'asc' ? { key, dir: 'desc' } : null;
     });
   }
 

@@ -17,7 +17,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve gantry-demo --open",
-    "build:lib": "ng build gantry",
+    "build:lib": "ng build gantry && node scripts/resolve-workspace-deps.mjs dist/ngx-gantry/package.json",
     "build:app": "ng build gantry-demo --configuration production",
     "build:demo": "ng build gantry-demo --configuration production --base-href ./",
     "watch:lib": "ng build gantry --watch",
@@ -30,7 +30,14 @@
     "dev:vanilla": "pnpm --filter demo-vanilla dev",
     "dev:react": "pnpm --filter demo-react dev",
     "dev:vue": "pnpm --filter demo-vue dev",
-    "dev:svelte": "pnpm --filter demo-svelte dev"
+    "dev:svelte": "pnpm --filter demo-svelte dev",
+    "build": "pnpm build:packages && pnpm build:lib && pnpm build:app && pnpm build:demos",
+    "build:packages": "pnpm --filter \"./packages/*\" -r build",
+    "build:demos": "pnpm --filter \"./apps/*\" -r build",
+    "typecheck": "pnpm --filter \"./packages/*\" -r typecheck",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build:packages && pnpm build:lib && changeset publish"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",
@@ -41,7 +48,6 @@
     "@angular/platform-browser": "^20.0.0",
     "@angular/router": "^20.0.0",
     "dayjs": "^1.11.13",
-    "puppeteer": "^25.5.0",
     "rxjs": "^7.8.2",
     "tslib": "^2.8.1",
     "zone.js": "~0.15.0"
@@ -50,9 +56,11 @@
     "@angular-devkit/build-angular": "^20.0.0",
     "@angular/cli": "^20.0.0",
     "@angular/compiler-cli": "^20.0.0",
+    "@changesets/cli": "^2.31.1",
     "@chromatic-com/storybook": "^5.1.2",
     "@storybook/addon-docs": "^10.3.5",
     "@storybook/angular": "^10.3.5",
+    "happy-dom": "^20.14.5",
     "ng-packagr": "^20.0.0",
     "storybook": "^10.3.5",
     "typescript": "~5.8.0",

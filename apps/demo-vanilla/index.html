@@ -3,41 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gantry Vanilla Demo</title>
-    <style>
-      body, html {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #0f172a;
-        color: white;
-        font-family: system-ui, sans-serif;
-      }
-      .app {
-        height: 100vh;
-        display: flex;
-        flex-direction: column;
-      }
-      header {
-        padding: 1rem;
-        background: #1e293b;
-        border-bottom: 1px solid #334155;
-      }
-      .gantt-wrapper {
-        flex: 1;
-        overflow: hidden;
-        padding: 2rem;
-      }
-    </style>
+    <title>Gantry · Vanilla JS</title>
   </head>
   <body>
-    <div class="app">
-      <header>
-        <h1>Gantry Vanilla JS</h1>
+    <div class="demo">
+      <header class="demo-header">
+        <h1>Gantry · Vanilla JS</h1>
+        <div class="demo-group">
+          <span class="demo-label">Features</span>
+          <button id="baseline" aria-pressed="false">Baseline</button>
+          <button id="critical" aria-pressed="false">Critical path</button>
+          <button id="dark" aria-pressed="true">Dark</button>
+        </div>
+        <div class="demo-group">
+          <span class="demo-label">View</span>
+          <select id="view-mode">
+            <option>Day</option><option>Week</option><option selected>Month</option><option>Quarter</option><option>Year</option>
+          </select>
+        </div>
+        <span class="demo-log" id="log"></span>
       </header>
-      <div class="gantt-wrapper">
-        <gantry-element id="myGantt"></gantry-element>
-      </div>
+      <gantry-element id="gantt" class="demo-chart" dark-mode="true"></gantry-element>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

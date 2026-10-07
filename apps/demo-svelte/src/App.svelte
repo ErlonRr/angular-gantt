@@ -1,47 +1,53 @@
 <script lang="ts">
-  import { Gantry } from '@gantry/svelte';
-  import { DEMO_TASKS } from '@gantry/core';
-  import type { GanttTask } from '@gantry/core';
+  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/svelte';
+  import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+  import '../../demo.css';
 
-  let tasks: GanttTask[] = $state(DEMO_TASKS);
-  let viewMode = $state<'Day' | 'Week' | 'Month'>('Month');
+  let gantt = $state<GantryElement>();
+  let tasks = $state<GanttTask[]>([...DEMO_TASKS]);
+  let viewMode = $state<ViewMode>(ViewMode.Month);
+  let baseline = $state(false);
+  let criticalPath = $state(false);
+  let dark = $state(true);
+  let log = $state('');
 
-  let columns = [
-    { key: 'name', label: 'Initiative', width: 250 },
-    { key: 'progress', label: 'Progress (%)', width: 100 }
-  ];
+  const options = $derived({ viewMode, baseline, criticalPath });
 
-  function handleTaskUpdate(e: CustomEvent<GanttTask>) {
-    const task = e.detail;
-    const idx = tasks.findIndex(t => t.id === task.id);
-    if (idx !== -1) {
-      tasks[idx] = task;
-    }
+  function applyDates(e: TaskDragEvent | TaskResizeEvent) {
+    const task = tasks.find(t => t.id === e.taskId);
+    if (task) Object.assign(task, { start: e.newStart, end: e.newEnd });
   }
 </script>
 
-<div style="height: 100vh; display: flex; flex-direction: column; background: #0f172a; color: #f1f5f9; margin: 0; font-family: system-ui, sans-serif;">
-  <header style="display: flex; align-items: center; gap: 16px; padding: 8px 14px; background: #1e293b; border-bottom: 1px solid #334155; flex-shrink: 0;">
-    <div style="display: flex; align-items: center; gap: 5px;">
-      <span style="font-family: monospace; font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Features</span>
-      <button style="padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; background: #334155; color: #f1f5f9; border: 1px solid #475569;">Baseline</button>
-      <button style="padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; background: #334155; color: #f1f5f9; border: 1px solid #475569;">Critical path</button>
+<div class="demo">
+  <header class="demo-header">
+    <h1>Gantry · Svelte</h1>
+    <div class="demo-group">
+      <span class="demo-label">Features</span>
+      <button aria-pressed={baseline} onclick={() => (baseline = !baseline)}>Baseline</button>
+      <button aria-pressed={criticalPath} onclick={() => (criticalPath = !criticalPath)}>Critical path</button>
+      <button aria-pressed={dark} onclick={() => (dark = !dark)}>Dark</button>
+      <button onclick={() => gantt?.scrollToToday()}>Today</button>
     </div>
-    <div style="display: flex; align-items: center; gap: 5px;">
-      <span style="font-family: monospace; font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">View</span>
-      <select bind:value={viewMode} style="padding: 4px; border-radius: 4px; background: #334155; color: white; border: 1px solid #475569;">
-        <option value="Day">Day</option>
-        <option value="Week">Week</option>
-        <option value="Month">Month</option>
+    <div class="demo-group">
+      <span class="demo-label">View</span>
+      <select bind:value={viewMode}>
+        {#each Object.values(ViewMode) as v (v)}<option>{v}</option>{/each}
       </select>
     </div>
+    <span class="demo-log">{log}</span>
   </header>
-  <div style="flex: 1; overflow: hidden;">
-      <Gantry 
-        {tasks}
-        {columns}
-        options={{ viewMode }}
-        on:taskUpdated={handleTaskUpdate}
-      />
-  </div>
+  <Gantry
+    bind:element={gantt}
+    class="demo-chart"
+    {tasks}
+    annotations={DEMO_ANNOTATIONS}
+    {options}
+    darkMode={dark}
+    showLegend
+    onTaskDragged={e => { applyDates(e); log = `moved ${e.taskId} by ${e.daysMoved} day(s)`; }}
+    onTaskResized={e => { applyDates(e); log = `resized ${e.taskId} (${e.handle}) by ${e.daysDelta} day(s)`; }}
+    onSelectionChange={e => (log = `selected: ${e.selectedIds.join(', ') || 'none'}`)}
+    onViewModeChange={e => (viewMode = e.viewMode)}
+  />
 </div>

@@ -1,0 +1,11 @@
+/* Shared look for the framework demo apps */
+html, body { margin: 0; height: 100%; background: #0f172a; color: #f1f5f9; font-family: system-ui, sans-serif; }
+.demo { height: 100vh; display: flex; flex-direction: column; }
+.demo-header { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 8px 14px; background: #1e293b; border-bottom: 1px solid #334155; flex-shrink: 0; }
+.demo-header h1 { font-size: 14px; margin: 0 8px 0 0; }
+.demo-group { display: flex; align-items: center; gap: 5px; }
+.demo-label { font-family: monospace; font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.demo-header button, .demo-header select { padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer; background: #334155; color: #f1f5f9; border: 1px solid #475569; }
+.demo-header button[aria-pressed="true"] { background: #3b82f6; border-color: #60a5fa; }
+.demo-log { margin-left: auto; font-family: monospace; font-size: 11px; color: #94a3b8; }
+.demo-chart { flex: 1; min-height: 0; }

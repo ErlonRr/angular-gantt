@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - name: Build packages, Angular library, showcase and demos
+        run: pnpm build
+      - name: Lint published packages
+        run: |
+          for dir in packages/*; do
+            (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/packs")
+          done
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-core-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vanilla-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-react-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vue-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-svelte-*.tgz

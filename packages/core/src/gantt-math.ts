@@ -6,8 +6,8 @@
 // ─────────────────────────────────────────────────────────────
 
 import dayjs, { Dayjs } from 'dayjs';
-import isoWeek  from 'dayjs/plugin/isoWeek';
-import quarterOfYear from 'dayjs/plugin/quarterOfYear';
+import isoWeek  from 'dayjs/plugin/isoWeek.js';
+import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 
 dayjs.extend(isoWeek);
 dayjs.extend(quarterOfYear);

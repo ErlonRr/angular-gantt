@@ -3,13 +3,15 @@
  * Vanilla JS column definition and width management service.
  */
 
-import { ColumnDef, buildDefaultColumns } from '@gantry/core';
+import { buildDefaultColumns } from '@gantry/core';
+import type { VanillaColumnDef as ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { createState } from '../core/state';
 
 export class GanttColumnService {
   private i18nService: GanttI18nService;
-  private hasCustom = false;
+  /** Consumer-provided definitions (null = default columns) */
+  private custom: ColumnDef[] | null = null;
   private readonly _columns = createState<ColumnDef[]>([]);
 
   constructor(i18nService: GanttI18nService) {
@@ -38,7 +40,7 @@ export class GanttColumnService {
   }
 
   setColumns(defs: ColumnDef[]): void {
-    this.hasCustom = true;
+    this.custom = defs;
     const base = this.defaults();
     const merged = defs.map(def => {
       const b = base.find(d => d.key === def.key) ?? {};
@@ -48,8 +50,14 @@ export class GanttColumnService {
   }
 
   resetColumns(): void {
-    this.hasCustom = false;
+    this.custom = null;
     this._columns.set(this.defaults());
+  }
+
+  /** Re-resolve column labels/formatters after a locale or label change. */
+  refresh(): void {
+    if (this.custom) this.setColumns(this.custom);
+    else this.resetColumns();
   }
 
   setColumnWidth(key: string, width: number): void {

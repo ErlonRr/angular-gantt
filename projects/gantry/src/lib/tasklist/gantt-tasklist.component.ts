@@ -88,11 +88,24 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.font-weight]="'600'"
           [style.color]="theme().textPrimary"
           [style.cursor]="col.sortable ? 'pointer' : 'default'"
+          [style.gap.px]="4"
+          [attr.role]="'columnheader'"
+          [attr.aria-sort]="col.sortable ? ariaSort(col.key) : null"
+          [attr.tabindex]="col.sortable ? 0 : null"
           (click)="col.sortable && sortColumn.emit(col.key)"
+          (keydown.enter)="col.sortable && sortColumn.emit(col.key)"
+          (keydown.space)="$event.preventDefault(); col.sortable && sortColumn.emit(col.key)"
         >
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
             {{ col.label }}
           </span>
+          @if (col.sortable) {
+            <span
+              aria-hidden="true"
+              [style.font-size.px]="9"
+              [style.color]="sort()?.key === col.key ? theme().textPrimary : theme().textMuted"
+            >{{ sortIcon(col.key) }}</span>
+          }
           <!-- Column resize handle -->
           <div
             class="gantt-col-resize-handle"
@@ -304,6 +317,7 @@ export class GanttTaskListComponent {
   readonly indentSize     = input<number>(16);
   readonly paddingTop     = input<number>(0);
   readonly paddingBottom  = input<number>(0);
+  readonly sort           = input<{ key: string; dir: 'asc' | 'desc' } | null>(null);
 
   // ── Outputs ───────────────────────────────────────────────
   readonly collapseToggle    = output<string>();          // taskId
@@ -321,6 +335,16 @@ export class GanttTaskListComponent {
 
   private readonly el = inject(ElementRef<HTMLElement>);
   private readonly i18n = inject(GanttI18nService);
+
+  protected ariaSort(key: string): 'ascending' | 'descending' | 'none' {
+    const s = this.sort();
+    return s?.key !== key ? 'none' : s.dir === 'asc' ? 'ascending' : 'descending';
+  }
+
+  protected sortIcon(key: string): string {
+    const s = this.sort();
+    return s?.key !== key ? '⇅' : s.dir === 'asc' ? '▲' : '▼';
+  }
 
   // ── Derived ───────────────────────────────────────────────
   protected readonly visibleColumns = computed(() =>

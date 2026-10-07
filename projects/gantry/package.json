@@ -31,6 +31,12 @@
     "@angular/common": ">=20.2.0"
   },
   "dependencies": {
+    "@gantry/core": "workspace:^",
     "dayjs": "^1.11.0"
+  },
+  "publishConfig": {
+    "directory": "../../dist/ngx-gantry",
+    "access": "public",
+    "provenance": true
   }
 }

@@ -19,9 +19,21 @@
     "target": "ES2022",
     "module": "ES2022",
     "useDefineForClassFields": false,
-    "lib": ["ES2022", "dom", "dom.iterable"],
+    "lib": [
+      "ES2022",
+      "dom",
+      "dom.iterable"
+    ],
     "paths": {
-      "ngx-gantry": ["projects/gantry/src/public-api.ts"]
+      "ngx-gantry": [
+        "projects/gantry/src/public-api.ts"
+      ],
+      "@gantry/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@gantry/core/demo": [
+        "packages/core/src/demo.ts"
+      ]
     }
   }
 }

@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "vite --force",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "vue-tsc -p tsconfig.json"
   },
   "dependencies": {
     "vue": "^3.4.0",
-    "@gantry/vue": "workspace:*",
-    "@gantry/core": "workspace:*"
+    "@gantry/vue": "workspace:^",
+    "@gantry/core": "workspace:^"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

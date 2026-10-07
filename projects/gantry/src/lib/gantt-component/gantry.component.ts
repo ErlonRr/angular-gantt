@@ -147,6 +147,7 @@ import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
             [colHeaderHeight]="layout.totalHeaderHeight()"
             [paddingTop]="vsPaddingTop()"
             [paddingBottom]="vsPaddingBottom()"
+            [sort]="layout.sort()"
             (collapseToggle)="layout.toggleCollapse($event)"
             (rowClick)="onTaskListRowClick($event)"
             (rowDblClick)="rowDblClick.emit($event)"
@@ -337,13 +338,13 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   readonly taskResized = output<TaskResizeEvent>();
   readonly selectionChange = output<SelectionChangeEvent>();
   readonly rowClick = output<RowGeometry>();
-  readonly rowDblClick = output<any>();
+  readonly rowDblClick = output<GanttFlatRow>();
 
   // ── Theme shortcut ────────────────────────────────────────
   protected readonly theme = computed(() => this.themeSvc.resolvedTheme());
 
   // ── Virtual scroll state ──────────────────────────────────
-  private readonly _vsVisibleRows = signal<any[]>([]);
+  private readonly _vsVisibleRows = signal<GanttFlatRow[]>([]);
   private readonly _vsPaddingTop = signal<number>(0);
   private readonly _vsPaddingBot = signal<number>(0);
   /** Canvas viewport height (px), tracked via ResizeObserver so the visible
@@ -357,7 +358,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
 
   // ── Virtual-scrolled geometries (canvas) ─────────────────
   protected readonly vsVisibleGeos = computed<RowGeometry[]>(() => {
-    const visibleIds = new Set(this._vsVisibleRows().map((r: any) => r.task.id));
+    const visibleIds = new Set(this._vsVisibleRows().map(r => r.task.id));
     return this.layout.rowGeometries().filter(g => visibleIds.has(g.row.task.id));
   });
 
@@ -469,7 +470,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
 
   // ── Virtual scroll (shared window math on layout rows) ────
 
-  private _runVirtualScroll(rows: any[]): void {
+  private _runVirtualScroll(rows: GanttFlatRow[]): void {
     const rh = this.layout.rowHeight();
     const hh = this.layout.totalHeaderHeight();
     const st = this.scrollSvc.scrollTop();
@@ -489,7 +490,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
 
   protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent }): void {
     this.selSvc.handleClick(e.row.task.id, e.event, this.layout.visibleRows());
-    this.rowClick.emit(e.row as unknown as RowGeometry);
+    const geo = this.layout.rowGeometries().find(g => g.row.task.id === e.row.task.id);
+    if (geo) this.rowClick.emit(geo);
   }
 
   protected onCanvasRowClick(geo: RowGeometry): void {
@@ -497,7 +499,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnChanges, OnDest
   }
 
   protected onSortColumn(key: string): void {
-    // Future: implement sort via GanttLayoutService
+    this.layout.toggleSort(key);
   }
 
   protected onTaskDragged(event: TaskDragEvent): void {

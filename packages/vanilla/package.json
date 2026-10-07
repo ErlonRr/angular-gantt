@@ -1,26 +1,62 @@
 {
   "name": "@gantry/vanilla",
   "version": "1.0.0",
-  "main": "dist/gantry.umd.js",
-  "module": "dist/gantry.es.js",
-  "types": "dist/index.d.ts",
+  "description": "Gantry Gantt chart as a framework-agnostic Web Component (<gantry-element>). Works with plain JS or any framework.",
+  "keywords": [
+    "web-component",
+    "custom-element",
+    "vanilla",
+    "javascript",
+    "gantt",
+    "gantt-chart",
+    "timeline",
+    "project-management",
+    "roadmap",
+    "schedule",
+    "critical-path",
+    "svg"
+  ],
+  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#readme",
+  "bugs": {
+    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "directory": "packages/vanilla"
+  },
+  "license": "MIT",
+  "author": "Erlon Rrustemaj",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "@gantry/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
-      "import": "./dist/gantry.es.js",
-      "require": "./dist/gantry.umd.js"
-    }
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build"
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@gantry/core": "workspace:*"
+    "@gantry/core": "workspace:^"
   },
   "devDependencies": {
     "vite": "^6.0.0",
     "vite-plugin-dts": "^4.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   }
 }

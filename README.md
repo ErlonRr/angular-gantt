@@ -1,17 +1,73 @@
 # Gantry
 
-> Angular 20+ Gantt chart library — 100% free, zoneless, signal-based, zero `@angular/animations`, zero `@angular/cdk`.
-> npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
+> A free, full-featured, open-source Gantt chart for **every framework** — Angular, React, Vue, Svelte, or plain JavaScript.
+> Interactive drag & resize, dependencies, critical path, baselines, virtual scrolling, theming and i18n — MIT licensed, only dependency `dayjs`.
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
 
 ![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.gif)
 
+## Packages
+
+| Framework | Package | Install | Docs |
+|---|---|---|---|
+| **Angular 20+** | `ngx-gantry` | `npm i ngx-gantry` | [below](#angular-ngx-gantry) |
+| **React 18 / 19** | `@gantry/react` | `npm i @gantry/react` | [packages/react](packages/react/README.md) |
+| **Vue 3.5+** | `@gantry/vue` | `npm i @gantry/vue` | [packages/vue](packages/vue/README.md) |
+| **Svelte 5** | `@gantry/svelte` | `npm i @gantry/svelte` | [packages/svelte](packages/svelte/README.md) |
+| **Vanilla JS / any** | `@gantry/vanilla` | `npm i @gantry/vanilla` | [packages/vanilla](packages/vanilla/README.md) |
+| Framework-free logic | `@gantry/core` | `npm i @gantry/core` | [packages/core](packages/core/README.md) |
+
+```
+@gantry/core      types · timeline math · tree helpers · critical path (no DOM, no framework)
+ ├── ngx-gantry       native Angular components (signals, zoneless)
+ └── @gantry/vanilla  <gantry-element> Web Component
+      ├── @gantry/react
+      ├── @gantry/vue
+      └── @gantry/svelte
+```
+
+### Quick start (any framework)
+
+```tsx
+// React
+import { Gantry, ViewMode } from '@gantry/react';
+<Gantry tasks={tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={e => save(e)} />
+```
+
+```vue
+<!-- Vue — import { Gantry, ViewMode } from '@gantry/vue' -->
+<Gantry :tasks="tasks" :options="{ viewMode: ViewMode.Week }" @task-dragged="save" />
+```
+
+```svelte
+<!-- Svelte — import { Gantry, ViewMode } from '@gantry/svelte' -->
+<Gantry {tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={save} />
+```
+
+```html
+<!-- Plain HTML / any framework -->
+<gantry-element id="gantt"></gantry-element>
+<script type="module">
+  import '@gantry/vanilla';
+  const gantt = document.getElementById('gantt');
+  gantt.tasks = [{ id: '1', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20'), progress: 40 }];
+  gantt.addEventListener('task-dragged', e => console.log(e.detail));
+</script>
+```
+
+---
+
+## Angular (`ngx-gantry`)
+
+> Angular 20+ — zoneless, signal-based, zero `@angular/animations`, zero `@angular/cdk`.
+> npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
+
 ## Install
 
 ```bash
 npm i ngx-gantry
-# peer deps: @angular/core & @angular/common >= 20.2, plus dayjs
+# peer deps: @angular/core & @angular/common >= 20.2 (dayjs and @gantry/core are installed automatically)
 ```
 
 ## Features
@@ -26,6 +82,7 @@ npm i ngx-gantry
 | **Drag & resize** | Pointer Events API + `setPointerCapture()` |
 | **Selection** | Single / Ctrl+Click toggle / Shift+Click range |
 | **Keyboard** | `Escape`, `Ctrl+A`, `+/-` zoom, `T` today |
+| **Sorting** | Click a sortable column header: ascending → descending → original order |
 | **Tooltip** | Native Popover API — zero CDK Overlay |
 | **Dark / light** | Auto `prefers-color-scheme` + manual toggle |
 | **Animations** | `animate.enter` / `animate.leave` (Angular 20.2 native) |
@@ -375,20 +432,47 @@ and navigating via the sidebar works without it.
 
 ## Development tooling
 
+### Monorepo layout
+
+A pnpm workspace (`pnpm-workspace.yaml`):
+
+| Path | What |
+|---|---|
+| `packages/core` | `@gantry/core` — framework-free logic, shared by every binding |
+| `packages/vanilla` | `@gantry/vanilla` — the `<gantry-element>` Web Component |
+| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component |
+| `projects/gantry` | `ngx-gantry` — the Angular library (imports `@gantry/core`) |
+| `projects/gantry-demo` | Angular showcase app + Storybook |
+| `apps/demo-*` | one Vite demo per framework |
+
+| Script | Effect |
+|---|---|
+| `pnpm dev:angular` / `dev:vanilla` / `dev:react` / `dev:vue` / `dev:svelte` | run a demo (packages resolve from source, so library edits hot-reload) |
+| `pnpm build` | build all packages, the Angular library, the showcase and the demos |
+| `pnpm test` | Vitest: core (Node) + Web Component (happy-dom) |
+| `pnpm typecheck` | type-check every package |
+| `pnpm changeset` | describe a change for the next release (see [`.changeset/README.md`](.changeset/README.md)) |
+
+Workspace packages expose a `@gantry/source` export condition pointing at
+their TypeScript sources; the demos, tests and type-checks use it, so nothing
+has to be built first. Published consumers never see that condition.
+
 ### Testing
 
-The framework-free core (`gantt-math` / `gantt-data` / `gantt-cpm` + the i18n
-formatters) is unit-tested with **Vitest** in plain Node — no Angular TestBed,
-no browser.
+**Vitest** runs two projects: the framework-free core (`gantt-math` /
+`gantt-data` / `gantt-cpm` + the i18n formatters) in plain Node, and the
+`<gantry-element>` Web Component in happy-dom.
 
 ```bash
 pnpm test          # run once
 pnpm test:watch    # watch mode
 ```
 
-Specs live in `projects/gantry/src/lib/__tests__/*.test.ts` and cover
-date↔pixel math, tree flattening, the Critical Path Method, timeline-range
-padding, and i18n (locale, labels, header/date formats).
+Specs live in `packages/core/src/__tests__/` (date↔pixel math, tree
+flattening, the Critical Path Method, timeline-range padding, i18n) and
+`packages/vanilla/src/__tests__/` (rendering, options, drag, selection,
+keyboard, sorting, virtual scrolling, lazy loading, custom bars, tooltip
+escaping).
 
 ### Angular workspace vs Storybook preview
 
@@ -426,6 +510,7 @@ After `ng build gantry` and Storybook builds are stable, you can spike **`@story
 | Package | License | Size |
 |---|---|---|
 | `dayjs` | MIT | 7KB |
+| `@gantry/core` | MIT | shared logic from this repo |
 
 Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses native Popover API).
 

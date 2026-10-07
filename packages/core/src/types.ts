@@ -1,11 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · types.ts
 //  Single source of truth for all domain types.
-//  No runtime Angular imports — usable in Node / Vitest / SSR.
-//  (The single `import type` below is erased at compile time.)
+//  Framework-free — usable in Node / Vitest / SSR and by every
+//  framework binding (Angular, Web Component, React, Vue, Svelte).
 // ─────────────────────────────────────────────────────────────
-
-import type { TemplateRef } from '@angular/core';
 
 // ─── Enums ───────────────────────────────────────────────────
 
@@ -139,7 +137,13 @@ export interface ColumnCellContext {
   row:       GanttFlatRow;
 }
 
-export interface ColumnDef {
+/**
+ * Column definition. `TTemplate` is the framework-specific cell template
+ * type (e.g. Angular's `TemplateRef<ColumnCellContext>`); framework-free
+ * consumers can ignore it and use `render` instead.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export interface ColumnDef<TTemplate = any> {
   key:        string;
   label:      string;
   /** Initial width in px */
@@ -150,8 +154,8 @@ export interface ColumnDef {
   sortable?:  boolean;
   /** Custom cell renderer — returns an HTML string */
   render?:    ColumnRenderer;
-  /** Angular template for the cell content (from `<ng-template ganttColumn>`) */
-  cellTemplate?: TemplateRef<ColumnCellContext>;
+  /** Framework-specific cell template (e.g. Angular `<ng-template ganttColumn>`) */
+  cellTemplate?: TTemplate;
   /** Used internally to mark built-in columns */
   builtin?:   boolean;
 }
