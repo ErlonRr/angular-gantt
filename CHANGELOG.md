@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `barRadius` and `criticalColor` ignored by several shapes / arrows; arrows cutting through bars when the successor starts early; arrows ending inside milestones; labels spilling out of bars; double selection tint.
 - Dead options now work: `enableSelection`, `multiSelect`, `enableDrag` / `enableResize` in `options`, `task.collapsed`, `options.columns` / `theme` / `darkMode` in Angular; `timelinePadding` in every view; `options` no longer resets `patchTheme()` overrides.
 - `rowClick` now always emits a `RowGeometry` (the task list previously emitted a flat row); `rowDblClick` is typed `GanttFlatRow`.
+- Tasks with `parentId: null`, an empty or unknown parent, or a parent cycle no longer disappear; a task without `end` is drawn at its start instead of breaking the date columns. The repair is exported as `normalizeTasks()` from `@gantry/core`.
+- The critical path reads task dates like the bars do: with `endDateMode: 'inclusive'` the last day counts, and hour-level tasks use fractional days (`computeCriticalPath(tasks, { endDateMode, normalizeDateOnly })`).
+- Sorting by a column no longer slows down quadratically with the number of rows.
 
 ## [1.0.1] — 2026-08-08
 

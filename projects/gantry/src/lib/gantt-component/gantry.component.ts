@@ -426,8 +426,9 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Critical path ─────────────────────────────────────────
   readonly criticalIds = computed<Set<string>>(() => {
-    if (!this.cfg().criticalPath) return new Set();
-    return computeCriticalPath(this.layout.tasks()).criticalIds;
+    const cfg = this.cfg();
+    if (!cfg.criticalPath) return new Set();
+    return computeCriticalPath(this.layout.tasks(), cfg).criticalIds;
   });
 
   // ── Legend items (today marker + user annotations) ───────

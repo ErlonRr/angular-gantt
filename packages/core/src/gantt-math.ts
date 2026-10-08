@@ -201,8 +201,10 @@ export function snapRange(
   paddingDays: number,
   includeDate?: Date | null,
   weekStart: 0 | 1 = 1,
+  /** Reference "now" for the empty-data fallback range (keeps the result deterministic) */
+  now: Date = new Date(),
 ): TimelineRange {
-  const today = snapToDay(new Date());
+  const today = snapToDay(now);
   const extent = taskExtent(tasks, includeDate)
     ?? { start: addDays(today, -30), end: addDays(today, 60) };
   const step = scale.step ?? 1;

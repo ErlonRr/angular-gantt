@@ -6,6 +6,56 @@
 
 import { GanttTask, GanttFlatRow, TaskType } from './types';
 
+// ─── Normalisation ────────────────────────────────────────────
+
+/**
+ * Repair task data that would otherwise drop rows or crash rendering:
+ * - a `parentId` that is null/empty, unknown, the task itself, or closes a
+ *   cycle makes the task a root;
+ * - a missing `end` falls back to `start`.
+ * Valid tasks keep their identity; when nothing needs fixing the same array is returned.
+ */
+export function normalizeTasks(tasks: GanttTask[]): GanttTask[] {
+  const ids = new Set<string>();
+  for (const t of tasks) ids.add(t.id);
+
+  const parentOf = new Map<string, string | undefined>();
+  for (const t of tasks) {
+    const p = t.parentId;
+    parentOf.set(t.id, p && p !== t.id && ids.has(p) ? p : undefined);
+  }
+
+  // Break cycles: walk up each ancestor chain; a chain that re-enters itself
+  // is cut at its last node, which becomes a root.
+  const VISITING = 1, DONE = 2;
+  const state = new Map<string, number>();
+  for (const t of tasks) {
+    const path: string[] = [];
+    let cur: string | undefined = t.id;
+    while (cur !== undefined && !state.has(cur)) {
+      state.set(cur, VISITING);
+      path.push(cur);
+      cur = parentOf.get(cur);
+    }
+    if (cur !== undefined && state.get(cur) === VISITING) parentOf.set(path[path.length - 1], undefined);
+    for (const id of path) state.set(id, DONE);
+  }
+
+  let changed = false;
+  const out = tasks.map(t => {
+    const parentId = parentOf.get(t.id);
+    const fixParent = t.parentId !== parentId;
+    const fixEnd = t.end == null;
+    if (!fixParent && !fixEnd) return t;
+    changed = true;
+    const copy: GanttTask = { ...t, end: t.end ?? t.start };
+    if (parentId === undefined) delete copy.parentId;
+    else copy.parentId = parentId;
+    return copy;
+  });
+  return changed ? out : tasks;
+}
+
 // ─── Build parent→children map ────────────────────────────────
 
 function buildChildMap(tasks: GanttTask[]): Map<string | undefined, GanttTask[]> {
@@ -34,7 +84,7 @@ export function flattenTree(
   tasks: GanttTask[],
   collapsedIds: Set<string> = new Set(),
 ): GanttFlatRow[] {
-  const childMap = buildChildMap(tasks);
+  const childMap = buildChildMap(normalizeTasks(tasks));
   const result: GanttFlatRow[] = [];
 
   // Stack entries: [task, level, parentIsHidden]
@@ -127,33 +177,17 @@ export const SORT_BY_PROGRESS: SortComparator = (a, b) =>
 
 /**
  * Sort only the root-level tasks, preserving child order.
- * Children always follow their parent in the flat array.
+ * Children always follow their parent in the flat array. `rows` must be in
+ * depth-first order (as produced by `flattenTree`), so every root's subtree
+ * is contiguous — O(N log R) for N rows and R roots. The sort is stable.
  */
 export function sortRoots(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatRow[] {
-  // Collect root groups
-  const groups = new Map<string, GanttFlatRow[]>();
-  const rootOrder: string[] = [];
-
+  const groups: GanttFlatRow[][] = [];
   for (const row of rows) {
-    const rootId = getRootId(row, rows);
-    if (!groups.has(rootId)) {
-      groups.set(rootId, []);
-      rootOrder.push(rootId);
-    }
-    groups.get(rootId)!.push(row);
+    if (row.level === 0 || groups.length === 0) groups.push([row]);
+    else groups[groups.length - 1].push(row);
   }
-
-  // Sort root groups by comparing their root rows
-  const rootRows = rootOrder.map(id => groups.get(id)![0]);
-  rootRows.sort(cmp);
-
-  return rootRows.flatMap(r => groups.get(r.task.id) ?? []);
-}
-
-function getRootId(row: GanttFlatRow, allRows: GanttFlatRow[]): string {
-  if (row.level === 0) return row.task.id;
-  const parent = allRows.find(r => r.task.id === row.task.parentId);
-  return parent ? getRootId(parent, allRows) : row.task.id;
+  return groups.sort((a, b) => cmp(a[0], b[0])).flat();
 }
 
 export type SortDirection = 'asc' | 'desc';
@@ -239,7 +273,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     minWidth: 72,
     builtin: true,
     sortable: true,
-    render:  r => formatDate(r.task.end),
+    render:  r => formatDate(r.task.end ?? r.task.start),
   },
   {
     key:     'duration',
@@ -248,7 +282,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
     minWidth: 60,
     builtin: true,
     sortable: true,
-    render:  r => durationLabel(r.task.start, r.task.end),
+    render:  r => durationLabel(r.task.start, r.task.end ?? r.task.start),
   },
   {
     key:     'progress',
@@ -273,8 +307,8 @@ export function buildDefaultColumns(
   return [
     { key: 'name',     label: labels.colName,     width: 240, minWidth: 120, builtin: true, sortable: true, render: r => r.task.name },
     { key: 'start',    label: labels.colStart,    width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.start, dateFormat, locale) },
-    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.end, dateFormat, locale) },
-    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, sortable: true, render: r => durationLabel(r.task.start, r.task.end, labels) },
+    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.end ?? r.task.start, dateFormat, locale) },
+    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, sortable: true, render: r => durationLabel(r.task.start, r.task.end ?? r.task.start, labels) },
     { key: 'progress', label: labels.colProgress, width: 56,  minWidth: 44,  builtin: true, sortable: true, render: r => `${r.task.progress ?? 0}%` },
   ];
 }

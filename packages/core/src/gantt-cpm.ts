@@ -14,13 +14,15 @@
 // ─────────────────────────────────────────────────────────────
 
 import { GanttTask, GanttDependency, DependencyType } from './types';
-import { diffDays } from './gantt-math';
+import { calendarDays } from './gantt-math';
+import { taskSpan } from './render/timeline';
+import type { ResolvedGanttConfig } from './render/config';
 
 // ─── Internal graph node ──────────────────────────────────────
 
 interface CPMNode {
   id:       string;
-  duration: number;   // calendar days
+  duration: number;   // calendar days (fractional for hour-level tasks)
   es:       number;   // Early Start  (days from project start)
   ef:       number;   // Early Finish
   ls:       number;   // Late Start
@@ -62,6 +64,27 @@ function parseDeps(task: GanttTask): CPMEdge[] {
   return edges;
 }
 
+// ─── Durations ────────────────────────────────────────────────
+
+/** How task dates are read — the same fields as the resolved chart config. */
+export type CPMOptions = Partial<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>;
+
+/** Tolerance for fractional-day arithmetic (≈ 0.1 s). */
+const EPS = 1e-6;
+
+/** Rendered span of a task, read exactly like the bars are drawn. */
+function spanOf(task: GanttTask, options: CPMOptions) {
+  return taskSpan(task, {
+    endDateMode: options.endDateMode ?? 'exclusive',
+    normalizeDateOnly: options.normalizeDateOnly ?? true,
+  });
+}
+
+/** Duration in calendar days of the rendered span (an inclusive end counts its last day). */
+function spanDays(span: { start: Date; end: Date }): number {
+  return Math.max(calendarDays(span.end, false) - calendarDays(span.start, false), 0);
+}
+
 // ─── Main entry point ─────────────────────────────────────────
 
 export interface CPMResult {
@@ -76,10 +99,12 @@ export interface CPMResult {
 /**
  * Run CPM analysis on a task array.
  *
- * @param tasks  Array of GanttTask with dependency fields set.
- *               Missing predecessors are silently ignored (with a warning).
+ * @param tasks    Array of GanttTask with dependency fields set.
+ *                 Missing predecessors are silently ignored (with a warning).
+ * @param options  `endDateMode` / `normalizeDateOnly` as in the chart config, so an
+ *                 inclusive end counts its last day (defaults: exclusive, normalised).
  */
-export function computeCriticalPath(tasks: GanttTask[]): CPMResult {
+export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}): CPMResult {
   const warnings: string[] = [];
 
   if (!tasks.length) {
@@ -90,7 +115,7 @@ export function computeCriticalPath(tasks: GanttTask[]): CPMResult {
   const nodeMap = new Map<string, CPMNode>();
 
   for (const t of tasks) {
-    const duration = Math.max(diffDays(t.start, t.end), 0);
+    const duration = spanDays(spanOf(t, options));
     nodeMap.set(t.id, {
       id: t.id,
       duration,
@@ -228,7 +253,8 @@ export function computeCriticalPath(tasks: GanttTask[]): CPMResult {
   const floatMap    = new Map<string, number>();
 
   for (const [id, node] of nodeMap) {
-    node.float = node.ls - node.es;
+    const float = node.ls - node.es;
+    node.float = Math.abs(float) < EPS ? 0 : float;
     floatMap.set(id, node.float);
     if (node.float <= 0) criticalIds.add(id);
   }
@@ -243,15 +269,17 @@ export function computeCriticalPath(tasks: GanttTask[]): CPMResult {
  * (by total duration days). Useful as a simple fallback
  * when no dependency data is available.
  */
-export function longestChain(tasks: GanttTask[]): string[] {
+export function longestChain(tasks: GanttTask[], options: CPMOptions = {}): string[] {
   if (!tasks.length) return [];
 
-  const sorted = [...tasks].sort((a, b) => a.start.getTime() - b.start.getTime());
+  const sorted = tasks
+    .map(task => ({ id: task.id, ...spanOf(task, options) }))
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
   const dp     = new Map<string, number>();  // taskId → cumulative days
   const prev   = new Map<string, string>();  // taskId → predecessor
 
   for (const t of sorted) {
-    const dur = diffDays(t.start, t.end);
+    const dur = spanDays(t);
     let best  = dur;
     let bestPred: string | undefined;
 
@@ -259,7 +287,7 @@ export function longestChain(tasks: GanttTask[]): string[] {
       if (p.id === t.id) continue;
       if (p.end <= t.start) {
         const candidate = (dp.get(p.id) ?? 0) + dur;
-        if (candidate > best) {
+        if (candidate > best + EPS) {
           best     = candidate;
           bestPred = p.id;
         }

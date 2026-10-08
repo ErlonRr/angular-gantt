@@ -31,6 +31,7 @@ import {
   sortRoots,
   columnComparator,
   SortDirection,
+  normalizeTasks,
 } from '../gantt-data';
 
 import {
@@ -217,7 +218,8 @@ export class GanttLayoutService {
   private readonly seenIds = new Set<string>();
 
   /** Replace the entire task array (seeds collapsed state from `task.collapsed`) */
-  setTasks(tasks: GanttTask[]): void {
+  setTasks(input: GanttTask[]): void {
+    const tasks = normalizeTasks(input);
     const initiallyCollapsed = tasks.filter(t => t.collapsed && !this.seenIds.has(t.id)).map(t => t.id);
     for (const t of tasks) this.seenIds.add(t.id);
     if (initiallyCollapsed.length) {
@@ -228,6 +230,6 @@ export class GanttLayoutService {
 
   /** Append tasks (lazy load) */
   appendTasks(newTasks: GanttTask[]): void {
-    this.tasks.update(existing => [...existing, ...newTasks]);
+    this.tasks.update(existing => normalizeTasks([...existing, ...newTasks]));
   }
 }

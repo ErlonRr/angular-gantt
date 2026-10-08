@@ -7,7 +7,7 @@
 
 import {
   GanttTask, GanttFlatRow, RowGeometry, GanttI18n, GanttView,
-  flattenTree, filterVisible, reindexVisible, sortRoots, columnComparator, SortDirection,
+  flattenTree, filterVisible, reindexVisible, sortRoots, columnComparator, SortDirection, normalizeTasks,
   buildTimeline, computeRowGeometries, zoomStep,
   type ResolvedGanttConfig, type TimelineModel,
 } from '@gantry/core';
@@ -99,7 +99,8 @@ export class GanttLayoutService {
   /** Seed collapsed state from `task.collapsed` (only for ids not seen before). */
   private seenIds = new Set<string>();
 
-  setTasks(tasks: GanttTask[]): void {
+  setTasks(input: GanttTask[]): void {
+    const tasks = normalizeTasks(input);
     const initiallyCollapsed = tasks.filter(t => t.collapsed && !this.seenIds.has(t.id)).map(t => t.id);
     for (const t of tasks) this.seenIds.add(t.id);
     if (initiallyCollapsed.length) {

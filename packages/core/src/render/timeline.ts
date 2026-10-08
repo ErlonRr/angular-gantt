@@ -84,7 +84,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     return { start: s.start, end: s.end, baseline: t.baseline } as GanttTask;
   });
   let { start, end } = snapRange(
-    spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart,
+    spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now,
   );
 
   const pxPerDay = cfg.pxPerDay;

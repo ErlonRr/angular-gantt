@@ -298,7 +298,8 @@ export class GantryElement extends BaseElement {
   private resizeObserver?: ResizeObserver;
   private clock?: ReturnType<typeof setInterval>;
   private scrolledToToday = false;
-  private critical: { tasks: GanttTask[] | null; ids: Set<string> } = { tasks: null, ids: new Set() };
+  private critical: { tasks: GanttTask[] | null; cfg: ResolvedGanttConfig | null; ids: Set<string> } =
+    { tasks: null, cfg: null, ids: new Set() };
   private lastViewMode: string;
   private restoredStateKey?: string;
   private stateTimer?: ReturnType<typeof setTimeout>;
@@ -607,8 +608,9 @@ export class GantryElement extends BaseElement {
   get criticalIds(): Set<string> {
     if (!this._options.criticalPath) return new Set();
     const tasks = this.layout.tasks();
-    if (this.critical.tasks !== tasks) {
-      this.critical = { tasks, ids: computeCriticalPath(tasks).criticalIds };
+    const cfg = this.layout.config();
+    if (this.critical.tasks !== tasks || this.critical.cfg !== cfg) {
+      this.critical = { tasks, cfg, ids: computeCriticalPath(tasks, cfg ?? {}).criticalIds };
     }
     return this.critical.ids;
   }
