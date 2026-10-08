@@ -6,7 +6,7 @@ import '../../demo.css';
 export default function App() {
   const gantt = useRef<GantryElement>(null);
   const [tasks, setTasks] = useState<GanttTask[]>(DEMO_TASKS);
-  const [viewMode, setViewMode] = useState<ViewMode>(ViewMode.Month);
+  const [viewMode, setViewMode] = useState<string>(ViewMode.Month);
   const [baseline, setBaseline] = useState(false);
   const [criticalPath, setCriticalPath] = useState(false);
   const [dark, setDark] = useState(true);
@@ -30,7 +30,7 @@ export default function App() {
         </div>
         <div className="demo-group">
           <span className="demo-label">View</span>
-          <select value={viewMode} onChange={e => setViewMode(e.target.value as ViewMode)}>
+          <select value={viewMode} onChange={e => setViewMode(e.target.value)}>
             {Object.values(ViewMode).map(v => <option key={v}>{v}</option>)}
           </select>
         </div>

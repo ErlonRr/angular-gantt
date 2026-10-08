@@ -1,49 +1,43 @@
 /**
  * @file gantt-layout.service.ts
- * Vanilla JS layout engine — single source of truth for Gantt geometry calculations.
- *
- * Derived values (rows, geometries, timeline range…) are memoised and
- * invalidated whenever any input state changes, so a render pass can read
- * them as often as it likes without re-flattening the tree.
+ * Vanilla JS layout state. Geometry comes from the shared @gantry/core render
+ * model (`buildTimeline` / `computeRowGeometries`), memoised and invalidated
+ * whenever an input changes.
  */
 
 import {
-  GanttTask, GanttFlatRow, GanttOptions, RowGeometry, ViewMode,
-  dateToPixel, getTimelineRange, generateGridLines, generateHeaderRows,
-  PX_PER_DAY, GridLine, TimelineRange, HeaderRow, zoomIn, zoomOut,
+  GanttTask, GanttFlatRow, RowGeometry, GanttI18n, GanttView,
   flattenTree, filterVisible, reindexVisible, sortRoots, columnComparator, SortDirection,
+  buildTimeline, computeRowGeometries, zoomStep,
+  type ResolvedGanttConfig, type TimelineModel,
 } from '@gantry/core';
 import { createState, WritableState } from '../core/state';
-
-const DEFAULT_ROW_HEIGHT = 36;
-const DEFAULT_HEADER_HEIGHT = 32;
-const DEFAULT_SUBHEADER_HEIGHT = 28;
-const DEFAULT_PANEL_WIDTH = 320;
-const DEFAULT_TIMELINE_PAD = 7;
 
 export interface SortState { key: string; dir: SortDirection }
 
 export class GanttLayoutService {
   readonly tasks = createState<GanttTask[]>([]);
   readonly collapsedIds = createState<Set<string>>(new Set());
-  readonly viewMode = createState<ViewMode>(ViewMode.Month);
-  readonly panelWidth = createState<number>(DEFAULT_PANEL_WIDTH);
-  readonly panelVisible = createState<boolean>(true);
-  readonly rowHeight = createState<number>(DEFAULT_ROW_HEIGHT);
-  readonly headerHeight = createState<number>(DEFAULT_HEADER_HEIGHT);
-  readonly subHeaderHeight = createState<number>(DEFAULT_SUBHEADER_HEIGHT);
-  readonly timelinePadding = createState<number>(DEFAULT_TIMELINE_PAD);
-  readonly showBaseline = createState<boolean>(false);
-  readonly showCriticalPath = createState<boolean>(false);
-  readonly showToday = createState<boolean>(true);
+  /** Active zoom level name (`ViewMode` or a custom level) */
+  readonly viewMode = createState<string>('Month');
   readonly sort = createState<SortState | null>(null);
+  readonly viewportWidth = createState<number>(0);
+  readonly config = createState<ResolvedGanttConfig | null>(null);
+  readonly i18n = createState<GanttI18n | undefined>(undefined);
+
+  // ── Panel / view UI state ──────────────────────────────────
+  /** Panel width in px once the user resized it (null = from `panel.width`) */
+  readonly panelWidthPx = createState<number | null>(null);
+  readonly panelCollapsed = createState<boolean>(false);
+  readonly view = createState<GanttView>('split');
 
   private cache = new Map<string, unknown>();
+  /** Bumped when "now" moves to a new minute, so the today marker stays fresh */
+  private nowTick = createState<number>(0);
 
   constructor() {
-    const states: WritableState<unknown>[] = [
-      this.tasks, this.collapsedIds, this.viewMode, this.rowHeight,
-      this.timelinePadding, this.showToday, this.sort,
+    const states = [
+      this.tasks, this.collapsedIds, this.sort, this.viewportWidth, this.config, this.i18n, this.nowTick,
     ] as WritableState<unknown>[];
     for (const s of states) s.subscribe(() => this.cache.clear());
   }
@@ -51,6 +45,17 @@ export class GanttLayoutService {
   private memo<T>(key: string, fn: () => T): T {
     if (!this.cache.has(key)) this.cache.set(key, fn());
     return this.cache.get(key) as T;
+  }
+
+  get cfg(): ResolvedGanttConfig {
+    const c = this.config();
+    if (!c) throw new Error('[gantry] layout used before configuration');
+    return c;
+  }
+
+  /** Invalidate time-dependent values (today marker, current-period highlight). */
+  tick(): void {
+    this.nowTick.update(n => n + 1);
   }
 
   get allRows(): GanttFlatRow[] {
@@ -65,61 +70,25 @@ export class GanttLayoutService {
     return this.memo('visibleRows', () => reindexVisible(filterVisible(this.allRows)));
   }
 
-  get rowCount(): number {
-    return this.visibleRows.length;
-  }
-
-  get timelineRange(): TimelineRange {
-    return this.memo('range', () => getTimelineRange(
-      this.tasks(),
-      this.viewMode(),
-      this.timelinePadding(),
-      this.showToday() ? new Date() : null,
-    ));
-  }
-
-  get startDate(): Date {
-    return this.timelineRange.start;
-  }
-
-  get endDate(): Date {
-    return this.timelineRange.end;
-  }
-
-  get pxPerDay(): number {
-    return PX_PER_DAY[this.viewMode()];
-  }
-
-  get totalWidth(): number {
-    const diff = (this.endDate.getTime() - this.startDate.getTime()) / 86_400_000;
-    return Math.ceil(diff * this.pxPerDay);
+  get rowHeight(): number {
+    return this.cfg.rowHeight;
   }
 
   get totalHeight(): number {
-    return this.rowCount * this.rowHeight();
+    return this.visibleRows.length * this.rowHeight;
   }
 
-  get totalHeaderHeight(): number {
-    return this.headerHeight() + this.subHeaderHeight();
+  get timeline(): TimelineModel {
+    return this.memo('timeline', () => buildTimeline({
+      tasks: this.tasks(),
+      config: this.cfg,
+      viewportWidth: this.viewportWidth(),
+      i18n: this.i18n(),
+    }));
   }
 
   get rowGeometries(): RowGeometry[] {
-    return this.memo('geometries', () => {
-      const start = this.startDate;
-      const pxPerDay = this.pxPerDay;
-      const rh = this.rowHeight();
-
-      return this.visibleRows.map(row => {
-        const taskEnd = row.task.end ?? row.task.start;
-        const barX = dateToPixel(row.task.start, start, pxPerDay);
-        const barWidth = Math.max(
-          dateToPixel(taskEnd, start, pxPerDay) - barX,
-          row.barType === 'milestone' ? 0 : 4,
-        );
-        const progressWidth = Math.max((barWidth * (row.task.progress ?? 0)) / 100, 0);
-        return { row, y: row.visibleIndex * rh, height: rh, barX, barWidth, progressWidth };
-      });
-    });
+    return this.memo('geometries', () => computeRowGeometries(this.visibleRows, this.timeline, this.cfg));
   }
 
   get geometryById(): Map<string, RowGeometry> {
@@ -127,32 +96,16 @@ export class GanttLayoutService {
       new Map(this.rowGeometries.map(g => [g.row.task.id, g])));
   }
 
-  get gridLines(): GridLine[] {
-    return this.memo('gridLines', () =>
-      generateGridLines(this.viewMode(), this.startDate, this.endDate, this.pxPerDay));
-  }
+  /** Seed collapsed state from `task.collapsed` (only for ids not seen before). */
+  private seenIds = new Set<string>();
 
-  get headerRows(): [HeaderRow, HeaderRow] {
-    return generateHeaderRows(this.viewMode(), this.startDate, this.endDate, this.pxPerDay);
-  }
-
-  get todayX(): number {
-    if (!this.showToday()) return -1;
-    const x = dateToPixel(new Date(), this.startDate, this.pxPerDay);
-    return x >= 0 && x <= this.totalWidth ? x : -1;
-  }
-
-  applyOptions(opts: GanttOptions): void {
-    if (opts.viewMode != null) this.viewMode.set(opts.viewMode);
-    if (opts.rowHeight != null) this.rowHeight.set(opts.rowHeight);
-    if (opts.headerHeight != null) this.headerHeight.set(opts.headerHeight);
-    if (opts.subHeaderHeight != null) this.subHeaderHeight.set(opts.subHeaderHeight);
-    if (opts.panelWidth != null) this.panelWidth.set(opts.panelWidth);
-    if (opts.panelVisible != null) this.panelVisible.set(opts.panelVisible);
-    if (opts.timelinePadding != null) this.timelinePadding.set(opts.timelinePadding);
-    if (opts.baseline != null) this.showBaseline.set(opts.baseline);
-    if (opts.criticalPath != null) this.showCriticalPath.set(opts.criticalPath);
-    if (opts.showToday != null) this.showToday.set(opts.showToday);
+  setTasks(tasks: GanttTask[]): void {
+    const initiallyCollapsed = tasks.filter(t => t.collapsed && !this.seenIds.has(t.id)).map(t => t.id);
+    for (const t of tasks) this.seenIds.add(t.id);
+    if (initiallyCollapsed.length) {
+      this.collapsedIds.update(ids => new Set([...ids, ...initiallyCollapsed]));
+    }
+    this.tasks.set(tasks);
   }
 
   toggleCollapse(taskId: string): void {
@@ -176,11 +129,11 @@ export class GanttLayoutService {
   }
 
   zoomIn(): void {
-    this.viewMode.update(zoomIn);
+    this.viewMode.update(v => zoomStep(this.cfg.zoomLevels, v, -1));
   }
 
   zoomOut(): void {
-    this.viewMode.update(zoomOut);
+    this.viewMode.update(v => zoomStep(this.cfg.zoomLevels, v, 1));
   }
 
   /** Cycle a column's sort: ascending → descending → original order. */
@@ -199,9 +152,5 @@ export class GanttLayoutService {
 
   appendTasks(tasks: GanttTask[]): void {
     if (tasks.length) this.tasks.update(cur => [...cur, ...tasks]);
-  }
-
-  setTasks(tasks: GanttTask[]): void {
-    this.tasks.set(tasks);
   }
 }

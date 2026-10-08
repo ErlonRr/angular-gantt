@@ -82,8 +82,9 @@ describe('zoomIn / zoomOut', () => {
   it('Month → Quarter on zoomOut', () => {
     expect(zoomOut(ViewMode.Month)).toBe(ViewMode.Quarter);
   });
-  it('Day cannot zoom in further', () => {
-    expect(zoomIn(ViewMode.Day)).toBe(ViewMode.Day);
+  it('Hour cannot zoom in further', () => {
+    expect(zoomIn(ViewMode.Day)).toBe(ViewMode.Hour);
+    expect(zoomIn(ViewMode.Hour)).toBe(ViewMode.Hour);
   });
   it('Year cannot zoom out further', () => {
     expect(zoomOut(ViewMode.Year)).toBe(ViewMode.Year);

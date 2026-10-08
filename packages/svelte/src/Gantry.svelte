@@ -20,7 +20,7 @@
   let {
     tasks, columns, options, annotations, darkMode, showToolbar, enableDrag,
     enableResize, tooltipEnabled, showLegend, dataSource, renderBar,
-    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange,
+    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange, onStateChange,
     element = $bindable(),
     style = '',
     ...rest
@@ -43,7 +43,7 @@
   $effect(() => { if (element && renderBar !== undefined) element.renderBar = renderBar; });
 
   const callbacks = $derived<GantryEventCallbacks>({
-    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange,
+    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange, onStateChange,
   });
 
   $effect(() => {

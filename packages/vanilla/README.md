@@ -38,6 +38,13 @@ npm i @gantry/vanilla
 
 Give the element a height (it fills its container: `display: block; height: 100%`).
 
+## Configuration
+
+`options` accepts every `GanttOptions` field — header tiers & week formats, zoom presets,
+period delimiters, weekends / holidays / working hours, bar & arrow sizes, panel splitter,
+table view and saved state. See the full guide:
+[Configuration](https://github.com/ErlonRr/angular-gantt#configuration).
+
 ## Properties
 
 | Property | Type | Default | |
@@ -69,6 +76,7 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 | `selection-change` | `{ selectedIds: string[] }` |
 | `row-click` / `row-dblclick` | `GanttFlatRow` |
 | `view-mode-change` | `{ viewMode }` |
+| `state-change` | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort |
 
 `addEventListener` is typed: `gantt.addEventListener('task-dragged', e => e.detail.daysMoved)`.
 
@@ -77,7 +85,8 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 `zoomIn()`, `zoomOut()`, `setViewMode(mode)`, `scrollToToday()`, `scrollToDate(date)`,
 `scrollToTask(id)`, `getSelectedTasks()`, `setSelectedTasks(ids)`, `clearSelection()`,
 `selectAll()`, `updateTask(id, patch)`, `appendTasks(tasks)`, `collapseAll()`,
-`expandAll()`, `togglePanel()`, `setTheme(theme)`, `patchTheme(patch)`.
+`expandAll()`, `togglePanel()`, `setView('split' | 'table' | 'chart')`, `setColumnVisible(key, visible)`,
+`getState()`, `setState(state)`, `getBarVisual(id)`, `setTheme(theme)`, `patchTheme(patch)`.
 
 ## Keyboard
 
@@ -89,7 +98,7 @@ selects all, `+` / `-` zoom, `T` scrolls to today. Sortable column headers respo
 
 Pass any subset of `GanttTheme` via `options.theme` or `setTheme()` / `patchTheme()`
 (colors, font, radii). The resolved theme is exposed as `--gantt-*` CSS custom properties
-on the element, and its parts are styleable with `::part(toolbar | panel | timeline)`.
+on the element, and its parts are styleable with `::part(toolbar | panel | splitter | timeline)`.
 
 ## i18n
 

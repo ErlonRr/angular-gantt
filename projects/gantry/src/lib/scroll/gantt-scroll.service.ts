@@ -156,6 +156,16 @@ export class GanttScrollService {
 
   // ── Programmatic scroll ───────────────────────────────────
 
+  /** Scroll the timeline horizontally to `x` (clamped at 0). */
+  scrollToX(x: number, behavior: ScrollBehavior = 'smooth'): void {
+    this._canvas?.scrollTo({ left: Math.max(0, x), behavior });
+  }
+
+  /** Current viewport width of the timeline. */
+  get viewportWidth(): number {
+    return this._canvas?.clientWidth ?? 0;
+  }
+
   /**
    * Scroll the canvas to put `date` in view.
    * @param date       Target date

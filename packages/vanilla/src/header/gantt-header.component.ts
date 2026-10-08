@@ -1,118 +1,80 @@
 /**
  * @file gantt-header.component.ts
- * Vanilla JS SVG-based dual-tier timeline header component matching ngx-gantry visual specification.
+ * Timeline header painter: N tiers from the core render model, drawn as HTML so
+ * labels can stick to the left edge while scrolling (`position: sticky`) and
+ * ellipsize natively. Period delimiters, the current period and non-working
+ * time are tinted to match the chart body.
  */
 
-import { ViewMode, GanttTheme, generateHeaderRows, HeaderCell } from '@gantry/core';
+import type { TimelineModel, ResolvedGanttConfig, GanttLabels } from '@gantry/core';
 import { BaseComponent } from '../core/base-component';
-import { GanttI18nService } from '../services/gantt-i18n.service';
 
 export interface GanttHeaderProps {
-  viewMode: ViewMode;
-  startDate: Date;
-  endDate: Date;
-  pxPerDay: number;
-  totalWidth: number;
-  theme: GanttTheme;
-  i18nService: GanttI18nService;
+  timeline: TimelineModel;
+  config:   ResolvedGanttConfig;
+  labels:   GanttLabels;
 }
 
 export class GanttHeaderComponent extends BaseComponent<GanttHeaderProps> {
-  private svgEl!: SVGSVGElement;
-
   constructor(container: HTMLElement, props: GanttHeaderProps) {
     super(container, props);
     this.render();
   }
 
   render(): void {
-    const { viewMode, startDate, endDate, pxPerDay, totalWidth, theme, i18nService } = this.props;
-    const [topRow, bottomRow] = generateHeaderRows(viewMode, startDate, endDate, pxPerDay, i18nService.bundle);
+    const { timeline, config } = this.props;
+    const theme = config.theme;
+    const major = config.gridLines.major;
+    const majorSet = new Set(timeline.majorLines);
+    const lastTier = timeline.tiers.length - 1;
 
-    const topHeight = topRow.height;
-    const bottomHeight = bottomRow.height;
-    const totalHeight = topHeight + bottomHeight;
+    const root = document.createElement('div');
+    root.className = 'g-header';
+    root.setAttribute('aria-hidden', 'true');
+    root.style.cssText = `width:${timeline.totalWidth}px;height:${timeline.headerHeight}px;`;
 
-    this.element.innerHTML = '';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', `${totalWidth}`);
-    svg.setAttribute('height', `${totalHeight}`);
-    svg.style.display = 'block';
+    timeline.tiers.forEach((tier, i) => {
+      const row = document.createElement('div');
+      row.className = `g-tier g-tier--${tier.unit}${tier.align === 'start' ? ' g-tier--start' : ''}`;
+      row.style.cssText = `top:${tier.y}px;height:${tier.height}px;`;
 
-    // Top tier row
-    const topG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    topG.setAttribute('class', 'gantt-header-top');
-
-    topRow.cells.forEach(cell => {
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', `${cell.x + 0.5}`);
-      rect.setAttribute('y', '0.5');
-      rect.setAttribute('width', `${cell.width - 1}`);
-      rect.setAttribute('height', `${topHeight - 1}`);
-      rect.setAttribute('fill', theme.headerBackground);
-      rect.setAttribute('stroke', theme.borderColor);
-      rect.setAttribute('stroke-width', '0.5');
-      g.appendChild(rect);
-
-      if (cell.width >= 24) {
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', `${cell.x + cell.width / 2}`);
-        text.setAttribute('y', `${topHeight / 2}`);
-        text.setAttribute('fill', theme.textPrimary);
-        text.setAttribute('font-size', theme.fontSize);
-        text.setAttribute('font-family', theme.fontFamily);
-        text.setAttribute('font-weight', '600');
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'central');
-        text.style.pointerEvents = 'none';
-        text.textContent = cell.label;
-        g.appendChild(text);
+      // Non-working time tint on the finest tier
+      if (i === lastTier && config.nonWorking?.showInHeader) {
+        for (const band of timeline.bands) {
+          const b = document.createElement('div');
+          b.className = `g-band g-band--${band.kind}`;
+          b.style.cssText = `left:${band.x}px;width:${band.width}px;background:${band.color};`;
+          row.appendChild(b);
+        }
       }
-      topG.appendChild(g);
+
+      for (const cell of tier.cells) {
+        const el = document.createElement('div');
+        el.className = `g-cell${cell.isCurrent && i === lastTier ? ' g-cell--current' : ''}${cell.className ? ` ${cell.className}` : ''}`;
+        // Upper tiers are delimiters by definition; lower cells only at major boundaries
+        const isMajor = cell.x > 0 && (i < lastTier || majorSet.has(cell.x));
+        const border = isMajor && major
+          ? `${major.width}px ${major.dash ? 'dashed' : 'solid'} ${major.color}`
+          : `1px solid ${theme.borderColor}`;
+        el.style.cssText = `left:${cell.x}px;width:${cell.width}px;border-left:${cell.x > 0 ? border : 'none'};`;
+        const label = document.createElement('span');
+        label.className = 'g-cell-label';
+        label.textContent = cell.label;
+        label.title = cell.label;
+        el.appendChild(label);
+        row.appendChild(el);
+      }
+      root.appendChild(row);
     });
 
-    // Bottom tier row
-    const bottomG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    bottomG.setAttribute('class', 'gantt-header-bottom');
-    bottomG.setAttribute('transform', `translate(0, ${topHeight})`);
+    // "Today" pointer at the bottom of the header (a line would cover the labels)
+    if (timeline.todayX >= 0) {
+      const today = document.createElement('div');
+      today.className = 'g-today-pointer';
+      today.style.left = `${timeline.todayX}px`;
+      root.appendChild(today);
+    }
 
-    const today = new Date();
-
-    bottomRow.cells.forEach(cell => {
-      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      const cellStart = new Date(cell.dateKey);
-      const cellEnd = new Date(cellStart.getTime() + (cell.width / pxPerDay) * 86_400_000);
-      const isToday = today >= cellStart && today < cellEnd;
-
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', `${cell.x + 0.5}`);
-      rect.setAttribute('y', '0.5');
-      rect.setAttribute('width', `${cell.width - 1}`);
-      rect.setAttribute('height', `${bottomHeight - 1}`);
-      rect.setAttribute('fill', isToday ? theme.todayColor + '1F' : theme.headerBackground);
-      rect.setAttribute('stroke', theme.borderColor);
-      rect.setAttribute('stroke-width', '0.5');
-      g.appendChild(rect);
-
-      if (cell.width >= 20) {
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('x', `${cell.x + cell.width / 2}`);
-        text.setAttribute('y', `${bottomHeight / 2}`);
-        text.setAttribute('fill', isToday ? theme.todayColor : theme.textSecondary);
-        text.setAttribute('font-size', '12px');
-        text.setAttribute('font-family', theme.fontFamily);
-        text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('dominant-baseline', 'central');
-        text.style.pointerEvents = 'none';
-        text.textContent = cell.label;
-        g.appendChild(text);
-      }
-      bottomG.appendChild(g);
-    });
-
-    svg.appendChild(topG);
-    svg.appendChild(bottomG);
-    this.element.appendChild(svg);
+    this.element.replaceChildren(root);
   }
 }

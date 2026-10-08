@@ -4,7 +4,7 @@
  */
 
 import type {
-  ColumnDef, GanttFlatRow, GanttTask, GanttOptions, GanttAnnotation, ViewMode,
+  ColumnDef, GanttFlatRow, GanttTask, GanttOptions, GanttAnnotation, GanttState,
   TaskDragEvent, TaskResizeEvent, SelectionChangeEvent,
 } from '@gantry/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
@@ -34,7 +34,9 @@ export interface GantryEventDetailMap {
   'selection-change': SelectionChangeEvent;
   'row-click': GanttFlatRow;
   'row-dblclick': GanttFlatRow;
-  'view-mode-change': { viewMode: ViewMode };
+  'view-mode-change': { viewMode: string };
+  /** Panel width / collapsed, view, zoom, column widths, collapsed rows or sort changed */
+  'state-change': GanttState;
 }
 
 export type GantryEventMap = {
@@ -70,6 +72,7 @@ export const GANTRY_EVENTS = {
   'row-click': 'onRowClick',
   'row-dblclick': 'onRowDblClick',
   'view-mode-change': 'onViewModeChange',
+  'state-change': 'onStateChange',
 } as const satisfies Record<keyof GantryEventDetailMap, string>;
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */

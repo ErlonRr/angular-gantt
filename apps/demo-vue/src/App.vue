@@ -6,7 +6,7 @@ import '../../demo.css';
 
 const gantt = shallowRef<InstanceType<typeof Gantry> | null>(null);
 const tasks = ref<GanttTask[]>([...DEMO_TASKS]);
-const viewMode = ref<ViewMode>(ViewMode.Month);
+const viewMode = ref<string>(ViewMode.Month);
 const baseline = ref(false);
 const criticalPath = ref(false);
 const dark = ref(true);

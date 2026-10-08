@@ -4,6 +4,20 @@ import { DEMO_TASKS } from '@gantry/core/demo';
 import { GantryElement } from '../gantry.element';
 import '../index';
 
+// Node ≥ 22 defines its own (empty) global `localStorage`, which hides happy-dom's
+if (!window.localStorage) {
+  const store = new Map<string, string>();
+  const memoryStorage: Storage = {
+    get length() { return store.size; },
+    clear: () => store.clear(),
+    getItem: k => store.get(k) ?? null,
+    key: i => [...store.keys()][i] ?? null,
+    removeItem: k => { store.delete(k); },
+    setItem: (k, v) => { store.set(k, String(v)); },
+  };
+  Object.defineProperty(window, 'localStorage', { value: memoryStorage, configurable: true });
+}
+
 const frame = () => new Promise<void>(r => requestAnimationFrame(() => r()));
 
 function task(id: string, start: string, end: string, extra: Partial<GanttTask> = {}): GanttTask {
@@ -45,8 +59,8 @@ describe('<gantry-element>', () => {
     el.options = { viewMode: ViewMode.Week, rowHeight: 44, criticalPath: true, baseline: true };
     await frame();
     expect(el.viewMode).toBe(ViewMode.Week);
-    expect(el.layout.rowHeight()).toBe(44);
-    expect(el.layout.showBaseline()).toBe(true);
+    expect(el.layout.rowHeight).toBe(44);
+    expect(el.layout.cfg.baseline).toBe(true);
     expect(el.criticalIds.size).toBeGreaterThan(0);
     expect(($(el, '.gantt-tl-row') as HTMLElement).style.height).toBe('44px');
   });
@@ -190,5 +204,75 @@ describe('<gantry-element>', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('collapses the panel with the splitter toggle and restores the last width', async () => {
+    el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
+    const panel = $(el, '.gantry-panel') as HTMLElement;
+    el.setState({ panelWidth: 280 });
+    await frame();
+    expect(panel.style.width).toBe('280px');
+    ($(el, '.gantry-splitter-toggle') as HTMLButtonElement).click();
+    await frame();
+    expect(el.view).toBe('chart');
+    expect(panel.style.width).toBe('0px');
+    ($(el, '.gantry-splitter-toggle') as HTMLButtonElement).click();
+    await frame();
+    expect(panel.style.width).toBe('280px');
+  });
+
+  it('switches to the table view, showing tableOnly columns', async () => {
+    el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
+    el.columns = [
+      { key: 'name', label: 'Name', width: 200 },
+      { key: 'owner', label: 'Owner', width: 120, tableOnly: true, render: () => 'Ann' },
+    ];
+    await frame();
+    expect($$(el, '.gantt-tl-col-header')).toHaveLength(1);
+    el.setView('table');
+    await frame();
+    expect($$(el, '.gantt-tl-col-header')).toHaveLength(2);
+    expect(($(el, '.gantry-wrapper') as HTMLElement).dataset['view']).toBe('table');
+  });
+
+  it('persists UI state under stateKey and emits state-change', async () => {
+    window.localStorage.clear();
+    el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
+    const onState = vi.fn();
+    el.addEventListener('state-change', onState);
+    el.options = { stateKey: 'proj-1' };
+    el.setView('chart');
+    el.setViewMode(ViewMode.Week);
+    await vi.waitFor(() => expect(onState).toHaveBeenCalled());
+    const saved = JSON.parse(window.localStorage.getItem('gantry:proj-1')!);
+    expect(saved).toMatchObject({ view: 'chart', viewMode: 'Week', panelCollapsed: true });
+
+    const other = document.createElement('gantry-element');
+    other.options = { stateKey: 'proj-1' };
+    expect(other.view).toBe('chart');
+    expect(other.viewMode).toBe('Week');
+  });
+
+  it('applies bar options (height % of row, radius) from the render model', async () => {
+    el = await mount({ tasks: [task('a', '2026-03-01', '2026-03-20')] });
+    el.options = { rowHeight: 40, bar: { height: '50%', radius: 10 } };
+    await frame();
+    const body = $(el, '.gantt-bars-layer [data-task-id="a"] .gantt-bar-body')!;
+    expect(body.getAttribute('d')).toContain('A10,10');
+    expect(el.getBarVisual('a')?.height).toBe(20);
+  });
+
+  it('renders configurable header tiers (three tiers, week ranges)', async () => {
+    el = await mount({ tasks: [task('a', '2026-03-02', '2026-03-20')] });
+    el.options = {
+      scales: [
+        { unit: 'year' },
+        { unit: 'month', format: 'MMMM' },
+        { unit: 'week', format: (s, e) => `${s.getDate()}-${new Date(e.getTime() - 1).getDate()}` },
+      ],
+    };
+    await frame();
+    expect($$(el, '.g-tier')).toHaveLength(3);
+    expect($$(el, '.g-tier--week .g-cell-label').map(c => c.textContent)).toContain('2-8');
   });
 });

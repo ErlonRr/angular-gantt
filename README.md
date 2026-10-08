@@ -56,6 +56,133 @@ import { Gantry, ViewMode } from '@gantry/react';
 </script>
 ```
 
+## Configuration
+
+Every binding (Angular `[options]`, React / Vue / Svelte `options`, `<gantry-element>.options`)
+takes the same `GanttOptions` object, and both renderers draw from the same `@gantry/core`
+render model — an option behaves identically everywhere. Try them all live in the
+**playground** (`pnpm dev:vanilla`).
+
+### Timeline, header tiers and zoom
+
+```ts
+import { ViewMode, WEEK_FORMATS } from '@gantry/core';
+
+options = {
+  viewMode: ViewMode.Week,            // Hour · Day · Week · Month · Quarter · Year, or a custom level name
+  weekStart: 1,                       // 1 = Monday (ISO weeks), 0 = Sunday
+  scales: [                           // header tiers, top → bottom (any number)
+    { unit: 'month', format: 'MMMM YYYY' },
+    { unit: 'week', format: WEEK_FORMATS.rangeMonth },   // "4–11 Mar"
+  ],
+  zoomLevels: [                       // replace the built-in presets
+    { name: 'Sprint', cellWidth: 120, scales: [{ unit: 'month' }, { unit: 'week', step: 2, format: '[W]W' }] },
+  ],
+  gridLines: {
+    major: { color: '#94a3b8', width: 1.5, dash: '4 3' },  // period delimiters (header + body)
+    minor: { width: 1 },                                     // between cells; `false` hides
+    horizontal: false,                                       // row separators
+    majorUnit: 'month',                                      // default: the tier above the bottom one
+  },
+  headerHeight: 32, subHeaderHeight: 28,
+  fitToWidth: true,                   // the timeline always fills the viewport
+};
+```
+
+- `unit`: `hour` · `day` · `week` · `month` · `quarter` · `year`; `step` groups cells (6 hours, 2 weeks…).
+- `format`: a dayjs format string (`'MMM YYYY'`, `'[W]W'`, `'ddd D'`) or `(start, end, ctx) => string`.
+- Week presets: `WEEK_FORMATS.number` (`W52`), `.label` (`Week 52`), `.range` (`4–11`), `.rangeMonth` (`4–11 Mar`), `.numberRange` (`W52 · 4–11`).
+- `className: (start, end) => string` adds your own class to header cells.
+- Upper-tier labels stay pinned to the left while scrolling (`align: 'start'`).
+
+### Non-working time (weekends, holidays, working & intensive hours)
+
+```ts
+options = {
+  nonWorkingTime: {
+    weekends: true,                                   // or weekday numbers, e.g. [5, 6]
+    holidays: [new Date(2026, 11, 25), { start: d1, end: d2, label: 'Shutdown', color: '#fee2e2' }],
+    workingHours: { start: 9, end: 18 },              // or per weekday: { 1: [{ start: 9, end: 13 }, { start: 14, end: 18 }] }
+    intensiveHours: [{ start: 10, end: 12, label: 'Focus', color: 'rgba(245,158,11,.2)' }],
+    style: 'shade',                                   // 'shade' | 'hatch' | 'disabled'
+    showInHeader: true,
+    minPxPerDay: 12,                                  // hide day shading in dense zoom levels
+  },
+  highlightTime: (start, unit) => (isRelease(start) ? { color: '#dcfce7', label: 'Release' } : null),
+};
+```
+
+Shading is visual only — durations stay in calendar days. Colours default to the theme
+(`weekendBg`, `holidayBg`, `offHoursBg`, `intensiveBg`). `nonWorkingTime: false` turns it off.
+
+### Bars, milestones, arrows
+
+```ts
+options = {
+  rowHeight: 40,
+  bar: {
+    height: '60%',                    // px or % of the row
+    radius: 6,
+    minWidth: 4,
+    progress: { show: true, color: '#1e3a8a', opacity: 0.3 },
+    label: { position: 'auto', template: t => `${t.name} · ${t.progress ?? 0}%` }, // inside | left | right | auto | none
+  },
+  milestone: { size: 18, shape: 'diamond' },          // diamond | circle | square
+  groupBar: { style: 'summary', height: '40%' },      // summary (bracket) | bar
+  arrows: { width: 1.5, headSize: 5, radius: 6, offset: 12, color: '#64748b' },
+  indentSize: 16,
+};
+```
+
+Per task: `barColor`, `progressColor`, `textColor`, `rowColor`, `className`, `draggable`.
+For full control replace the bar renderer (`renderBar` in the Web Component / bindings,
+`provideGanttBar` in Angular) — custom renderers receive the computed geometry in `ctx.visual`.
+
+### Task list panel, table view and saved state
+
+```ts
+options = {
+  panel: { width: '30%', minWidth: 160, maxWidth: '70%', resizable: true, collapsible: true, collapsed: false },
+  view: 'split',                      // 'split' | 'table' (all columns, animated) | 'chart'
+  toolbar: { zoom: true, viewModes: ['Day', 'Week', 'Month'], today: true, viewToggle: true }, // or false
+  stateKey: 'project-42',             // remember panel width, view, zoom, column widths, collapsed rows, sort
+};
+columns = [
+  { key: 'name', label: 'Task', width: 220, flex: true },          // flex: fills spare panel width
+  { key: 'owner', label: 'Owner', width: 120, align: 'center' },
+  { key: 'budget', label: 'Budget', width: 100, tableOnly: true }, // only in the table view
+];
+```
+
+- Drag the splitter to resize (also past the last column); the chevron collapses the list and
+  restores the **last width of that instance**. Columns wider than the panel scroll horizontally.
+- Column widths are resizable from the header edge (`resizable: false` to lock one).
+- `state-change` / `(stateChange)` / `onStateChange` reports every layout change; `getState()` /
+  `setState()` save and restore it from your own backend.
+
+### Dates and time zones
+
+- `new Date('2026-01-05')` (UTC midnight) is read as **that calendar day in local time**
+  (`normalizeDateOnly: true`), so bars line up with day cells in every time zone; `parseDate()` helps too.
+- The x axis follows local calendar days, so daylight-saving changes never shift bars.
+- `endDateMode: 'inclusive'` makes a date-only `end` cover that whole day (default `'exclusive'`).
+
+### Theming
+
+Colours, font and radius come from the theme (`options.theme`, `setTheme()`, `patchTheme()`,
+light/dark/auto). They are also exposed as CSS custom properties on the chart root:
+
+| Variable | Theme key | | Variable | Theme key |
+|---|---|---|---|---|
+| `--gantt-bg` | `backgroundColor` | | `--gantt-grid-line` | `gridLine` |
+| `--gantt-header-bg` | `headerBackground` | | `--gantt-grid-line-major` | `gridLineMajor` |
+| `--gantt-bar` | `barColor` | | `--gantt-today` | `todayColor` |
+| `--gantt-bar-radius` | `barRadius` | | `--gantt-weekend-bg` | `weekendBg` |
+| `--gantt-milestone` | `milestoneColor` | | `--gantt-holiday-bg` | `holidayBg` |
+| `--gantt-critical` | `criticalColor` | | `--gantt-off-hours-bg` | `offHoursBg` |
+| `--gantt-arrow` | `arrowColor` | | `--gantt-intensive-bg` | `intensiveBg` |
+| `--gantt-text` / `-sec` / `-muted` | text colours | | `--gantt-sel-bg` / `--gantt-sel-border` | selection |
+
 ---
 
 ## Angular (`ngx-gantry`)
@@ -447,7 +574,7 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 
 | Script | Effect |
 |---|---|
-| `pnpm dev:angular` / `dev:vanilla` / `dev:react` / `dev:vue` / `dev:svelte` | run a demo (packages resolve from source, so library edits hot-reload) |
+| `pnpm dev:angular` / `dev:vanilla` / `dev:react` / `dev:vue` / `dev:svelte` | run a demo (packages resolve from source, so library edits hot-reload); `dev:vanilla` is the options playground |
 | `pnpm build` | build all packages, the Angular library, the showcase and the demos |
 | `pnpm test` | Vitest: core (Node) + Web Component (happy-dom) |
 | `pnpm typecheck` | type-check every package |

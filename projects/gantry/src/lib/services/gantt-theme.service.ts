@@ -29,70 +29,11 @@ import {
   makeEnvironmentProviders,
 } from '@angular/core';
 import { GanttTheme, GanttLabels, GanttFormats } from '../types';
+import { LightTheme, DarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
 
-// ─── Built-in themes ─────────────────────────────────────────
+// ─── Built-in themes (shared with the Web Component via @gantry/core) ──
 
-export const LightTheme: Readonly<GanttTheme> = {
-  backgroundColor:  '#FFFFFF',
-  headerBackground: '#F8FAFC',
-  rowBg:            '#FFFFFF',
-  rowBgAlt:         '#F8FAFC',
-  barColor:         '#3B82F6',
-  barTextColor:     '#FFFFFF',
-  barRadius:        '4px',
-  milestoneColor:   '#8B5CF6',
-  baselineColor:    '#94A3B8',
-  criticalColor:    '#EF4444',
-  panelBg:          '#FFFFFF',
-  panelBorder:      '#E2E8F0',
-  borderColor:      '#E2E8F0',
-  gridLine:         '#F1F5F9',
-  todayColor:       '#F59E0B',
-  textPrimary:      '#1E293B',
-  textSecondary:    '#475569',
-  textMuted:        '#94A3B8',
-  fontFamily:       'system-ui, -apple-system, sans-serif',
-  fontSize:         '13px',
-  arrowColor:       '#3B82F6',
-  tooltipBg:        '#FFFFFF',
-  tooltipBorder:    '#E2E8F0',
-  tooltipText:      '#1E293B',
-  selectionBg:      '#EFF6FF',
-  selectionBorder:  '#3B82F6',
-  scrollbarTrack:   '#F1F5F9',
-  scrollbarThumb:   '#CBD5E1',
-};
-
-export const DarkTheme: Readonly<GanttTheme> = {
-  backgroundColor:  '#0F172A',
-  headerBackground: '#1E293B',
-  rowBg:            '#0F172A',
-  rowBgAlt:         '#111827',
-  barColor:         '#3B82F6',
-  barTextColor:     '#FFFFFF',
-  barRadius:        '4px',
-  milestoneColor:   '#A78BFA',
-  baselineColor:    '#334155',
-  criticalColor:    '#F87171',
-  panelBg:          '#0F172A',
-  panelBorder:      '#1E293B',
-  borderColor:      '#1E293B',
-  gridLine:         '#1A2744',
-  todayColor:       '#FBBF24',
-  textPrimary:      '#F1F5F9',
-  textSecondary:    '#94A3B8',
-  textMuted:        '#475569',
-  fontFamily:       'system-ui, -apple-system, sans-serif',
-  fontSize:         '13px',
-  arrowColor:       '#60A5FA',
-  tooltipBg:        '#1E293B',
-  tooltipBorder:    '#334155',
-  tooltipText:      '#F1F5F9',
-  selectionBg:      '#1D3461',
-  selectionBorder:  '#60A5FA',
-  scrollbarTrack:   '#1E293B',
-  scrollbarThumb:   '#334155',
-};
+export { LightTheme, DarkTheme };
 
 // ─── Config token ─────────────────────────────────────────────
 
@@ -118,44 +59,8 @@ export function provideGantt(config: GanttGlobalConfig = {}): EnvironmentProvide
   ]);
 }
 
-// ─── CSS var map ──────────────────────────────────────────────
-
-const VAR_MAP: Array<[keyof GanttTheme, string]> = [
-  ['backgroundColor',  '--gantt-bg'],
-  ['headerBackground', '--gantt-header-bg'],
-  ['rowBg',            '--gantt-row-bg'],
-  ['rowBgAlt',         '--gantt-row-bg-alt'],
-  ['barColor',         '--gantt-bar'],
-  ['barTextColor',     '--gantt-bar-text'],
-  ['barRadius',        '--gantt-bar-radius'],
-  ['milestoneColor',   '--gantt-milestone'],
-  ['baselineColor',    '--gantt-baseline'],
-  ['criticalColor',    '--gantt-critical'],
-  ['panelBg',          '--gantt-panel-bg'],
-  ['panelBorder',      '--gantt-panel-border'],
-  ['borderColor',      '--gantt-border'],
-  ['gridLine',         '--gantt-grid-line'],
-  ['todayColor',       '--gantt-today'],
-  ['textPrimary',      '--gantt-text'],
-  ['textSecondary',    '--gantt-text-sec'],
-  ['textMuted',        '--gantt-text-muted'],
-  ['fontFamily',       '--gantt-font'],
-  ['fontSize',         '--gantt-font-size'],
-  ['arrowColor',       '--gantt-arrow'],
-  ['tooltipBg',        '--gantt-tooltip-bg'],
-  ['tooltipBorder',    '--gantt-tooltip-bdr'],
-  ['tooltipText',      '--gantt-tooltip-txt'],
-  ['selectionBg',      '--gantt-sel-bg'],
-  ['selectionBorder',  '--gantt-sel-border'],
-  ['scrollbarTrack',   '--gantt-scrollbar-track'],
-  ['scrollbarThumb',   '--gantt-scrollbar-thumb'],
-];
-
-function applyThemeToDom(el: HTMLElement, theme: GanttTheme): void {
-  for (const [key, cssVar] of VAR_MAP) {
-    const val = theme[key];
-    if (val != null) el.style.setProperty(cssVar, String(val));
-  }
+function applyThemeToDom(el: HTMLElement, theme: Required<GanttTheme>): void {
+  for (const [key, cssVar] of THEME_CSS_VARS) el.style.setProperty(cssVar, String(theme[key]));
 }
 
 // ─── Service ─────────────────────────────────────────────────
@@ -169,14 +74,16 @@ export class GanttThemeService {
 
   private readonly _darkMode       = signal<boolean | 'auto'>(this.cfg.darkMode ?? false);
   private readonly _prefersDark    = signal<boolean>(false);
-  private readonly _customOverride = signal<Partial<GanttTheme>>(this.cfg.theme ?? {});
+  /** From `[options].theme` — replaced whenever the options change */
+  private readonly _optionsTheme   = signal<Partial<GanttTheme>>({});
+  /** From `setTheme()` / `patchTheme()` — survives options changes */
+  private readonly _customOverride = signal<Partial<GanttTheme>>({});
 
   // ── Computed resolved theme ───────────────────────────────
-  readonly resolvedTheme = computed<GanttTheme>(() => {
-    const mode   = this._darkMode();
-    const isDark = mode === 'auto' ? this._prefersDark() : mode === true;
-    return { ...(isDark ? DarkTheme : LightTheme), ...this._customOverride() };
-  });
+  /** Light/dark base ← global config ← `options.theme` ← API overrides */
+  readonly resolvedTheme = computed<Required<GanttTheme>>(() =>
+    resolveTheme(this.isDark(), { ...this.cfg.theme, ...this._optionsTheme(), ...this._customOverride() }),
+  );
 
   readonly isDark = computed(() => {
     const mode = this._darkMode();
@@ -212,6 +119,10 @@ export class GanttThemeService {
     this._darkMode.set(mode);
     if (mode === 'auto') this._setupMQL();
     else this._teardownMQL();
+  }
+
+  setOptionsTheme(theme: Partial<GanttTheme> | undefined): void {
+    this._optionsTheme.set(theme ?? {});
   }
 
   patchTheme(patch: Partial<GanttTheme>): void {

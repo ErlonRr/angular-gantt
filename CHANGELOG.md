@@ -12,8 +12,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Column sorting** (`ngx-gantry` and the Web Component): built-in columns are sortable; clicking a header cycles ascending → descending → original order.
 - Release tooling with Changesets, CI workflow, and Web Component tests (happy-dom).
 
+- **Configurable timeline**: N-tier header `scales` (`unit`, `step`, `format`, `className`), named `zoomLevels`, a new **Hour** view, `weekStart`, week label presets (`WEEK_FORMATS`: `W52`, `Week 52`, `4–11`, `4–11 Mar`), sticky upper-tier labels and `fitToWidth`.
+- **Period delimiters**: `gridLines.major / minor / horizontal` (colour, width, dash) drawn through header and body — month boundaries now show in Week view too.
+- **Non-working time**: `nonWorkingTime` (weekends, holidays, working hours per weekday, intensive hours; shade / hatch / disabled styles) and a `highlightTime` callback.
+- **Element styling**: `bar` (height in px or % of the row, radius, progress, label position & template), `milestone` (size, diamond / circle / square), `groupBar` (summary or bar), `arrows` (width, head, rounded corners), per-task `progressColor` / `textColor` / `className`.
+- **Task list panel**: `panel` (width in px or %, default 30%; min/max; resizable splitter; collapse toggle that restores the last width), horizontal scroll when columns overflow, a flexible fill column, resizable columns in every binding, `align` and `tableOnly` columns.
+- **Views**: `view: 'split' | 'table' | 'chart'` with an animated table view and a toolbar switch; `options.toolbar` configures every toolbar part.
+- **State**: `stateKey` (localStorage), `state-change` / `stateChange` event, `getState()` / `setState()`.
+- Options playground in `apps/demo-vanilla`.
+
 ### Changed
 - `ngx-gantry` now imports its types, timeline math, tree helpers and critical path from `@gantry/core` (no public API change).
+- Angular and the Web Component render from the same `@gantry/core` model (`resolveConfig`, `buildTimeline`, `computeBarVisual`, `computeArrowVisual`, `DragSession`), so every option behaves identically. Custom bar components receive the computed geometry in `ctx.visual`.
+- Defaults: panel width `'30%'` (was 320px), bars `60%` of the row height, summary-style group bars, weekend shading in Day / Week views.
+- Low-level Angular building blocks changed inputs: `GanttHeaderComponent` / `GanttCanvasComponent` take `[timeline]` + `[config]`, `GanttArrowComponent` takes `[arrow]` (an `ArrowVisual`), the task-list panel resize handle moved to the splitter.
+
+### Fixed
+- Bars misaligned with day cells outside UTC (`new Date('YYYY-MM-DD')` is now read as a local day) and after daylight-saving changes; `diffDays` off by one across DST.
+- `headerHeight` / `subHeaderHeight` ignored by the timeline header (task list and timeline rows out of line).
+- Angular task-list rows 1px taller than timeline rows (missing `box-sizing`); last rows misaligned by the horizontal scrollbar; scroll sync lost after toggling the panel; column directive effect re-running itself.
+- Header labels overflowing narrow cells; doubled cell borders; current-period highlight on clipped cells; invalid tint with non-hex `todayColor`; "today" going stale after midnight.
+- `barRadius` and `criticalColor` ignored by several shapes / arrows; arrows cutting through bars when the successor starts early; arrows ending inside milestones; labels spilling out of bars; double selection tint.
+- Dead options now work: `enableSelection`, `multiSelect`, `enableDrag` / `enableResize` in `options`, `task.collapsed`, `options.columns` / `theme` / `darkMode` in Angular; `timelinePadding` in every view; `options` no longer resets `patchTheme()` overrides.
 - `rowClick` now always emits a `RowGeometry` (the task list previously emitted a flat row); `rowDblClick` is typed `GanttFlatRow`.
 
 ## [1.0.1] — 2026-08-08

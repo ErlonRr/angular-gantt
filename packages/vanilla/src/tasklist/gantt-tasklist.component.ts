@@ -31,6 +31,8 @@ export interface GanttTaskListProps {
   paddingBottom: number;
   sort: SortState | null;
   loadMore: GanttLoadMoreState | null;
+  /** Full table view: also shows `tableOnly` columns */
+  tableView: boolean;
 }
 
 export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
@@ -39,6 +41,13 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
   readonly rowDblClick$ = new EventEmitter<GanttFlatRow>();
   readonly sortColumn$ = new EventEmitter<string>();
   readonly loadMore$ = new EventEmitter<void>();
+  /** Live column resize (fires while dragging) */
+  readonly columnWidthChange$ = new EventEmitter<{ key: string; width: number }>();
+  /** Column resize finished */
+  readonly columnResizeEnd$ = new EventEmitter<void>();
+
+  /** Set while a column edge is dragged, so the trailing click doesn't sort */
+  private resizing = false;
 
   constructor(container: HTMLElement, props: GanttTaskListProps) {
     super(container, props);
@@ -51,15 +60,21 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       colHeaderHeight, indentSize, paddingTop, paddingBottom, sort, loadMore,
     } = this.props;
 
-    const visibleColumns = columns.filter(c => c.visible !== false);
-    const gridTemplate = visibleColumns.map(c => `${c.width}px`).join(' ');
+    const visibleColumns = columns.filter(c => c.visible !== false && (!c.tableOnly || this.props.tableView));
+    // One column grows to fill a panel wider than the columns: the `flex` one, else the last
+    const flexIdx = visibleColumns.some(c => c.flex)
+      ? visibleColumns.findIndex(c => c.flex)
+      : visibleColumns.length - 1;
+    const gridTemplate = visibleColumns
+      .map((c, i) => (i === flexIdx ? `minmax(${c.width}px, 1fr)` : `${c.width}px`))
+      .join(' ');
 
     this.element.innerHTML = '';
     this.element.className = 'gantt-tasklist';
     this.element.setAttribute('role', 'treegrid');
     this.element.setAttribute('aria-rowcount', String(rowCount + 1));
     this.element.setAttribute('aria-multiselectable', 'true');
-    this.element.style.cssText = 'display:flex;flex-direction:column;position:relative;';
+    this.element.style.cssText = 'display:flex;flex-direction:column;position:relative;width:max-content;min-width:100%;';
 
     // ── Column headers ───────────────────────────────────────
     const headerRow = document.createElement('div');
@@ -68,6 +83,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     headerRow.setAttribute('aria-rowindex', '1');
     headerRow.style.cssText = `
       display: grid;
+      box-sizing: border-box;
       grid-template-columns: ${gridTemplate};
       height: ${colHeaderHeight}px;
       background-color: ${theme.headerBackground};
@@ -83,9 +99,11 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       colEl.className = 'gantt-tl-col-header';
       colEl.setAttribute('role', 'columnheader');
       colEl.style.cssText = `
+        position: relative;
         padding: 0 8px;
         display: flex;
         align-items: center;
+        justify-content: ${justify(col.align)};
         gap: 4px;
         overflow: hidden;
         border-right: 1px solid ${theme.borderColor};
@@ -109,7 +127,9 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         arrow.style.cssText = `font-size:9px;color:${active ? theme.textPrimary : theme.textMuted};`;
         arrow.textContent = active === 'desc' ? '▼' : active === 'asc' ? '▲' : '⇅';
         colEl.appendChild(arrow);
-        colEl.addEventListener('click', () => this.sortColumn$.emit(col.key));
+        colEl.addEventListener('click', () => {
+          if (!this.resizing) this.sortColumn$.emit(col.key);
+        });
         colEl.addEventListener('keydown', e => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
@@ -118,6 +138,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         });
       }
 
+      if (col.resizable !== false) colEl.appendChild(this.resizeHandle(col));
       headerRow.appendChild(colEl);
     }
     this.element.appendChild(headerRow);
@@ -159,8 +180,9 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         cellEl.style.cssText = `
           display: flex;
           align-items: center;
+          justify-content: ${justify(col.align)};
           overflow: hidden;
-          padding: 0 4px;
+          padding: 0 8px;
           border-right: 1px solid ${theme.borderColor};
           color: ${theme.textPrimary};
         `;
@@ -173,7 +195,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
           cellEl.appendChild(this.nameCell(row, theme, labels, indentSize));
         } else {
           const textSpan = document.createElement('span');
-          textSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;';
+          textSpan.style.cssText = `overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:${col.align ?? 'start'};`;
           const raw = col.render ? col.render(row) : (row.task as unknown as Record<string, unknown>)[col.key];
           textSpan.textContent = raw == null ? '' : String(raw);
           cellEl.appendChild(textSpan);
@@ -190,6 +212,39 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
 
     // ── Load-more footer (lazy data source) ──────────────────
     if (loadMore) this.element.appendChild(this.loadMoreFooter(loadMore, theme, labels, rowHeight));
+  }
+
+  /** Drag handle on the column's right border. */
+  private resizeHandle(col: VanillaColumnDef): HTMLElement {
+    const handle = document.createElement('div');
+    handle.className = 'gantt-col-resize';
+    handle.setAttribute('aria-hidden', 'true');
+    handle.addEventListener('click', e => e.stopPropagation());
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startX = e.clientX;
+      const startWidth = col.width;
+      this.resizing = true;
+      // Listen on window: the list re-renders while resizing, replacing this handle
+      const move = (ev: PointerEvent) => {
+        const width = Math.round(Math.min(col.maxWidth ?? 800, Math.max(col.minWidth ?? 40, startWidth + ev.clientX - startX)));
+        this.columnWidthChange$.emit({ key: col.key, width });
+      };
+      const end = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', end);
+        window.removeEventListener('pointercancel', end);
+        this.columnResizeEnd$.emit();
+        // let the click that follows pointerup see `resizing`
+        setTimeout(() => { this.resizing = false; });
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', end);
+      window.addEventListener('pointercancel', end);
+    });
+    return handle;
   }
 
   private nameCell(row: GanttFlatRow, theme: GanttTheme, labels: GanttLabels, indentSize: number): HTMLElement {
@@ -275,6 +330,10 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     }
     return footer;
   }
+}
+
+function justify(align: VanillaColumnDef['align']): string {
+  return align === 'center' ? 'center' : align === 'end' ? 'flex-end' : 'flex-start';
 }
 
 function spacer(height: number): HTMLElement {

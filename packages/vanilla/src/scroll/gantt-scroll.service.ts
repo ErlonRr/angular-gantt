@@ -7,8 +7,6 @@
  * wheel/touch scrolling works over either pane.
  */
 
-import { dateToPixel, snapToDay } from '@gantry/core';
-
 export class GanttScrollService {
   private panelEl?: HTMLElement;
   private canvasEl?: HTMLElement;
@@ -48,16 +46,10 @@ export class GanttScrollService {
     return this.canvasEl?.clientHeight ?? 0;
   }
 
-  /** Centre `date` horizontally in the timeline viewport. */
-  scrollToDate(date: Date, origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
+  /** Scroll the timeline horizontally to `x` (clamped at 0). */
+  scrollToX(x: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.canvasEl) return;
-    const x = dateToPixel(date, origin, pxPerDay);
-    const left = Math.max(0, x - this.canvasEl.clientWidth / 2);
-    scrollTo(this.canvasEl, { left, behavior });
-  }
-
-  scrollToToday(origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
-    this.scrollToDate(snapToDay(new Date()), origin, pxPerDay, behavior);
+    scrollTo(this.canvasEl, { left: Math.max(0, x), behavior });
   }
 
   /** Scroll vertically so the row at `rowIndex` is visible. */

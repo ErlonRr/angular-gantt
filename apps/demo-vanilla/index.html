@@ -3,27 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gantry · Vanilla JS</title>
+    <title>Gantry · Playground</title>
   </head>
   <body>
     <div class="demo">
       <header class="demo-header">
-        <h1>Gantry · Vanilla JS</h1>
+        <h1>Gantry · Vanilla JS playground</h1>
         <div class="demo-group">
-          <span class="demo-label">Features</span>
-          <button id="baseline" aria-pressed="false">Baseline</button>
-          <button id="critical" aria-pressed="false">Critical path</button>
           <button id="dark" aria-pressed="true">Dark</button>
-        </div>
-        <div class="demo-group">
-          <span class="demo-label">View</span>
-          <select id="view-mode">
-            <option>Day</option><option>Week</option><option selected>Month</option><option>Quarter</option><option>Year</option>
-          </select>
+          <button id="reset">Reset</button>
         </div>
         <span class="demo-log" id="log"></span>
       </header>
-      <gantry-element id="gantt" class="demo-chart" dark-mode="true"></gantry-element>
+      <div class="pg">
+        <aside class="pg-controls" id="controls"></aside>
+        <gantry-element id="gantt" class="demo-chart" dark-mode="true"></gantry-element>
+      </div>
+      <details class="pg-code"><summary>options</summary><pre id="code"></pre></details>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

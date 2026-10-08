@@ -5,7 +5,7 @@
 
   let gantt = $state<GantryElement>();
   let tasks = $state<GanttTask[]>([...DEMO_TASKS]);
-  let viewMode = $state<ViewMode>(ViewMode.Month);
+  let viewMode = $state<string>(ViewMode.Month);
   let baseline = $state(false);
   let criticalPath = $state(false);
   let dark = $state(true);

@@ -1,35 +1,27 @@
 /**
  * @file gantt-drag.service.ts
- * Vanilla JS Drag and Drop & Resize Service using DOM Pointer Events.
+ * Vanilla JS drag & resize: wires Pointer Events to the framework-free
+ * `DragSession` from @gantry/core (snapping, minimum length, preview, result).
  */
 
-import { RowGeometry, TaskDragEvent, TaskResizeEvent, addDays, diffDays } from '@gantry/core';
+import {
+  RowGeometry, TaskDragEvent, TaskResizeEvent, DragSession,
+  type DragTiming, type DragPreview,
+} from '@gantry/core';
 import { createState } from '../core/state';
 
-const daysBetween = (a: Date, b: Date) => (b.getTime() - a.getTime()) / 86_400_000;
+export type { DragPreview };
 
 export type DragState =
   | { kind: 'idle' }
-  | { kind: 'dragging'; taskId: string; startX: number; origStart: Date; origEnd: Date }
-  | { kind: 'resizing-left'; taskId: string; startX: number; origStart: Date; origEnd: Date }
-  | { kind: 'resizing-right'; taskId: string; startX: number; origStart: Date; origEnd: Date };
-
-export interface DragPreview {
-  taskId: string;
-  x: number;
-  width: number;
-  y: number;
-  height: number;
-  daysDelta: number;
-}
+  | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };
 
 export class GanttDragService {
   readonly state = createState<DragState>({ kind: 'idle' });
   readonly preview = createState<DragPreview | null>(null);
 
-  private _pxPerDay = 8;
-  private _origin = new Date();
-  private _rowHeight = 36;
+  private timing: DragTiming = { pxPerDay: 8, toX: () => 0, span: (start, end) => ({ start, end }), snap: 'day' };
+  private session: DragSession | null = null;
 
   onTaskDragged?: (e: TaskDragEvent) => void;
   onTaskResized?: (e: TaskResizeEvent) => void;
@@ -37,10 +29,8 @@ export class GanttDragService {
   /** Whether the last finished drag actually moved the bar (used to suppress the trailing click). */
   lastDragMoved = false;
 
-  configure(cfg: { pxPerDay: number; origin: Date; rowHeight: number }): void {
-    this._pxPerDay = cfg.pxPerDay;
-    this._origin = cfg.origin;
-    this._rowHeight = cfg.rowHeight;
+  configure(timing: DragTiming): void {
+    this.timing = timing;
   }
 
   startDrag(
@@ -49,27 +39,24 @@ export class GanttDragService {
     handle: 'bar' | 'left' | 'right',
     captureEl: SVGElement | HTMLElement
   ): void {
-    if (this.state().kind !== 'idle') return;
-
+    if (this.session) return;
     event.preventDefault();
     event.stopPropagation();
 
     const task = geo.row.task;
-    const kind = handle === 'left' ? 'resizing-left' : handle === 'right' ? 'resizing-right' : 'dragging';
-
+    const session = new DragSession(task.id, handle, task.start, task.end ?? task.start, event.clientX, geo, this.timing);
+    this.session = session;
     try { captureEl.setPointerCapture(event.pointerId); } catch { /* synthetic event */ }
 
     this.state.set({
-      kind,
+      kind: handle === 'left' ? 'resizing-left' : handle === 'right' ? 'resizing-right' : 'dragging',
       taskId: task.id,
-      startX: event.clientX,
-      origStart: task.start,
-      origEnd: task.end,
     });
+    this.setPreview(session.preview(event.clientX));
 
-    this.updatePreview(event.clientX, geo);
-
-    const onMove = (e: PointerEvent) => this.updatePreview(e.clientX, geo);
+    const onMove = (e: PointerEvent) => {
+      if (this.session === session) this.setPreview(session.preview(e.clientX));
+    };
     const cleanup = () => {
       captureEl.removeEventListener('pointermove', onMove as EventListener);
       captureEl.removeEventListener('pointerup', onUp as EventListener);
@@ -77,7 +64,12 @@ export class GanttDragService {
     };
     const onUp = (e: PointerEvent) => {
       cleanup();
-      this.finishDrag(e.clientX);
+      if (this.session !== session) return;
+      const result = session.finish(e.clientX);
+      this.lastDragMoved = !!result;
+      this.reset();
+      if (result?.kind === 'drag') this.onTaskDragged?.(result.event);
+      else if (result?.kind === 'resize') this.onTaskResized?.(result.event);
     };
     const onCancel = () => {
       cleanup();
@@ -89,76 +81,20 @@ export class GanttDragService {
     captureEl.addEventListener('pointercancel', onCancel);
   }
 
-  /** New [start, end] for the active drag after `days` of movement. */
-  private rangeFor(s: Exclude<DragState, { kind: 'idle' }>, days: number): [Date, Date] {
-    switch (s.kind) {
-      case 'dragging':
-        return [addDays(s.origStart, days), addDays(s.origEnd, days)];
-      case 'resizing-left': {
-        // keep at least one day: start can't pass end
-        const maxDays = diffDays(s.origStart, s.origEnd) - 1;
-        return [addDays(s.origStart, Math.min(days, maxDays)), s.origEnd];
-      }
-      case 'resizing-right': {
-        const minDays = 1 - diffDays(s.origStart, s.origEnd);
-        return [s.origStart, addDays(s.origEnd, Math.max(days, minDays))];
-      }
-    }
+  private setPreview(p: DragPreview): void {
+    const prev = this.preview();
+    if (!prev || prev.x !== p.x || prev.width !== p.width) this.preview.set(p);
   }
 
-  private updatePreview(currentX: number, geo: RowGeometry): void {
-    const s = this.state();
-    if (s.kind === 'idle') return;
-
-    const daysDelta = Math.round((currentX - s.startX) / this._pxPerDay);
-    const [newStart, newEnd] = this.rangeFor(s, daysDelta);
-    const x = Math.round(daysBetween(this._origin, newStart) * this._pxPerDay);
-    const width = Math.max(Math.round(daysBetween(newStart, newEnd) * this._pxPerDay), 4);
-
-    const prev = this.preview();
-    if (prev && prev.x === x && prev.width === width) return;
-    this.preview.set({ taskId: s.taskId, x, width, y: geo.y, height: geo.height, daysDelta });
+  private reset(): void {
+    this.session = null;
+    this.state.set({ kind: 'idle' });
+    this.preview.set(null);
   }
 
   /** Abort the active drag without emitting (e.g. pointercancel, Escape). */
   cancel(): void {
     this.lastDragMoved = false;
-    this.state.set({ kind: 'idle' });
-    this.preview.set(null);
-  }
-
-  private finishDrag(currentX: number): void {
-    const s = this.state();
-    if (s.kind === 'idle') return;
-
-    const daysDelta = Math.round((currentX - s.startX) / this._pxPerDay);
-    const [newStart, newEnd] = this.rangeFor(s, daysDelta);
-    this.lastDragMoved = daysDelta !== 0;
-
-    if (daysDelta !== 0) {
-      if (s.kind === 'dragging') {
-        this.onTaskDragged?.({
-          taskId: s.taskId,
-          oldStart: s.origStart,
-          oldEnd: s.origEnd,
-          newStart,
-          newEnd,
-          daysMoved: daysDelta,
-        });
-      } else {
-        this.onTaskResized?.({
-          taskId: s.taskId,
-          handle: s.kind === 'resizing-left' ? 'left' : 'right',
-          oldStart: s.origStart,
-          oldEnd: s.origEnd,
-          newStart,
-          newEnd,
-          daysDelta: diffDays(s.origStart, newStart) || diffDays(s.origEnd, newEnd),
-        });
-      }
-    }
-
-    this.state.set({ kind: 'idle' });
-    this.preview.set(null);
+    this.reset();
   }
 }

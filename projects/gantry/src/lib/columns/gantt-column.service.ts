@@ -12,7 +12,7 @@
 //  (not the SVG canvas).
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, computed, effect, inject } from '@angular/core';
+import { Injectable, signal, computed, effect, inject, untracked } from '@angular/core';
 import { ColumnDef } from '../types';
 import { buildDefaultColumns } from '../gantt-data';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -28,19 +28,38 @@ export class GanttColumnService {
     ).map(c => ({ ...c, visible: true }));
   }
 
-  /** True once the consumer supplies their own columns (stops auto-localising). */
-  private _hasCustom = false;
+  /** Consumer-provided definitions (null = default columns). */
+  private _custom: ColumnDef[] | null = null;
+
+  /**
+   * Widths the user dragged (or restored from saved state) and visibility
+   * toggles — kept as overrides so they survive re-assigning `columns`
+   * or a locale change.
+   */
+  private readonly _widthOverrides = new Map<string, number>();
+  private readonly _visibilityOverrides = new Map<string, boolean>();
 
   // ── State ────────────────────────────────────────────────
   private readonly _columns = signal<ColumnDef[]>(this.defaults());
 
   constructor() {
-    // Re-seed default columns when the locale / labels / date format change,
-    // unless the consumer has taken over via setColumns().
+    // Re-resolve labels / date formats when the locale or labels change
     effect(() => {
-      const cols = this.defaults();
-      if (!this._hasCustom) this._columns.set(cols);
+      const base = this.defaults();
+      untracked(() => this._publish(this._custom ? this._merge(this._custom, base) : base));
     });
+  }
+
+  private _merge(defs: ColumnDef[], base: ColumnDef[]): ColumnDef[] {
+    return defs.map(def => ({ ...(base.find(d => d.key === def.key) ?? {}), ...def }));
+  }
+
+  private _publish(defs: ColumnDef[]): void {
+    this._columns.set(defs.map(c => ({
+      ...c,
+      width: clampWidth(c, this._widthOverrides.get(c.key) ?? c.width),
+      visible: this._visibilityOverrides.get(c.key) ?? c.visible ?? true,
+    })));
   }
 
   // ── Public signals ────────────────────────────────────────
@@ -59,6 +78,10 @@ export class GanttColumnService {
       .join(' ')
   );
 
+  /** Current width of every column, by key (for state persistence) */
+  readonly widths = computed<Record<string, number>>(() =>
+    Object.fromEntries(this._columns().map(c => [c.key, c.width])));
+
   /** Total width of the visible task-list panel */
   readonly totalPanelWidth = computed(() =>
     this.visibleColumns().reduce((sum, c) => sum + c.width, 0)
@@ -70,20 +93,15 @@ export class GanttColumnService {
    * Merges with defaults so consumers only need to specify overrides.
    */
   setColumns(defs: ColumnDef[]): void {
-    this._hasCustom = true;
+    this._custom = defs;
     // Merge consumer defs onto the (localised) defaults
-    const base = this.defaults();
-    const merged = defs.map(def => {
-      const b = base.find(d => d.key === def.key) ?? {};
-      return { ...b, ...def, visible: def.visible ?? true };
-    });
-    this._columns.set(merged);
+    this._publish(this._merge(defs, this.defaults()));
   }
 
   /** Reset to library defaults */
   resetColumns(): void {
-    this._hasCustom = false;
-    this._columns.set(this.defaults());
+    this._custom = null;
+    this._publish(this.defaults());
   }
 
   // ── Runtime mutation ──────────────────────────────────────
@@ -99,15 +117,13 @@ export class GanttColumnService {
   }
 
   setVisible(key: string, visible: boolean): void {
-    this._columns.update(cols =>
-      cols.map(c => c.key === key ? { ...c, visible } : c)
-    );
+    this._visibilityOverrides.set(key, visible);
+    this._publish(this._columns());
   }
 
   toggleVisible(key: string): void {
-    this._columns.update(cols =>
-      cols.map(c => c.key === key ? { ...c, visible: !c.visible } : c)
-    );
+    const col = this._columns().find(c => c.key === key);
+    if (col) this.setVisible(key, col.visible === false);
   }
 
   /**
@@ -115,16 +131,14 @@ export class GanttColumnService {
    * Clamps to [minWidth, maxWidth].
    */
   setColumnWidth(key: string, width: number): void {
-    this._columns.update(cols =>
-      cols.map(c => {
-        if (c.key !== key) return c;
-        const clamped = Math.max(
-          c.minWidth ?? 40,
-          Math.min(c.maxWidth ?? 600, width),
-        );
-        return { ...c, width: clamped };
-      })
-    );
+    this._widthOverrides.set(key, width);
+    this._publish(this._columns());
+  }
+
+  /** Apply saved widths (e.g. from `stateKey`). */
+  setColumnWidths(widths: Record<string, number>): void {
+    for (const [key, w] of Object.entries(widths)) this._widthOverrides.set(key, w);
+    this._publish(this._columns());
   }
 
   /**
@@ -154,4 +168,8 @@ export class GanttColumnService {
       return next;
     });
   }
+}
+
+function clampWidth(c: ColumnDef, width: number): number {
+  return Math.round(Math.max(c.minWidth ?? 40, Math.min(c.maxWidth ?? 800, width)));
 }

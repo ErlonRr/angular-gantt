@@ -29,6 +29,7 @@ import {
   inject,
   Injector,
   runInInjectionContext,
+  untracked,
   OnInit,
   OnDestroy,
   TemplateRef,
@@ -74,12 +75,12 @@ export class GanttColumnDefDirective implements OnInit, OnDestroy {
     // Keep service in sync when inputs change (ngOnInit is not an injection context)
     runInInjectionContext(this.injector, () => {
       effect(() => {
-        this.columnService.setColumns(
-          // Merge this column's latest values into the existing set
-          this.columnService.columns().map(c =>
-            c.key === this.key() ? { ...c, ...this.buildDef() } : c
-          )
-        );
+        // Track only this directive's inputs; reading the column list untracked
+        // avoids re-running on our own write (setColumns → columns → effect…)
+        const def = this.buildDef();
+        untracked(() => this.columnService.setColumns(
+          this.columnService.columns().map(c => (c.key === def.key ? { ...c, ...def } : c)),
+        ));
       });
     });
   }

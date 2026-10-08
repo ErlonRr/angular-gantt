@@ -33,7 +33,6 @@ import {
   input,
   output,
   signal,
-  ElementRef,
   inject,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -48,13 +47,19 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
   imports: [NgTemplateOutlet],
   host: {
     'class':              'gantt-tasklist',
+    'role':               'treegrid',
+    'aria-multiselectable': 'true',
+    '[attr.aria-rowcount]': 'rowCount() + 1',
     '[style.display]':    '"flex"',
     '[style.flex-direction]': '"column"',
     // overflow:visible so the sticky column header anchors to the outer
-    // scrollport (#panelEl in GantryComponent), not to this host.
+    // scrollport (the panel in GantryComponent), not to this host.
     '[style.overflow]':   '"visible"',
     '[style.position]':   '"relative"',
-    '[style.user-select]': 'isResizing() ? "none" : "auto"',
+    // As wide as the columns (the panel scrolls horizontally), at least the panel
+    '[style.width]':      '"max-content"',
+    '[style.min-width]':  '"100%"',
+    '[style.user-select]': 'resizingCol() ? "none" : null',
   },
   template: `
     <!-- ── Custom header slot ─────────────────────────────── -->
@@ -65,40 +70,28 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     <!-- ── Column header row ──────────────────────────────── -->
     <div
       class="gantt-tl-col-headers"
-      [style.display]="'grid'"
+      role="row"
+      aria-rowindex="1"
       [style.grid-template-columns]="gridTemplate()"
       [style.height.px]="colHeaderHeight()"
       [style.background-color]="theme().headerBackground"
       [style.border-bottom]="'1px solid ' + theme().borderColor"
-      [style.flex-shrink]="'0'"
-      [style.position]="'sticky'"
-      [style.top]="'0'"
-      [style.z-index]="'5'"
     >
       @for (col of visibleColumns(); track col.key) {
         <div
           class="gantt-tl-col-header"
-          [style.padding]="'0 8px'"
-          [style.display]="'flex'"
-          [style.align-items]="'center'"
-          [style.overflow]="'hidden'"
+          role="columnheader"
+          [style.justify-content]="justify(col.align)"
           [style.border-right]="'1px solid ' + theme().borderColor"
-          [style.font-size]="theme().fontSize"
-          [style.font-family]="theme().fontFamily"
-          [style.font-weight]="'600'"
           [style.color]="theme().textPrimary"
           [style.cursor]="col.sortable ? 'pointer' : 'default'"
-          [style.gap.px]="4"
-          [attr.role]="'columnheader'"
           [attr.aria-sort]="col.sortable ? ariaSort(col.key) : null"
           [attr.tabindex]="col.sortable ? 0 : null"
-          (click)="col.sortable && sortColumn.emit(col.key)"
+          (click)="onHeaderClick(col)"
           (keydown.enter)="col.sortable && sortColumn.emit(col.key)"
           (keydown.space)="$event.preventDefault(); col.sortable && sortColumn.emit(col.key)"
         >
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-            {{ col.label }}
-          </span>
+          <span class="gantt-tl-ellipsis">{{ col.label }}</span>
           @if (col.sortable) {
             <span
               aria-hidden="true"
@@ -106,40 +99,31 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
               [style.color]="sort()?.key === col.key ? theme().textPrimary : theme().textMuted"
             >{{ sortIcon(col.key) }}</span>
           }
-          <!-- Column resize handle -->
-          <div
-            class="gantt-col-resize-handle"
-            [style.width]="'4px'"
-            [style.flex-shrink]="'0'"
-            [style.margin-left]="'auto'"
-            [style.cursor]="'col-resize'"
-            [style.height]="'100%'"
-            [style.opacity]="'0'"
-            (pointerdown)="onColResizeStart($event, col)"
-            style="touch-action: none;"
-          ></div>
+          @if (col.resizable !== false) {
+            <div class="gantt-col-resize" aria-hidden="true"
+              (click)="$event.stopPropagation()"
+              (pointerdown)="onColResizeStart($event, col)"></div>
+          }
         </div>
       }
     </div>
 
     <!-- ── Task rows ──────────────────────────────────────── -->
-    <div
-      #rowsContainer
-      class="gantt-tl-rows"
-      [style.flex]="'1'"
-      [style.overflow-y]="'hidden'"
-      [style.overflow-x]="'hidden'"
-      [style.position]="'relative'"
-    >
+    <div class="gantt-tl-rows" role="rowgroup">
       <!-- Spacer top (virtual scroll) -->
-      <div [style.height.px]="paddingTop()"></div>
+      <div aria-hidden="true" [style.height.px]="paddingTop()"></div>
 
       @for (row of visibleRows(); track row.task.id) {
         <div
           class="gantt-tl-row"
+          role="row"
           [class.gantt-tl-row--selected]="isSelected(row)"
           [class.gantt-tl-row--group]="row.hasChildren"
-          [style.display]="'grid'"
+          [attr.data-task-id]="row.task.id"
+          [attr.aria-rowindex]="row.visibleIndex + 2"
+          [attr.aria-level]="row.level + 1"
+          [attr.aria-selected]="isSelected(row)"
+          [attr.aria-expanded]="row.hasChildren ? !row.isCollapsed : null"
           [style.grid-template-columns]="gridTemplate()"
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
@@ -150,76 +134,43 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           @for (col of visibleColumns(); track col.key) {
             <div
               class="gantt-tl-cell"
-              [style.display]="'flex'"
-              [style.align-items]="'center'"
-              [style.overflow]="'hidden'"
-              [style.padding]="'0 4px'"
+              role="gridcell"
+              [style.justify-content]="justify(col.align)"
               [style.border-right]="'1px solid ' + theme().borderColor"
-              [style.font-size]="theme().fontSize"
-              [style.font-family]="theme().fontFamily"
               [style.color]="theme().textPrimary"
             >
-              @if (col.key === 'name') {
-                <!-- Name cell: indent + collapse toggle + text -->
-                <span
-                  [style.display]="'flex'"
-                  [style.align-items]="'center'"
-                  [style.gap]="'4px'"
-                  [style.padding-left.px]="row.level * indentSize()"
-                  [style.overflow]="'hidden'"
-                  [style.width]="'100%'"
-                >
-                  <!-- Collapse toggle -->
-                  @if (row.hasChildren) {
-                    <button
-                      type="button"
-                      class="gantt-collapse-btn"
-                      [style.flex-shrink]="'0'"
-                      [style.border]="'none'"
-                      [style.background]="'transparent'"
-                      [style.color]="theme().textSecondary"
-                      [attr.aria-expanded]="!row.isCollapsed"
-                      [attr.aria-label]="collapseAriaLabel(row)"
-                      (click)="onCollapseClick($event, row)"
-                      animate.enter="collapse-btn-enter"
-                    >
-                      {{ row.isCollapsed ? '▶' : '▼' }}
-                    </button>
-                  } @else {
-                    <!-- Leaf indent spacer (width matches collapse control column) -->
-                    <span [style.width.px]="COLLAPSE_TARGET_PX" [style.flex-shrink]="'0'"></span>
-                  }
-
-                  <!-- Task type icon -->
-                  <span
-                    [style.flex-shrink]="'0'"
-                    [style.font-size]="'10px'"
-                    [style.color]="theme().textMuted"
-                  >{{ taskIcon(row) }}</span>
-
-                  <!-- Task name -->
-                  <span
-                    [style.overflow]="'hidden'"
-                    [style.text-overflow]="'ellipsis'"
-                    [style.white-space]="'nowrap'"
-                    [style.font-weight]="row.hasChildren ? '600' : '400'"
-                    [style.color]="row.hasChildren ? theme().textPrimary : theme().textSecondary"
-                  >{{ row.task.name }}</span>
-                </span>
-              } @else if (col.cellTemplate) {
+              @if (col.cellTemplate) {
                 <!-- Custom cell via <ng-template ganttColumn> -->
                 <ng-container
                   *ngTemplateOutlet="col.cellTemplate; context: { $implicit: row, row: row }"
                 />
+              } @else if (col.key === 'name') {
+                <!-- Name cell: indent + collapse toggle + text -->
+                <span class="gantt-tl-name" [style.padding-left.px]="row.level * indentSize()">
+                  @if (row.hasChildren) {
+                    <button
+                      type="button"
+                      class="gantt-collapse-btn"
+                      [style.color]="theme().textSecondary"
+                      [attr.aria-expanded]="!row.isCollapsed"
+                      [attr.aria-label]="collapseAriaLabel(row)"
+                      (click)="onCollapseClick($event, row)"
+                    >{{ row.isCollapsed ? '▶' : '▼' }}</button>
+                  } @else {
+                    <!-- Leaf indent spacer (width matches the collapse control) -->
+                    <span [style.width.px]="COLLAPSE_TARGET_PX" [style.flex-shrink]="'0'"></span>
+                  }
+                  <span aria-hidden="true" [style.flex-shrink]="'0'" [style.font-size]="'10px'"
+                    [style.color]="row.task.barColor ?? theme().textMuted">{{ taskIcon(row) }}</span>
+                  <span class="gantt-tl-ellipsis"
+                    [style.font-weight]="row.hasChildren ? '600' : '400'"
+                    [style.color]="row.hasChildren ? theme().textPrimary : theme().textSecondary"
+                  >{{ row.task.name }}</span>
+                </span>
               } @else {
-                <!-- Regular cell via ColumnDef.render() -->
-                <span
-                  [style.overflow]="'hidden'"
-                  [style.text-overflow]="'ellipsis'"
-                  [style.white-space]="'nowrap'"
-                  [style.width]="'100%'"
-                  [style.color]="theme().textSecondary"
-                >{{ renderCell(col, row) }}</span>
+                <!-- Regular cell: ColumnDef.render(), else the task field -->
+                <span class="gantt-tl-ellipsis" [style.text-align]="col.align ?? 'start'"
+                  [style.color]="theme().textSecondary">{{ renderCell(col, row) }}</span>
               }
             </div>
           }
@@ -227,79 +178,80 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       }
 
       <!-- Spacer bottom (virtual scroll) -->
-      <div [style.height.px]="paddingBottom()"></div>
+      <div aria-hidden="true" [style.height.px]="paddingBottom()"></div>
     </div>
 
     <!-- ── Custom footer slot ─────────────────────────────── -->
     <div class="gantt-tl-footer-slot">
       <ng-content select="[tlFooter]" />
     </div>
-
-    <!-- ── Panel resize handle (right edge) ───────────────── -->
-    <div
-      class="gantt-panel-resize-handle"
-      [style.position]="'absolute'"
-      [style.top]="'0'"
-      [style.right]="'0'"
-      [style.width]="'5px'"
-      [style.height]="'100%'"
-      [style.cursor]="'col-resize'"
-      [style.background]="isResizing() ? theme().todayColor : 'transparent'"
-      [style.z-index]="'20'"
-      [style.touch-action]="'none'"
-      (pointerdown)="onPanelResizeStart($event)"
-    ></div>
   `,
   styles: [`
     :host { box-sizing: border-box; }
 
+    .gantt-tl-col-headers {
+      display: grid;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      box-sizing: border-box;
+    }
+    .gantt-tl-col-header {
+      position: relative;
+      padding: 0 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+      font-weight: 600;
+      user-select: none;
+    }
+    .gantt-tl-rows { flex: 1; position: relative; }
     .gantt-tl-row {
+      display: grid;
+      box-sizing: border-box;
       cursor: default;
       transition: background-color 0.1s;
     }
-    .gantt-tl-row:hover {
-      filter: brightness(0.96);
+    .gantt-tl-row:hover { filter: brightness(0.96); }
+    .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border, #3B82F6); }
+    .gantt-tl-cell {
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      padding: 0 8px;
+      box-sizing: border-box;
     }
-    .gantt-tl-row--selected {
-      outline: 1px solid var(--gantt-selection-border, #3B82F6);
-      outline-offset: -1px;
+    .gantt-tl-name { display: flex; align-items: center; gap: 4px; overflow: hidden; width: 100%; }
+    .gantt-tl-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gantt-col-resize {
+      position: absolute; top: 0; right: -3px; width: 6px; height: 100%;
+      cursor: col-resize; z-index: 2; touch-action: none;
     }
-    .gantt-col-resize-handle:hover {
-      opacity: 1 !important;
-      background: var(--gantt-border, #e2e8f0);
-    }
-    /*
-     * WCAG 2.2 — 2.5.8 Target Size (Minimum): pointer target ≥ 24×24 CSS px (Level AA).
-     */
+    .gantt-col-resize:hover { background: var(--gantt-sel-border, #3B82F6); opacity: .6; }
+    /* WCAG 2.2 — 2.5.8 Target Size (Minimum): pointer target ≥ 24×24 CSS px (Level AA). */
     .gantt-collapse-btn {
       box-sizing: border-box;
       min-width: 24px;
       min-height: 24px;
+      flex-shrink: 0;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       padding: 0;
+      border: none;
       border-radius: 4px;
-      font-size: 12px;
+      background: transparent;
+      font-size: 10px;
       line-height: 1;
       cursor: pointer;
       touch-action: manipulation;
     }
-    .gantt-collapse-btn:hover {
-      opacity: 0.75;
-    }
+    .gantt-collapse-btn:hover { opacity: 0.75; }
     .gantt-collapse-btn:focus-visible {
-      outline: 2px solid var(--gantt-selection-border, #3B82F6);
+      outline: 2px solid var(--gantt-sel-border, #3B82F6);
       outline-offset: 2px;
-    }
-    .gantt-panel-resize-handle:hover {
-      background: var(--gantt-today, #F59E0B) !important;
-      opacity: 0.5;
-    }
-
-    @keyframes collapse-btn-enter {
-      from { opacity: 0; transform: scale(0.6); }
-      to   { opacity: 1; transform: scale(1); }
     }
   `],
 })
@@ -310,6 +262,7 @@ export class GanttTaskListComponent {
   // ── Inputs ────────────────────────────────────────────────
   readonly visibleRows    = input.required<GanttFlatRow[]>();
   readonly columns        = input.required<ColumnDef[]>();
+  readonly rowCount       = input<number>(0);
   readonly rowHeight      = input<number>(32);
   readonly selectedIds    = input<Set<string>>(new Set());
   readonly theme          = input.required<GanttTheme>();
@@ -318,22 +271,25 @@ export class GanttTaskListComponent {
   readonly paddingTop     = input<number>(0);
   readonly paddingBottom  = input<number>(0);
   readonly sort           = input<{ key: string; dir: 'asc' | 'desc' } | null>(null);
+  /** Full table view: also shows `tableOnly` columns */
+  readonly tableView      = input<boolean>(false);
 
   // ── Outputs ───────────────────────────────────────────────
   readonly collapseToggle    = output<string>();          // taskId
   readonly rowClick          = output<{ row: GanttFlatRow; event: MouseEvent }>();
   readonly rowDblClick       = output<GanttFlatRow>();
+  /** @deprecated The panel is resized with the splitter in GantryComponent */
   readonly panelWidthChange  = output<number>();
+  /** Live column resize (while dragging the header edge) */
   readonly columnWidthChange = output<{ key: string; width: number }>();
+  /** Column resize finished */
+  readonly columnResizeEnd   = output<void>();
   readonly sortColumn        = output<string>();
 
   // ── Internal state ────────────────────────────────────────
-  protected readonly isResizing = signal(false);
-  private _resizeStartX = 0;
-  private _resizeStartWidth = 0;
-  private _resizingColKey: string | null = null;
+  /** Key of the column being resized (the trailing click must not sort) */
+  protected readonly resizingCol = signal<string | null>(null);
 
-  private readonly el = inject(ElementRef<HTMLElement>);
   private readonly i18n = inject(GanttI18nService);
 
   protected ariaSort(key: string): 'ascending' | 'descending' | 'none' {
@@ -346,35 +302,43 @@ export class GanttTaskListComponent {
     return s?.key !== key ? '⇅' : s.dir === 'asc' ? '▲' : '▼';
   }
 
+  protected justify(align: ColumnDef['align']): string {
+    return align === 'center' ? 'center' : align === 'end' ? 'flex-end' : 'flex-start';
+  }
+
   // ── Derived ───────────────────────────────────────────────
   protected readonly visibleColumns = computed(() =>
-    this.columns().filter(c => c.visible !== false)
+    this.columns().filter(c => c.visible !== false && (!c.tableOnly || this.tableView()))
   );
 
-  protected readonly gridTemplate = computed(() =>
-    this.visibleColumns()
-      .map(c => `${c.width}px`)
-      .join(' ')
-  );
+  /** One column grows to fill a panel wider than the columns: the `flex` one, else the last */
+  protected readonly gridTemplate = computed(() => {
+    const cols = this.visibleColumns();
+    const flexIdx = cols.some(c => c.flex) ? cols.findIndex(c => c.flex) : cols.length - 1;
+    return cols.map((c, i) => (i === flexIdx ? `minmax(${c.width}px, 1fr)` : `${c.width}px`)).join(' ');
+  });
 
   // ── Row utilities ─────────────────────────────────────────
   protected isSelected(row: GanttFlatRow): boolean {
     return this.selectedIds().has(row.task.id);
   }
 
+  /** Same zebra striping as the timeline rows */
   protected rowBg(row: GanttFlatRow): string {
-    if (this.isSelected(row)) return this.theme().selectionBg;
-    return row.task.rowColor ?? this.theme().rowBg;
+    const theme = this.theme();
+    if (this.isSelected(row)) return theme.selectionBg;
+    return row.task.rowColor ?? (row.visibleIndex % 2 === 0 ? theme.rowBg : theme.rowBgAlt);
   }
 
   protected taskIcon(row: GanttFlatRow): string {
-    if (row.hasChildren) return '📁';
+    if (row.hasChildren) return '▤';
     if (row.barType === 'milestone') return '◆';
     return '▬';
   }
 
   protected renderCell(col: ColumnDef, row: GanttFlatRow): string {
-    return col.render ? col.render(row) : '';
+    const raw = col.render ? col.render(row) : (row.task as unknown as Record<string, unknown>)[col.key];
+    return raw == null ? '' : String(raw);
   }
 
   // ── Collapse toggle ───────────────────────────────────────
@@ -393,58 +357,34 @@ export class GanttTaskListComponent {
     this.rowClick.emit({ row, event });
   }
 
-  // ── Panel resize ──────────────────────────────────────────
-  protected onPanelResizeStart(event: PointerEvent): void {
-    event.preventDefault();
-    this.isResizing.set(true);
-    this._resizeStartX     = event.clientX;
-    this._resizeStartWidth = this.el.nativeElement.getBoundingClientRect().width;
-
-    const host = this.el.nativeElement;
-    host.setPointerCapture(event.pointerId);
-
-    const onMove = (e: PointerEvent) => {
-      const delta    = e.clientX - this._resizeStartX;
-      const newWidth = Math.max(this._resizeStartWidth + delta, 120);
-      this.panelWidthChange.emit(newWidth);
-    };
-    const onUp = () => {
-      this.isResizing.set(false);
-      host.removeEventListener('pointermove', onMove);
-      host.removeEventListener('pointerup',   onUp);
-    };
-
-    host.addEventListener('pointermove', onMove, { passive: true });
-    host.addEventListener('pointerup',   onUp);
+  protected onHeaderClick(col: ColumnDef): void {
+    if (col.sortable && !this.resizingCol()) this.sortColumn.emit(col.key);
   }
 
   // ── Column resize ─────────────────────────────────────────
   protected onColResizeStart(event: PointerEvent, col: ColumnDef): void {
+    if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = col.width;
+    this.resizingCol.set(col.key);
 
-    this._resizingColKey  = col.key;
-    this._resizeStartX    = event.clientX;
-    this._resizeStartWidth = col.width;
-
-    const target = event.currentTarget as HTMLElement;
-    target.setPointerCapture(event.pointerId);
-
+    // Listen on window: the header re-renders while resizing
     const onMove = (e: PointerEvent) => {
-      const delta    = e.clientX - this._resizeStartX;
-      const newWidth = Math.max(
-        this._resizeStartWidth + delta,
-        col.minWidth ?? 40,
-      );
-      this.columnWidthChange.emit({ key: col.key, width: newWidth });
+      const width = Math.round(Math.min(col.maxWidth ?? 800, Math.max(col.minWidth ?? 40, startWidth + e.clientX - startX)));
+      this.columnWidthChange.emit({ key: col.key, width });
     };
     const onUp = () => {
-      this._resizingColKey = null;
-      target.removeEventListener('pointermove', onMove);
-      target.removeEventListener('pointerup',   onUp);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      this.columnResizeEnd.emit();
+      // Let the click that follows pointerup see `resizingCol`
+      setTimeout(() => this.resizingCol.set(null));
     };
-
-    target.addEventListener('pointermove', onMove, { passive: true });
-    target.addEventListener('pointerup',   onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   }
 }

@@ -28,10 +28,10 @@ import { GanttTheme }   from '../types';
       <!-- Ghost bar -->
       <svg:rect
         [attr.x]="preview()!.x"
-        [attr.y]="preview()!.y + 4"
+        [attr.y]="preview()!.y + (preview()!.height - ghostHeight()) / 2"
         [attr.width]="preview()!.width"
-        [attr.height]="preview()!.height - 8"
-        rx="4"
+        [attr.height]="ghostHeight()"
+        [attr.rx]="radius()"
         [attr.fill]="theme().barColor"
         opacity="0.35"
         stroke-dasharray="4 2"
@@ -57,11 +57,21 @@ import { GanttTheme }   from '../types';
 export class GanttDragPreviewComponent {
   readonly preview = input<DragPreview | null>(null);
   readonly theme   = input.required<GanttTheme>();
+  /** Bar height in px (from the bar's render visual) */
+  readonly barHeight = input<number | null>(null);
+  readonly radius    = input<number>(4);
+  /** Snap unit, for the delta label */
+  readonly unit      = input<'day' | 'hour'>('day');
+
+  protected readonly ghostHeight = computed(() => {
+    const p = this.preview();
+    return this.barHeight() ?? (p ? p.height * 0.6 : 0);
+  });
 
   protected readonly deltaLabel = computed(() => {
     const p = this.preview();
     if (!p || p.daysDelta === 0) return '';
     const sign = p.daysDelta > 0 ? '+' : '';
-    return `${sign}${p.daysDelta}d`;
+    return `${sign}${p.daysDelta}${this.unit() === 'hour' ? 'h' : 'd'}`;
   });
 }

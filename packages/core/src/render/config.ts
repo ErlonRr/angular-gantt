@@ -1,0 +1,210 @@
+// ─────────────────────────────────────────────────────────────
+//  gantry · render/config.ts
+//  `resolveConfig()` — the single place where every option gets its
+//  default. Both bindings render from the resolved config, so an option
+//  can't be honoured by one and ignored by the other.
+// ─────────────────────────────────────────────────────────────
+
+import type {
+  GanttOptions, GanttTheme, GanttScale, GanttZoomLevel, GanttLength, GanttLineStyle,
+  GanttHourRange, GanttTimeHighlight, GanttView, GanttTask, TimeUnit, GanttI18n,
+} from '../types';
+import { DEFAULT_ZOOM_LEVELS, findZoomLevel, levelPxPerDay, withLegacyHeaderFormats } from './scales';
+import { cssPx } from './theme';
+import { calendarDays } from '../gantt-math';
+
+export interface ResolvedLine { color: string; width: number; dash?: string }
+
+export interface ResolvedHoliday { from: number; to: number; label?: string; color?: string }
+
+export interface ResolvedNonWorking {
+  weekends:     Set<number>;
+  /** Epoch-day ranges, inclusive */
+  holidays:     ResolvedHoliday[];
+  /** Working hours for a weekday (null = no hour shading) */
+  workingHours: ((weekday: number) => GanttHourRange[]) | null;
+  intensive:    (GanttHourRange & { color?: string; label?: string })[];
+  style:        'shade' | 'hatch' | 'disabled';
+  showInHeader: boolean;
+  minPxPerDay:  number;
+}
+
+export interface ResolvedToolbar { zoom: boolean; viewModes: string[] | false; today: boolean; viewToggle: boolean }
+
+export interface ResolvedGanttConfig {
+  theme:           Required<GanttTheme>;
+  zoomLevels:      GanttZoomLevel[];
+  level:           GanttZoomLevel;
+  scales:          GanttScale[];
+  pxPerDay:        number;
+  weekStart:       0 | 1;
+  fitToWidth:      boolean;
+  timelinePadding: number;
+  /** [upper tiers, bottom tier] default heights */
+  tierHeights:     [number, number];
+  rowHeight:       number;
+  indentSize:      number;
+  gridLines: {
+    minor:      ResolvedLine | null;
+    major:      ResolvedLine | null;
+    horizontal: ResolvedLine | null;
+    majorUnit?: TimeUnit;
+  };
+  nonWorking:      ResolvedNonWorking | null;
+  highlightTime?:  (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
+  endDateMode:     'exclusive' | 'inclusive';
+  normalizeDateOnly: boolean;
+  bar: {
+    height:   GanttLength;
+    radius:   number;
+    minWidth: number;
+    progress: { show: boolean; color?: string; opacity: number };
+    label:    { position: 'inside' | 'left' | 'right' | 'auto' | 'none'; template?: (task: GanttTask) => string; color?: string };
+  };
+  milestone: { size?: number; shape: 'diamond' | 'circle' | 'square' };
+  groupBar:  { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
+  arrows:    { width: number; headSize: number; radius: number; color?: string; offset: number };
+  panel: {
+    width:       GanttLength;
+    minWidth:    number;
+    maxWidth?:   GanttLength;
+    resizable:   boolean;
+    collapsible: boolean;
+    collapsed:   boolean;
+  };
+  view:          GanttView;
+  toolbar:       ResolvedToolbar | false;
+  showToday:     boolean;
+  baseline:      boolean;
+  criticalPath:  boolean;
+}
+
+const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
+  style === false ? null : { ...fallback, ...style };
+
+/** Epoch day of a date (local calendar). */
+const epochDay = (d: Date) => Math.floor(calendarDays(d));
+
+export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): ResolvedNonWorking | null {
+  if (opts === false) return null;
+  const o = opts ?? {};
+  const weekends = new Set<number>(
+    o.weekends === false ? [] : Array.isArray(o.weekends) ? o.weekends : [0, 6],
+  );
+  const holidays: ResolvedHoliday[] = (o.holidays ?? []).map(h => {
+    const hol = h instanceof Date ? { start: h } : h;
+    return { from: epochDay(hol.start), to: epochDay(hol.end ?? hol.start), label: hol.label, color: hol.color };
+  });
+
+  let workingHours: ResolvedNonWorking['workingHours'] = null;
+  const wh = o.workingHours;
+  if (wh) {
+    if (Array.isArray(wh)) workingHours = () => wh;
+    else if ('start' in wh && 'end' in wh && typeof wh.start === 'number') {
+      const r = wh as GanttHourRange;
+      workingHours = () => [r];
+    } else {
+      const map = wh as Partial<Record<number, GanttHourRange[]>>;
+      workingHours = day => map[day] ?? [];
+    }
+  }
+
+  return {
+    weekends,
+    holidays,
+    workingHours,
+    intensive: o.intensiveHours ?? [],
+    style: o.style ?? 'shade',
+    showInHeader: o.showInHeader ?? true,
+    minPxPerDay: o.minPxPerDay ?? 12,
+  };
+}
+
+export function resolveConfig(
+  options: GanttOptions = {},
+  theme: Required<GanttTheme>,
+  i18n?: GanttI18n,
+): ResolvedGanttConfig {
+  const zoomLevels = options.zoomLevels?.length ? options.zoomLevels : DEFAULT_ZOOM_LEVELS;
+  const level = findZoomLevel(zoomLevels, options.viewMode);
+  const scales = options.scales?.length ? options.scales : withLegacyHeaderFormats(level, i18n);
+  const toolbar = options.toolbar;
+
+  return {
+    theme,
+    zoomLevels,
+    level,
+    scales,
+    pxPerDay: levelPxPerDay(options.scales?.length ? { ...level, scales } : level),
+    weekStart: options.weekStart ?? 1,
+    fitToWidth: options.fitToWidth ?? true,
+    timelinePadding: options.timelinePadding ?? 7,
+    tierHeights: [options.headerHeight ?? 32, options.subHeaderHeight ?? 28],
+    rowHeight: options.rowHeight ?? 36,
+    indentSize: options.indentSize ?? 16,
+    gridLines: {
+      minor: line(options.gridLines?.minor, { color: theme.gridLine, width: 1 }),
+      major: line(options.gridLines?.major, { color: theme.gridLineMajor, width: 1 }),
+      horizontal: line(options.gridLines?.horizontal, { color: theme.borderColor, width: 1 }),
+      majorUnit: options.gridLines?.majorUnit,
+    },
+    nonWorking: resolveNonWorking(options.nonWorkingTime),
+    highlightTime: options.highlightTime,
+    endDateMode: options.endDateMode ?? 'exclusive',
+    normalizeDateOnly: options.normalizeDateOnly ?? true,
+    bar: {
+      height: options.bar?.height ?? '60%',
+      radius: options.bar?.radius ?? cssPx(theme.barRadius, 4),
+      minWidth: options.bar?.minWidth ?? 4,
+      progress: {
+        show: options.bar?.progress?.show ?? true,
+        color: options.bar?.progress?.color,
+        opacity: options.bar?.progress?.opacity ?? 0.25,
+      },
+      label: {
+        position: options.bar?.label?.position ?? 'auto',
+        template: options.bar?.label?.template,
+        color: options.bar?.label?.color,
+      },
+    },
+    milestone: { size: options.milestone?.size, shape: options.milestone?.shape ?? 'diamond' },
+    groupBar: {
+      height: options.groupBar?.height ?? (options.groupBar?.style === 'bar' ? '60%' : '40%'),
+      style: options.groupBar?.style ?? 'summary',
+      showProgress: options.groupBar?.showProgress ?? true,
+    },
+    arrows: {
+      width: options.arrows?.width ?? 1.25,
+      headSize: options.arrows?.headSize ?? 5,
+      radius: options.arrows?.radius ?? 4,
+      color: options.arrows?.color,
+      offset: options.arrows?.offset ?? 12,
+    },
+    panel: {
+      width: options.panel?.width ?? options.panelWidth ?? '30%',
+      minWidth: options.panel?.minWidth ?? 120,
+      maxWidth: options.panel?.maxWidth,
+      resizable: options.panel?.resizable ?? true,
+      collapsible: options.panel?.collapsible ?? true,
+      collapsed: options.panel?.collapsed ?? (options.panelVisible === false),
+    },
+    view: options.view ?? 'split',
+    toolbar: toolbar === false ? false : {
+      zoom: toolbar?.zoom ?? true,
+      viewModes: toolbar?.viewModes ?? zoomLevels.map(l => l.name),
+      today: toolbar?.today ?? true,
+      viewToggle: toolbar?.viewToggle ?? true,
+    },
+    showToday: options.showToday ?? true,
+    baseline: options.baseline ?? false,
+    criticalPath: options.criticalPath ?? false,
+  };
+}
+
+/** Resolve a `GanttLength` against a reference size (`'40%'` of 200 → 80). */
+export function resolveLength(len: GanttLength | undefined, reference: number, fallback: number): number {
+  if (len == null) return fallback;
+  if (typeof len === 'number') return len;
+  const pct = parseFloat(len);
+  return Number.isFinite(pct) ? (reference * pct) / 100 : fallback;
+}

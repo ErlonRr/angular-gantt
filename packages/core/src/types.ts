@@ -5,9 +5,12 @@
 //  framework binding (Angular, Web Component, React, Vue, Svelte).
 // ─────────────────────────────────────────────────────────────
 
+import type { BarVisual } from './render/bars';
+
 // ─── Enums ───────────────────────────────────────────────────
 
 export enum ViewMode {
+  Hour    = 'Hour',
   Day     = 'Day',
   Week    = 'Week',
   Month   = 'Month',
@@ -64,6 +67,11 @@ export interface GanttTask {
   /** Per-task style overrides */
   barColor?:  string;
   rowColor?:  string;
+  /** Text colour of the bar label */
+  textColor?: string;
+  progressColor?: string;
+  /** Extra CSS class on the bar element */
+  className?: string;
 
   /** Planned baseline dates for variance visualisation */
   baseline?: GanttBaseline;
@@ -158,6 +166,14 @@ export interface ColumnDef<TTemplate = any> {
   cellTemplate?: TTemplate;
   /** Used internally to mark built-in columns */
   builtin?:   boolean;
+  /** Allow resizing by dragging the header edge (default true) */
+  resizable?: boolean;
+  /** Cell text alignment (default 'start') */
+  align?:     'start' | 'center' | 'end';
+  /** Only shown in the full table view (`view: 'table'`) */
+  tableOnly?: boolean;
+  /** Grow to fill the remaining panel width (default: the last column grows) */
+  flex?:      boolean;
 }
 
 // ─── Annotations ─────────────────────────────────────────────
@@ -230,6 +246,14 @@ export interface GanttTheme {
   // Scrollbar
   scrollbarTrack:   string;
   scrollbarThumb:   string;
+
+  // Timeline delimiters & non-working time (optional: fall back to the built-in palette)
+  /** Strong vertical delimiter between periods (month/year/day boundaries) */
+  gridLineMajor?:   string;
+  weekendBg?:       string;
+  holidayBg?:       string;
+  offHoursBg?:      string;
+  intensiveBg?:     string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -248,7 +272,17 @@ export interface GanttLabels {
   zoomIn:     string;
   zoomOut:    string;
   todayButton: string;
-  viewModes:  Record<ViewMode, string>;
+  /** Toolbar labels per zoom level (built-in `ViewMode`s and custom level names) */
+  viewModes:  Partial<Record<ViewMode | (string & {}), string>>;
+  /** Toolbar: split / table / chart view toggle */
+  viewSplit:  string;
+  viewTable:  string;
+  viewChart:  string;
+  /** Splitter toggle button */
+  showPanel:  string;
+  hidePanel:  string;
+  /** Week label used by `WEEK_FORMATS.label` ("Week 12") */
+  week:       string;
   // Legend
   legend:     string;
   today:      string;
@@ -289,12 +323,19 @@ export const DEFAULT_LABELS: GanttLabels = {
   zoomOut:   'Zoom out',
   todayButton: 'Today',
   viewModes: {
+    [ViewMode.Hour]:    'Hour',
     [ViewMode.Day]:     'Day',
     [ViewMode.Week]:    'Week',
     [ViewMode.Month]:   'Month',
     [ViewMode.Quarter]: 'Quarter',
     [ViewMode.Year]:    'Year',
   },
+  viewSplit:  'Gantt',
+  viewTable:  'Table',
+  viewChart:  'Chart',
+  showPanel:  'Show task list',
+  hidePanel:  'Hide task list',
+  week:       'Week',
   legend:     'Legend',
   today:      'Today',
   annotation: 'Annotation',
@@ -349,10 +390,185 @@ export interface GanttI18n {
   formats: GanttFormats;
 }
 
+// ─── Configuration building blocks ───────────────────────────
+
+/** px, or a percentage string such as `'60%'` (of the row / container) */
+export type GanttLength = number | `${number}%`;
+
+export type TimeUnit = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
+
+export interface ScaleFormatContext {
+  unit:      TimeUnit;
+  step:      number;
+  locale?:   string;
+  labels:    GanttLabels;
+  weekStart: 0 | 1;
+}
+
+/** dayjs format string (e.g. `'MMM YYYY'`, `'[W]W'`) or a function of the cell's period. */
+export type ScaleFormat = string | ((start: Date, end: Date, ctx: ScaleFormatContext) => string);
+
+/** One header tier ("scale"), DHTMLX/SVAR style. Tiers are listed top → bottom. */
+export interface GanttScale {
+  unit:       TimeUnit;
+  /** Cell size in `unit`s (e.g. 6 hours, 2 weeks). Default 1 */
+  step?:      number;
+  format?:    ScaleFormat;
+  /** Tier height in px */
+  height?:    number;
+  /** Extra CSS class for a cell (also used to colour it via your stylesheet) */
+  className?: (start: Date, end: Date) => string | undefined;
+  /** `'start'` keeps labels pinned to the left edge while scrolling (default for upper tiers) */
+  align?:     'center' | 'start';
+}
+
+/** A named zoom preset: header tiers + horizontal density. */
+export interface GanttZoomLevel {
+  name:       string;
+  /** Header tiers, top → bottom; the last one is the finest */
+  scales:     GanttScale[];
+  /** Width of one bottom-tier cell in px (alternative: `pxPerDay`) */
+  cellWidth?: number;
+  pxPerDay?:  number;
+  /** Toolbar label (default: `labels.viewModes[name]` or `name`) */
+  label?:     string;
+}
+
+export interface GanttLineStyle {
+  color?: string;
+  width?: number;
+  /** SVG dash array, e.g. `'4 3'` */
+  dash?:  string;
+}
+
+export interface GanttGridLines {
+  /** Lines between bottom-tier cells (days, weeks…) */
+  minor?:      GanttLineStyle | false;
+  /** Period delimiters (month / year / day…) drawn through header and body */
+  major?:      GanttLineStyle | false;
+  /** Row separators */
+  horizontal?: GanttLineStyle | false;
+  /** Unit of the major delimiters (default: the tier above the bottom one) */
+  majorUnit?:  TimeUnit;
+}
+
+export interface GanttHoliday {
+  start:  Date;
+  /** Inclusive last day (default: same day) */
+  end?:   Date;
+  label?: string;
+  color?: string;
+}
+
+export interface GanttHourRange {
+  /** Hour of day, fractional allowed (8.5 = 08:30) */
+  start: number;
+  end:   number;
+}
+
+export interface GanttNonWorkingTime {
+  /** `true` = Saturday & Sunday; or a list of weekday numbers (0 = Sunday). Default `true` */
+  weekends?:       boolean | number[];
+  holidays?:       (Date | GanttHoliday)[];
+  /** Working hours; time outside is shaded in hour scales. Per-weekday map allowed. */
+  workingHours?:   GanttHourRange | GanttHourRange[] | Partial<Record<number, GanttHourRange[]>>;
+  /** Highlighted "intensive" hours, drawn in their own colour */
+  intensiveHours?: (GanttHourRange & { color?: string; label?: string })[];
+  /** `'shade'` = tinted, `'hatch'` = diagonal stripes, `'disabled'` = greyed out */
+  style?:          'shade' | 'hatch' | 'disabled';
+  /** Tint the matching header cells too (default true) */
+  showInHeader?:   boolean;
+  /** Hide day shading below this density (default 12 px/day: shown in Day / Week views) */
+  minPxPerDay?:    number;
+}
+
+export interface GanttTimeHighlight {
+  color?:     string;
+  className?: string;
+  label?:     string;
+}
+
+export interface GanttBarOptions {
+  /** Bar height: px or % of the row height (default `'60%'`) */
+  height?:    GanttLength;
+  /** Corner radius in px (default: theme `barRadius`) */
+  radius?:    number;
+  minWidth?:  number;
+  progress?: {
+    show?:    boolean;
+    color?:   string;
+    opacity?: number;
+  };
+  label?: {
+    /** `'auto'` = inside when it fits, otherwise to the right */
+    position?: 'inside' | 'left' | 'right' | 'auto' | 'none';
+    template?: (task: GanttTask) => string;
+    color?:    string;
+  };
+}
+
+export interface GanttMilestoneOptions {
+  /** Diamond/circle size in px (default: 50% of the row height) */
+  size?:  number;
+  shape?: 'diamond' | 'circle' | 'square';
+}
+
+export interface GanttGroupBarOptions {
+  height?:       GanttLength;
+  /** `'summary'` = thin bracket bar with end caps, `'bar'` = regular bar */
+  style?:        'summary' | 'bar';
+  showProgress?: boolean;
+}
+
+export interface GanttArrowOptions {
+  width?:    number;
+  headSize?: number;
+  /** Corner radius of the orthogonal path */
+  radius?:   number;
+  color?:    string;
+  /** Horizontal clearance before the first bend */
+  offset?:   number;
+}
+
+export interface GanttPanelOptions {
+  /** Initial width: px or % of the chart (default `'30%'`) */
+  width?:       GanttLength;
+  minWidth?:    number;
+  maxWidth?:    GanttLength;
+  /** Drag the splitter to resize — also past the last column (default true) */
+  resizable?:   boolean;
+  /** Show the collapse/expand toggle on the splitter (default true) */
+  collapsible?: boolean;
+  collapsed?:   boolean;
+}
+
+export type GanttView = 'split' | 'table' | 'chart';
+
+export interface GanttToolbarOptions {
+  zoom?:       boolean;
+  /** Zoom levels offered as pills (default: all) — `false` hides them */
+  viewModes?:  string[] | false;
+  today?:      boolean;
+  /** Split / table / chart switch */
+  viewToggle?: boolean;
+}
+
+/** UI state that can be persisted (`stateKey`) or restored (`setState`). */
+export interface GanttState {
+  panelWidth?:     number;
+  panelCollapsed?: boolean;
+  view?:           GanttView;
+  viewMode?:       string;
+  columnWidths?:   Record<string, number>;
+  collapsedIds?:   string[];
+  sort?:           { key: string; dir: 'asc' | 'desc' } | null;
+}
+
 // ─── Global options ───────────────────────────────────────────
 
 export interface GanttOptions {
-  viewMode?:       ViewMode;
+  /** Active zoom level: a `ViewMode` or the `name` of a custom `zoomLevels` entry */
+  viewMode?:       ViewMode | (string & {});
   rowHeight?:      number;
   headerHeight?:   number;
   subHeaderHeight?: number;
@@ -393,6 +609,46 @@ export interface GanttOptions {
   multiSelect?:     boolean;
 
   annotations?:    GanttAnnotation[];
+
+  // ── Timeline ──
+  /** Zoom presets (replace the built-in Hour…Year levels) */
+  zoomLevels?:     GanttZoomLevel[];
+  /** Header tiers for the current level (overrides the level's own scales) */
+  scales?:         GanttScale[];
+  /** First day of the week: 1 = Monday (ISO, default), 0 = Sunday */
+  weekStart?:      0 | 1;
+  /** Stretch the timeline so it always fills the viewport (default true) */
+  fitToWidth?:     boolean;
+  gridLines?:      GanttGridLines;
+  /** Weekends, holidays, working / intensive hours (visual only) */
+  nonWorkingTime?: GanttNonWorkingTime | false;
+  /** Custom shading per day / hour cell */
+  highlightTime?:  (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
+  /**
+   * How `task.end` is read: `'exclusive'` (default) — the bar ends at that instant;
+   * `'inclusive'` — a date-only end covers that whole day.
+   */
+  endDateMode?:    'exclusive' | 'inclusive';
+  /**
+   * Treat `new Date('2026-01-05')` (UTC midnight) as a local calendar day, so bars
+   * line up with day cells in every time zone. Default true.
+   */
+  normalizeDateOnly?: boolean;
+
+  // ── Elements ──
+  bar?:            GanttBarOptions;
+  milestone?:      GanttMilestoneOptions;
+  groupBar?:       GanttGroupBarOptions;
+  arrows?:         GanttArrowOptions;
+  /** Tree indentation per level in px (default 16) */
+  indentSize?:     number;
+
+  // ── Layout ──
+  panel?:          GanttPanelOptions;
+  view?:           GanttView;
+  toolbar?:        GanttToolbarOptions | false;
+  /** Persist UI state (panel width, view, zoom, column widths…) in localStorage */
+  stateKey?:       string;
 }
 
 // ─── Events emitted by the component ─────────────────────────
@@ -455,4 +711,6 @@ export interface GanttBarContext {
    * Drives cursor and interaction affordances on the bar.
    */
   draggable?: boolean;
+  /** Geometry computed by the core render model (position, size, label…) */
+  visual?: BarVisual;
 }
