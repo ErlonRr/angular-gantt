@@ -579,10 +579,28 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `pnpm test` | Vitest: core (Node) + Web Component (happy-dom) |
 | `pnpm typecheck` | type-check every package |
 | `pnpm changeset` | describe a change for the next release (see [`.changeset/README.md`](.changeset/README.md)) |
+| `pnpm test:tz` | core tests in other time zones (Los Angeles, Kolkata) |
+| `pnpm qa:serve start` · `pnpm qa --url …` | serve the demos and run the browser QA |
 
 Workspace packages expose a `@gantry/source` export condition pointing at
 their TypeScript sources; the demos, tests and type-checks use it, so nothing
 has to be built first. Published consumers never see that condition.
+
+### Working with Claude Code
+
+The repo ships a shared [Claude Code](https://claude.com/claude-code) setup:
+
+| Path | What |
+|---|---|
+| `CLAUDE.md` | architecture, commands and hard rules (no auto-commits, render model in core, date rules) |
+| `.claude/rules/` | per-area rules loaded when files in that area are touched (core, Web Component, Angular, bindings, docs) |
+| `.claude/skills/` | `/gantry-feature` (add an option end to end), `/gantry-visual-qa` (browser checks), `/gantry-release` (manual), plus vetted external skills: `angular-developer`, `accessibility`, `svelte-core-bestpractices`, `vue-best-practices`, `web-design-guidelines` (sources in `skills-lock.json`) |
+| `.claude/agents/` | `gantry-reviewer` (parity & invariants review), `gantry-qa` (browser QA), `gantry-docs-sync` (docs, changeset, playground) |
+| `.claude/settings.json` | safe commands pre-approved; commit / push / tag / publish always ask; unit tests of the edited package run after each edit (`GANTRY_HOOK_TESTS=0` to skip) |
+
+The browser QA works without Claude too: `pnpm qa:serve start`, then
+`pnpm qa --url http://localhost:4171 --rows 60` (checks console errors, header/row alignment,
+scroll sync, drag, panel collapse and table view; Chrome, Chromium or Firefox).
 
 ### Testing
 

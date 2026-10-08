@@ -37,7 +37,10 @@
     "typecheck": "pnpm --filter \"./packages/*\" -r typecheck",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "pnpm build:packages && pnpm build:lib && changeset publish"
+    "release": "pnpm build:packages && pnpm build:lib && changeset publish",
+    "test:tz": "TZ=America/Los_Angeles vitest run --project core && TZ=Asia/Kolkata vitest run --project core",
+    "qa:serve": "bash scripts/qa/serve.sh",
+    "qa": "node scripts/qa/qa.mjs"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",
@@ -62,6 +65,7 @@
     "@storybook/angular": "^10.3.5",
     "happy-dom": "^20.14.5",
     "ng-packagr": "^20.0.0",
+    "puppeteer-core": "^24.43.1",
     "storybook": "^10.3.5",
     "typescript": "~5.8.0",
     "vitest": "^4.1.10"

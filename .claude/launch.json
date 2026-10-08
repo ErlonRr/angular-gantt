@@ -3,7 +3,42 @@
   "configurations": [
     {
       "name": "gantry-demo",
-      "url": "http://localhost:4200"
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["ng", "serve", "gantry-demo", "--port", "4200"],
+      "port": 4200,
+      "autoPort": false
+    },
+    {
+      "name": "playground",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5173", "--strictPort"],
+      "cwd": "apps/demo-vanilla",
+      "port": 5173,
+      "autoPort": false
+    },
+    {
+      "name": "demo-react",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5174", "--strictPort"],
+      "cwd": "apps/demo-react",
+      "port": 5174,
+      "autoPort": false
+    },
+    {
+      "name": "demo-vue",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5175", "--strictPort"],
+      "cwd": "apps/demo-vue",
+      "port": 5175,
+      "autoPort": false
+    },
+    {
+      "name": "demo-svelte",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5176", "--strictPort"],
+      "cwd": "apps/demo-svelte",
+      "port": 5176,
+      "autoPort": false
     }
   ]
 }
