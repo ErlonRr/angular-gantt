@@ -38,7 +38,7 @@ export { GanttColumnDefDirective } from './lib/columns/gantt-column.directive';
 export type { ColumnCellContext } from './lib/columns/gantt-column.directive';
 
 export {
-  GanttThemeService, LightTheme, DarkTheme,
+  GanttThemeService, LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme,
   GANTT_GLOBAL_CONFIG, provideGantt,
 } from './lib/services/gantt-theme.service';
 export type { GanttGlobalConfig } from './lib/services/gantt-theme.service';

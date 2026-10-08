@@ -126,7 +126,7 @@ export class GanttTooltip {
                 <span style="opacity:0.6">${esc(labels.ttProgress)}</span><span>${prog}%</span>
               </div>
               <div style="height:3px;background:rgba(127,127,127,0.25);border-radius:2px;overflow:hidden;">
-                <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#3B82F6);border-radius:2px;"></div>
+                <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
               </div>
             </div>`}
     `;

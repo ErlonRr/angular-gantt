@@ -388,7 +388,12 @@ provideGantt({ darkMode: 'auto', theme: { barColor: '#6366F1' } }); // global de
 ```
 
 Dark/light is driven by `[darkMode]="true | false | 'auto'"`. Built-in themes
-`LightTheme` / `DarkTheme` are exported. Full token map:
+`LightTheme` / `DarkTheme` are exported. They meet WCAG 2.2 AA: bar labels reach 4.5:1 and
+bars, markers and arrows 3:1 against the background. Labels inside bars switch to white or
+near-black when `barTextColor` is unreadable on a custom `barColor` (an explicit
+`task.textColor` or `bar.label.color` is always kept); `contrastRatio()` and `readableOn()`
+are exported from `@gantry/core`. The 1.x colours are available as `LegacyLightTheme` /
+`LegacyDarkTheme`. Full token map:
 
 | `GanttTheme` field | CSS variable | | `GanttTheme` field | CSS variable |
 |---|---|---|---|---|

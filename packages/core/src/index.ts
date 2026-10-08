@@ -4,6 +4,7 @@ export * from './gantt-cpm';
 export * from './gantt-data';
 export * from './render/scales';
 export * from './render/theme';
+export * from './render/contrast';
 export * from './render/config';
 export * from './render/timeline';
 export * from './render/bars';

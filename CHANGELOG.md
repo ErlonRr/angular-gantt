@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Angular and the Web Component render from the same `@gantry/core` model (`resolveConfig`, `buildTimeline`, `computeBarVisual`, `computeArrowVisual`, `DragSession`), so every option behaves identically. Custom bar components receive the computed geometry in `ctx.visual`.
 - Defaults: panel width `'30%'` (was 320px), bars `60%` of the row height, summary-style group bars, weekend shading in Day / Week views.
 - Low-level Angular building blocks changed inputs: `GanttHeaderComponent` / `GanttCanvasComponent` take `[timeline]` + `[config]`, `GanttArrowComponent` takes `[arrow]` (an `ArrowVisual`), the task-list panel resize handle moved to the splitter.
+- **Accessible default palette** (WCAG 2.2 AA): bars, arrows and selection `#2563EB`, critical `#DC2626`, today marker `#B45309`, darker muted text and baselines. The 1.x colours remain available as `LegacyLightTheme` / `LegacyDarkTheme`. Labels inside bars switch to a readable colour on custom `barColor`s (new `contrastRatio()` / `readableOn()` in `@gantry/core`).
 
 ### Fixed
 - Bars misaligned with day cells outside UTC (`new Date('YYYY-MM-DD')` is now read as a local day) and after daylight-saving changes; `diffDays` off by one across DST.

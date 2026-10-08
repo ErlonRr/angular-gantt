@@ -2,6 +2,8 @@ export {
   GanttThemeService,
   LightTheme,
   DarkTheme,
+  LegacyLightTheme,
+  LegacyDarkTheme,
   GANTT_GLOBAL_CONFIG,
   provideGantt,
 } from './gantt-theme.service';

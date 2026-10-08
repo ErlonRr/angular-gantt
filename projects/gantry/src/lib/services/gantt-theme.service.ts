@@ -29,11 +29,11 @@ import {
   makeEnvironmentProviders,
 } from '@angular/core';
 import { GanttTheme, GanttLabels, GanttFormats } from '../types';
-import { LightTheme, DarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
+import { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
 
 // ─── Built-in themes (shared with the Web Component via @gantry/core) ──
 
-export { LightTheme, DarkTheme };
+export { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme };
 
 // ─── Config token ─────────────────────────────────────────────
 

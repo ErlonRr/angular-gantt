@@ -258,7 +258,7 @@ const SPLITTER_PX = 6;
   `,
   styles: [`
     :host { box-sizing: border-box; outline: none; }
-    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #3B82F6); }
+    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #2563EB); }
 
     .gantry-main { display: flex; flex: 1; overflow: hidden; min-height: 0; position: relative; }
 

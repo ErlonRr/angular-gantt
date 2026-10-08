@@ -80,7 +80,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     .gantt-spinner {
       width: 14px; height: 14px;
       border: 2px solid var(--gantt-border, #E2E8F0);
-      border-top-color: var(--gantt-bar, #3B82F6);
+      border-top-color: var(--gantt-bar, #2563EB);
       border-radius: 50%;
       animation: gantt-spin 0.7s linear infinite;
       flex-shrink: 0;

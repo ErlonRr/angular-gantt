@@ -215,7 +215,7 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
           <span>${prog}%</span>
         </div>
         <div style="height:3px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden;">
-          <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#3B82F6);border-radius:2px;"></div>
+          <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
         </div>
       </div>` : '';
 

@@ -2,6 +2,7 @@
 //  gantry · render/theme.ts
 //  Built-in palettes + the theme → CSS custom property map.
 //  Single source for the Angular and Web Component bindings.
+//  Default palettes meet WCAG AA: bar labels ≥ 4.5:1, bars / markers ≥ 3:1.
 // ─────────────────────────────────────────────────────────────
 
 import type { GanttTheme } from '../types';
@@ -11,29 +12,29 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   headerBackground: '#F8FAFC',
   rowBg:            '#FFFFFF',
   rowBgAlt:         '#F8FAFC',
-  barColor:         '#3B82F6',
+  barColor:         '#2563EB',
   barTextColor:     '#FFFFFF',
   barRadius:        '4px',
   milestoneColor:   '#8B5CF6',
-  baselineColor:    '#94A3B8',
-  criticalColor:    '#EF4444',
+  baselineColor:    '#64748B',
+  criticalColor:    '#DC2626',
   panelBg:          '#FFFFFF',
   panelBorder:      '#E2E8F0',
   borderColor:      '#E2E8F0',
   gridLine:         '#EEF2F6',
   gridLineMajor:    '#CBD5E1',
-  todayColor:       '#F59E0B',
+  todayColor:       '#B45309',
   textPrimary:      '#1E293B',
   textSecondary:    '#475569',
-  textMuted:        '#94A3B8',
+  textMuted:        '#64748B',
   fontFamily:       'system-ui, -apple-system, sans-serif',
   fontSize:         '13px',
-  arrowColor:       '#3B82F6',
+  arrowColor:       '#2563EB',
   tooltipBg:        '#FFFFFF',
   tooltipBorder:    '#E2E8F0',
   tooltipText:      '#1E293B',
   selectionBg:      '#EFF6FF',
-  selectionBorder:  '#3B82F6',
+  selectionBorder:  '#2563EB',
   scrollbarTrack:   '#F1F5F9',
   scrollbarThumb:   '#CBD5E1',
   weekendBg:        'rgba(100, 116, 139, 0.08)',
@@ -47,12 +48,12 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   headerBackground: '#1E293B',
   rowBg:            '#0F172A',
   rowBgAlt:         '#111827',
-  barColor:         '#3B82F6',
+  barColor:         '#2563EB',
   barTextColor:     '#FFFFFF',
   barRadius:        '4px',
   milestoneColor:   '#A78BFA',
   baselineColor:    '#64748B',
-  criticalColor:    '#F87171',
+  criticalColor:    '#DC2626',
   panelBg:          '#0F172A',
   panelBorder:      '#1E293B',
   borderColor:      '#1E293B',
@@ -61,7 +62,7 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   todayColor:       '#FBBF24',
   textPrimary:      '#F1F5F9',
   textSecondary:    '#94A3B8',
-  textMuted:        '#64748B',
+  textMuted:        '#8494A9',
   fontFamily:       'system-ui, -apple-system, sans-serif',
   fontSize:         '13px',
   arrowColor:       '#60A5FA',
@@ -76,6 +77,28 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   holidayBg:        'rgba(248, 113, 113, 0.10)',
   offHoursBg:       'rgba(148, 163, 184, 0.06)',
   intensiveBg:      'rgba(251, 191, 36, 0.14)',
+};
+
+/**
+ * The 1.x palettes, before the WCAG AA contrast fixes (white labels on `#3B82F6` bars are 3.7:1).
+ * Opt back in with `theme: dark ? LegacyDarkTheme : LegacyLightTheme`.
+ */
+export const LegacyLightTheme: Readonly<Required<GanttTheme>> = {
+  ...LightTheme,
+  barColor:        '#3B82F6',
+  baselineColor:   '#94A3B8',
+  criticalColor:   '#EF4444',
+  todayColor:      '#F59E0B',
+  textMuted:       '#94A3B8',
+  arrowColor:      '#3B82F6',
+  selectionBorder: '#3B82F6',
+};
+
+export const LegacyDarkTheme: Readonly<Required<GanttTheme>> = {
+  ...DarkTheme,
+  barColor:      '#3B82F6',
+  criticalColor: '#F87171',
+  textMuted:     '#64748B',
 };
 
 /** Light/dark base + overrides, with every optional field filled in. */

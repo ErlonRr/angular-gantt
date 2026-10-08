@@ -215,7 +215,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       transition: background-color 0.1s;
     }
     .gantt-tl-row:hover { filter: brightness(0.96); }
-    .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border, #3B82F6); }
+    .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border, #2563EB); }
     .gantt-tl-cell {
       display: flex;
       align-items: center;
@@ -229,7 +229,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       position: absolute; top: 0; right: -3px; width: 6px; height: 100%;
       cursor: col-resize; z-index: 2; touch-action: none;
     }
-    .gantt-col-resize:hover { background: var(--gantt-sel-border, #3B82F6); opacity: .6; }
+    .gantt-col-resize:hover { background: var(--gantt-sel-border, #2563EB); opacity: .6; }
     /* WCAG 2.2 — 2.5.8 Target Size (Minimum): pointer target ≥ 24×24 CSS px (Level AA). */
     .gantt-collapse-btn {
       box-sizing: border-box;
@@ -250,7 +250,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     }
     .gantt-collapse-btn:hover { opacity: 0.75; }
     .gantt-collapse-btn:focus-visible {
-      outline: 2px solid var(--gantt-sel-border, #3B82F6);
+      outline: 2px solid var(--gantt-sel-border, #2563EB);
       outline-offset: 2px;
     }
   `],

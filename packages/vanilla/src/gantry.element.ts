@@ -53,7 +53,7 @@ if (template) template.innerHTML = `
       background-color: var(--gantt-bg, #FFFFFF);
       outline: none;
     }
-    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #3B82F6); }
+    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #2563EB); }
     :host([hidden]) { display: none; }
 
     .gantry-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--gantt-bg); overflow: hidden; }

@@ -7,6 +7,7 @@ import type { RowGeometry, GanttTask } from '../types';
 import type { ResolvedGanttConfig } from './config';
 import { resolveLength } from './config';
 import { taskSpan } from './timeline';
+import { readableOn } from './contrast';
 
 /** Pointer distance (px) from a bar edge that resizes instead of moving. */
 export const RESIZE_HANDLE_PX = 8;
@@ -168,7 +169,7 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
 
   return {
     kind, x, y, width, height, cy, rx, path, fill, progress,
-    label: computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx),
+    label: computeLabel(task, kind, { x, y, width, height, cy }, fill, cfg, fontPx),
     baseline, caps, handles,
   };
 }
@@ -176,7 +177,7 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
 function computeLabel(
   task: GanttTask, kind: BarKind,
   box: { x: number; y: number; width: number; height: number; cy: number },
-  cfg: ResolvedGanttConfig, fontPx: number,
+  fill: string, cfg: ResolvedGanttConfig, fontPx: number,
 ): BarLabel | null {
   const opt = cfg.bar.label;
   if (opt.position === 'none') return null;
@@ -185,7 +186,8 @@ function computeLabel(
 
   const theme = cfg.theme;
   const outsideColor = opt.color ?? theme.textPrimary;
-  const insideColor = task.textColor ?? opt.color ?? theme.barTextColor;
+  // Explicit colours win; the theme default switches to white / near-black when unreadable on the fill
+  const insideColor = task.textColor ?? opt.color ?? readableOn(fill, theme.barTextColor);
   const outside = (side: 'left' | 'right'): BarLabel => ({
     text,
     x: side === 'right' ? box.x + box.width + LABEL_GAP : box.x - LABEL_GAP,
