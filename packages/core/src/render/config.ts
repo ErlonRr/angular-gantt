@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { DEFAULT_ZOOM_LEVELS, findZoomLevel, levelPxPerDay, withLegacyHeaderFormats } from './scales';
 import { cssPx } from './theme';
+import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
 
 export interface ResolvedLine { color: string; width: number; dash?: string }
@@ -39,6 +40,7 @@ export interface ResolvedGanttConfig {
   pxPerDay:        number;
   weekStart:       0 | 1;
   fitToWidth:      boolean;
+  initialScroll:   InitialScroll;
   timelinePadding: number;
   /** [upper tiers, bottom tier] default heights */
   tierHeights:     [number, number];
@@ -71,12 +73,18 @@ export interface ResolvedGanttConfig {
     resizable:   boolean;
     collapsible: boolean;
     collapsed:   boolean;
+    /** Explicit split-view column keys; null = derive (see `resolveViewColumns`) */
+    columns:     string[] | null;
   };
+  /** Explicit table-view column keys; null = derive */
+  table:         { columns: string[] | null };
   view:          GanttView;
   toolbar:       ResolvedToolbar | false;
   showToday:     boolean;
   baseline:      boolean;
   criticalPath:  boolean;
+  /** `enableSelection` / `multiSelect` (both default true) */
+  selection:     { enabled: boolean; multi: boolean };
 }
 
 const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
@@ -138,6 +146,7 @@ export function resolveConfig(
     pxPerDay: levelPxPerDay(options.scales?.length ? { ...level, scales } : level),
     weekStart: options.weekStart ?? 1,
     fitToWidth: options.fitToWidth ?? true,
+    initialScroll: options.initialScroll ?? 'auto',
     timelinePadding: options.timelinePadding ?? 7,
     tierHeights: [options.headerHeight ?? 32, options.subHeaderHeight ?? 28],
     rowHeight: options.rowHeight ?? 36,
@@ -187,7 +196,9 @@ export function resolveConfig(
       resizable: options.panel?.resizable ?? true,
       collapsible: options.panel?.collapsible ?? true,
       collapsed: options.panel?.collapsed ?? (options.panelVisible === false),
+      columns: options.panel?.columns ?? null,
     },
+    table: { columns: options.table?.columns ?? null },
     view: options.view ?? 'split',
     toolbar: toolbar === false ? false : {
       zoom: toolbar?.zoom ?? true,
@@ -198,6 +209,7 @@ export function resolveConfig(
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
     criticalPath: options.criticalPath ?? false,
+    selection: { enabled: options.enableSelection ?? true, multi: options.multiSelect ?? true },
   };
 }
 

@@ -30,7 +30,7 @@ import {
 } from '@angular/core';
 
 import { RowGeometry, GanttTheme } from '../types';
-import { formatDate, durationLabel }              from '../gantt-math';
+import { formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 // ─── Tooltip directive ────────────────────────────────────────
@@ -58,6 +58,9 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
   readonly ganttTooltip = input.required<RowGeometry>();
   readonly tooltipTheme = input<GanttTheme | null>(null);
   readonly tooltipEnabled = input<boolean>(true);
+  /** How task dates are read, so the duration matches the bar and the Duration column */
+  readonly tooltipDates = input<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>(
+    { endDateMode: 'exclusive', normalizeDateOnly: true });
 
   private readonly doc  = inject(DOCUMENT);
   private readonly el   = inject(ElementRef);
@@ -205,7 +208,7 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     const fmt    = this.i18n.formats().dateFormat;
     const start = formatDate(task.start, fmt, locale);
     const end   = formatDate(task.end, fmt, locale);
-    const dur   = durationLabel(task.start, task.end, labels);
+    const dur   = taskDurationLabel(task, this.tooltipDates(), labels);
     const prog  = task.progress ?? 0;
 
     const progressBar = task.progress != null ? `

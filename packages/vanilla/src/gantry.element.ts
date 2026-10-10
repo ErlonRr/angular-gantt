@@ -16,7 +16,8 @@
 import {
   GanttTask, GanttOptions, GanttAnnotation, GanttTheme, GanttFlatRow, GanttState, GanttView,
   GanttI18n, ViewMode, computeCriticalPath, resolveConfig, resolveLength, taskSpan,
-  type ResolvedGanttConfig, type BarVisual,
+  initialScrollLeft, initialScrollChanged, zoomAnchorScroll,
+  type ResolvedGanttConfig, type BarVisual, type TimelineModel,
 } from '@gantry/core';
 import { GanttThemeService } from './services/gantt-theme.service';
 import { GanttI18nService } from './services/gantt-i18n.service';
@@ -128,6 +129,10 @@ if (template) template.innerHTML = `
     .gantry-panel::-webkit-scrollbar-thumb, .gantry-canvas-viewport::-webkit-scrollbar-thumb { background: var(--gantt-scrollbar-thumb); border-radius: 3px; }
 
     /* ── Header tiers ───────────────────────────────────── */
+    .gantt-sr-alert {
+      position: absolute; width: 1px; height: 1px; overflow: hidden;
+      clip-path: inset(50%); white-space: nowrap;
+    }
     .g-header { position: relative; }
     .g-tier { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--gantt-border); box-sizing: border-box; }
     .g-cell {
@@ -210,6 +215,7 @@ if (template) template.innerHTML = `
     </div>
   </div>
   <div class="gantt-legend" hidden></div>
+  <div class="gantt-sr-alert" role="alert"></div>
 `;
 
 const BOOLEAN_ATTRS = {
@@ -273,6 +279,12 @@ export class GantryElement extends BaseElement {
   private readonly headerContainerEl: HTMLElement;
   private readonly canvasContainerEl: HTMLElement;
   private readonly legendEl: HTMLElement;
+  /** Persistent live region: announces a failed data-source page once */
+  private readonly srAlertEl: HTMLElement;
+  /** Last data-source error reported through `load-error` */
+  private reportedLoadError: unknown = null;
+  /** Columns assigned through the `columns` property (options.columns overrides them) */
+  private columnsProp: VanillaColumnDef[] | null = null;
 
   private headerComp?: GanttHeaderComponent;
   private tasklistComp?: GanttTaskListComponent;
@@ -297,9 +309,12 @@ export class GantryElement extends BaseElement {
   private fullRenderPending = false;
   private resizeObserver?: ResizeObserver;
   private clock?: ReturnType<typeof setInterval>;
-  private scrolledToToday = false;
-  private critical: { tasks: GanttTask[] | null; cfg: ResolvedGanttConfig | null; ids: Set<string> } =
-    { tasks: null, cfg: null, ids: new Set() };
+  /** The first render with data has applied `initialScroll` (or a requested scroll) */
+  private initialScrollDone = false;
+  /** Timeline the canvas was last painted with — anchors the scroll when it changes */
+  private paintedTimeline?: TimelineModel;
+  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string> } =
+    { tasks: null, key: '', ids: new Set() };
   private lastViewMode: string;
   private restoredStateKey?: string;
   private stateTimer?: ReturnType<typeof setTimeout>;
@@ -326,6 +341,7 @@ export class GantryElement extends BaseElement {
     this.headerContainerEl = $('.gantry-header-container');
     this.canvasContainerEl = $('.gantry-canvas-container');
     this.legendEl = $('.gantt-legend');
+    this.srAlertEl = $('.gantt-sr-alert');
 
     this.tooltip = new GanttTooltip(this.shadow, this.i18nSvc);
     this.lastViewMode = this.layout.viewMode();
@@ -357,7 +373,15 @@ export class GantryElement extends BaseElement {
       this.emit('selection-change', e);
       this.scheduleRender(false);
     };
-    this.colSvc.onChange = () => this.scheduleRender(false);
+    const mirrorColumns = () => {
+      this.layout.columns.set(this.colSvc.columns);
+      this.layout.builtins.set(this.colSvc.builtins);
+    };
+    this.colSvc.onChange = () => {
+      mirrorColumns();
+      this.scheduleRender(false);
+    };
+    mirrorColumns();
 
     this.layout.viewMode.subscribe(vm => {
       if (vm === this.lastViewMode) return;
@@ -384,6 +408,7 @@ export class GantryElement extends BaseElement {
       this.layout.tick();
       this.scheduleRender();
     }, 60_000);
+    if (this._dataSource) this.attachDataSource(this._dataSource);
     this.scheduleRender();
   }
 
@@ -396,6 +421,13 @@ export class GantryElement extends BaseElement {
     this.dragSvc.cancel();
     if (this.frame) cancelAnimationFrame(this.frame);
     this.frame = 0;
+    // Write a pending state save now; stop listening to the data source until reconnected
+    if (this.stateTimer) {
+      clearTimeout(this.stateTimer);
+      this.stateTimer = undefined;
+      this.writeState();
+    }
+    if (this._dataSource) this._dataSource.onChange = undefined;
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
@@ -422,8 +454,12 @@ export class GantryElement extends BaseElement {
 
   get columns(): VanillaColumnDef[] { return this.colSvc.columns; }
   set columns(val: VanillaColumnDef[] | null | undefined) {
-    if (val?.length) this.colSvc.setColumns(val);
-    else this.colSvc.resetColumns();
+    this.columnsProp = val?.length ? val : null;
+    // options.columns, when set, keeps priority
+    if (!this._options.columns?.length) {
+      if (this.columnsProp) this.colSvc.setColumns(this.columnsProp);
+      else this.colSvc.resetColumns();
+    }
     this.scheduleRender();
   }
 
@@ -433,8 +469,12 @@ export class GantryElement extends BaseElement {
     const prev = this._options;
     this._options = opts;
     this.i18nSvc.apply(opts);
+    // options.columns wins; removing it falls back to the `columns` property, else the built-ins
     if (opts.columns?.length) this.colSvc.setColumns(opts.columns);
-    else this.colSvc.refresh();
+    else if (prev.columns?.length) {
+      if (this.columnsProp) this.colSvc.setColumns(this.columnsProp);
+      else this.colSvc.resetColumns();
+    } else this.colSvc.refresh();
     this.themeSvc.setOptionsTheme(opts.theme);
     if (opts.darkMode != null) this.darkMode = opts.darkMode;
     if (opts.enableDrag != null) this._enableDrag = opts.enableDrag;
@@ -445,6 +485,7 @@ export class GantryElement extends BaseElement {
     const prevView = prev.view ?? (prev.panel?.collapsed ? 'chart' : undefined);
     if (view && view !== prevView) this.layout.view.set(view);
     if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) this.layout.panelWidthPx.set(null);
+    if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this.initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this.restoredStateKey) {
       this.restoredStateKey = opts.stateKey;
       const saved = readState(opts.stateKey);
@@ -495,13 +536,31 @@ export class GantryElement extends BaseElement {
     if (this._dataSource) this._dataSource.onChange = undefined;
     const ds = val == null ? null : val instanceof GanttDataSource ? val : new GanttDataSource(val);
     this._dataSource = ds;
+    this.reportedLoadError = null;
+    this.srAlertEl.textContent = '';
     if (!ds) return;
-    ds.onChange = () => {
-      this.layout.setTasks(ds.items);
-      this.scheduleRender();
-    };
+    this.attachDataSource(ds);
+    this.scheduleRender();
+  }
+
+  /** Mirror the data source into the layout (also on reconnect) and start it per `initialPage`. */
+  private attachDataSource(ds: GanttDataSource): void {
+    ds.onChange = () => this.syncDataSource(ds);
+    this.syncDataSource(ds);
+    if (ds.loadedCount === 0 && ds.autoStart) void ds.loadNext();
+  }
+
+  /** Copy the loaded items; report each new failure once (event + screen-reader alert). */
+  private syncDataSource(ds: GanttDataSource): void {
     this.layout.setTasks(ds.items);
-    if (ds.loadedCount === 0) void ds.loadNext();
+    if (ds.error === null) {
+      if (this.reportedLoadError !== null) this.srAlertEl.textContent = '';
+      this.reportedLoadError = null;
+    } else if (ds.error !== this.reportedLoadError && this.isConnected) {
+      this.reportedLoadError = ds.error;
+      this.srAlertEl.textContent = this.i18nSvc.labels.loadError;
+      this.emit('load-error', { error: ds.error, page: ds.nextPage });
+    }
     this.scheduleRender();
   }
 
@@ -570,7 +629,8 @@ export class GantryElement extends BaseElement {
   }
   clearSelection(): void { this.selSvc.clear(); }
   selectAll(): void {
-    if (this._options.enableSelection === false || this._options.multiSelect === false) return;
+    const selection = this.layout.config()?.selection;
+    if (!selection?.enabled || !selection.multi) return;
     this.selSvc.selectAll(this.layout.visibleRows);
   }
 
@@ -587,7 +647,12 @@ export class GantryElement extends BaseElement {
   expandAll(): void { this.layout.expandAll(); this.saveState(); this.scheduleRender(); }
 
   /** Show / hide a column (also persisted with `stateKey` via its width map). */
-  setColumnVisible(key: string, visible: boolean): void { this.colSvc.setVisible(key, visible); }
+  /** Show / hide a column in both views, or only in the split panel / the table view. */
+  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void { this.colSvc.setVisible(key, visible, view); }
+  /** Show a column if the view (both views by default) hides it, else hide it. */
+  toggleColumnVisible(key: string, view?: 'split' | 'table'): void {
+    this.colSvc.toggleVisible(key, view, this.layout.config() ?? undefined);
+  }
 
   /** Replace the custom theme overrides (on top of the light/dark base and `options.theme`). */
   setTheme(override: Partial<GanttTheme>): void {
@@ -609,8 +674,10 @@ export class GantryElement extends BaseElement {
     if (!this._options.criticalPath) return new Set();
     const tasks = this.layout.tasks();
     const cfg = this.layout.config();
-    if (this.critical.tasks !== tasks || this.critical.cfg !== cfg) {
-      this.critical = { tasks, cfg, ids: computeCriticalPath(tasks, cfg ?? {}).criticalIds };
+    // Only the date reading matters — not the config object, which every full render replaces
+    const key = `${cfg?.endDateMode}|${cfg?.normalizeDateOnly}`;
+    if (this.critical.tasks !== tasks || this.critical.key !== key) {
+      this.critical = { tasks, key, ids: computeCriticalPath(tasks, cfg ?? {}).criticalIds };
     }
     return this.critical.ids;
   }
@@ -647,13 +714,18 @@ export class GantryElement extends BaseElement {
   private saveState(): void {
     clearTimeout(this.stateTimer);
     this.stateTimer = setTimeout(() => {
-      const state = this.getState();
-      this.emit('state-change', state);
-      const key = this._options.stateKey;
-      if (key) {
-        try { window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state)); } catch { /* storage unavailable */ }
-      }
+      this.stateTimer = undefined;
+      this.writeState();
     }, 150);
+  }
+
+  private writeState(): void {
+    const state = this.getState();
+    this.emit('state-change', state);
+    const key = this._options.stateKey;
+    if (key) {
+      try { window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state)); } catch { /* storage unavailable */ }
+    }
   }
 
   // ── Rendering ─────────────────────────────────────────────
@@ -695,6 +767,10 @@ export class GantryElement extends BaseElement {
     const labels = this.i18nSvc.labels;
     const layout = this.layout;
     const view = layout.view();
+    // In the coordinates of the painted timeline: read before the DOM changes (and clamps it)
+    const scrollLeftBefore = this.canvasViewportEl.scrollLeft;
+    // Rebuilt controls lose focus: remember which one had it
+    const focusKey = (this.shadow.activeElement as HTMLElement | null)?.dataset?.['focusKey'];
 
     this.wrapperEl.dataset['view'] = view;
     this.applyPanelWidth(cfg, view);
@@ -733,7 +809,8 @@ export class GantryElement extends BaseElement {
     const tasklistProps = {
       visibleRows: windowRows,
       rowCount: rows.length,
-      columns: this.colSvc.columns,
+      columns: this.colSvc.columnsFor(view, cfg),
+      cellContext: layout.columnContext,
       rowHeight,
       selectedIds: this.selSvc.selectedIds,
       theme,
@@ -743,7 +820,9 @@ export class GantryElement extends BaseElement {
       paddingTop: vw.paddingTop,
       paddingBottom: vw.paddingBottom,
       sort: layout.sort(),
-      loadMore: ds ? { isLoading: ds.isLoading, hasMore: ds.hasMore, loadedCount: ds.loadedCount } : null,
+      loadMore: ds
+        ? { isLoading: ds.isLoading, hasMore: ds.hasMore, loadedCount: ds.loadedCount, error: ds.error !== null }
+        : null,
       tableView: view === 'table',
     };
     if (!this.tasklistComp) {
@@ -763,6 +842,7 @@ export class GantryElement extends BaseElement {
       this.tasklistComp.columnWidthChange$.subscribe(({ key, width }) => this.colSvc.setColumnWidth(key, width));
       this.tasklistComp.columnResizeEnd$.subscribe(() => this.saveState());
       this.tasklistComp.loadMore$.subscribe(() => void this._dataSource?.loadNext());
+      this.tasklistComp.retry$.subscribe(() => void this._dataSource?.retry());
     } else {
       this.tasklistComp.updateProps(tasklistProps);
     }
@@ -797,19 +877,54 @@ export class GantryElement extends BaseElement {
       else this.canvasComp.updateProps(canvasProps);
     }
 
-    // First render with data: bring today into view (unless a scroll was requested)
+    // A requested scroll wins; otherwise the first render with data applies `initialScroll`
+    // and later timeline changes keep the anchor date in place
     if (this.pendingScroll) {
       const scroll = this.pendingScroll;
       this.pendingScroll = undefined;
-      this.scrolledToToday = true;
+      this.initialScrollDone = true;
       scroll();
-    } else if (!this.scrolledToToday && rows.length && view !== 'table') {
-      this.scrolledToToday = true;
-      this.scrollToToday('instant');
+    } else if (!this.initialScrollDone && rows.length && view !== 'table') {
+      this.initialScrollDone = true;
+      const left = initialScrollLeft({
+        timeline: tl,
+        initialScroll: cfg.initialScroll,
+        viewportWidth: this.canvasViewportEl.clientWidth,
+        now: this.layout.now(),
+      });
+      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+    } else if (view !== 'table') {
+      this.keepScrollAnchor(tl, scrollLeftBefore);
     }
+    if (view !== 'table') this.paintedTimeline = tl;
+    if (focusKey) this.restoreFocus(focusKey);
 
-    // Lazy loading: fetch the next page when the window nears the end
-    if (ds && ds.hasMore && !ds.isLoading && vw.last >= rows.length - 3) void ds.loadNext();
+    // Lazy loading: fetch the next page when the window nears the end — never while
+    // a failed page waits for `retry()`, and the first page only per `initialPage`
+    if (ds && ds.hasMore && !ds.isLoading && ds.error === null && ds.loadedCount > 0
+      && vw.last >= rows.length - 3) void ds.loadNext();
+  }
+
+  /** Focus the rebuilt control that had focus before the render (toolbar, sort header, collapse…). */
+  private restoreFocus(key: string): void {
+    const active = this.shadow.activeElement as HTMLElement | null;
+    if (active?.dataset['focusKey'] === key) return;
+    for (const el of this.shadow.querySelectorAll<HTMLElement>('[data-focus-key]')) {
+      if (el.dataset['focusKey'] === key) {
+        el.focus({ preventScroll: true });
+        return;
+      }
+    }
+  }
+
+  /** Keep the date at the viewport centre (zoom) or left edge (new range start) in place. */
+  private keepScrollAnchor(tl: TimelineModel, scrollLeft: number): void {
+    const prev = this.paintedTimeline;
+    if (!prev || prev === tl) return;
+    const zoomed = prev.pxPerDay !== tl.pxPerDay;
+    if (!zoomed && prev.start.getTime() === tl.start.getTime()) return;
+    const anchorX = zoomed ? this.canvasViewportEl.clientWidth / 2 : 0;
+    this.scrollSvc.scrollToX(zoomAnchorScroll(prev, tl, scrollLeft, anchorX), 'instant');
   }
 
   /** Panel width for the current view; split view honours the user's last width. */
@@ -825,6 +940,8 @@ export class GantryElement extends BaseElement {
       this.panelEl.style.width = `${width}px`;
     }
     this.panelEl.inert = view === 'chart';
+    // Hidden behind the table view: out of the tab order and the accessibility tree
+    this.canvasViewportEl.inert = view === 'table';
     this.splitterEl.dataset['resizable'] = String(cfg.panel.resizable && view === 'split');
     this.toggleEl.hidden = !cfg.panel.collapsible;
     const collapsed = view === 'chart';
@@ -876,7 +993,8 @@ export class GantryElement extends BaseElement {
       items.push({ color: ann.color ?? theme.arrowColor, label: ann.label?.text ?? labels.annotation, dashed: true });
     }
 
-    this.legendEl.hidden = !this._showLegend || !items.length;
+    // The legend explains timeline markers: nothing to explain in the table view
+    this.legendEl.hidden = !this._showLegend || !items.length || this.layout.view() === 'table';
     this.legendEl.replaceChildren();
     if (this.legendEl.hidden) return;
 
@@ -901,8 +1019,8 @@ export class GantryElement extends BaseElement {
   }
 
   private onRowClick(row: GanttFlatRow, event: MouseEvent): void {
-    if (this._options.enableSelection !== false) {
-      const multi = this._options.multiSelect !== false;
+    const { enabled, multi } = this.layout.cfg.selection;
+    if (enabled) {
       const e = multi ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
       this.selSvc.handleClick(row.task.id, e, this.layout.visibleRows);
     }
@@ -1014,7 +1132,7 @@ export class GantryElement extends BaseElement {
       if (!this._tooltipEnabled) return;
       const task = bar && this.layout.geometryById.get(bar.getAttribute('data-task-id')!)?.row.task;
       if (task) {
-        this.tooltip.enter(task, e, this.themeSvc.resolvedTheme);
+        this.tooltip.enter(task, e, this.themeSvc.resolvedTheme, this.layout.config() ?? undefined);
         this.tooltip.move(e);
       } else {
         this.tooltip.leave();
@@ -1025,9 +1143,10 @@ export class GantryElement extends BaseElement {
   }
 
   private onKeyDown(event: KeyboardEvent): void {
-    // Don't hijack typing inside slotted/custom cell inputs
+    // Don't hijack typing inside slotted/custom cell inputs, editable cells or the splitter
+    if (event.defaultPrevented) return;
     const origin = event.composedPath()[0] as HTMLElement | undefined;
-    if (origin && /^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName)) return;
+    if (origin && (/^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName) || origin.isContentEditable)) return;
     if (origin === this.splitterEl) return;
 
     const ctrl = event.ctrlKey || event.metaKey;

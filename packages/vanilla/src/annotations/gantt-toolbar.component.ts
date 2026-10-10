@@ -39,10 +39,12 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
       bar.appendChild(g);
       return g;
     };
-    const button = (parent: HTMLElement, text: string, title: string, onClick: () => void, cls = 'gantt-tb-btn') => {
+    // `focusKey` lets the element restore focus after the toolbar is rebuilt
+    const button = (parent: HTMLElement, text: string, title: string, focusKey: string, onClick: () => void, cls = 'gantt-tb-btn') => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = cls;
+      b.dataset['focusKey'] = focusKey;
       b.textContent = text;
       b.title = title;
       b.setAttribute('aria-label', title);
@@ -53,8 +55,8 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
 
     if (toolbar.zoom) {
       const g = group();
-      button(g, '−', labels.zoomOut, () => this.zoomOut$.emit());
-      button(g, '+', labels.zoomIn, () => this.zoomIn$.emit());
+      button(g, '−', labels.zoomOut, 'zoom-out', () => this.zoomOut$.emit());
+      button(g, '+', labels.zoomIn, 'zoom-in', () => this.zoomIn$.emit());
     }
 
     if (toolbar.viewModes !== false && toolbar.viewModes.length) {
@@ -64,13 +66,13 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
         const level = zoomLevels.find(l => l.name === name);
         if (!level) continue;
         const text = level.label ?? (labels.viewModes as Record<string, string>)[name] ?? name;
-        const b = button(g, text, text, () => this.viewModeChange$.emit(name), 'gantt-tb-pill');
+        const b = button(g, text, text, `zoom:${name}`, () => this.viewModeChange$.emit(name), 'gantt-tb-pill');
         b.setAttribute('aria-pressed', String(name === currentView));
       }
     }
 
     if (toolbar.today) {
-      button(group(), `◎ ${labels.todayButton}`, labels.todayButton, () => this.scrollToToday$.emit(), 'gantt-tb-btn gantt-tb-today');
+      button(group(), `◎ ${labels.todayButton}`, labels.todayButton, 'today', () => this.scrollToToday$.emit(), 'gantt-tb-btn gantt-tb-today');
     }
 
     if (toolbar.viewToggle) {
@@ -78,7 +80,7 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
       g.classList.add('gantt-tb-pills', 'gantt-tb-views');
       const views: [GanttView, string][] = [['split', labels.viewSplit], ['table', labels.viewTable], ['chart', labels.viewChart]];
       for (const [v, text] of views) {
-        const b = button(g, text, text, () => this.viewChange$.emit(v), 'gantt-tb-pill');
+        const b = button(g, text, text, `view:${v}`, () => this.viewChange$.emit(v), 'gantt-tb-pill');
         b.setAttribute('aria-pressed', String(v === view));
       }
     }

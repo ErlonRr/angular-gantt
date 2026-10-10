@@ -21,4 +21,4 @@ them explicitly.
 
 Tests: core → `packages/core/src/__tests__/` (Node), Web Component →
 `packages/vanilla/src/__tests__/` (happy-dom). Angular has no unit tests yet — cover its
-behaviour with the browser QA (`scripts/qa/qa.mjs`).
+behaviour with the Playwright suite (`e2e/`, `pnpm e2e`).

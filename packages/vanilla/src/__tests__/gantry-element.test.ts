@@ -180,6 +180,72 @@ describe('<gantry-element>', () => {
     expect(fetcher).toHaveBeenCalledWith(1, 5);
   });
 
+  it('stops at a failed page: one load-error, a Retry button, no request storm', async () => {
+    let fail = true;
+    const fetcher = vi.fn(async (page: number, size: number) => {
+      if (fail) throw new Error('offline');
+      return Array.from({ length: size }, (_, i) => task(`p${page}-${i}`, '2026-01-01', '2026-01-05'));
+    });
+    const errors: unknown[] = [];
+    el = await mount();
+    el.addEventListener('load-error', e => errors.push((e as CustomEvent).detail));
+    el.dataSource = { fetcher, pageSize: 5, retries: 0 };
+    await vi.waitFor(() => expect(el.dataSource?.error).not.toBeNull());
+    for (let i = 0; i < 5; i++) await frame();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(errors).toEqual([{ error: expect.any(Error), page: 1 }]);
+
+    // Announced once through the persistent alert region, not by the rebuilt footer
+    expect($(el, '.gantt-sr-alert')?.textContent).toBe('Couldn’t load tasks');
+    expect($(el, '[role="alert"]')).toBe($(el, '.gantt-sr-alert'));
+    const retry = $(el, '.gantt-load-error .gantt-load-more-btn') as HTMLButtonElement;
+    expect(retry.textContent).toBe('Retry');
+    fail = false;
+    retry.focus();
+    retry.click();
+    await vi.waitFor(() => expect(el.tasks.length).toBeGreaterThanOrEqual(5));
+    expect(el.tasks[0].id).toBe('p1-0');
+    expect(el.dataSource?.error).toBeNull();
+    expect($(el, '.gantt-sr-alert')?.textContent).toBe('');
+    // Focus stayed in the footer while Retry turned into "Loading…" and back
+    expect((el.shadowRoot!.activeElement as HTMLElement | null)?.dataset['focusKey']).toBe('load-more');
+  });
+
+  it('reports a failure that happened while disconnected once reconnected', async () => {
+    let reject!: (e: Error) => void;
+    const fetcher = vi.fn(() => new Promise<GanttTask[]>((_, r) => { reject = r; }));
+    const errors: unknown[] = [];
+    el = await mount();
+    el.addEventListener('load-error', e => errors.push((e as CustomEvent).detail));
+    el.dataSource = { fetcher, retries: 0 };
+    el.remove();
+    reject(new Error('offline'));
+    await vi.waitFor(() => expect(el.dataSource?.error).not.toBeNull());
+    expect(errors).toHaveLength(0);
+    document.body.appendChild(el);
+    await frame();
+    expect(errors).toHaveLength(1);
+  });
+
+  it('repairs appended tasks like set ones', async () => {
+    el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-05')] });
+    el.appendTasks([{ id: 'b', name: 'B', start: new Date(2026, 0, 2), parentId: null } as unknown as GanttTask]);
+    await frame();
+    const b = el.tasks.find(t => t.id === 'b')!;
+    expect(b.end).toEqual(new Date(2026, 0, 2));
+    expect('parentId' in b).toBe(false);
+  });
+
+  it('initialPage: 0 waits for an explicit loadNext()', async () => {
+    const fetcher = vi.fn(async () => [task('a', '2026-01-01', '2026-01-05')]);
+    el = await mount();
+    el.dataSource = { fetcher, initialPage: 0 };
+    for (let i = 0; i < 3; i++) await frame();
+    expect(fetcher).not.toHaveBeenCalled();
+    await el.dataSource?.loadNext();
+    expect(fetcher).toHaveBeenCalledWith(1, 30);
+  });
+
   it('uses a custom bar renderer when provided', async () => {
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
     el.renderBar = (ctx, renderDefault) => {
@@ -235,6 +301,107 @@ describe('<gantry-element>', () => {
     expect(($(el, '.gantry-wrapper') as HTMLElement).dataset['view']).toBe('table');
   });
 
+  describe('panel vs table-view columns', () => {
+    const headers = (e: GantryElement) => $$(e, '.gantt-tl-col-header').map(h => h.textContent?.replace(/[⇅▲▼]/g, '').trim());
+    const plan = () => [
+      task('a', '2020-01-01', '2020-01-10', { name: 'Design', progress: 100 }),
+      task('b', '2020-01-10', '2020-01-20', { name: 'Build', progress: 20, dependency: 'a' }),
+    ];
+
+    it('shows a lean panel in split view and every useful field in table view', async () => {
+      el = await mount({ tasks: plan() });
+      expect(headers(el)).toEqual(['Task Name', 'Start', 'End', '%']);
+      el.setView('table');
+      await frame();
+      expect(headers(el)).toEqual(['Task Name', 'Type', 'Status', 'Start', 'End', 'Duration', '%', 'Predecessors']);
+      el.options = { baseline: true };
+      await frame();
+      expect(headers(el)).toHaveLength(11);
+      expect($(el, '[role="treegrid"]')?.getAttribute('aria-label')).toBe('Tasks');
+    });
+
+    it('derives statuses from progress, dates and now, with a dot and data-status', async () => {
+      el = await mount({ tasks: plan() });
+      el.setView('table');
+      await frame();
+      const statusCells = $$(el, '.gantt-tl-row [data-status]');
+      expect(statusCells.map(c => c.getAttribute('data-status'))).toEqual(['done', 'overdue']);
+      expect(statusCells[1].textContent).toBe('Overdue');
+      expect(statusCells[1].querySelector('.gantt-tl-status-dot')?.getAttribute('aria-hidden')).toBe('true');
+      expect($$(el, '.gantt-tl-row .gantt-tl-cell')[15].textContent).toBe('Design');
+    });
+
+    it('sorts by status rank from the header', async () => {
+      el = await mount({ tasks: [...plan(), task('c', '2099-01-01', '2099-01-05', { name: 'Later', progress: 0 })] });
+      el.setView('table');
+      await frame();
+      ($$(el, '.gantt-tl-col-header')[2] as HTMLElement).click();
+      await frame();
+      expect($$(el, '.gantt-tl-row').map(r => (r as HTMLElement).dataset['taskId'])).toEqual(['c', 'b', 'a']);
+    });
+
+    it('honours panel.columns, table.columns and per-view visibility', async () => {
+      el = await mount({ tasks: plan(), options: { panel: { columns: ['name', 'status'] }, table: { columns: ['id', 'name'] } } });
+      expect(headers(el)).toEqual(['Task Name', 'Status']);
+      el.setColumnVisible('progress', true, 'split');
+      await frame();
+      expect(headers(el)).toEqual(['Task Name', 'Status', '%']);
+      el.setView('table');
+      await frame();
+      expect(headers(el)).toEqual(['ID', 'Task Name']);
+      el.toggleColumnVisible('status', 'table');   // hidden by the table list → shown at the first call
+      await frame();
+      expect(headers(el)).toEqual(['ID', 'Task Name', 'Status']);
+    });
+
+    it('takes the hidden timeline and the legend out of the table view', async () => {
+      el = await mount({ tasks: plan() });
+      el.showLegend = true;
+      el.setView('table');
+      await frame();
+      expect(($(el, '.gantry-canvas-viewport') as HTMLElement).inert).toBe(true);
+      expect(($(el, '.gantt-legend') as HTMLElement).hidden).toBe(true);
+      el.setView('split');
+      await frame();
+      expect(($(el, '.gantry-canvas-viewport') as HTMLElement).inert).toBe(false);
+    });
+
+    it('sorts by a built-in column listed next to custom columns', async () => {
+      el = await mount({
+        tasks: [task('long', '2020-01-01', '2020-03-01'), task('short', '2020-01-01', '2020-01-03')],
+        options: { table: { columns: ['name', 'owner', 'duration'] } },
+      });
+      el.columns = [{ key: 'name', label: 'Name', width: 200 }, { key: 'owner', label: 'Owner', width: 100, render: () => 'Ann' }];
+      el.setView('table');
+      await frame();
+      ($$(el, '.gantt-tl-col-header')[2] as HTMLElement).click();
+      await frame();
+      expect($$(el, '.gantt-tl-row').map(r => (r as HTMLElement).dataset['taskId'])).toEqual(['short', 'long']);
+    });
+
+    it('falls back to the columns property, then the built-ins, when options.columns goes away', async () => {
+      el = await mount({ tasks: plan() });
+      el.columns = [{ key: 'name', label: 'Own name', width: 200 }];
+      el.options = { columns: [{ key: 'name', label: 'From options', width: 200 }] };
+      await frame();
+      expect(headers(el)).toEqual(['From options']);
+      el.options = {};
+      await frame();
+      expect(headers(el)).toEqual(['Own name']);
+      el.columns = [];
+      await frame();
+      expect(headers(el)).toEqual(['Task Name', 'Start', 'End', '%']);
+    });
+
+    it('translates column headers and statuses', async () => {
+      el = await mount({ tasks: plan(), options: { labels: { colStatus: 'Stato', statusOverdue: 'In ritardo' } } });
+      el.setView('table');
+      await frame();
+      expect(headers(el)).toContain('Stato');
+      expect($$(el, '.gantt-tl-row [data-status="overdue"]')[0].textContent).toBe('In ritardo');
+    });
+  });
+
   it('persists UI state under stateKey and emits state-change', async () => {
     window.localStorage.clear();
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
@@ -274,5 +441,114 @@ describe('<gantry-element>', () => {
     await frame();
     expect($$(el, '.g-tier')).toHaveLength(3);
     expect($$(el, '.g-tier--week .g-cell-label').map(c => c.textContent)).toContain('2-8');
+  });
+
+  describe('re-render robustness', () => {
+    const active = (e: GantryElement) => e.shadowRoot!.activeElement as HTMLElement | null;
+
+    it('keeps focus on the toolbar button, sort header and collapse toggle it was on', async () => {
+      el = await mount({ tasks: [
+        task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group }),
+        task('c', '2026-01-01', '2026-01-10', { parentId: 'g' }),
+      ] });
+      const zoomIn = $(el, '[data-focus-key="zoom-in"]') as HTMLButtonElement;
+      zoomIn.focus();
+      zoomIn.click();
+      await frame();
+      expect(active(el)?.dataset['focusKey']).toBe('zoom-in');
+      expect(active(el)).not.toBe(zoomIn); // rebuilt, yet focused
+
+      const header = $(el, '[data-focus-key^="sort:"]') as HTMLElement;
+      header.focus();
+      header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await frame();
+      expect(active(el)?.dataset['focusKey']).toBe(header.dataset['focusKey']);
+
+      const toggle = $(el, '[data-focus-key="collapse:g"]') as HTMLButtonElement;
+      toggle.focus();
+      toggle.click();
+      await frame();
+      expect(active(el)?.dataset['focusKey']).toBe('collapse:g');
+      expect(active(el)?.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('builds bands and vertical grid once per timeline, not on every scroll', async () => {
+      el = await mount({ tasks: DEMO_TASKS });
+      const bands = $(el, '.gantt-bands');
+      const grid = $(el, '.gantt-grid');
+      ($(el, '.gantry-canvas-viewport') as HTMLElement).scrollTop = 200;
+      ($(el, '.gantry-canvas-viewport') as HTMLElement).dispatchEvent(new Event('scroll'));
+      await frame();
+      await frame();
+      expect($(el, '.gantt-bands')).toBe(bands);
+      expect($(el, '.gantt-grid')).toBe(grid);
+      el.setViewMode(ViewMode.Day);
+      await frame();
+      expect($(el, '.gantt-bands')).not.toBe(bands);
+    });
+
+    it('writes a pending state change when disconnected', async () => {
+      el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')], options: { stateKey: 'disconnect-test' } });
+      const onState = vi.fn();
+      el.addEventListener('state-change', onState);
+      el.setView('chart');
+      el.remove();
+      expect(onState).toHaveBeenCalledOnce();
+      expect(JSON.parse(localStorage.getItem('gantry:disconnect-test')!).view).toBe('chart');
+    });
+
+    it('re-syncs the data source after a reconnect', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(r => { release = r; });
+      const fetcher = vi.fn(async (page: number) => {
+        await gate;
+        return page === 1 ? [task('x', '2026-01-01', '2026-01-05')] : [];
+      });
+      el = await mount();
+      el.dataSource = { fetcher, pageSize: 5 };
+      el.remove();
+      release();
+      await vi.waitFor(() => expect(el.dataSource?.loadedCount).toBe(1));
+      expect(el.tasks).toHaveLength(0); // detached: not mirrored
+      document.body.appendChild(el);
+      await frame();
+      expect(el.tasks.map(t => t.id)).toEqual(['x']);
+      expect(fetcher).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('horizontal scroll', () => {
+    const viewport = (e: GantryElement) => $(e, '.gantry-canvas-viewport') as HTMLElement;
+    // Tasks far from "today" (the suite runs in 2026+): 'auto' must show them, not today
+    const past = [task('a', '2020-03-02', '2020-03-20'), task('b', '2020-04-01', '2020-04-30')];
+
+    it("initialScroll 'auto' brings the first task into view when today is far away", async () => {
+      el = await mount({ tasks: past });
+      const tl = el.layout.timeline;
+      expect(viewport(el).scrollLeft).toBe(tl.toX(new Date(2020, 2, 2)));
+    });
+
+    it('initialScroll false leaves the timeline at its start', async () => {
+      el = await mount({ tasks: past, options: { initialScroll: false } });
+      expect(viewport(el).scrollLeft).toBe(0);
+    });
+
+    it('re-applies initialScroll when the consumer changes it', async () => {
+      el = await mount({ tasks: past, options: { initialScroll: false } });
+      el.options = { initialScroll: 'start' };
+      await frame();
+      expect(viewport(el).scrollLeft).toBe(el.layout.timeline.toX(new Date(2020, 2, 2)));
+    });
+
+    it('keeps the anchor date in place when zooming', async () => {
+      el = await mount({ tasks: past, options: { viewMode: ViewMode.Week, initialScroll: false } });
+      viewport(el).scrollLeft = 200;
+      const before = el.layout.timeline.toDate(200);
+      el.setViewMode(ViewMode.Day);
+      await frame();
+      const after = el.layout.timeline.toDate(viewport(el).scrollLeft);
+      expect(Math.abs(after.getTime() - before.getTime())).toBeLessThan(86_400_000);
+      expect(viewport(el).scrollLeft).toBeGreaterThan(200);
+    });
   });
 });

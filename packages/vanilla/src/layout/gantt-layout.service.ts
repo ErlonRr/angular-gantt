@@ -7,7 +7,8 @@
 
 import {
   GanttTask, GanttFlatRow, RowGeometry, GanttI18n, GanttView,
-  flattenTree, filterVisible, reindexVisible, sortRoots, columnComparator, SortDirection, normalizeTasks,
+  flattenTree, filterVisible, reindexVisible, sortTree, columnComparator, SortDirection, normalizeTasks,
+  buildColumnContext, findColumn, type ColumnContext, type ColumnDef,
   buildTimeline, computeRowGeometries, zoomStep,
   type ResolvedGanttConfig, type TimelineModel,
 } from '@gantry/core';
@@ -31,15 +32,26 @@ export class GanttLayoutService {
   readonly panelCollapsed = createState<boolean>(false);
   readonly view = createState<GanttView>('split');
 
+  /** Column catalogue and built-ins (mirrored from the column service) — to sort by a column */
+  readonly columns = createState<readonly ColumnDef[]>([]);
+  readonly builtins = createState<readonly ColumnDef[]>([]);
+
   private cache = new Map<string, unknown>();
-  /** Bumped when "now" moves to a new minute, so the today marker stays fresh */
-  private nowTick = createState<number>(0);
+  /** The instant the chart renders at; `tick()` moves it every minute (today marker, statuses) */
+  readonly now = createState<Date>(new Date());
 
   constructor() {
     const states = [
-      this.tasks, this.collapsedIds, this.sort, this.viewportWidth, this.config, this.i18n, this.nowTick,
+      this.tasks, this.collapsedIds, this.sort, this.viewportWidth, this.config, this.i18n, this.now,
     ] as WritableState<unknown>[];
     for (const s of states) s.subscribe(() => this.cache.clear());
+    // Column edits (e.g. every pointermove of a column resize) only matter to a sorted row order
+    for (const s of [this.columns, this.builtins] as WritableState<unknown>[]) {
+      s.subscribe(() => {
+        if (!this.sort()) return;
+        for (const k of ['allRows', 'visibleRows', 'geometries', 'geometryById']) this.cache.delete(k);
+      });
+    }
   }
 
   private memo<T>(key: string, fn: () => T): T {
@@ -53,16 +65,29 @@ export class GanttLayoutService {
     return c;
   }
 
-  /** Invalidate time-dependent values (today marker, current-period highlight). */
-  tick(): void {
-    this.nowTick.update(n => n + 1);
+  /** Move "now" (today marker, current-period highlight, task statuses). */
+  tick(now: Date = new Date()): void {
+    this.now.set(now);
+  }
+
+  /** Values time- and data-dependent cells read (status, predecessors, sort order). */
+  get columnContext(): ColumnContext {
+    return this.memo('columnContext', () => buildColumnContext({
+      tasks: this.tasks(),
+      config: this.config(),
+      now: this.now(),
+      locale: this.i18n()?.locale,
+    }));
   }
 
   get allRows(): GanttFlatRow[] {
     return this.memo('allRows', () => {
       const rows = flattenTree(this.tasks(), this.collapsedIds());
       const sort = this.sort();
-      return sort ? sortRoots(rows, columnComparator(sort.key, sort.dir)) : rows;
+      if (!sort) return rows;
+      const column = findColumn(this.columns(), this.builtins(), sort.key);
+      // Siblings sort at every level, each subtree stays under its parent
+      return sortTree(rows, columnComparator(sort.key, sort.dir, { column, ctx: this.columnContext }));
     });
   }
 
@@ -84,6 +109,7 @@ export class GanttLayoutService {
       config: this.cfg,
       viewportWidth: this.viewportWidth(),
       i18n: this.i18n(),
+      now: this.now(),
     }));
   }
 
@@ -152,6 +178,6 @@ export class GanttLayoutService {
   }
 
   appendTasks(tasks: GanttTask[]): void {
-    if (tasks.length) this.tasks.update(cur => [...cur, ...tasks]);
+    if (tasks.length) this.tasks.update(cur => normalizeTasks([...cur, ...tasks]));
   }
 }

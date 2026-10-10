@@ -5,6 +5,7 @@ import {
   GantryComponent, GanttTask, GanttBarBase, GanttBarContext,
   GanttBarRegistry, TaskType,
 } from 'ngx-gantry';
+import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ─── Custom "Epic" bar component ─────────────────────────────
@@ -103,7 +104,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-04-01'), end: d('2026-05-01'), progress: 15,
   },
   {
-    id: 'ms1', name: 'Q1 cutoff', type: TaskType.Milestone,
+    id: 'ms1', name: 'Scope cutoff', type: TaskType.Milestone,
     start: d('2026-03-31'), end: d('2026-03-31'), barColor: '#F59E0B',
   },
 ];
@@ -147,7 +148,8 @@ const TASKS: GanttTask[] = [
 export class GanttCustomComponent {
   protected readonly theme = inject(AppThemeService);
 
-  readonly tasks = TASKS;
+  /** The template plan moved so today sits inside it */
+  readonly tasks = anchorToToday(TASKS).tasks;
 
   constructor(registry: GanttBarRegistry) {
     // Register the custom bar type at component init

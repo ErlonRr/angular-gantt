@@ -158,7 +158,11 @@ export class GanttScrollService {
 
   /** Scroll the timeline horizontally to `x` (clamped at 0). */
   scrollToX(x: number, behavior: ScrollBehavior = 'smooth'): void {
-    this._canvas?.scrollTo({ left: Math.max(0, x), behavior });
+    if (!this._canvas) return;
+    const b = motionSafe(behavior);
+    this._canvas.scrollTo({ left: Math.max(0, x), behavior: b });
+    // An instant scroll is applied synchronously: keep the offset current for anchoring
+    if (b !== 'smooth') this.scrollLeft.set(this._canvas.scrollLeft);
   }
 
   /** Current viewport width of the timeline. */
@@ -184,7 +188,7 @@ export class GanttScrollService {
     const canvasWidth = this._canvas.clientWidth;
     // Centre the date in the viewport
     const target = Math.max(0, x - canvasWidth / 2);
-    this._canvas.scrollTo({ left: target, behavior });
+    this._canvas.scrollTo({ left: target, behavior: motionSafe(behavior) });
   }
 
   /** Scroll to today */
@@ -208,8 +212,9 @@ export class GanttScrollService {
     behavior: ScrollBehavior = 'smooth',
   ): void {
     const y = rowIndex * rowHeight;
-    this._panel?.scrollTo({ top: y, behavior });
-    this._canvas?.scrollTo({ top: y, behavior });
+    const b = motionSafe(behavior);
+    this._panel?.scrollTo({ top: y, behavior: b });
+    this._canvas?.scrollTo({ top: y, behavior: b });
   }
 
   /** Scroll both panels back to top-left */
@@ -230,4 +235,10 @@ export class GanttScrollService {
     const last   = Math.ceil((top + height) / rowHeight);
     return [first, last];
   }
+}
+
+/** `smooth` becomes `instant` when the user prefers reduced motion. */
+function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
+  return behavior === 'smooth' && typeof matchMedia === 'function'
+    && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : behavior;
 }

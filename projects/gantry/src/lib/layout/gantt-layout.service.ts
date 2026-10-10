@@ -22,13 +22,14 @@ import {
   RowGeometry,
   GanttView,
   GanttI18n,
+  ColumnDef,
 } from '../types';
 
 import {
   flattenTree,
   filterVisible,
   reindexVisible,
-  sortRoots,
+  sortTree,
   columnComparator,
   SortDirection,
   normalizeTasks,
@@ -38,6 +39,9 @@ import {
   buildTimeline,
   computeRowGeometries,
   zoomStep,
+  buildColumnContext,
+  findColumn,
+  type ColumnContext,
   type ResolvedGanttConfig,
   type TimelineModel,
   type GridLine,
@@ -84,6 +88,15 @@ export class GanttLayoutService {
     this.i18nSource.set(i18n);
   }
 
+  /** Column catalogue and built-ins (bound to the column service) — used to sort by a column */
+  private readonly columnsSource = signal<(() => readonly ColumnDef[]) | null>(null);
+  private readonly builtinsSource = signal<(() => readonly ColumnDef[]) | null>(null);
+
+  bindColumns(columns: () => readonly ColumnDef[], builtins?: () => readonly ColumnDef[]): void {
+    this.columnsSource.set(columns);
+    this.builtinsSource.set(builtins ?? null);
+  }
+
   /** Panel width in px once the user resized it (null = from `panel.width`) */
   readonly panelWidthPx = signal<number | null>(null);
 
@@ -97,11 +110,21 @@ export class GanttLayoutService {
   //  Derived: tree processing
   // ══════════════════════════════════════════════════════════
 
-  /** All rows (DFS flat, including hidden) */
+  /** Values time- and data-dependent cells read (status, predecessors, sort order) */
+  readonly columnContext = computed<ColumnContext>(() => buildColumnContext({
+    tasks: this.tasks(),
+    config: this.configSource()?.() ?? this.config(),
+    now: new Date(this.now()),
+    locale: (this.i18nSource()?.() ?? this.i18n())?.locale,
+  }));
+
+  /** All rows (DFS flat, including hidden); a sort reorders siblings at every level */
   readonly allRows = computed<GanttFlatRow[]>(() => {
     const rows = flattenTree(this.tasks(), this.collapsedIds());
     const sort = this.sort();
-    return sort ? sortRoots(rows, columnComparator(sort.key, sort.dir)) : rows;
+    if (!sort) return rows;
+    const column = findColumn(this.columnsSource()?.() ?? [], this.builtinsSource()?.() ?? [], sort.key);
+    return sortTree(rows, columnComparator(sort.key, sort.dir, { column, ctx: this.columnContext() }));
   });
 
   /** Visible rows only (hidden === false) */

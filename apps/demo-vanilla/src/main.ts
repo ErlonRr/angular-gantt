@@ -1,15 +1,17 @@
 import '../../demo.css';
 import '@gantry/vanilla';
 import { ViewMode, WEEK_FORMATS, type GanttOptions, type GanttScale, type ScaleFormat } from '@gantry/vanilla';
-import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+import { createDemoData } from '@gantry/core/demo';
 
 const gantt = document.querySelector('gantry-element')!;
 const log = document.getElementById('log')!;
 const controls = document.getElementById('controls')!;
 const code = document.getElementById('code')!;
 
-gantt.tasks = DEMO_TASKS;
-gantt.annotations = DEMO_ANNOTATIONS;
+// The demo plan is moved so today sits about 40% into it
+const demo = createDemoData();
+gantt.tasks = demo.tasks;
+gantt.annotations = demo.annotations;
 gantt.showLegend = true;
 
 // ── Playground state → options ─────────────────────────────
@@ -18,6 +20,7 @@ const defaults = {
   viewMode: ViewMode.Week as string,
   weekFormat: 'number',
   weekStart: 1,
+  initialScroll: 'auto',
   weekends: true,
   holiday: true,
   workStart: 9,
@@ -36,9 +39,25 @@ const defaults = {
   criticalPath: false,
   inclusive: false,
   stateKey: false,
+  panelCols: 'default',
+  tableCols: 'default',
 };
 type State = typeof defaults;
 let state: State = { ...defaults };
+
+/** Column-key presets for the split panel and the table view (`panel.columns` / `table.columns`). */
+const PANEL_COLUMNS: Record<string, string[] | undefined> = {
+  default: undefined,
+  status: ['name', 'status', 'start', 'progress'],
+  minimal: ['name'],
+  legacy: ['name', 'start', 'end', 'duration', 'progress'],
+};
+const TABLE_COLUMNS: Record<string, string[] | undefined> = {
+  default: undefined,
+  everything: ['id', 'name', 'type', 'status', 'start', 'end', 'duration', 'progress', 'predecessors',
+    'baselineStart', 'baselineEnd', 'variance'],
+  schedule: ['name', 'start', 'end', 'duration'],
+};
 
 const WEEK: Record<string, ScaleFormat> = {
   number: WEEK_FORMATS.number,
@@ -58,6 +77,7 @@ function toOptions(s: State): GanttOptions {
     viewMode: s.viewMode,
     scales: s.viewMode === ViewMode.Week ? weekScales : undefined,
     weekStart: s.weekStart as 0 | 1,
+    initialScroll: s.initialScroll === 'none' ? false : s.initialScroll as 'auto' | 'today' | 'start',
     rowHeight: s.rowHeight,
     baseline: s.baseline,
     criticalPath: s.criticalPath,
@@ -77,6 +97,8 @@ function toOptions(s: State): GanttOptions {
     groupBar: { style: s.groupStyle as 'summary' },
     arrows: { radius: s.arrowRadius },
     stateKey: s.stateKey ? 'playground' : undefined,
+    panel: { columns: PANEL_COLUMNS[s.panelCols] },
+    table: { columns: TABLE_COLUMNS[s.tableCols] },
   };
 }
 
@@ -100,6 +122,9 @@ const sections: [string, Control[]][] = [
       ['number', 'W52'], ['label', 'Week 52'], ['range', '4–11'], ['rangeMonth', '4–11 Mar'], ['numberRange', 'W52 · 4–11'],
     ] },
     { kind: 'select', key: 'weekStart', label: 'Week starts', options: [[1, 'Monday'], [0, 'Sunday']] },
+    { kind: 'select', key: 'initialScroll', label: 'Initial scroll', options: [
+      ['auto', 'Auto'], ['today', 'Today'], ['start', 'First task'], ['none', 'None'],
+    ] },
     { kind: 'check', key: 'majorDash', label: 'Dashed delimiters' },
     { kind: 'check', key: 'inclusive', label: 'Inclusive end dates' },
   ]],
@@ -121,6 +146,14 @@ const sections: [string, Control[]][] = [
     { kind: 'range', key: 'arrowRadius', label: 'Arrow corners', min: 0, max: 12 },
     { kind: 'check', key: 'baseline', label: 'Baseline' },
     { kind: 'check', key: 'criticalPath', label: 'Critical path' },
+  ]],
+  ['Columns', [
+    { kind: 'select', key: 'panelCols', label: 'Panel', options: [
+      ['default', 'Name · Start · End · %'], ['status', 'Name · Status · Start · %'], ['minimal', 'Name only'], ['legacy', '1.x (5 columns)'],
+    ] },
+    { kind: 'select', key: 'tableCols', label: 'Table view', options: [
+      ['default', 'Default (8, + baseline)'], ['everything', 'Every built-in'], ['schedule', 'Schedule only'],
+    ] },
   ]],
   ['State', [
     { kind: 'check', key: 'stateKey', label: 'Remember layout' },

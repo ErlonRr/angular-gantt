@@ -35,8 +35,17 @@ const { criticalIds } = computeCriticalPath([
 ]);
 ```
 
-Sample data for demos and docs lives in a separate entry point:
-`import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo'`.
+Sample data for demos and docs lives in a separate entry point, `@gantry/core/demo`:
+
+```ts
+import { createDemoData, anchorToToday, DEMO_TASKS } from '@gantry/core/demo';
+
+const { tasks, annotations } = createDemoData();          // today ≈ 40% into the plan
+const later = createDemoData({ now: new Date(2027, 0, 4), at: 0.8 });
+const mine = anchorToToday(myTemplate, { at: 0.5 }).tasks; // any template, whole-week shift
+```
+
+`DEMO_TASKS` / `DEMO_ANNOTATIONS` are the fixed 2026 reference plan.
 
 ## License
 

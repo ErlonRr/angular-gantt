@@ -41,6 +41,10 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   holidayBg:        'rgba(239, 68, 68, 0.08)',
   offHoursBg:       'rgba(100, 116, 139, 0.07)',
   intensiveBg:      'rgba(245, 158, 11, 0.16)',
+  statusNotStarted: '#64748B',
+  statusInProgress: '#2563EB',
+  statusOverdue:    '#DC2626',
+  statusDone:       '#15803D',
 };
 
 export const DarkTheme: Readonly<Required<GanttTheme>> = {
@@ -77,6 +81,10 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   holidayBg:        'rgba(248, 113, 113, 0.10)',
   offHoursBg:       'rgba(148, 163, 184, 0.06)',
   intensiveBg:      'rgba(251, 191, 36, 0.14)',
+  statusNotStarted: '#8494A9',
+  statusInProgress: '#60A5FA',
+  statusOverdue:    '#F87171',
+  statusDone:       '#4ADE80',
 };
 
 /**
@@ -147,6 +155,10 @@ export const THEME_CSS_VARS: ReadonlyArray<readonly [keyof GanttTheme, string]> 
   ['holidayBg',        '--gantt-holiday-bg'],
   ['offHoursBg',       '--gantt-off-hours-bg'],
   ['intensiveBg',      '--gantt-intensive-bg'],
+  ['statusNotStarted', '--gantt-status-not-started'],
+  ['statusInProgress', '--gantt-status-in-progress'],
+  ['statusOverdue',    '--gantt-status-overdue'],
+  ['statusDone',       '--gantt-status-done'],
 ];
 
 /** Parse a CSS length like `'4px'` / `'6'` to px (fallback when not numeric). */

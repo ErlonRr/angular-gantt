@@ -13,7 +13,8 @@
 //    5. Float (slack) = LS - ES ; critical if float === 0
 // ─────────────────────────────────────────────────────────────
 
-import { GanttTask, GanttDependency, DependencyType } from './types';
+import { GanttTask, DependencyType } from './types';
+import { taskDependencies } from './render/columns';
 import { calendarDays } from './gantt-math';
 import { taskSpan } from './render/timeline';
 import type { ResolvedGanttConfig } from './render/config';
@@ -42,26 +43,12 @@ interface CPMEdge {
 // ─── Parse dependency field ───────────────────────────────────
 
 function parseDeps(task: GanttTask): CPMEdge[] {
-  const edges: CPMEdge[] = [];
-  if (!task.dependency) return edges;
-
-  const raw = task.dependency;
-  const items: GanttDependency[] = Array.isArray(raw)
-    ? raw
-    : typeof raw === 'string'
-      ? [{ taskId: raw }]
-      : [raw as GanttDependency];
-
-  for (const dep of items) {
-    edges.push({
-      fromId: dep.taskId,
-      toId:   task.id,
-      type:   dep.type ?? DependencyType.FS,
-      lag:    dep.lag  ?? 0,
-    });
-  }
-
-  return edges;
+  return taskDependencies(task).map(dep => ({
+    fromId: dep.taskId,
+    toId:   task.id,
+    type:   dep.type ?? DependencyType.FS,
+    lag:    dep.lag  ?? 0,
+  }));
 }
 
 // ─── Durations ────────────────────────────────────────────────

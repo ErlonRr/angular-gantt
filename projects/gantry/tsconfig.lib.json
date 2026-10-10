@@ -19,7 +19,6 @@
   },
   "exclude": [
     "test.ts",
-    "**/*.spec.ts",
-    "src/stories"
+    "**/*.spec.ts"
   ]
 }

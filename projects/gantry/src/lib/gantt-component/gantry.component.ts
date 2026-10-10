@@ -37,6 +37,9 @@ import {
   viewChild,
   ElementRef,
   untracked,
+  afterRenderEffect,
+  afterNextRender,
+  EnvironmentInjector,
 } from '@angular/core';
 
 import {
@@ -54,7 +57,10 @@ import {
   RowGeometry,
   GanttFlatRow,
 } from '../types';
-import { resolveConfig, resolveLength, type ResolvedGanttConfig } from '@gantry/core';
+import {
+  resolveConfig, resolveLength, initialScrollLeft, initialScrollChanged, zoomAnchorScroll,
+  type ResolvedGanttConfig, type TimelineModel,
+} from '@gantry/core';
 
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttCanvasComponent } from '../layout/gantt-canvas.component';
@@ -132,7 +138,7 @@ const SPLITTER_PX = 6;
     }
 
     <!-- ── Main area: panel · splitter · timeline ─────────── -->
-    <div #mainEl class="gantry-main" [class.is-resizing]="splitterDragging()">
+    <div #mainEl class="gantry-main" [class.is-resizing]="splitterDragging() || !panelAnimated()">
       <!-- Left: task list (scrolls horizontally; vertical scroll mirrors the timeline) -->
       <div
         #panelEl
@@ -144,7 +150,8 @@ const SPLITTER_PX = 6;
         <gantt-tasklist
           [visibleRows]="vsVisibleRows()"
           [rowCount]="layout.rowCount()"
-          [columns]="colSvc.columns()"
+          [columns]="activeColumns()"
+          [cellContext]="layout.columnContext()"
           [rowHeight]="layout.rowHeight()"
           [selectedIds]="selSvc.selectedIds()"
           [theme]="theme()"
@@ -169,9 +176,11 @@ const SPLITTER_PX = 6;
             [theme]="theme()"
             [isLoading]="ds.isLoading()"
             [hasMore]="ds.hasMore()"
+            [error]="ds.error() !== null"
             [loadedCount]="ds.loadedCount()"
             [autoLoad]="true"
             (loadMore)="ds.loadNext()"
+            (retry)="ds.retry()"
           />
         }
 
@@ -207,7 +216,7 @@ const SPLITTER_PX = 6;
       }
 
       <!-- Right: one scrollport — header + bars share horizontal scroll natively -->
-      <div #canvasEl class="gantt-timeline-scroll">
+      <div #canvasEl class="gantt-timeline-scroll" [attr.inert]="layout.view() === 'table' ? '' : null">
         <div class="gantt-timeline-header">
           <gantt-header [timeline]="layout.timeline()" [config]="cfg()" />
         </div>
@@ -224,12 +233,11 @@ const SPLITTER_PX = 6;
           [criticalIds]="criticalIds()"
           [enableResize]="dragEnabled() && resizeEnabled()"
           [enableDrag]="dragEnabled()"
-          [enableSelection]="options().enableSelection !== false"
-          [multiSelect]="options().multiSelect !== false"
+          [enableSelection]="cfg().selection.enabled"
+          [multiSelect]="cfg().selection.multi"
           [tooltipEnabled]="tooltipEnabled()"
           (taskDragged)="onTaskDragged($event)"
           (taskResized)="onTaskResized($event)"
-          (selectionChange)="selectionChange.emit($event)"
           (rowClick)="onCanvasRowClick($event)"
           (rowDblClick)="rowDblClick.emit($event)"
         />
@@ -237,7 +245,7 @@ const SPLITTER_PX = 6;
     </div>
 
     <!-- ── Legend (optional) ─────────────────────────────────── -->
-    @if (showLegend() && legendItems().length) {
+    @if (showLegend() && legendItems().length && layout.view() !== 'table') {
       <div class="gantt-legend">
         <span class="gantt-legend-title">{{ i18n.labels().legend }}</span>
         @for (item of legendItems(); track item.label) {
@@ -362,6 +370,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly taskDragged = output<TaskDragEvent>();
   readonly taskResized = output<TaskResizeEvent>();
   readonly selectionChange = output<SelectionChangeEvent>();
+  /** A data-source page failed after its automatic retries (`dataSource.retry()` tries again) */
+  readonly loadError = output<{ error: unknown; page: number }>();
   readonly rowClick = output<RowGeometry>();
   readonly rowDblClick = output<GanttFlatRow>();
   /** The zoom level changed (toolbar, keyboard or API) */
@@ -374,12 +384,22 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     resolveConfig({ ...this.options(), viewMode: this.layout.viewMode() }, this.themeSvc.resolvedTheme(), this.i18n.bundle()),
   );
   protected readonly theme = computed(() => this.cfg().theme);
+  /** Consumer columns: `options.columns` wins over the `columns` input (compared by reference) */
+  private readonly columnSource = computed<ColumnDef[]>(() => {
+    const fromOptions = this.options().columns as ColumnDef[] | undefined;
+    return fromOptions?.length ? fromOptions : this.columns();
+  });
+
+  /** Columns of the current view: lean split panel, data-rich table view (resolved in core) */
+  protected readonly activeColumns = computed(() => this.colSvc.columnsFor(this.layout.view(), this.cfg()));
   protected readonly dragEnabled = computed(() => this.options().enableDrag ?? this.enableDrag());
   protected readonly resizeEnabled = computed(() => this.options().enableResize ?? this.enableResize());
 
   // ── Panel / splitter ──────────────────────────────────────
   private readonly mainWidth = signal<number>(0);
   protected readonly splitterDragging = signal(false);
+  /** Width transitions start after the first measured render (no 300px → 30% slide on load) */
+  protected readonly panelAnimated = signal(false);
   protected readonly panelPx = computed(() => {
     const view = this.layout.view();
     const hostW = this.mainWidth() || 1000;
@@ -417,6 +437,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly vsWindowTop = computed(() => this._window().first * this.layout.rowHeight());
   protected readonly vsWindowBottom = computed(() => (this._window().last + 1) * this.layout.rowHeight());
 
+  // ── Horizontal scroll ─────────────────────────────────────
+  private readonly envInjector = inject(EnvironmentInjector);
+  private readonly hasRows = computed(() => this.layout.visibleRows().length > 0);
+  /** The first render with data has applied `initialScroll` */
+  private _initialScrollDone = false;
+  /** Timeline the canvas was last rendered with — anchors the scroll when it changes */
+  private _paintedTimeline?: TimelineModel;
+
   private _resizeObserver?: ResizeObserver;
   private _clock?: ReturnType<typeof setInterval>;
   private _stateTimer?: ReturnType<typeof setTimeout>;
@@ -425,8 +453,16 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   private _lastViewMode?: string;
 
   // ── Critical path ─────────────────────────────────────────
+  /** Only these config fields affect the critical path (cfg itself changes with theme, i18n…) */
+  private readonly cpmConfig = computed(() => {
+    const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
+    return { criticalPath, endDateMode, normalizeDateOnly };
+  }, {
+    equal: (a, b) => a.criticalPath === b.criticalPath && a.endDateMode === b.endDateMode
+      && a.normalizeDateOnly === b.normalizeDateOnly,
+  });
   readonly criticalIds = computed<Set<string>>(() => {
-    const cfg = this.cfg();
+    const cfg = this.cpmConfig();
     if (!cfg.criticalPath) return new Set();
     return computeCriticalPath(this.layout.tasks(), cfg).criticalIds;
   });
@@ -445,6 +481,17 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   constructor() {
     this.layout.bindConfig(() => this.cfg(), () => this.i18n.bundle());
+    this.layout.bindColumns(() => this.colSvc.columns(), () => this.colSvc.builtins());
+    // Every selection change — canvas, task list, keyboard or API — reaches the output
+    this.selSvc.onChange = e => this.selectionChange.emit(e);
+
+    // After each render: apply `initialScroll` once rows exist, then keep the anchor date in place
+    afterRenderEffect(() => {
+      const tl = this.layout.timeline();
+      const hasRows = this.hasRows();
+      const view = this.layout.view();
+      untracked(() => this.syncHorizontalScroll(tl, hasRows, view));
+    });
   }
 
   // ── Lifecycle ─────────────────────────────────────────────
@@ -466,16 +513,23 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
         untracked(() => this.layout.setTasks(tasks));
       });
 
+      // data-source failures → loadError output (once per failure)
+      effect(() => {
+        const ds = this.dataSource();
+        const error = ds?.error() ?? null;
+        if (ds && error !== null) untracked(() => this.loadError.emit({ error, page: ds.nextPage() }));
+      });
+
       // options → i18n, theme, columns, and UI state the consumer changed
       effect(() => {
         const opts = this.options();
         untracked(() => this.applyOptions(opts));
       });
 
-      // columns input → column service
+      // options.columns, else the columns input, else the built-ins → column service
       effect(() => {
-        const cols = this.columns();
-        if (cols.length) untracked(() => this.colSvc.setColumns(cols));
+        const cols = this.columnSource();
+        untracked(() => (cols.length ? this.colSvc.setColumns(cols) : this.colSvc.resetColumns()));
       });
 
       // zoom level changes → output + persisted state
@@ -513,15 +567,13 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       if (main) this.mainWidth.set(main.clientWidth);
     };
     measure();
+    afterNextRender(() => requestAnimationFrame(() => this.panelAnimated.set(true)), { injector: this.injector });
     this._resizeObserver = new ResizeObserver(measure);
     for (const el of [canvas, panel, main]) if (el) this._resizeObserver.observe(el);
     // Scrollbars appear/disappear with the content width too
     for (const el of [canvas?.lastElementChild, panel?.firstElementChild]) {
       if (el) this._resizeObserver.observe(el);
     }
-
-    // Scroll to today on mount
-    requestAnimationFrame(() => this.scrollToToday('instant'));
   }
 
   ngOnDestroy(): void {
@@ -536,12 +588,13 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this._prevOptions = opts;
     this.i18n.apply(opts);
     this.themeSvc.setOptionsTheme(opts.theme);
-    if (opts.columns?.length) this.colSvc.setColumns(opts.columns as ColumnDef[]);
+
     if (opts.viewMode && opts.viewMode !== prev.viewMode) this.layout.viewMode.set(opts.viewMode);
     const view = opts.view ?? (opts.panel?.collapsed || opts.panelVisible === false ? 'chart' : undefined);
     const prevView = prev.view ?? (prev.panel?.collapsed || prev.panelVisible === false ? 'chart' : undefined);
     if (view && view !== prevView) this.layout.view.set(view);
     if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) this.layout.panelWidthPx.set(null);
+    if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this._initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this._restoredStateKey) {
       this._restoredStateKey = opts.stateKey;
       const saved = readState(opts.stateKey);
@@ -552,9 +605,9 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   // ── Event handlers ────────────────────────────────────────
 
   protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent }): void {
-    const opts = this.options();
-    if (opts.enableSelection !== false) {
-      const ev = opts.multiSelect === false ? ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent) : e.event;
+    const { enabled, multi } = this.cfg().selection;
+    if (enabled) {
+      const ev = multi ? e.event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
       this.selSvc.handleClick(e.row.task.id, ev, this.layout.visibleRows());
     }
     const geo = this.layout.geometryById().get(e.row.task.id);
@@ -638,6 +691,32 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     }
   }
 
+  /** First render with data → `initialScroll`; later timeline changes keep the anchor date in place. */
+  private syncHorizontalScroll(tl: TimelineModel, hasRows: boolean, view: GanttView): void {
+    const canvas = this.canvasEl()?.nativeElement;
+    if (!canvas || view === 'table') return;
+    const prev = this._paintedTimeline;
+    this._paintedTimeline = tl;
+    if (!this._initialScrollDone) {
+      if (!hasRows) return;
+      this._initialScrollDone = true;
+      const left = initialScrollLeft({
+        timeline: tl,
+        initialScroll: this.cfg().initialScroll,
+        viewportWidth: canvas.clientWidth,
+        now: new Date(),
+      });
+      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+      return;
+    }
+    if (!prev || prev === tl) return;
+    const zoomed = prev.pxPerDay !== tl.pxPerDay;
+    if (!zoomed && prev.start.getTime() === tl.start.getTime()) return;
+    // Zoom keeps the centre date; a new range start keeps the left-edge date
+    const anchorX = zoomed ? canvas.clientWidth / 2 : 0;
+    this.scrollSvc.scrollToX(zoomAnchorScroll(prev, tl, this.scrollSvc.scrollLeft(), anchorX), 'instant');
+  }
+
   // ── Public API ────────────────────────────────────────────
 
   zoomIn(): void { this.layout.zoomIn(); }
@@ -663,11 +742,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   /** Centre `date` in the timeline viewport. */
   scrollToDate(date: Date, behavior: ScrollBehavior = 'smooth'): void {
-    // Wait a frame so a pending zoom change has rendered its new timeline
-    requestAnimationFrame(() => {
+    // After the next render, so a pending zoom change has painted its new timeline
+    // (the environment injector makes the hook schedule that render)
+    afterNextRender(() => {
+      if (!this.canvasEl()) return;
+      this._initialScrollDone = true;
       const x = this.layout.timeline().toX(date);
       this.scrollSvc.scrollToX(x - this.scrollSvc.viewportWidth / 2, behavior);
-    });
+    }, { injector: this.envInjector });
   }
 
   /** Scroll the given task into view (vertically and horizontally). */
@@ -689,8 +771,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   clearSelection(): void { this.selSvc.clear(); }
 
   selectAll(): void {
-    const opts = this.options();
-    if (opts.enableSelection === false || opts.multiSelect === false) return;
+    const { enabled, multi } = this.cfg().selection;
+    if (!enabled || !multi) return;
     this.selSvc.selectAll(this.layout.visibleRows());
   }
 
@@ -704,7 +786,10 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   expandAll(): void { this.layout.expandAll(); this.saveState(); }
 
   /** Show / hide a column. */
-  setColumnVisible(key: string, visible: boolean): void { this.colSvc.setVisible(key, visible); }
+  /** Show / hide a column in both views, or only in the split panel / the table view. */
+  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void { this.colSvc.setVisible(key, visible, view); }
+  /** Show a column if the view (both views by default) hides it, else hide it. */
+  toggleColumnVisible(key: string, view?: 'split' | 'table'): void { this.colSvc.toggleVisible(key, view, this.cfg()); }
 
   setTheme(override: Partial<GanttTheme>): void {
     this.themeSvc.setCustomTheme(override);

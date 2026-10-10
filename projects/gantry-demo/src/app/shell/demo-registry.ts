@@ -92,7 +92,7 @@ tasks: GanttTask[] = [
     description: '120 tasks · paginated datasource',
     icon:        '⚡',
     category:    'Performance',
-    blurb:       'A paginated data source (Angular resource() + linkedSignal) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
+    blurb:       'A paginated data source (the shared core PagedLoader, exposed as signals) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
     usage:
 `import { createGanttDataSource } from 'ngx-gantry';
 

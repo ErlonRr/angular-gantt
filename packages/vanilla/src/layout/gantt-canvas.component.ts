@@ -44,9 +44,22 @@ export interface GanttCanvasProps {
   renderBar?:        GanttBarRenderer;
 }
 
+/** Bands and vertical grid lines span the full height: they only change with the timeline. */
+interface StaticLayer {
+  timeline:  TimelineModel;
+  config:    ResolvedGanttConfig;
+  height:    number;
+  bands:     SVGGElement;
+  grid:      SVGGElement;
+  /** Row separators go before the first period delimiter (same order as Angular) */
+  firstMajor: Element | null;
+  rowLines:  Element[];
+}
+
 export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
   /** Bar visuals of the last render, by task id (used for hit-testing) */
   visuals = new Map<string, BarVisual>();
+  private staticLayer?: StaticLayer;
 
   constructor(container: HTMLElement, props: GanttCanvasProps) {
     super(container, props);
@@ -59,7 +72,6 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
     const theme = cfg.theme;
     const fontPx = cssPx(theme.fontSize, 13) - 1;
     const width = tl.totalWidth;
-    const winH = Math.max(0, windowBottom - windowTop);
 
     this.element.style.cssText = `width:${width}px;height:${totalHeight}px;position:relative;`;
     const svg = svgEl('svg', { width, height: totalHeight, role: 'list', 'aria-label': p.labels.ariaChart });
@@ -91,42 +103,24 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
     }
     svg.appendChild(rowsGroup);
 
-    // 2. Non-working time
-    const bandsGroup = svgEl('g', { class: 'gantt-bands', 'aria-hidden': 'true', 'pointer-events': 'none' });
-    for (const band of tl.bands) {
-      const rect = svgEl('rect', {
-        class: `gantt-band gantt-band--${band.kind}${band.className ? ` ${band.className}` : ''}`,
-        x: band.x, y: windowTop, width: band.width, height: winH,
-        fill: band.color,
-      });
-      bandsGroup.appendChild(rect);
-      if (nwStyle === 'hatch' && band.kind !== 'intensive') {
-        bandsGroup.appendChild(svgEl('rect', { x: band.x, y: windowTop, width: band.width, height: winH, fill: 'url(#gantt-hatch)' }));
-      }
-    }
-    svg.appendChild(bandsGroup);
-
-    // 3. Grid: minor lines, row separators, period delimiters
-    const grid = svgEl('g', { class: 'gantt-grid', 'aria-hidden': 'true', 'pointer-events': 'none' });
-    const vline = (x: number, style: { color: string; width: number; dash?: string }, cls: string) =>
-      grid.appendChild(svgEl('line', {
-        class: cls, x1: x, y1: windowTop, x2: x, y2: windowBottom,
-        stroke: style.color, 'stroke-width': style.width, 'stroke-dasharray': style.dash,
-        'shape-rendering': 'crispEdges',
-      }));
-    if (cfg.gridLines.minor) for (const x of tl.minorLines) vline(x + 0.5, cfg.gridLines.minor, 'gantt-grid-minor');
+    // 2–3. Non-working time and grid (cached per timeline), row separators per window
+    const layer = this.staticLayerFor(tl, cfg, totalHeight);
+    svg.appendChild(layer.bands);
+    for (const line of layer.rowLines) line.remove();
+    layer.rowLines = [];
     const hz = cfg.gridLines.horizontal;
     if (hz) {
       for (const geo of p.visibleGeometries) {
         const y = geo.y + geo.height - 0.5;
-        grid.appendChild(svgEl('line', {
+        const line = svgEl('line', {
           class: 'gantt-grid-row', x1: 0, y1: y, x2: width, y2: y,
           stroke: hz.color, 'stroke-width': hz.width, 'stroke-dasharray': hz.dash, 'shape-rendering': 'crispEdges',
-        }));
+        });
+        layer.grid.insertBefore(line, layer.firstMajor);
+        layer.rowLines.push(line);
       }
     }
-    if (cfg.gridLines.major) for (const x of tl.majorLines) vline(x + 0.5, cfg.gridLines.major, 'gantt-grid-major');
-    svg.appendChild(grid);
+    svg.appendChild(layer.grid);
 
     // 4. Annotations (labels go on top of the bars, see below)
     const annotationLabels = svgEl('g', { class: 'gantt-annotation-labels', 'aria-hidden': 'true', 'pointer-events': 'none' });
@@ -224,6 +218,40 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
     }
 
     this.element.replaceChildren(svg);
+  }
+
+  /** Bands and vertical grid lines for this timeline, rebuilt only when it (or the config / height) changes. */
+  private staticLayerFor(tl: TimelineModel, cfg: ResolvedGanttConfig, height: number): StaticLayer {
+    const cached = this.staticLayer;
+    if (cached && cached.timeline === tl && cached.config === cfg && cached.height === height) return cached;
+
+    const hatch = cfg.nonWorking?.style === 'hatch';
+    const bands = svgEl('g', { class: 'gantt-bands', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    for (const band of tl.bands) {
+      bands.appendChild(svgEl('rect', {
+        class: `gantt-band gantt-band--${band.kind}${band.className ? ` ${band.className}` : ''}`,
+        x: band.x, y: 0, width: band.width, height,
+        fill: band.color,
+      }));
+      if (hatch && band.kind !== 'intensive') {
+        bands.appendChild(svgEl('rect', { x: band.x, y: 0, width: band.width, height, fill: 'url(#gantt-hatch)' }));
+      }
+    }
+
+    const grid = svgEl('g', { class: 'gantt-grid', 'aria-hidden': 'true', 'pointer-events': 'none' });
+    const vline = (x: number, style: { color: string; width: number; dash?: string }, cls: string) =>
+      grid.appendChild(svgEl('line', {
+        class: cls, x1: x, y1: 0, x2: x, y2: height,
+        stroke: style.color, 'stroke-width': style.width, 'stroke-dasharray': style.dash,
+        'shape-rendering': 'crispEdges',
+      }));
+    if (cfg.gridLines.minor) for (const x of tl.minorLines) vline(x + 0.5, cfg.gridLines.minor, 'gantt-grid-minor');
+    const marker = grid.lastChild;
+    if (cfg.gridLines.major) for (const x of tl.majorLines) vline(x + 0.5, cfg.gridLines.major, 'gantt-grid-major');
+    const firstMajor = marker ? marker.nextSibling as Element | null : grid.firstElementChild;
+
+    this.staticLayer = { timeline: tl, config: cfg, height, bands, grid, firstMajor, rowLines: [] };
+    return this.staticLayer;
   }
 
   private paintAnnotations(fontPx: number, labels: SVGGElement): SVGGElement {

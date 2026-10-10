@@ -5,13 +5,13 @@
 
 import type {
   ColumnDef, GanttFlatRow, GanttTask, GanttOptions, GanttAnnotation, GanttState,
-  TaskDragEvent, TaskResizeEvent, SelectionChangeEvent,
+  TaskDragEvent, TaskResizeEvent, SelectionChangeEvent, PagedLoaderConfig, ColumnContext,
 } from '@gantry/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
 import type { GanttBarRenderer } from './layout/gantt-canvas.component';
 
-/** Custom cell content: a DOM node, or a string rendered as text. */
-export type VanillaCellTemplate = (row: GanttFlatRow) => Node | string;
+/** Custom cell content: a DOM node, or a string rendered as text. `ctx` carries "now" and the task index. */
+export type VanillaCellTemplate = (row: GanttFlatRow, ctx: ColumnContext) => Node | string;
 
 /** Column definition whose `cellTemplate` builds the cell's DOM content. */
 export type VanillaColumnDef = ColumnDef<VanillaCellTemplate>;
@@ -20,12 +20,7 @@ export type VanillaColumnDef = ColumnDef<VanillaCellTemplate>;
  * Lazy-loading configuration — the same shape as Angular's
  * `GanttDataSourceConfig`, so paging code is portable across bindings.
  */
-export interface GanttDataSourceConfig<T extends GanttTask = GanttTask> {
-  /** Async fetcher for page `page` (1-based). Fewer than `pageSize` items = last page. */
-  fetcher: (page: number, pageSize: number) => Promise<T[]>;
-  /** Items per page (default: 30) */
-  pageSize?: number;
-}
+export type GanttDataSourceConfig<T extends GanttTask = GanttTask> = PagedLoaderConfig<T>;
 
 /** Detail payloads of the events dispatched by `<gantry-element>`. */
 export interface GantryEventDetailMap {
@@ -37,6 +32,8 @@ export interface GantryEventDetailMap {
   'view-mode-change': { viewMode: string };
   /** Panel width / collapsed, view, zoom, column widths, collapsed rows or sort changed */
   'state-change': GanttState;
+  /** A data-source page failed after its automatic retries (`dataSource.retry()` tries again) */
+  'load-error': { error: unknown; page: number };
 }
 
 export type GantryEventMap = {
@@ -73,6 +70,7 @@ export const GANTRY_EVENTS = {
   'row-dblclick': 'onRowDblClick',
   'view-mode-change': 'onViewModeChange',
   'state-change': 'onStateChange',
+  'load-error': 'onLoadError',
 } as const satisfies Record<keyof GantryEventDetailMap, string>;
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */

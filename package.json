@@ -9,10 +9,7 @@
       "esbuild",
       "lmdb",
       "msgpackr-extract"
-    ],
-    "overrides": {
-      "webpack": "5.106.2"
-    }
+    ]
   },
   "scripts": {
     "ng": "ng",
@@ -21,8 +18,6 @@
     "build:app": "ng build gantry-demo --configuration production",
     "build:demo": "ng build gantry-demo --configuration production --base-href ./",
     "watch:lib": "ng build gantry --watch",
-    "storybook": "ng run gantry-demo:storybook",
-    "build:storybook": "ng run gantry-demo:build-storybook",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "ng lint",
@@ -40,7 +35,10 @@
     "release": "pnpm build:packages && pnpm build:lib && changeset publish",
     "test:tz": "TZ=America/Los_Angeles vitest run --project core && TZ=Asia/Kolkata vitest run --project core",
     "qa:serve": "bash scripts/qa/serve.sh",
-    "qa": "node scripts/qa/qa.mjs"
+    "e2e": "playwright test",
+    "e2e:full": "pnpm build && playwright test",
+    "e2e:visual": "bash scripts/e2e-container.sh e2e/visual.spec.ts",
+    "e2e:update": "bash scripts/e2e-container.sh e2e/visual.spec.ts --update-snapshots=all"
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",
@@ -56,17 +54,13 @@
     "zone.js": "~0.15.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^20.0.0",
+    "@angular/build": "^20.0.0",
     "@angular/cli": "^20.0.0",
     "@angular/compiler-cli": "^20.0.0",
     "@changesets/cli": "^2.31.1",
-    "@chromatic-com/storybook": "^5.1.2",
-    "@storybook/addon-docs": "^10.3.5",
-    "@storybook/angular": "^10.3.5",
+    "@playwright/test": "^1.64.0",
     "happy-dom": "^20.14.5",
     "ng-packagr": "^20.0.0",
-    "puppeteer-core": "^24.43.1",
-    "storybook": "^10.3.5",
     "typescript": "~5.8.0",
     "vitest": "^4.1.10"
   }

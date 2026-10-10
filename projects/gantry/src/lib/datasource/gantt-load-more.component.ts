@@ -18,6 +18,7 @@ import {
   OnInit,
   OnDestroy,
   inject,
+  afterRenderEffect,
 } from '@angular/core';
 
 import { GanttTheme } from '../types';
@@ -28,6 +29,12 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
   standalone:  true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
+    class: 'gantt-tl-load-more',
+    // Focus target when the focused Retry / Load more button is replaced (see constructor)
+    tabindex: '-1',
+    '(focusin)': 'hasFocus = true',
+    '(focusout)': 'onFocusOut($event)',
+    '[attr.aria-busy]': 'isLoading() || null',
     '[style.display]':         '"block"',
     '[style.padding]':         '"8px 12px"',
     '[style.border-top]':      '"1px solid " + theme().borderColor',
@@ -41,6 +48,27 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
            [style.font-family]="theme().fontFamily">
         <div class="gantt-spinner"></div>
         <span>{{ labels().loading }}</span>
+      </div>
+    } @else if (error()) {
+      <!-- Failed page: message + retry -->
+      <div role="alert" class="gantt-load-error"
+           [style.display]="'flex'" [style.align-items]="'center'" [style.justify-content]="'center'"
+           [style.gap]="'8px'" [style.color]="theme().textSecondary" [style.font-size]="theme().fontSize"
+           [style.font-family]="theme().fontFamily">
+        <span>{{ labels().loadError }}</span>
+        <button
+          type="button"
+          class="gantt-load-more-btn"
+          [style.padding]="'3px 10px'"
+          [style.border]="'1px solid ' + theme().borderColor"
+          [style.border-radius]="'4px'"
+          [style.background]="'transparent'"
+          [style.color]="theme().textSecondary"
+          [style.font-size]="theme().fontSize"
+          [style.font-family]="theme().fontFamily"
+          [style.cursor]="'pointer'"
+          (click)="retry.emit()"
+        >{{ labels().retry }}</button>
       </div>
     } @else if (hasMore()) {
       @if (autoLoad()) {
@@ -95,16 +123,37 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
   readonly theme       = input.required<GanttTheme>();
   readonly isLoading   = input<boolean>(false);
   readonly hasMore     = input<boolean>(false);
+  /** The last page failed: show the error and a Retry button (no auto-load) */
+  readonly error       = input<boolean>(false);
   readonly loadedCount = input<number>(0);
   readonly totalCount  = input<number>(0);
   /** Auto-trigger load when sentinel scrolls into view */
   readonly autoLoad    = input<boolean>(true);
 
   readonly loadMore = output<void>();
+  readonly retry    = output<void>();
 
   protected readonly labels = inject(GanttI18nService).labels;
   private readonly el = inject(ElementRef<HTMLElement>);
   private _observer?: IntersectionObserver;
+  /** Focus is inside the footer (kept while its focused button is swapped out) */
+  protected hasFocus = false;
+
+  constructor() {
+    // Retry / Load more turn into "Loading…" and back: keep keyboard focus in the footer
+    afterRenderEffect(() => {
+      this.isLoading(); this.error(); this.hasMore();
+      const host = this.el.nativeElement as HTMLElement;
+      if (!this.hasFocus || host.contains(document.activeElement)) return;
+      (host.querySelector('button') ?? host).focus({ preventScroll: true });
+    });
+  }
+
+  protected onFocusOut(event: FocusEvent): void {
+    // relatedTarget is null when the focused button was removed: keep tracking then
+    const next = event.relatedTarget as Node | null;
+    if (next && !(this.el.nativeElement as HTMLElement).contains(next)) this.hasFocus = false;
+  }
 
   ngOnInit(): void {
     if (this.autoLoad()) {
@@ -120,7 +169,8 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
     this._observer = new IntersectionObserver(
       entries => {
         for (const entry of entries) {
-          if (entry.isIntersecting && this.hasMore() && !this.isLoading()) {
+          // Never before the first page: `initialPage: 0` waits for an explicit loadNext()
+          if (entry.isIntersecting && this.hasMore() && !this.isLoading() && !this.error() && this.loadedCount() > 0) {
             this.loadMore.emit();
           }
         }

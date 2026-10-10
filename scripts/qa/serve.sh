@@ -5,7 +5,8 @@
 #   serve.sh stop               stop every server started by this script
 #   serve.sh status             list running servers
 #
-# Targets / ports: vanilla 4171 · react 4172 · vue 4173 · svelte 4174 · angular 4180
+# Targets / ports: vanilla 4171 · react 4172 · vue 4175 · svelte 4174 · angular 4180
+# (vue avoids 4173, Vite's default preview port, so a stray `vite preview` is never mistaken for it)
 # (Angular routes: / roadmap · /demo · /lazy 120 tasks · /custom-bar)
 # Demos resolve @gantry/* from source, so no package build is needed first.
 set -euo pipefail
@@ -14,7 +15,7 @@ ROOT="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 STATE="${TMPDIR:-/tmp}/gantry-qa-serve"
 mkdir -p "$STATE"
 
-declare -A PORT=([vanilla]=4171 [react]=4172 [vue]=4173 [svelte]=4174 [angular]=4180)
+declare -A PORT=([vanilla]=4171 [react]=4172 [vue]=4175 [svelte]=4174 [angular]=4180)
 ALL=(vanilla react vue svelte angular)
 
 pnpm_cmd() {

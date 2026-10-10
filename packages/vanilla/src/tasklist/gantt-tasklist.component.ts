@@ -4,7 +4,7 @@
  * sortable custom columns, virtual rows and an optional load-more footer.
  */
 
-import { GanttFlatRow, GanttTheme, GanttLabels } from '@gantry/core';
+import { GanttFlatRow, GanttTheme, GanttLabels, computeCellVisual, type ColumnContext } from '@gantry/core';
 import { BaseComponent } from '../core/base-component';
 import { EventEmitter } from '../core/event-emitter';
 import type { SortState } from '../layout/gantt-layout.service';
@@ -14,13 +14,18 @@ export interface GanttLoadMoreState {
   isLoading: boolean;
   hasMore: boolean;
   loadedCount: number;
+  /** The last page failed: show the error and a Retry button */
+  error?: boolean;
 }
 
 export interface GanttTaskListProps {
   visibleRows: GanttFlatRow[];
   /** Total number of visible rows (for aria-rowcount) */
   rowCount: number;
+  /** Columns of the current view, already resolved (`GanttColumnService.columnsFor`) */
   columns: VanillaColumnDef[];
+  /** "Now", date reading and task index for status / predecessor cells */
+  cellContext: ColumnContext;
   rowHeight: number;
   selectedIds: Set<string>;
   theme: GanttTheme;
@@ -31,7 +36,7 @@ export interface GanttTaskListProps {
   paddingBottom: number;
   sort: SortState | null;
   loadMore: GanttLoadMoreState | null;
-  /** Full table view: also shows `tableOnly` columns */
+  /** Full table view (styling only — the columns are already resolved) */
   tableView: boolean;
 }
 
@@ -41,6 +46,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
   readonly rowDblClick$ = new EventEmitter<GanttFlatRow>();
   readonly sortColumn$ = new EventEmitter<string>();
   readonly loadMore$ = new EventEmitter<void>();
+  readonly retry$ = new EventEmitter<void>();
   /** Live column resize (fires while dragging) */
   readonly columnWidthChange$ = new EventEmitter<{ key: string; width: number }>();
   /** Column resize finished */
@@ -57,10 +63,10 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
   render(): void {
     const {
       visibleRows, rowCount, columns, rowHeight, selectedIds, theme, labels,
-      colHeaderHeight, indentSize, paddingTop, paddingBottom, sort, loadMore,
+      colHeaderHeight, indentSize, paddingTop, paddingBottom, sort, loadMore, cellContext,
     } = this.props;
 
-    const visibleColumns = columns.filter(c => c.visible !== false && (!c.tableOnly || this.props.tableView));
+    const visibleColumns = columns;
     // One column grows to fill a panel wider than the columns: the `flex` one, else the last
     const flexIdx = visibleColumns.some(c => c.flex)
       ? visibleColumns.findIndex(c => c.flex)
@@ -73,6 +79,8 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     this.element.className = 'gantt-tasklist';
     this.element.setAttribute('role', 'treegrid');
     this.element.setAttribute('aria-rowcount', String(rowCount + 1));
+    this.element.setAttribute('aria-colcount', String(visibleColumns.length));
+    this.element.setAttribute('aria-label', labels.ariaTaskList);
     this.element.setAttribute('aria-multiselectable', 'true');
     this.element.style.cssText = 'display:flex;flex-direction:column;position:relative;width:max-content;min-width:100%;';
 
@@ -116,12 +124,14 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       const labelSpan = document.createElement('span');
       labelSpan.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       labelSpan.textContent = col.label;
+      labelSpan.title = col.label;
       colEl.appendChild(labelSpan);
 
       if (col.sortable) {
         const active = sort?.key === col.key ? sort.dir : null;
         colEl.setAttribute('aria-sort', active === 'asc' ? 'ascending' : active === 'desc' ? 'descending' : 'none');
         colEl.tabIndex = 0;
+        colEl.dataset['focusKey'] = `sort:${col.key}`;
         const arrow = document.createElement('span');
         arrow.setAttribute('aria-hidden', 'true');
         arrow.style.cssText = `font-size:9px;color:${active ? theme.textPrimary : theme.textMuted};`;
@@ -188,16 +198,28 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         `;
 
         if (col.cellTemplate) {
-          const content = col.cellTemplate(row);
+          const content = col.cellTemplate(row, cellContext);
           if (typeof content === 'string') cellEl.textContent = content;
           else cellEl.appendChild(content);
         } else if (col.key === 'name') {
-          cellEl.appendChild(this.nameCell(row, theme, labels, indentSize));
+          // A consumer `render` on the name column changes the text, keeping indent and toggle
+          const text = !col.builtin && col.render ? col.render(row, cellContext) : row.task.name;
+          cellEl.appendChild(this.nameCell(row, theme, labels, indentSize, text));
         } else {
+          const cell = computeCellVisual(col, row, cellContext, theme);
+          if (cell.status) {
+            cellEl.dataset['status'] = cell.status;
+            const dot = document.createElement('span');
+            dot.className = 'gantt-tl-status-dot';
+            dot.setAttribute('aria-hidden', 'true');
+            dot.style.cssText = `flex-shrink:0;width:8px;height:8px;border-radius:50%;margin-inline-end:6px;background:${cell.dotColor};`;
+            cellEl.appendChild(dot);
+          }
           const textSpan = document.createElement('span');
+          textSpan.className = 'gantt-tl-ellipsis';
           textSpan.style.cssText = `overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:${col.align ?? 'start'};`;
-          const raw = col.render ? col.render(row) : (row.task as unknown as Record<string, unknown>)[col.key];
-          textSpan.textContent = raw == null ? '' : String(raw);
+          textSpan.textContent = cell.text;
+          if (cell.title) cellEl.title = cell.title;
           cellEl.appendChild(textSpan);
         }
 
@@ -247,7 +269,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     return handle;
   }
 
-  private nameCell(row: GanttFlatRow, theme: GanttTheme, labels: GanttLabels, indentSize: number): HTMLElement {
+  private nameCell(row: GanttFlatRow, theme: GanttTheme, labels: GanttLabels, indentSize: number, text: string): HTMLElement {
     const wrapper = document.createElement('span');
     wrapper.style.cssText = `
       display: flex;
@@ -262,6 +284,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'gantt-collapse-btn';
+      btn.dataset['focusKey'] = `collapse:${row.task.id}`;
       btn.setAttribute('aria-expanded', String(!row.isCollapsed));
       btn.setAttribute('aria-label', row.isCollapsed ? labels.ariaExpand(row.task.name) : labels.ariaCollapse(row.task.name));
       btn.style.cssText = `
@@ -300,32 +323,53 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       font-weight: ${row.hasChildren ? '600' : '400'};
       color: ${row.hasChildren ? theme.textPrimary : theme.textSecondary};
     `;
-    nameSpan.textContent = row.task.name;
+    nameSpan.textContent = text;
     wrapper.appendChild(nameSpan);
     return wrapper;
   }
 
+  /**
+   * Footer under the rows. It is rebuilt with the list, so it holds no live region (the
+   * element announces failures in its own `.gantt-sr-alert`); every state keeps an element
+   * with `data-focus-key="load-more"` so keyboard focus survives Retry / Load more.
+   */
   private loadMoreFooter(state: GanttLoadMoreState, theme: GanttTheme, labels: GanttLabels, rowHeight: number): HTMLElement {
     const footer = document.createElement('div');
     footer.className = 'gantt-tl-load-more';
-    footer.setAttribute('aria-live', 'polite');
     footer.style.cssText = `
-      display:flex;align-items:center;justify-content:center;
+      display:flex;align-items:center;justify-content:center;gap:8px;
       height:${rowHeight}px;font-size:12px;color:${theme.textSecondary};
     `;
-    if (state.isLoading) {
-      footer.textContent = labels.loading;
-    } else if (state.hasMore) {
+    const button = (text: string, onClick: (() => void) | null) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.textContent = labels.loadMore;
+      btn.className = 'gantt-load-more-btn';
+      btn.dataset['focusKey'] = 'load-more';
+      btn.textContent = text;
       btn.style.cssText = `
-        padding:3px 10px;font-size:12px;border-radius:4px;cursor:pointer;
+        padding:3px 10px;font-size:12px;border-radius:4px;cursor:${onClick ? 'pointer' : 'default'};
         border:1px solid ${theme.borderColor};background:${theme.panelBg};color:${theme.textSecondary};
       `;
-      btn.addEventListener('click', () => this.loadMore$.emit());
-      footer.appendChild(btn);
+      if (onClick) btn.addEventListener('click', onClick);
+      else btn.setAttribute('aria-disabled', 'true');
+      return btn;
+    };
+    if (state.isLoading) {
+      footer.setAttribute('aria-busy', 'true');
+      footer.appendChild(button(labels.loading, null));
+    } else if (state.error) {
+      const box = document.createElement('div');
+      box.className = 'gantt-load-error';
+      box.style.cssText = 'display:flex;align-items:center;gap:8px;';
+      const msg = document.createElement('span');
+      msg.textContent = labels.loadError;
+      box.append(msg, button(labels.retry, () => this.retry$.emit()));
+      footer.appendChild(box);
+    } else if (state.hasMore) {
+      footer.appendChild(button(labels.loadMore, () => this.loadMore$.emit()));
     } else {
+      footer.tabIndex = -1;
+      footer.dataset['focusKey'] = 'load-more';
       footer.textContent = labels.allLoaded(state.loadedCount);
     }
     return footer;

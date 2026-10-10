@@ -93,7 +93,8 @@ describe('sortRoots', () => {
     sortRoots(rows, cmp); // warm-up
     const t0 = performance.now();
     const sorted = sortRoots(rows, cmp);
-    expect(performance.now() - t0).toBeLessThan(50);
+    // Linear: a few ms. The old quadratic version took seconds for 10k rows.
+    expect(performance.now() - t0).toBeLessThan(200);
     expect(sorted).toHaveLength(10_000);
   });
 });

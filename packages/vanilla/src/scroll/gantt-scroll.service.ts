@@ -49,19 +49,25 @@ export class GanttScrollService {
   /** Scroll the timeline horizontally to `x` (clamped at 0). */
   scrollToX(x: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.canvasEl) return;
-    scrollTo(this.canvasEl, { left: Math.max(0, x), behavior });
+    scrollTo(this.canvasEl, { left: Math.max(0, x), behavior: motionSafe(behavior) });
   }
 
   /** Scroll vertically so the row at `rowIndex` is visible. */
   scrollToRow(rowIndex: number, rowHeight: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this.canvasEl) return;
-    scrollTo(this.canvasEl, { top: rowIndex * rowHeight, behavior });
+    scrollTo(this.canvasEl, { top: rowIndex * rowHeight, behavior: motionSafe(behavior) });
   }
 
   destroy(): void {
     if (this.frame) cancelAnimationFrame(this.frame);
     this.frame = 0;
   }
+}
+
+/** `smooth` becomes `instant` when the user prefers reduced motion. */
+function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
+  return behavior === 'smooth' && typeof matchMedia === 'function'
+    && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : behavior;
 }
 
 // `scrollTo` is missing on some non-browser DOMs (jsdom); fall back to assignment.

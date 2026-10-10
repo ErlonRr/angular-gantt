@@ -5,18 +5,21 @@ import {
   GantryComponent, GanttTask,
   TaskType, createGanttDataSource,
 } from 'ngx-gantry';
+import { addDays, snapToDay } from '@gantry/core';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ── Fake async fetcher — simulates an API ─────────────────────
+// The series starts 20 days ago, so today falls inside the first page (tasks 1–25)
+const FIRST_DAY = addDays(snapToDay(new Date()), -20);
 const ALL_TASKS: GanttTask[] = Array.from({ length: 120 }, (_, i) => {
-  const start = new Date(2026, 0, 1 + i * 2);
-  const end = new Date(start.getTime() + (5 + (i % 14)) * 86400000);
+  const start = addDays(FIRST_DAY, i * 2);
+  const end = addDays(start, 5 + (i % 14));
   return {
     id: `task-${i}`,
     name: `Task ${String(i + 1).padStart(3, '0')}`,
     start,
     end,
-    progress: Math.floor(Math.random() * 100),
+    progress: (i * 37) % 101,
     type: i % 15 === 0 ? TaskType.Milestone : TaskType.Task,
     barColor: i % 3 === 0 ? '#6366F1' : i % 3 === 1 ? '#10B981' : undefined,
   };

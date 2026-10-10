@@ -1,5 +1,5 @@
 ---
-"@gantry/core": minor
+"@gantry/core": major
 "ngx-gantry": major
 ---
 

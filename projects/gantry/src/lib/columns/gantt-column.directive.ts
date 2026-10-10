@@ -51,12 +51,13 @@ export class GanttColumnDefDirective implements OnInit, OnDestroy {
   readonly key   = input.required<string>({ alias: 'ganttColumn' });
 
   // ── Optional inputs ───────────────────────────────────────
-  readonly label    = input<string>('');
-  readonly width    = input<number>(120);
-  readonly minWidth = input<number>(40);
-  readonly maxWidth = input<number>(600);
-  readonly visible  = input<boolean>(true);
-  readonly sortable = input<boolean>(false);
+  // Unset inputs inherit from a built-in column with the same key (else core defaults apply)
+  readonly label    = input<string | undefined>(undefined);
+  readonly width    = input<number | undefined>(undefined);
+  readonly minWidth = input<number | undefined>(undefined);
+  readonly maxWidth = input<number | undefined>(undefined);
+  readonly visible  = input<boolean | undefined>(undefined);
+  readonly sortable = input<boolean | undefined>(undefined);
   /** Function-based renderer — overrides template cell if provided */
   readonly render   = input<ColumnRenderer | undefined>(undefined);
 
@@ -69,40 +70,34 @@ export class GanttColumnDefDirective implements OnInit, OnDestroy {
   private readonly injector = inject(Injector);
 
   ngOnInit(): void {
-    const def = this.buildDef();
-    this.columnService.addColumn(def);
-
-    // Keep service in sync when inputs change (ngOnInit is not an injection context)
+    // Register, and keep this one definition in sync when the inputs change
+    // (ngOnInit is not an injection context)
     runInInjectionContext(this.injector, () => {
       effect(() => {
-        // Track only this directive's inputs; reading the column list untracked
-        // avoids re-running on our own write (setColumns → columns → effect…)
         const def = this.buildDef();
-        untracked(() => this.columnService.setColumns(
-          this.columnService.columns().map(c => (c.key === def.key ? { ...c, ...def } : c)),
-        ));
+        untracked(() => this.columnService.registerColumn(def));
       });
     });
   }
 
   ngOnDestroy(): void {
-    this.columnService.removeColumn(this.key());
+    this.columnService.unregisterColumn(this.key());
   }
 
   private buildDef(): ColumnDef {
-    return {
-      key:          this.key(),
-      label:        this.label() || this.key(),
-      width:        this.width(),
-      minWidth:     this.minWidth(),
-      maxWidth:     this.maxWidth(),
-      visible:      this.visible(),
-      sortable:     this.sortable(),
-      // Function renderer takes precedence; otherwise the Angular template (if any)
-      render:       this.render(),
-      cellTemplate: this.render() ? undefined : this.cellTemplate,
-      builtin:      false,
-    };
+    const render = this.render();
+    const cellTemplate = render ? undefined : this.cellTemplate;
+    // Only set what was given, so a built-in column with this key fills in the rest
+    const def: Partial<ColumnDef> & { key: string } = { key: this.key() };
+    if (this.label() !== undefined) def.label = this.label();
+    if (this.width() !== undefined) def.width = this.width();
+    if (this.minWidth() !== undefined) def.minWidth = this.minWidth();
+    if (this.maxWidth() !== undefined) def.maxWidth = this.maxWidth();
+    if (this.visible() !== undefined) def.visible = this.visible();
+    if (this.sortable() !== undefined) def.sortable = this.sortable();
+    if (render) def.render = render;
+    if (cellTemplate) def.cellTemplate = cellTemplate;
+    return def as ColumnDef;
   }
 
   /** Exposed for the task list to use as a TemplateRef per-cell */

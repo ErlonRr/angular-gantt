@@ -86,6 +86,7 @@ options = {
   },
   headerHeight: 32, subHeaderHeight: 28,
   fitToWidth: true,                   // the timeline always fills the viewport
+  initialScroll: 'auto',              // 'auto' · 'today' · 'start' · a Date · false
 };
 ```
 
@@ -94,6 +95,11 @@ options = {
 - Week presets: `WEEK_FORMATS.number` (`W52`), `.label` (`Week 52`), `.range` (`4–11`), `.rangeMonth` (`4–11 Mar`), `.numberRange` (`W52 · 4–11`).
 - `className: (start, end) => string` adds your own class to header cells.
 - Upper-tier labels stay pinned to the left while scrolling (`align: 'start'`).
+- `initialScroll` picks where the first render with data scrolls: `'auto'` (default) centres
+  today when it is near the tasks, otherwise shows the earliest task; `'start'` the earliest
+  task; `'today'` or a `Date` centred; `false` stays at the timeline start. Changing it
+  re-applies it. Zooming keeps the date at the centre of the viewport in place, and
+  `prefers-reduced-motion` turns smooth scrolling into an instant jump.
 
 ### Non-working time (weekends, holidays, working & intensive hours)
 
@@ -142,8 +148,10 @@ For full control replace the bar renderer (`renderBar` in the Web Component / bi
 
 ```ts
 options = {
-  panel: { width: '30%', minWidth: 160, maxWidth: '70%', resizable: true, collapsible: true, collapsed: false },
-  view: 'split',                      // 'split' | 'table' (all columns, animated) | 'chart'
+  panel: { width: '30%', minWidth: 160, maxWidth: '70%', resizable: true, collapsible: true, collapsed: false,
+           columns: ['name', 'start', 'end', 'progress'] },   // keys shown next to the timeline
+  table: { columns: ['name', 'type', 'status', 'start', 'end', 'duration', 'progress', 'predecessors'] },
+  view: 'split',                      // 'split' | 'table' (every useful field, animated) | 'chart'
   toolbar: { zoom: true, viewModes: ['Day', 'Week', 'Month'], today: true, viewToggle: true }, // or false
   stateKey: 'project-42',             // remember panel width, view, zoom, column widths, collapsed rows, sort
 };
@@ -157,6 +165,8 @@ columns = [
 - Drag the splitter to resize (also past the last column); the chevron collapses the list and
   restores the **last width of that instance**. Columns wider than the panel scroll horizontally.
 - Column widths are resizable from the header edge (`resizable: false` to lock one).
+- The split panel and the table view show different columns — see
+  [Columns: split panel vs table view](#columns-split-panel-vs-table-view).
 - `state-change` / `(stateChange)` / `onStateChange` reports every layout change; `getState()` /
   `setState()` save and restore it from your own backend.
 
@@ -205,7 +215,7 @@ npm i ngx-gantry
 | **Zoneless** | Works with `provideZonelessChangeDetection()` |
 | **Bar registry** | Plug in any custom bar component via `provideGanttBar()` |
 | **Virtual scroll** | Scroll-position windowing, zero CDK |
-| **Lazy load** | Angular 20 `resource()` + `linkedSignal` accumulation |
+| **Lazy load** | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry |
 | **Drag & resize** | Pointer Events API + `setPointerCapture()` |
 | **Selection** | Single / Ctrl+Click toggle / Shift+Click range |
 | **Keyboard** | `Escape`, `Ctrl+A`, `+/-` zoom, `T` today |
@@ -307,16 +317,64 @@ provideGanttBar({ type: 'epic', component: EpicBarComponent })
 ## Lazy load with GanttDataSource
 
 ```ts
-const ds = createGanttDataSource({
+const ds = new GanttDataSource({
   fetcher: (page, size) => fetch(`/api/tasks?page=${page}&size=${size}`).then(r => r.json()),
-  pageSize: 30,
+  pageSize: 30,     // fewer items than this = last page
+  initialPage: 1,   // 0 = load nothing until ds.loadNext()
+  retries: 2,       // automatic retries of a failed page, backoff from retryDelay (500 ms)
 });
 
 // Template:
-<gantry [dataSource]="ds" />
+<gantry [dataSource]="ds" (loadError)="report($event.error)" />
 ```
 
+The next page loads as the last rows scroll into view. A page that still fails after its
+retries sets `ds.error()`, shows a message with a **Retry** button in the task list, emits
+`loadError` / `load-error` / `onLoadError` (`{ error, page }`) and pauses loading until
+`ds.retry()`. `ds.reset()` reloads from the first page; `ds.setStatic(items)` shows a fixed
+list. The Web Component takes the same config (`gantt.dataSource = { fetcher, pageSize }`).
+
 ---
+
+## Columns: split panel vs table view
+
+The task list has two faces. Next to the timeline (`view: 'split'`) it is a **lean panel**;
+in the full **table view** (`view: 'table'`, toolbar "Table") it shows every useful field:
+
+| View | Default columns |
+|---|---|
+| split panel | `name` · `start` · `end` · `progress` |
+| table view | `name` · `type` · `status` · `start` · `end` · `duration` · `progress` · `predecessors` (+ `baselineStart` · `baselineEnd` · `variance` with `baseline: true`) |
+
+Built-in keys: `id`, `name`, `type`, `status`, `start`, `end`, `duration`, `progress`,
+`predecessors`, `baselineStart`, `baselineEnd`, `variance` — every one sortable (except
+`predecessors`), localised through `labels`, and usable by key without a `ColumnDef`:
+
+```ts
+options = {
+  panel: { columns: ['name', 'status', 'start', 'progress'] },           // the split panel
+  table: { columns: ['id', 'name', 'owner', 'status', 'start', 'end'] }, // the table view
+};
+// The 1.x panel: panel: { columns: ['name', 'start', 'end', 'duration', 'progress'] }
+gantt.setColumnVisible('status', true, 'split');   // per view; omit the view for both
+gantt.toggleColumnVisible('baselineStart', 'table'); // flips what the view shows now
+```
+
+- Keys are looked up in your `columns` first, then in the built-ins, so lists mix both.
+- Without lists, your `columns` behave as before: `tableOnly` ones show only in the table view,
+  `visible: false` ones nowhere; a listed key always shows.
+- A column with a built-in key inherits its label and sizes, and its cells and sort rule unless
+  you give it your own `render` / `cellTemplate`.
+- **Status** (`status` column): `task.status` when set (a built-in value or any text), else
+  derived — `done` at 100% progress, `overdue` past the drawn end, `inProgress` once started
+  or with some progress, else `notStarted`; a milestone is due at the end of its day. It sorts
+  by that order and shows a dot coloured by the theme keys `statusNotStarted`,
+  `statusInProgress`, `statusOverdue`, `statusDone`. Statuses follow the chart's clock (they
+  update every minute).
+- Sorting reorders siblings at every level of the tree; names sort numerically ("Task 2" before
+  "Task 10"). A custom column sorts by `sortValue(row, ctx)`, else by `task[key]`.
+- `render(row, ctx)` and cell templates receive a `ColumnContext` (`now`, `taskById`,
+  `endDateMode`, `collator`…) for time- or data-dependent cells.
 
 ## Custom columns (left panel)
 
@@ -352,8 +410,8 @@ columns = computed<ColumnDef[]>(() => [
 ]);
 ```
 
-The cell template context is `{ $implicit: row, row }` where `row: GanttFlatRow`
-(so `row.task` is your `GanttTask`).
+The cell template context is `{ $implicit: row, row, ctx }` where `row: GanttFlatRow`
+(so `row.task` is your `GanttTask`) and `ctx: ColumnContext` (`now`, `taskById`, …).
 
 ---
 
@@ -453,7 +511,7 @@ Global defaults: `provideGanttLib({ locale: 'it', labels: {…}, formats: {…} 
 | `GanttModule.forRoot(config?)` | Same, for NgModule apps. |
 | `provideGantt(config?)` | Global config only (no bar registration). |
 | `provideGanttBar({ type, component })` | Register a custom bar type (see above). |
-| `createGanttDataSource({ fetcher, pageSize })` | Build a lazy `GanttDataSource`. |
+| `new GanttDataSource({ fetcher, pageSize, initialPage, retries })` | Build a lazy data source (`createGanttDataSource()` is equivalent). |
 
 ---
 
@@ -495,6 +553,7 @@ Provided per `<gantry>` instance — inject them from a custom bar/child to read
 | `taskResized` | `TaskResizeEvent` |
 | `selectionChange` | `SelectionChangeEvent` |
 | `rowClick` / `rowDblClick` | row / geometry |
+| `loadError` | `{ error, page }` — a data-source page failed after its retries |
 
 ---
 
@@ -547,7 +606,7 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ## Live showcase (the demo app)
 
-`projects/gantry-demo` is a small **custom showcase** (a "semi-Storybook"): an
+`projects/gantry-demo` is a small **custom showcase**: an
 IDE-style sidebar lists the demos, each renders the live `<gantry>`, and a
 docs panel shows a copy-pasteable **Usage** snippet plus install/GitHub/npm links.
 It doubles as living documentation and as the site you can deploy next to the blog.
@@ -574,7 +633,7 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `packages/vanilla` | `@gantry/vanilla` — the `<gantry-element>` Web Component |
 | `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component |
 | `projects/gantry` | `ngx-gantry` — the Angular library (imports `@gantry/core`) |
-| `projects/gantry-demo` | Angular showcase app + Storybook |
+| `projects/gantry-demo` | Angular showcase app |
 | `apps/demo-*` | one Vite demo per framework |
 
 | Script | Effect |
@@ -585,7 +644,8 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `pnpm typecheck` | type-check every package |
 | `pnpm changeset` | describe a change for the next release (see [`.changeset/README.md`](.changeset/README.md)) |
 | `pnpm test:tz` | core tests in other time zones (Los Angeles, Kolkata) |
-| `pnpm qa:serve start` · `pnpm qa --url …` | serve the demos and run the browser QA |
+| `pnpm e2e` · `pnpm e2e:full` | Playwright end-to-end tests on every binding (after `pnpm build`; `e2e:full` builds first) |
+| `pnpm e2e:visual` · `pnpm e2e:update` | compare / regenerate the screenshot baselines (`e2e/__screenshots__`) in the Playwright container (Docker/Podman) — same pixels as CI |
 
 Workspace packages expose a `@gantry/source` export condition pointing at
 their TypeScript sources; the demos, tests and type-checks use it, so nothing
@@ -603,9 +663,10 @@ The repo ships a shared [Claude Code](https://claude.com/claude-code) setup:
 | `.claude/agents/` | `gantry-reviewer` (parity & invariants review), `gantry-qa` (browser QA), `gantry-docs-sync` (docs, changeset, playground) |
 | `.claude/settings.json` | safe commands pre-approved; commit / push / tag / publish always ask; unit tests of the edited package run after each edit (`GANTRY_HOOK_TESTS=0` to skip) |
 
-The browser QA works without Claude too: `pnpm qa:serve start`, then
-`pnpm qa --url http://localhost:4171 --rows 60` (checks console errors, header/row alignment,
-scroll sync, drag, panel collapse and table view; Chrome, Chromium or Firefox).
+The browser QA works without Claude too: `pnpm build && pnpm e2e` runs the Playwright suite
+in `e2e/` on the Web Component, React, Vue, Svelte and Angular demos (console errors,
+header/row alignment, scroll sync, drag, panel collapse, table view, binding parity) with a
+frozen clock; screenshots for review land in `test-results/e2e/shots/`.
 
 ### Testing
 
@@ -624,34 +685,11 @@ flattening, the Critical Path Method, timeline-range padding, i18n) and
 keyboard, sorting, virtual scrolling, lazy loading, custom bars, tooltip
 escaping).
 
-### Angular workspace vs Storybook preview
+### Angular workspace
 
-The demo app (`gantry-demo`) is built with `@angular-devkit/build-angular:application` (esbuild-based application builder). **That is not Vite** and it is not the same pipeline as Storybook.
-
-Storybook 10 runs via the Angular CLI targets `@storybook/angular:start-storybook` and `@storybook/angular:build-storybook`, which compile the preview with **Webpack 5** (`@storybook/builder-webpack5`). Expect two parallel toolchains: **`ng build` / `ng serve` for the app** vs **`ng run …:storybook` for the component workshop**. Missing a Vite dependency next to Angular does not indicate a misconfiguration for Storybook.
-
-### Storybook commands
-
-| Script | Effect |
-|--------|--------|
-| `pnpm storybook` | `ng run gantry-demo:storybook` — dev server; uses `browserTarget` **`gantry-demo:build:development`** (see [`angular.json`](angular.json)). |
-| `pnpm build:storybook` | Static Storybook under `storybook-static`; uses **`gantry-demo:build:production`** unless you change the target. |
-
-### pnpm and Webpack
-
-[`package.json`](package.json) sets `pnpm.overrides.webpack` to a single Webpack 5 version so hoisted installs do not load two copies of `webpack` (which breaks plugins that rely on `instanceof Compilation`). The Storybook config may also merge `DefinePlugin` definitions for `process.env.NODE_ENV` when both Angular and Storybook inject it; see [`.storybook/main.ts`](.storybook/main.ts).
-
-### Chromatic (optional)
-
-The Chromatic addon is **disabled by default**. To load it locally, set `STORYBOOK_CHROMATIC=1` (see `.storybook/main.ts`).
-
-### Optional: regenerate Storybook from the CLI
-
-If configuration drift becomes hard to maintain, create a branch, run `pnpm create storybook@latest`, compare the generated `.storybook/` and `angular.json` architect blocks with this repo, then copy back only **stories**, **preview providers**, and any project-specific options (e.g. `compodoc`, `browserTarget`).
-
-### Optional: Vite-based Storybook
-
-After `ng build gantry` and Storybook builds are stable, you can spike **`@storybook/builder-vite`** following [Storybook’s builder docs](https://storybook.js.org/docs/10/builders). Treat it as an optional performance experiment, not a prerequisite for fixing library TypeScript errors.
+The showcase (`gantry-demo`) and the library are built with the esbuild-based
+`@angular/build` builders (`application`, `dev-server`, `ng-packagr`); there is no
+webpack in the toolchain. The live showcase replaces a component workshop such as Storybook.
 
 ---
 

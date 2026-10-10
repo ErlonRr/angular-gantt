@@ -13,7 +13,7 @@
       "prefix": "gantt",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:ng-packagr",
+          "builder": "@angular/build:ng-packagr",
           "options": {
             "project": "projects/gantry/ng-package.json"
           },
@@ -36,7 +36,7 @@
       "prefix": "app",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:application",
+          "builder": "@angular/build:application",
           "options": {
             "outputPath": "dist/gantry-demo",
             "index": "projects/gantry-demo/src/index.html",
@@ -81,7 +81,7 @@
           "defaultConfiguration": "production"
         },
         "serve": {
-          "builder": "@angular-devkit/build-angular:dev-server",
+          "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
               "buildTarget": "gantry-demo:build:production"
@@ -92,31 +92,8 @@
           },
           "defaultConfiguration": "development"
         },
-        "storybook": {
-          "builder": "@storybook/angular:start-storybook",
-          "options": {
-            "browserTarget": "gantry-demo:build:development",
-            "configDir": ".storybook",
-            "port": 6006,
-            "compodoc": false
-          },
-          "configurations": {
-            "production": {
-              "browserTarget": "gantry-demo:build:production"
-            }
-          }
-        },
-        "build-storybook": {
-          "builder": "@storybook/angular:build-storybook",
-          "options": {
-            "browserTarget": "gantry-demo:build:production",
-            "configDir": ".storybook",
-            "outputDir": "storybook-static",
-            "compodoc": false
-          }
-        },
         "extract-i18n": {
-          "builder": "@angular-devkit/build-angular:extract-i18n"
+          "builder": "@angular/build:extract-i18n"
         }
       }
     }

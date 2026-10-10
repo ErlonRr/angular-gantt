@@ -10,7 +10,7 @@ configurable open-source Gantt — every option behaves identically in every bin
       ├── @gantry/react   React 18/19 wrapper                            packages/react
       ├── @gantry/vue     Vue 3.5 render-function wrapper                packages/vue
       └── @gantry/svelte  Svelte 5 runes wrapper                         packages/svelte
-apps/demo-*  Vite demos (demo-vanilla = options playground) · projects/gantry-demo  Angular showcase + Storybook
+apps/demo-*  Vite demos (demo-vanilla = options playground) · projects/gantry-demo  Angular showcase
 ```
 
 ## Architecture (read before changing rendering)
@@ -34,7 +34,8 @@ pnpm 10.33 workspace. If `pnpm` fails (unconfigured mise shim) use `npx -y pnpm@
 | Build everything (packages → ngx-gantry → showcase → demos) | `pnpm build` |
 | Angular library only (needs `@gantry/core` built) | `pnpm --filter @gantry/core build && pnpm build:lib` |
 | Dev servers | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte` |
-| Browser QA (alignment, drag, panel, table view, console errors) | `pnpm qa:serve start` then `pnpm qa --url http://localhost:4171` — or `/gantry-visual-qa` |
+| Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors) | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa` |
+| Screenshot baselines (Playwright container = CI pixels) | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate |
 | Release notes for a change | `pnpm changeset` |
 
 Iterate with `pnpm test` + `pnpm typecheck`; run `pnpm build` and the browser QA before
@@ -67,5 +68,5 @@ calling UI work done.
 - `ngx-gantry` publishes from `dist/ngx-gantry` (`publishConfig.directory`);
   `scripts/resolve-workspace-deps.mjs` rewrites `workspace:` ranges after `ng build`.
 - Node ≥ 22 shadows happy-dom's `localStorage` in tests — the element tests polyfill it.
-- Visual verification needs a browser: the QA script auto-detects Chrome/Chromium/Firefox
-  (`GANTRY_QA_BROWSER` overrides).
+- Visual verification needs a browser: the Playwright suite uses its bundled Chromium (install it
+  once with `npx playwright install chromium`); `pnpm e2e:update` runs in the Playwright container CI uses.

@@ -89,15 +89,15 @@ let nextCanvasId = 0;
           }
         </g>
 
-        <!-- Non-working time -->
+        <!-- Non-working time (full height: unchanged while scrolling) -->
         <g class="gantt-bands" aria-hidden="true" pointer-events="none">
           @for (band of timeline().bands; track band.x) {
             <svg:rect [attr.class]="'gantt-band gantt-band--' + band.kind + (band.className ? ' ' + band.className : '')"
-              [attr.x]="band.x" [attr.y]="windowTop()" [attr.width]="band.width" [attr.height]="windowHeight()"
+              [attr.x]="band.x" y="0" [attr.width]="band.width" [attr.height]="totalHeight()"
               [attr.fill]="band.color"/>
             @if (hatch() && band.kind !== 'intensive') {
-              <svg:rect [attr.x]="band.x" [attr.y]="windowTop()" [attr.width]="band.width"
-                [attr.height]="windowHeight()" [attr.fill]="'url(#' + uid + '-hatch)'"/>
+              <svg:rect [attr.x]="band.x" y="0" [attr.width]="band.width"
+                [attr.height]="totalHeight()" [attr.fill]="'url(#' + uid + '-hatch)'"/>
             }
           }
         </g>
@@ -106,7 +106,7 @@ let nextCanvasId = 0;
         <g class="gantt-grid" aria-hidden="true" pointer-events="none" shape-rendering="crispEdges">
           @if (config().gridLines.minor; as minor) {
             @for (x of timeline().minorLines; track x) {
-              <svg:line class="gantt-grid-minor" [attr.x1]="x + 0.5" [attr.y1]="windowTop()" [attr.x2]="x + 0.5" [attr.y2]="windowBottom()"
+              <svg:line class="gantt-grid-minor" [attr.x1]="x + 0.5" y1="0" [attr.x2]="x + 0.5" [attr.y2]="totalHeight()"
                 [attr.stroke]="minor.color" [attr.stroke-width]="minor.width" [attr.stroke-dasharray]="minor.dash ?? null"/>
             }
           }
@@ -119,7 +119,7 @@ let nextCanvasId = 0;
           }
           @if (config().gridLines.major; as major) {
             @for (x of timeline().majorLines; track x) {
-              <svg:line class="gantt-grid-major" [attr.x1]="x + 0.5" [attr.y1]="windowTop()" [attr.x2]="x + 0.5" [attr.y2]="windowBottom()"
+              <svg:line class="gantt-grid-major" [attr.x1]="x + 0.5" y1="0" [attr.x2]="x + 0.5" [attr.y2]="totalHeight()"
                 [attr.stroke]="major.color" [attr.stroke-width]="major.width" [attr.stroke-dasharray]="major.dash ?? null"/>
             }
           }
@@ -154,7 +154,7 @@ let nextCanvasId = 0;
         <!-- Bars -->
         <g class="gantt-bars-layer">
           @for (geo of visibleGeometries(); track geo.row.task.id) {
-            <g [ganttTooltip]="geo" [tooltipTheme]="config().theme" [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
+            <g [ganttTooltip]="geo" [tooltipTheme]="config().theme" [tooltipDates]="config()" [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
               [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? 0.35 : null">
               <g ganttBarHost [barComponent]="resolveBarComponent(geo.row.barType)" [ctx]="barContext(geo)"></g>
             </g>
@@ -199,6 +199,7 @@ export class GanttCanvasComponent {
 
   readonly taskDragged = output<TaskDragEvent>();
   readonly taskResized = output<TaskResizeEvent>();
+  /** @deprecated Never emitted — listen to `selectionChange` on `<gantry>`. */
   readonly selectionChange = output<SelectionChangeEvent>();
   readonly rowClick = output<RowGeometry>();
   readonly rowDblClick = output<GanttFlatRow>();
@@ -224,24 +225,26 @@ export class GanttCanvasComponent {
 
   // ── Render model ──────────────────────────────────────────
 
-  /** Bar visuals of visible rows + arrow endpoints, by task id. */
+  /**
+   * Bar visual of a row geometry (visible rows + arrow endpoints). Cached per geometry
+   * object: collapse, sort or an edit produce new geometries, so bars follow their rows.
+   */
   protected readonly visuals = computed(() => {
     const cfg = this.config();
     const tl = this.timeline();
     const crit = this.criticalIds();
     const fontPx = this.fontPx();
     const resizable = this.enableDrag() && this.enableResize();
-    const map = new Map<string, BarVisual>();
+    const cache = new WeakMap<RowGeometry, BarVisual>();
     return (geo: RowGeometry): BarVisual => {
-      const id = geo.row.task.id;
-      let v = map.get(id);
+      let v = cache.get(geo);
       if (!v) {
         v = computeBarVisual({
           geo, cfg, toX: tl.toX, fontPx,
-          isCritical: crit.has(id),
+          isCritical: crit.has(geo.row.task.id),
           resizable: resizable && geo.row.task.draggable !== false,
         });
-        map.set(id, v);
+        cache.set(geo, v);
       }
       return v;
     };
@@ -361,7 +364,6 @@ export class GanttCanvasComponent {
     if (!geo) return;
     if (this.enableSelection()) {
       const e = this.multiSelect() ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
-      this.selSvc.onChange = ev => this.selectionChange.emit(ev);
       this.selSvc.handleClick(geo.row.task.id, e, this.allGeometries().map(g => g.row));
     }
     this.rowClick.emit(geo);

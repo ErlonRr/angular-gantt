@@ -4,7 +4,9 @@
  * living in the component's shadow root, positioned next to the pointer.
  */
 
-import { GanttTask, GanttTheme, TaskType, formatDate, durationLabel } from '@gantry/core';
+import { GanttTask, GanttTheme, TaskType, formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
+
+type DateReading = Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 const SHOW_DELAY = 320;
@@ -13,6 +15,8 @@ const OFFSET_X = 12;
 const OFFSET_Y = 8;
 
 export class GanttTooltip {
+  /** How task dates are read (the duration matches the bar and the Duration column) */
+  private dates: DateReading = { endDateMode: 'exclusive', normalizeDateOnly: true };
   private readonly popover: HTMLElement;
   private showTimer = 0;
   private hideTimer = 0;
@@ -30,7 +34,8 @@ export class GanttTooltip {
   }
 
   /** Pointer entered a bar (or moved to a different one). */
-  enter(task: GanttTask, e: PointerEvent, theme: GanttTheme): void {
+  enter(task: GanttTask, e: PointerEvent, theme: GanttTheme, dates?: DateReading): void {
+    if (dates) this.dates = dates;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
     clearTimeout(this.hideTimer);
@@ -120,7 +125,7 @@ export class GanttTooltip {
         ? row(labels.ttMilestone, formatDate(task.start, fmt, locale))
         : row(labels.ttStart, formatDate(task.start, fmt, locale))
           + row(labels.ttEnd, formatDate(end, fmt, locale))
-          + row(labels.ttDuration, durationLabel(task.start, end, labels))
+          + row(labels.ttDuration, taskDurationLabel(task, this.dates, labels))
           + `<div style="margin-top:6px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
                 <span style="opacity:0.6">${esc(labels.ttProgress)}</span><span>${prog}%</span>

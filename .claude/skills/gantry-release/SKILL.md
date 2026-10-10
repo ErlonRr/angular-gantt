@@ -32,8 +32,7 @@ explicit "go" for each step (commit, tag, push, publish).
 pnpm install --frozen-lockfile
 pnpm typecheck && pnpm test && pnpm test:tz
 pnpm build                                   # packages → ngx-gantry → showcase → demos
-bash scripts/qa/serve.sh start && node scripts/qa/qa.mjs --url http://localhost:4171 --rows 60 \
-  && node scripts/qa/qa.mjs --url http://localhost:4180/lazy; bash scripts/qa/serve.sh stop
+pnpm e2e                                     # Playwright on every binding (serves the builds above)
 ```
 
 ## 2. Version
@@ -67,5 +66,6 @@ ranges left (`tar -xzOf <tgz> package/package.json`); versions match the changes
 1. Commit: `git commit -am "chore(release): vX.Y.Z"` (one line, no body).
 2. Tag: `git tag vX.Y.Z`.
 3. Push: `git push && git push --tags` — preferred: CI (`.github/workflows/release.yml`,
-   changesets/action) publishes with provenance using the `NPM_TOKEN` secret.
+   changesets/action) publishes with provenance using the `NPM_TOKEN` secret. It starts only
+   after the `CI` workflow succeeds on `main` (`workflow_run`), so a red build never publishes.
 4. Manual publish only if the user explicitly asks: `pnpm release` (needs `npm login` and 2FA).

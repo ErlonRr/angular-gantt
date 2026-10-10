@@ -15,6 +15,7 @@ import {
   GanttLabels, TaskType, DependencyType, ViewMode, GanttOptions,
 } from 'ngx-gantry';
 import 'dayjs/locale/it';
+import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ── Italian translation (partial override — the rest falls back to EN) ──
@@ -22,6 +23,8 @@ const IT_LABELS: Partial<GanttLabels> = {
   loading: 'Caricamento…',
   loadMore: 'Carica altro',
   allLoaded: (n) => `Tutte le ${n} attività caricate`,
+  loadError: 'Impossibile caricare le attività',
+  retry: 'Riprova',
   zoomIn: 'Ingrandisci',
   zoomOut: 'Riduci',
   todayButton: 'Oggi',
@@ -38,7 +41,20 @@ const IT_LABELS: Partial<GanttLabels> = {
   durationWeeks: (w) => `${w} sett`,
   durationWeeksDays: (w, d) => `${w} sett ${d}g`,
   colName: 'Attività', colStart: 'Inizio', colEnd: 'Fine', colDuration: 'Durata', colProgress: '%',
+  colId: 'ID', colType: 'Tipo', colStatus: 'Stato', colPredecessors: 'Predecessori',
+  colBaselineStart: 'Inizio previsto', colBaselineEnd: 'Fine prevista', colVariance: 'Scostamento',
+  statusNotStarted: 'Non iniziata', statusInProgress: 'In corso', statusOverdue: 'In ritardo', statusDone: 'Completata',
+  typeTask: 'Attività', typeMilestone: 'Traguardo', typeGroup: 'Gruppo',
+  dependency: (name, type, lag) => {
+    const t = ({ FS: 'FI', SS: 'II', FF: 'FF', SF: 'IF' } as Record<string, string>)[type] ?? type;
+    return t === 'FI' && !lag ? name : `${name} (${t}${lag ? `${lag > 0 ? '+' : '−'}${Math.abs(lag)} g` : ''})`;
+  },
+  varianceDays: (d) => (d === 0 ? 'In linea' : `${d > 0 ? '+' : '−'}${Math.abs(d)} g`),
   ariaChart: 'Diagramma di Gantt',
+  ariaTaskList: 'Elenco attività',
+  viewSplit: 'Gantt', viewTable: 'Tabella', viewChart: 'Grafico',
+  showPanel: 'Mostra elenco attività', hidePanel: 'Nascondi elenco attività',
+  week: 'Settimana', weekPrefix: 'S',
   ariaExpand: (n) => `Espandi ${n}`, ariaCollapse: (n) => `Comprimi ${n}`,
 };
 
@@ -162,7 +178,7 @@ const TASKS: GanttTask[] = [
     <div class="rm-bar app-dotted-grid">
       <div class="rm-head">
         <span class="rm-kicker">// showcase</span>
-        <h1 class="rm-title">Nimbus — Product Roadmap <span>2026</span></h1>
+        <h1 class="rm-title">Nimbus — Product Roadmap <span>{{ planYears }}</span></h1>
         <p class="rm-sub">3 squads · dependencies · baselines · release milestones · custom panel columns</p>
       </div>
       <div class="rm-legend">
@@ -255,7 +271,14 @@ const TASKS: GanttTask[] = [
 export class RoadmapComponent {
   protected readonly theme = inject(AppThemeService);
 
-  readonly tasks = TASKS;
+  /** The template plan moved so today sits about 40% into it */
+  readonly tasks = anchorToToday(TASKS).tasks;
+  /** "2026" or "2026–27", from the moved plan */
+  protected readonly planYears = (() => {
+    const years = this.tasks.flatMap(t => [t.start.getFullYear(), (t.end ?? t.start).getFullYear()]);
+    const [a, b] = [Math.min(...years), Math.max(...years)];
+    return a === b ? `${a}` : `${a}–${String(b).slice(-2)}`;
+  })();
 
   private readonly ownerTpl  = viewChild<TemplateRef<ColumnCellContext>>('ownerCell');
   private readonly statusTpl = viewChild<TemplateRef<ColumnCellContext>>('statusCell');
@@ -270,6 +293,11 @@ export class RoadmapComponent {
     baseline:     true,
     showToday:    true,
     criticalPath: false,
+    // Split view: the three custom columns. Table view: those plus every built-in field.
+    table: { columns: [
+      'name', 'owner', 'status', 'type', 'start', 'end', 'duration', 'progress',
+      'predecessors', 'baselineStart', 'baselineEnd', 'variance',
+    ] },
     ...(this.lang() === 'it'
       ? { locale: 'it', labels: IT_LABELS, formats: { dateFormat: 'D MMM YYYY' } }
       : {}),

@@ -4,7 +4,8 @@
 //  Pure functions — no Angular, no DOM.
 // ─────────────────────────────────────────────────────────────
 
-import { GanttTask, GanttFlatRow, TaskType } from './types';
+import { GanttTask, GanttFlatRow, TaskType, type ColumnContext } from './types';
+import { columnSortValue } from './render/columns';
 
 // ─── Normalisation ────────────────────────────────────────────
 
@@ -190,27 +191,68 @@ export function sortRoots(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatR
   return groups.sort((a, b) => cmp(a[0], b[0])).flat();
 }
 
+/**
+ * Sort siblings at every level of the tree, keeping each subtree under its parent.
+ * `rows` must be in depth-first order (as produced by `flattenTree`). Stable, O(N log N).
+ */
+export function sortTree(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatRow[] {
+  interface Node { row: GanttFlatRow | null; children: Node[] }
+  const root: Node = { row: null, children: [] };
+  const path: Node[] = [root];
+  for (const row of rows) {
+    const node: Node = { row, children: [] };
+    // Parent = the last node one level up (orphans of a filtered list attach to the root)
+    path.length = Math.min(path.length, row.level + 1);
+    path[path.length - 1].children.push(node);
+    path.push(node);
+  }
+  const out: GanttFlatRow[] = [];
+  const walk = (node: Node) => {
+    node.children.sort((a, b) => cmp(a.row!, b.row!));
+    for (const child of node.children) {
+      out.push(child.row!);
+      walk(child);
+    }
+  };
+  walk(root);
+  return out;
+}
+
 export type SortDirection = 'asc' | 'desc';
 
 /**
- * Comparator for sorting rows by a column key: a task field, or the derived
- * `duration` column. Dates and numbers compare by value, everything else as
- * localised strings; empty values always sort last.
+ * Comparator for sorting rows by a column key. With `opts.column` / `opts.ctx` it uses the
+ * column's `sortValue` (built-in columns: status rank, type rank, drawn span…); otherwise a
+ * task field, or the derived `duration`. Dates, numbers and booleans compare by value, strings
+ * with a numeric, locale-aware collator ("Task 2" before "Task 10"); empty values always sort last.
  */
-export function columnComparator(key: string, dir: SortDirection = 'asc'): SortComparator {
+export function columnComparator(
+  key: string,
+  dir: SortDirection = 'asc',
+  opts: { column?: ColumnDef; ctx?: ColumnContext } = {},
+): SortComparator {
   const sign = dir === 'asc' ? 1 : -1;
-  const value = (row: GanttFlatRow): unknown => key === 'duration'
-    ? (row.task.end ?? row.task.start).getTime() - row.task.start.getTime()
-    : (row.task as unknown as Record<string, unknown>)[key];
+  const { column, ctx } = opts;
+  const value = (row: GanttFlatRow): unknown => {
+    if (ctx) return columnSortValue(column, key, row, ctx);
+    return key === 'duration'
+      ? (row.task.end ?? row.task.start).getTime() - row.task.start.getTime()
+      : (row.task as unknown as Record<string, unknown>)[key];
+  };
+  const compareText = ctx
+    ? (a: string, b: string) => ctx.collator.compare(a, b)
+    : (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true });
   return (a, b) => {
     const va = value(a);
     const vb = value(b);
-    if (va == null && vb == null) return 0;
-    if (va == null) return 1;
-    if (vb == null) return -1;
+    // Empty values (null, undefined, '') are equal to each other and always last
+    const ea = va == null || va === '';
+    const eb = vb == null || vb === '';
+    if (ea || eb) return ea === eb ? 0 : ea ? 1 : -1;
     if (va instanceof Date && vb instanceof Date) return sign * (va.getTime() - vb.getTime());
     if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
-    return sign * String(va).localeCompare(String(vb));
+    if (typeof va === 'boolean' && typeof vb === 'boolean') return sign * (Number(va) - Number(vb));
+    return sign * compareText(String(va), String(vb));
   };
 }
 
@@ -247,6 +289,7 @@ export function collectDescendants(id: string, rows: GanttFlatRow[]): string[] {
 import { ColumnDef, GanttLabels } from './types';
 import { formatDate, durationLabel } from './gantt-math';
 
+/** @deprecated The legacy five columns. Use `buildBuiltinColumns()` and `resolveViewColumns()`. */
 export const DEFAULT_COLUMNS: ColumnDef[] = [
   {
     key:     'name',
@@ -298,6 +341,7 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
 /**
  * Build the default columns with localised headers and date/duration cells.
  * Falls back to English (`DEFAULT_COLUMNS`) equivalents when no i18n is given.
+ * @deprecated The legacy five columns. Use `buildBuiltinColumns()` and `resolveViewColumns()`.
  */
 export function buildDefaultColumns(
   labels: GanttLabels,

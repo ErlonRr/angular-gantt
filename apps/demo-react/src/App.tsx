@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from 'react';
 import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantry/react';
-import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+import { createDemoData } from '@gantry/core/demo';
 import '../../demo.css';
 
 export default function App() {
   const gantt = useRef<GantryElement>(null);
-  const [tasks, setTasks] = useState<GanttTask[]>(DEMO_TASKS);
+  // The demo plan is moved so today sits inside it (lazy initialiser: computed once)
+  const [demo] = useState(() => createDemoData());
+  const [tasks, setTasks] = useState<GanttTask[]>(demo.tasks);
   const [viewMode, setViewMode] = useState<string>(ViewMode.Month);
   const [baseline, setBaseline] = useState(false);
   const [criticalPath, setCriticalPath] = useState(false);
@@ -40,7 +42,7 @@ export default function App() {
         ref={gantt}
         className="demo-chart"
         tasks={tasks}
-        annotations={DEMO_ANNOTATIONS}
+        annotations={demo.annotations}
         options={options}
         darkMode={dark}
         showLegend

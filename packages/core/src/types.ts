@@ -83,9 +83,19 @@ export interface GanttTask {
    */
   draggable?: boolean;
 
+  /**
+   * Explicit status from your data; wins over the derived one (built-in `status` column).
+   * Built-in values are translated (`labels.status*`), any other string is shown as is.
+   * Default: derived from progress, dates and now (see `taskStatus`).
+   */
+  status?: TaskStatus | (string & {});
+
   /** Arbitrary extra data — passed through to bar components */
   data?: Record<string, unknown>;
 }
+
+/** Lifecycle status of a task (built-in `status` column). */
+export type TaskStatus = 'notStarted' | 'inProgress' | 'overdue' | 'done';
 
 // ─── Flat model (internal, after tree processing) ─────────────
 
@@ -137,12 +147,34 @@ export interface HeaderRow {
 
 // ─── Columns ─────────────────────────────────────────────────
 
-export type ColumnRenderer = (row: GanttFlatRow) => string;
+/** Keys of the built-in columns, usable in `panel.columns` / `table.columns` without a ColumnDef. */
+export type BuiltinColumnKey = 'id' | 'name' | 'type' | 'status' | 'start' | 'end' | 'duration'
+  | 'progress' | 'predecessors' | 'baselineStart' | 'baselineEnd' | 'variance';
 
-/** Context bound to a `<ng-template ganttColumn>` cell: `let-row` / `let-row="row"` */
+/** Per-render values for time- and data-dependent cells (built by `buildColumnContext`). */
+export interface ColumnContext {
+  /** The instant cells are evaluated at (the bindings' per-minute clock) */
+  now:               Date;
+  endDateMode:       'exclusive' | 'inclusive';
+  normalizeDateOnly: boolean;
+  locale?:           string;
+  /** Every loaded task by id (predecessor names) */
+  taskById:          ReadonlyMap<string, GanttTask>;
+  /** Numeric, locale-aware string comparison ("Task 2" < "Task 10") */
+  collator:          Intl.Collator;
+}
+
+/** Cell text. `ctx` carries "now", the date reading and the task index (always passed by the bindings). */
+export type ColumnRenderer = (row: GanttFlatRow, ctx?: ColumnContext) => string;
+
+/** Value a column sorts by; `null` / `undefined` sort last. */
+export type ColumnSortValue = string | number | Date | boolean | null | undefined;
+
+/** Context bound to a `<ng-template ganttColumn>` cell: `let-row` / `let-row="row"` / `let-ctx="ctx"` */
 export interface ColumnCellContext {
   $implicit: GanttFlatRow;
   row:       GanttFlatRow;
+  ctx:       ColumnContext;
 }
 
 /**
@@ -158,10 +190,13 @@ export interface ColumnDef<TTemplate = any> {
   width:      number;
   minWidth?:  number;
   maxWidth?:  number;
+  /** Default visibility in both views (default true). A key listed in `panel.columns` / `table.columns` shows anyway. */
   visible?:   boolean;
   sortable?:  boolean;
-  /** Custom cell renderer — returns an HTML string */
+  /** Custom cell renderer — returns the cell text */
   render?:    ColumnRenderer;
+  /** Value the column sorts by. Default: the built-in rule for built-in keys, else `task[key]`. Empty values sort last. */
+  sortValue?: (row: GanttFlatRow, ctx: ColumnContext) => ColumnSortValue;
   /** Framework-specific cell template (e.g. Angular `<ng-template ganttColumn>`) */
   cellTemplate?: TTemplate;
   /** Used internally to mark built-in columns */
@@ -170,7 +205,10 @@ export interface ColumnDef<TTemplate = any> {
   resizable?: boolean;
   /** Cell text alignment (default 'start') */
   align?:     'start' | 'center' | 'end';
-  /** Only shown in the full table view (`view: 'table'`) */
+  /**
+   * When you pass `columns` without `panel.columns`: leave this column out of the split-view
+   * panel (it still shows in `view: 'table'`). Ignored for keys listed explicitly. Default false.
+   */
   tableOnly?: boolean;
   /** Grow to fill the remaining panel width (default: the last column grows) */
   flex?:      boolean;
@@ -254,6 +292,11 @@ export interface GanttTheme {
   holidayBg?:       string;
   offHoursBg?:      string;
   intensiveBg?:     string;
+  /** Status dots of the built-in `status` column */
+  statusNotStarted?: string;
+  statusInProgress?: string;
+  statusOverdue?:    string;
+  statusDone?:       string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -268,6 +311,9 @@ export interface GanttLabels {
   loading:    string;
   loadMore:   string;
   allLoaded:  (count: number) => string;
+  /** A page of the data source failed to load */
+  loadError:  string;
+  retry:      string;
   // Toolbar
   zoomIn:     string;
   zoomOut:    string;
@@ -309,8 +355,29 @@ export interface GanttLabels {
   colEnd:      string;
   colDuration: string;
   colProgress: string;
+  // Table-view columns
+  colId:            string;
+  colType:          string;
+  colStatus:        string;
+  colPredecessors:  string;
+  colBaselineStart: string;
+  colBaselineEnd:   string;
+  colVariance:      string;
+  statusNotStarted: string;
+  statusInProgress: string;
+  statusOverdue:    string;
+  statusDone:       string;
+  typeTask:         string;
+  typeMilestone:    string;
+  typeGroup:        string;
+  /** Predecessor in the `predecessors` column, e.g. "Design (SS+2d)" */
+  dependency:   (name: string, type: DependencyType, lagDays: number) => string;
+  /** Finish variance against the baseline, e.g. "+3d" / "On schedule" */
+  varianceDays: (days: number) => string;
   // Accessibility
   ariaChart:    string;
+  /** Accessible name of the task list (split panel and table view) */
+  ariaTaskList: string;
   ariaExpand:   (name: string) => string;
   ariaCollapse: (name: string) => string;
 }
@@ -319,6 +386,8 @@ export const DEFAULT_LABELS: GanttLabels = {
   loading:   'Loading…',
   loadMore:  'Load more',
   allLoaded: (n) => `All ${n} tasks loaded`,
+  loadError: 'Couldn’t load tasks',
+  retry:     'Retry',
   zoomIn:    'Zoom in',
   zoomOut:   'Zoom out',
   todayButton: 'Today',
@@ -357,7 +426,25 @@ export const DEFAULT_LABELS: GanttLabels = {
   colEnd:      'End',
   colDuration: 'Duration',
   colProgress: '%',
+  colId:            'ID',
+  colType:          'Type',
+  colStatus:        'Status',
+  colPredecessors:  'Predecessors',
+  colBaselineStart: 'Baseline start',
+  colBaselineEnd:   'Baseline end',
+  colVariance:      'Variance',
+  statusNotStarted: 'Not started',
+  statusInProgress: 'In progress',
+  statusOverdue:    'Overdue',
+  statusDone:       'Done',
+  typeTask:         'Task',
+  typeMilestone:    'Milestone',
+  typeGroup:        'Group',
+  dependency: (name, type, lag) =>
+    type === DependencyType.FS && !lag ? name : `${name} (${type}${lag ? `${lag > 0 ? '+' : '−'}${Math.abs(lag)}d` : ''})`,
+  varianceDays: (days) => (days === 0 ? 'On schedule' : `${days > 0 ? '+' : '−'}${Math.abs(days)}d`),
   ariaChart:    'Gantt chart timeline',
+  ariaTaskList: 'Tasks',
   ariaExpand:   (name) => `Expand ${name}`,
   ariaCollapse: (name) => `Collapse ${name}`,
 };
@@ -540,6 +627,21 @@ export interface GanttPanelOptions {
   /** Show the collapse/expand toggle on the splitter (default true) */
   collapsible?: boolean;
   collapsed?:   boolean;
+  /**
+   * Ordered column keys (built-in keys or keys of `columns`) for the split-view panel.
+   * Default `['name', 'start', 'end', 'progress']`; with `columns` and no list: the
+   * `columns` entries that are not `tableOnly` / `visible: false`.
+   */
+  columns?:     string[];
+}
+
+export interface GanttTableOptions {
+  /**
+   * Ordered column keys for `view: 'table'`. Default `['name', 'type', 'status', 'start', 'end',
+   * 'duration', 'progress', 'predecessors']`, plus `['baselineStart', 'baselineEnd', 'variance']`
+   * when `baseline` is on; with `columns` and no list: every `columns` entry not `visible: false`.
+   */
+  columns?: string[];
 }
 
 export type GanttView = 'split' | 'table' | 'chart';
@@ -619,6 +721,12 @@ export interface GanttOptions {
   weekStart?:      0 | 1;
   /** Stretch the timeline so it always fills the viewport (default true) */
   fitToWidth?:     boolean;
+  /**
+   * Where the timeline scrolls on the first render with data. Default `'auto'`: today when
+   * it is near the tasks, otherwise the earliest task. `'today'`, `'start'` (earliest task),
+   * a `Date` (centred), or `false` to stay at the timeline start.
+   */
+  initialScroll?:  'auto' | 'today' | 'start' | Date | false;
   gridLines?:      GanttGridLines;
   /** Weekends, holidays, working / intensive hours (visual only) */
   nonWorkingTime?: GanttNonWorkingTime | false;
@@ -645,6 +753,8 @@ export interface GanttOptions {
 
   // ── Layout ──
   panel?:          GanttPanelOptions;
+  /** Columns of the full table view (`view: 'table'`) */
+  table?:          GanttTableOptions;
   view?:           GanttView;
   toolbar?:        GanttToolbarOptions | false;
   /** Persist UI state (panel width, view, zoom, column widths…) in localStorage */

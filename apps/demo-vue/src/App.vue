@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef } from 'vue';
 import { Gantry, ViewMode, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/vue';
-import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+import { createDemoData } from '@gantry/core/demo';
 import '../../demo.css';
 
 const gantt = shallowRef<InstanceType<typeof Gantry> | null>(null);
-const tasks = ref<GanttTask[]>([...DEMO_TASKS]);
+// The demo plan is moved so today sits inside it
+const demo = createDemoData();
+const tasks = ref<GanttTask[]>(demo.tasks);
 const viewMode = ref<string>(ViewMode.Month);
 const baseline = ref(false);
 const criticalPath = ref(false);
@@ -51,7 +53,7 @@ function onResized(e: TaskResizeEvent) {
       ref="gantt"
       class="demo-chart"
       :tasks="tasks"
-      :annotations="DEMO_ANNOTATIONS"
+      :annotations="demo.annotations"
       :options="options"
       :dark-mode="dark"
       show-legend

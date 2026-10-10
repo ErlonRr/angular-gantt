@@ -62,7 +62,7 @@ export class AppComponent {
 - Drag & resize via Pointer Events (per-task opt-out)
 - Selection: single / Ctrl-click / Shift-range / keyboard
 - Custom bars (`provideGanttBar`) and custom panel columns (`<ng-template ganttColumn>`)
-- Lazy loading (`createGanttDataSource` — `resource()` + `linkedSignal`)
+- Lazy loading (`GanttDataSource`: paging, automatic retries, error state with Retry, `loadError` output)
 - Views: Day / Week / Month / Quarter / Year with zoom
 - Annotations, today marker, optional legend
 - Light / dark / auto theming via CSS custom properties

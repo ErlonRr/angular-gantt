@@ -34,6 +34,8 @@ export interface TimelineModel {
   bands:        TimeBand[];
   /** x of "now", or -1 when out of range / hidden */
   todayX:       number;
+  /** Earliest start and latest end of the tasks as drawn (null without tasks) */
+  extent:       { start: Date; end: Date } | null;
   toX(date: Date): number;
   toDate(x: number): Date;
 }
@@ -83,6 +85,14 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     const s = taskSpan(t, cfg);
     return { start: s.start, end: s.end, baseline: t.baseline } as GanttTask;
   });
+  let extent: TimelineModel['extent'] = null;
+  for (const s of spans) {
+    if (!extent) extent = { start: s.start, end: s.end };
+    else {
+      if (s.start < extent.start) extent.start = s.start;
+      if (s.end > extent.end) extent.end = s.end;
+    }
+  }
   let { start, end } = snapRange(
     spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now,
   );
@@ -130,6 +140,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     majorLines,
     bands: computeTimeBands(start, end, pxPerDay, cfg, toX),
     todayX: todayX >= 0 && todayX <= totalWidth ? todayX : -1,
+    extent,
     toX,
     toDate,
   };

@@ -38,6 +38,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 
 import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
+import { buildColumnContext, computeCellVisual, type CellVisual, type ColumnContext } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
@@ -50,6 +51,8 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     'role':               'treegrid',
     'aria-multiselectable': 'true',
     '[attr.aria-rowcount]': 'rowCount() + 1',
+    '[attr.aria-colcount]': 'visibleColumns().length',
+    '[attr.aria-label]':    'i18n.labels().ariaTaskList',
     '[style.display]':    '"flex"',
     '[style.flex-direction]': '"column"',
     // overflow:visible so the sticky column header anchors to the outer
@@ -91,7 +94,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           (keydown.enter)="col.sortable && sortColumn.emit(col.key)"
           (keydown.space)="$event.preventDefault(); col.sortable && sortColumn.emit(col.key)"
         >
-          <span class="gantt-tl-ellipsis">{{ col.label }}</span>
+          <span class="gantt-tl-ellipsis" [attr.title]="col.label">{{ col.label }}</span>
           @if (col.sortable) {
             <span
               aria-hidden="true"
@@ -132,9 +135,12 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           (dblclick)="rowDblClick.emit(row)"
         >
           @for (col of visibleColumns(); track col.key) {
+            @let cell = cellVisual(col, row);
             <div
               class="gantt-tl-cell"
               role="gridcell"
+              [attr.data-status]="cell?.status ?? null"
+              [attr.title]="cell?.title ?? null"
               [style.justify-content]="justify(col.align)"
               [style.border-right]="'1px solid ' + theme().borderColor"
               [style.color]="theme().textPrimary"
@@ -142,7 +148,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
               @if (col.cellTemplate) {
                 <!-- Custom cell via <ng-template ganttColumn> -->
                 <ng-container
-                  *ngTemplateOutlet="col.cellTemplate; context: { $implicit: row, row: row }"
+                  *ngTemplateOutlet="col.cellTemplate; context: { $implicit: row, row: row, ctx: ctx() }"
                 />
               } @else if (col.key === 'name') {
                 <!-- Name cell: indent + collapse toggle + text -->
@@ -165,12 +171,15 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                   <span class="gantt-tl-ellipsis"
                     [style.font-weight]="row.hasChildren ? '600' : '400'"
                     [style.color]="row.hasChildren ? theme().textPrimary : theme().textSecondary"
-                  >{{ row.task.name }}</span>
+                  >{{ nameText(col, row) }}</span>
                 </span>
               } @else {
                 <!-- Regular cell: ColumnDef.render(), else the task field -->
+                @if (cell?.status) {
+                  <span class="gantt-tl-status-dot" aria-hidden="true" [style.background]="cell?.dotColor"></span>
+                }
                 <span class="gantt-tl-ellipsis" [style.text-align]="col.align ?? 'start'"
-                  [style.color]="theme().textSecondary">{{ renderCell(col, row) }}</span>
+                  [style.color]="theme().textSecondary">{{ cell?.text }}</span>
               }
             </div>
           }
@@ -188,6 +197,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
   `,
   styles: [`
     :host { box-sizing: border-box; }
+    .gantt-tl-status-dot {
+      flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 6px;
+    }
 
     .gantt-tl-col-headers {
       display: grid;
@@ -271,8 +283,10 @@ export class GanttTaskListComponent {
   readonly paddingTop     = input<number>(0);
   readonly paddingBottom  = input<number>(0);
   readonly sort           = input<{ key: string; dir: 'asc' | 'desc' } | null>(null);
-  /** Full table view: also shows `tableOnly` columns */
+  /** Full table view (styling only — `columns` are already resolved for the view) */
   readonly tableView      = input<boolean>(false);
+  /** "Now", date reading and task index for status / predecessor cells */
+  readonly cellContext    = input<ColumnContext | null>(null);
 
   // ── Outputs ───────────────────────────────────────────────
   readonly collapseToggle    = output<string>();          // taskId
@@ -290,7 +304,7 @@ export class GanttTaskListComponent {
   /** Key of the column being resized (the trailing click must not sort) */
   protected readonly resizingCol = signal<string | null>(null);
 
-  private readonly i18n = inject(GanttI18nService);
+  protected readonly i18n = inject(GanttI18nService);
 
   protected ariaSort(key: string): 'ascending' | 'descending' | 'none' {
     const s = this.sort();
@@ -307,9 +321,11 @@ export class GanttTaskListComponent {
   }
 
   // ── Derived ───────────────────────────────────────────────
-  protected readonly visibleColumns = computed(() =>
-    this.columns().filter(c => c.visible !== false && (!c.tableOnly || this.tableView()))
-  );
+  /** The columns of the current view (resolved by GantryComponent via `GanttColumnService.columnsFor`) */
+  protected readonly visibleColumns = computed(() => this.columns());
+
+  protected readonly ctx = computed<ColumnContext>(() =>
+    this.cellContext() ?? buildColumnContext({ tasks: [], now: new Date() }));
 
   /** One column grows to fill a panel wider than the columns: the `flex` one, else the last */
   protected readonly gridTemplate = computed(() => {
@@ -336,9 +352,15 @@ export class GanttTaskListComponent {
     return '▬';
   }
 
-  protected renderCell(col: ColumnDef, row: GanttFlatRow): string {
-    const raw = col.render ? col.render(row) : (row.task as unknown as Record<string, unknown>)[col.key];
-    return raw == null ? '' : String(raw);
+  /** Name cell text: a consumer `render` on the name column changes it (indent and toggle stay) */
+  protected nameText(col: ColumnDef, row: GanttFlatRow): string {
+    return !col.builtin && col.render ? col.render(row, this.ctx()) : row.task.name;
+  }
+
+  /** Text (and status dot / title) of a regular cell — null for the name and template cells */
+  protected cellVisual(col: ColumnDef, row: GanttFlatRow): CellVisual | null {
+    if (col.cellTemplate || col.key === 'name') return null;
+    return computeCellVisual(col, row, this.ctx(), this.theme());
   }
 
   // ── Collapse toggle ───────────────────────────────────────

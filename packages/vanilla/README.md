@@ -58,7 +58,7 @@ table view and saved state. See the full guide:
 | `enableDrag` / `enableResize` | `boolean` | `true` | Per task: `task.draggable = false` |
 | `tooltipEnabled` | `boolean` | `true` | Hover tooltip |
 | `showLegend` | `boolean` | `false` | Legend for the today marker and annotations |
-| `dataSource` | `{ fetcher(page, pageSize), pageSize? }` | `null` | Lazy paging; replaces `tasks` while set |
+| `dataSource` | `{ fetcher(page, pageSize), pageSize?, initialPage?, retries?, retryDelay? }` | `null` | Lazy paging; replaces `tasks` while set. A failed page shows Retry and pauses loading until `dataSource.retry()` |
 | `renderBar` | `(ctx, renderDefault) => SVGElement \| null` | — | Replace or decorate a bar's SVG |
 
 Boolean properties and the view mode are also available as attributes:
@@ -77,6 +77,7 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 | `row-click` / `row-dblclick` | `GanttFlatRow` |
 | `view-mode-change` | `{ viewMode }` |
 | `state-change` | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort |
+| `load-error` | `{ error, page }` — a data-source page failed after its automatic retries |
 
 `addEventListener` is typed: `gantt.addEventListener('task-dragged', e => e.detail.daysMoved)`.
 
@@ -85,7 +86,7 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 `zoomIn()`, `zoomOut()`, `setViewMode(mode)`, `scrollToToday()`, `scrollToDate(date)`,
 `scrollToTask(id)`, `getSelectedTasks()`, `setSelectedTasks(ids)`, `clearSelection()`,
 `selectAll()`, `updateTask(id, patch)`, `appendTasks(tasks)`, `collapseAll()`,
-`expandAll()`, `togglePanel()`, `setView('split' | 'table' | 'chart')`, `setColumnVisible(key, visible)`,
+`expandAll()`, `togglePanel()`, `setView('split' | 'table' | 'chart')`, `setColumnVisible(key, visible, view?)`, `toggleColumnVisible(key, view?)`,
 `getState()`, `setState(state)`, `getBarVisual(id)`, `setTheme(theme)`, `patchTheme(patch)`.
 
 ## Keyboard

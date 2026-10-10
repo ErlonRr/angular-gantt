@@ -1,10 +1,12 @@
 <script lang="ts">
   import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/svelte';
-  import { DEMO_TASKS, DEMO_ANNOTATIONS } from '@gantry/core/demo';
+  import { createDemoData } from '@gantry/core/demo';
   import '../../demo.css';
 
   let gantt = $state<GantryElement>();
-  let tasks = $state<GanttTask[]>([...DEMO_TASKS]);
+  // The demo plan is moved so today sits inside it
+  const demo = createDemoData();
+  let tasks = $state<GanttTask[]>(demo.tasks);
   let viewMode = $state<string>(ViewMode.Month);
   let baseline = $state(false);
   let criticalPath = $state(false);
@@ -41,7 +43,7 @@
     bind:element={gantt}
     class="demo-chart"
     {tasks}
-    annotations={DEMO_ANNOTATIONS}
+    annotations={demo.annotations}
     {options}
     darkMode={dark}
     showLegend
