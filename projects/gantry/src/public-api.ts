@@ -5,16 +5,34 @@
 export * from './lib/types';
 
 export {
-  dateToPixel, pixelToDate, snapToDay, addDays, diffDays,
-  getTimelineRange, generateHeaderRows, generateGridLines,
-  zoomIn, zoomOut, clamp, formatDate, durationLabel, PX_PER_DAY,
+  dateToPixel,
+  pixelToDate,
+  snapToDay,
+  addDays,
+  diffDays,
+  getTimelineRange,
+  generateHeaderRows,
+  generateGridLines,
+  zoomIn,
+  zoomOut,
+  clamp,
+  formatDate,
+  durationLabel,
+  PX_PER_DAY,
 } from './lib/gantt-math';
 export type { TimelineRange, GridLine, HeaderRow, HeaderCell } from './lib/gantt-math';
 
 export {
-  flattenTree, filterVisible, reindexVisible,
-  sortRoots, findRowById, collectDescendants,
-  DEFAULT_COLUMNS, SORT_BY_START, SORT_BY_NAME, SORT_BY_PROGRESS,
+  flattenTree,
+  filterVisible,
+  reindexVisible,
+  sortRoots,
+  findRowById,
+  collectDescendants,
+  DEFAULT_COLUMNS,
+  SORT_BY_START,
+  SORT_BY_NAME,
+  SORT_BY_PROGRESS,
 } from './lib/gantt-data';
 export type { SortComparator } from './lib/gantt-data';
 
@@ -38,8 +56,13 @@ export { GanttColumnDefDirective } from './lib/columns/gantt-column.directive';
 export type { ColumnCellContext } from './lib/columns/gantt-column.directive';
 
 export {
-  GanttThemeService, LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme,
-  GANTT_GLOBAL_CONFIG, provideGantt,
+  GanttThemeService,
+  LightTheme,
+  DarkTheme,
+  LegacyLightTheme,
+  LegacyDarkTheme,
+  GANTT_GLOBAL_CONFIG,
+  provideGantt,
 } from './lib/services/gantt-theme.service';
 export type { GanttGlobalConfig } from './lib/services/gantt-theme.service';
 

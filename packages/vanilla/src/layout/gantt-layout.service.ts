@@ -6,15 +6,34 @@
  */
 
 import {
-  GanttTask, GanttFlatRow, RowGeometry, GanttI18n, GanttView,
-  flattenTree, filterVisible, reindexVisible, sortTree, columnComparator, SortDirection, normalizeTasks,
-  buildColumnContext, findColumn, type ColumnContext, type ColumnDef,
-  buildTimeline, computeRowGeometries, zoomStep,
-  type ResolvedGanttConfig, type TimelineModel,
+  GanttTask,
+  GanttFlatRow,
+  RowGeometry,
+  GanttI18n,
+  GanttView,
+  flattenTree,
+  filterVisible,
+  reindexVisible,
+  sortTree,
+  columnComparator,
+  SortDirection,
+  normalizeTasks,
+  buildColumnContext,
+  findColumn,
+  type ColumnContext,
+  type ColumnDef,
+  buildTimeline,
+  computeRowGeometries,
+  zoomStep,
+  type ResolvedGanttConfig,
+  type TimelineModel,
 } from '@gantry/core';
 import { createState, WritableState } from '../core/state';
 
-export interface SortState { key: string; dir: SortDirection }
+export interface SortState {
+  key: string;
+  dir: SortDirection;
+}
 
 export class GanttLayoutService {
   readonly tasks = createState<GanttTask[]>([]);
@@ -42,7 +61,13 @@ export class GanttLayoutService {
 
   constructor() {
     const states = [
-      this.tasks, this.collapsedIds, this.sort, this.viewportWidth, this.config, this.i18n, this.now,
+      this.tasks,
+      this.collapsedIds,
+      this.sort,
+      this.viewportWidth,
+      this.config,
+      this.i18n,
+      this.now,
     ] as WritableState<unknown>[];
     for (const s of states) s.subscribe(() => this.cache.clear());
     // Column edits (e.g. every pointermove of a column resize) only matter to a sorted row order
@@ -72,12 +97,14 @@ export class GanttLayoutService {
 
   /** Values time- and data-dependent cells read (status, predecessors, sort order). */
   get columnContext(): ColumnContext {
-    return this.memo('columnContext', () => buildColumnContext({
-      tasks: this.tasks(),
-      config: this.config(),
-      now: this.now(),
-      locale: this.i18n()?.locale,
-    }));
+    return this.memo('columnContext', () =>
+      buildColumnContext({
+        tasks: this.tasks(),
+        config: this.config(),
+        now: this.now(),
+        locale: this.i18n()?.locale,
+      }),
+    );
   }
 
   get allRows(): GanttFlatRow[] {
@@ -104,13 +131,15 @@ export class GanttLayoutService {
   }
 
   get timeline(): TimelineModel {
-    return this.memo('timeline', () => buildTimeline({
-      tasks: this.tasks(),
-      config: this.cfg,
-      viewportWidth: this.viewportWidth(),
-      i18n: this.i18n(),
-      now: this.now(),
-    }));
+    return this.memo('timeline', () =>
+      buildTimeline({
+        tasks: this.tasks(),
+        config: this.cfg,
+        viewportWidth: this.viewportWidth(),
+        i18n: this.i18n(),
+        now: this.now(),
+      }),
+    );
   }
 
   get rowGeometries(): RowGeometry[] {
@@ -118,8 +147,7 @@ export class GanttLayoutService {
   }
 
   get geometryById(): Map<string, RowGeometry> {
-    return this.memo('geometryById', () =>
-      new Map(this.rowGeometries.map(g => [g.row.task.id, g])));
+    return this.memo('geometryById', () => new Map(this.rowGeometries.map(g => [g.row.task.id, g])));
   }
 
   /** Seed collapsed state from `task.collapsed` (only for ids not seen before). */
@@ -172,9 +200,7 @@ export class GanttLayoutService {
   }
 
   updateTask(taskId: string, patch: Partial<GanttTask>): void {
-    this.tasks.update(tasks =>
-      tasks.map(t => t.id === taskId ? { ...t, ...patch } : t)
-    );
+    this.tasks.update(tasks => tasks.map(t => (t.id === taskId ? { ...t, ...patch } : t)));
   }
 
   appendTasks(tasks: GanttTask[]): void {

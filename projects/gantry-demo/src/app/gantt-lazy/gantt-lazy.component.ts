@@ -1,10 +1,5 @@
-import {
-  ChangeDetectionStrategy, Component, inject,
-} from '@angular/core';
-import {
-  GantryComponent, GanttTask,
-  TaskType, createGanttDataSource,
-} from 'ngx-gantry';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { GantryComponent, GanttTask, TaskType, createGanttDataSource } from 'ngx-gantry';
 import { addDays, snapToDay } from '@gantry/core';
 import { AppThemeService } from '../shell/app-theme.service';
 
@@ -44,8 +39,7 @@ async function fakeFetch(page: number, pageSize: number): Promise<GanttTask[]> {
         &nbsp;·&nbsp;
         {{ ds.isLoading() ? 'Loading…' : ds.hasMore() ? 'Scroll or click Load more' : 'All loaded' }}
       </span>
-      <button [disabled]="ds.isLoading() || !ds.hasMore()"
-              (click)="ds.loadNext()">Load more</button>
+      <button [disabled]="ds.isLoading() || !ds.hasMore()" (click)="ds.loadNext()">Load more</button>
       <button (click)="ds.reset()">Reset</button>
     </div>
 
@@ -57,23 +51,59 @@ async function fakeFetch(page: number, pageSize: number): Promise<GanttTask[]> {
       [showLegend]="true"
     />
   `,
-  styles: [`
-    :host { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-    .lazy-bar {
-      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
-      padding: 9px 14px; background: hsl(var(--card)); border-bottom: 1px solid hsl(var(--border));
-    }
-    .lazy-title { font-size: 13px; font-weight: 600; color: hsl(var(--primary)); }
-    .lazy-info  { font-family: var(--app-font-mono); font-size: 12px; color: hsl(var(--muted-fg)); margin-right: auto; }
-    .lazy-info b { color: hsl(var(--fg)); }
-    .lazy-bar button {
-      padding: 4px 11px; font-size: 12px; border-radius: var(--app-radius-sm); cursor: pointer;
-      background: hsl(var(--muted)); color: hsl(var(--fg)); border: 1px solid hsl(var(--border));
-    }
-    .lazy-bar button:hover:not(:disabled) { background: hsl(var(--accent)); }
-    .lazy-bar button:disabled { opacity: .4; cursor: not-allowed; }
-    gantry { flex: 1; min-height: 0; }
-  `],
+  styles: [
+    `
+      :host {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow: hidden;
+      }
+      .lazy-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-shrink: 0;
+        padding: 9px 14px;
+        background: hsl(var(--card));
+        border-bottom: 1px solid hsl(var(--border));
+      }
+      .lazy-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: hsl(var(--primary));
+      }
+      .lazy-info {
+        font-family: var(--app-font-mono);
+        font-size: 12px;
+        color: hsl(var(--muted-fg));
+        margin-right: auto;
+      }
+      .lazy-info b {
+        color: hsl(var(--fg));
+      }
+      .lazy-bar button {
+        padding: 4px 11px;
+        font-size: 12px;
+        border-radius: var(--app-radius-sm);
+        cursor: pointer;
+        background: hsl(var(--muted));
+        color: hsl(var(--fg));
+        border: 1px solid hsl(var(--border));
+      }
+      .lazy-bar button:hover:not(:disabled) {
+        background: hsl(var(--accent));
+      }
+      .lazy-bar button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+      gantry {
+        flex: 1;
+        min-height: 0;
+      }
+    `,
+  ],
 })
 export class GanttLazyComponent {
   protected readonly theme = inject(AppThemeService);

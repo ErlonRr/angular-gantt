@@ -7,9 +7,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export const TARGETS = {
   vanilla: { port: 4171, dir: 'apps/demo-vanilla' },
-  react:   { port: 4172, dir: 'apps/demo-react' },
-  vue:     { port: 4175, dir: 'apps/demo-vue' },
-  svelte:  { port: 4174, dir: 'apps/demo-svelte' },
+  react: { port: 4172, dir: 'apps/demo-react' },
+  vue: { port: 4175, dir: 'apps/demo-vue' },
+  svelte: { port: 4174, dir: 'apps/demo-svelte' },
   angular: { port: 4180, dir: '.' },
 } as const;
 
@@ -28,13 +28,12 @@ export default defineConfig({
     viewport: { width: 1400, height: 820 },
     trace: 'retain-on-failure',
   },
-  projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 820 } } },
-  ],
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 820 } } }],
   webServer: Object.entries(TARGETS).map(([name, t]) => ({
-    command: name === 'angular'
-      ? `npx vite preview --outDir dist/gantry-demo/browser --port ${t.port} --strictPort`
-      : `npx vite preview --port ${t.port} --strictPort`,
+    command:
+      name === 'angular'
+        ? `npx vite preview --outDir dist/gantry-demo/browser --port ${t.port} --strictPort`
+        : `npx vite preview --port ${t.port} --strictPort`,
     cwd: t.dir,
     url: `http://localhost:${t.port}/`,
     reuseExistingServer: !process.env.CI,

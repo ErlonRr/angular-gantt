@@ -1,9 +1,16 @@
 /* Global styles for gantry-demo demo app */
 @use './styles/tokens.scss';
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-html, body {
+html,
+body {
   height: 100%;
   width: 100%;
   overflow: hidden;
@@ -11,7 +18,9 @@ html, body {
   font-size: 14px;
   background: hsl(var(--bg));
   color: hsl(var(--fg));
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 app-root {

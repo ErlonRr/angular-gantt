@@ -54,8 +54,20 @@ const PANEL_COLUMNS: Record<string, string[] | undefined> = {
 };
 const TABLE_COLUMNS: Record<string, string[] | undefined> = {
   default: undefined,
-  everything: ['id', 'name', 'type', 'status', 'start', 'end', 'duration', 'progress', 'predecessors',
-    'baselineStart', 'baselineEnd', 'variance'],
+  everything: [
+    'id',
+    'name',
+    'type',
+    'status',
+    'start',
+    'end',
+    'duration',
+    'progress',
+    'predecessors',
+    'baselineStart',
+    'baselineEnd',
+    'variance',
+  ],
   schedule: ['name', 'start', 'end', 'duration'],
 };
 
@@ -77,7 +89,7 @@ function toOptions(s: State): GanttOptions {
     viewMode: s.viewMode,
     scales: s.viewMode === ViewMode.Week ? weekScales : undefined,
     weekStart: s.weekStart as 0 | 1,
-    initialScroll: s.initialScroll === 'none' ? false : s.initialScroll as 'auto' | 'today' | 'start',
+    initialScroll: s.initialScroll === 'none' ? false : (s.initialScroll as 'auto' | 'today' | 'start'),
     rowHeight: s.rowHeight,
     baseline: s.baseline,
     criticalPath: s.criticalPath,
@@ -116,48 +128,135 @@ type Control =
   | { kind: 'check'; key: keyof State; label: string };
 
 const sections: [string, Control[]][] = [
-  ['Timeline', [
-    { kind: 'select', key: 'viewMode', label: 'Zoom', options: Object.values(ViewMode).map(v => [v, v]) },
-    { kind: 'select', key: 'weekFormat', label: 'Week label', options: [
-      ['number', 'W52'], ['label', 'Week 52'], ['range', '4–11'], ['rangeMonth', '4–11 Mar'], ['numberRange', 'W52 · 4–11'],
-    ] },
-    { kind: 'select', key: 'weekStart', label: 'Week starts', options: [[1, 'Monday'], [0, 'Sunday']] },
-    { kind: 'select', key: 'initialScroll', label: 'Initial scroll', options: [
-      ['auto', 'Auto'], ['today', 'Today'], ['start', 'First task'], ['none', 'None'],
-    ] },
-    { kind: 'check', key: 'majorDash', label: 'Dashed delimiters' },
-    { kind: 'check', key: 'inclusive', label: 'Inclusive end dates' },
-  ]],
-  ['Non-working time', [
-    { kind: 'check', key: 'weekends', label: 'Weekends' },
-    { kind: 'check', key: 'holiday', label: 'Holiday (in 2 days)' },
-    { kind: 'range', key: 'workStart', label: 'Work from (Hour)', min: 0, max: 12 },
-    { kind: 'range', key: 'workEnd', label: 'Work until (Hour)', min: 12, max: 24 },
-    { kind: 'check', key: 'intensive', label: 'Intensive 10–12' },
-    { kind: 'select', key: 'nwStyle', label: 'Style', options: [['shade', 'Shade'], ['hatch', 'Hatch'], ['disabled', 'Disabled']] },
-  ]],
-  ['Bars', [
-    { kind: 'range', key: 'rowHeight', label: 'Row height', min: 24, max: 64 },
-    { kind: 'range', key: 'barHeight', label: 'Bar height %', min: 20, max: 100, step: 5 },
-    { kind: 'range', key: 'radius', label: 'Radius', min: 0, max: 16 },
-    { kind: 'select', key: 'label', label: 'Label', options: [['auto', 'Auto'], ['inside', 'Inside'], ['right', 'Right'], ['left', 'Left'], ['none', 'None']] },
-    { kind: 'select', key: 'milestone', label: 'Milestone', options: [['diamond', 'Diamond'], ['circle', 'Circle'], ['square', 'Square']] },
-    { kind: 'select', key: 'groupStyle', label: 'Group bar', options: [['summary', 'Summary'], ['bar', 'Bar']] },
-    { kind: 'range', key: 'arrowRadius', label: 'Arrow corners', min: 0, max: 12 },
-    { kind: 'check', key: 'baseline', label: 'Baseline' },
-    { kind: 'check', key: 'criticalPath', label: 'Critical path' },
-  ]],
-  ['Columns', [
-    { kind: 'select', key: 'panelCols', label: 'Panel', options: [
-      ['default', 'Name · Start · End · %'], ['status', 'Name · Status · Start · %'], ['minimal', 'Name only'], ['legacy', '1.x (5 columns)'],
-    ] },
-    { kind: 'select', key: 'tableCols', label: 'Table view', options: [
-      ['default', 'Default (8, + baseline)'], ['everything', 'Every built-in'], ['schedule', 'Schedule only'],
-    ] },
-  ]],
-  ['State', [
-    { kind: 'check', key: 'stateKey', label: 'Remember layout' },
-  ]],
+  [
+    'Timeline',
+    [
+      { kind: 'select', key: 'viewMode', label: 'Zoom', options: Object.values(ViewMode).map(v => [v, v]) },
+      {
+        kind: 'select',
+        key: 'weekFormat',
+        label: 'Week label',
+        options: [
+          ['number', 'W52'],
+          ['label', 'Week 52'],
+          ['range', '4–11'],
+          ['rangeMonth', '4–11 Mar'],
+          ['numberRange', 'W52 · 4–11'],
+        ],
+      },
+      {
+        kind: 'select',
+        key: 'weekStart',
+        label: 'Week starts',
+        options: [
+          [1, 'Monday'],
+          [0, 'Sunday'],
+        ],
+      },
+      {
+        kind: 'select',
+        key: 'initialScroll',
+        label: 'Initial scroll',
+        options: [
+          ['auto', 'Auto'],
+          ['today', 'Today'],
+          ['start', 'First task'],
+          ['none', 'None'],
+        ],
+      },
+      { kind: 'check', key: 'majorDash', label: 'Dashed delimiters' },
+      { kind: 'check', key: 'inclusive', label: 'Inclusive end dates' },
+    ],
+  ],
+  [
+    'Non-working time',
+    [
+      { kind: 'check', key: 'weekends', label: 'Weekends' },
+      { kind: 'check', key: 'holiday', label: 'Holiday (in 2 days)' },
+      { kind: 'range', key: 'workStart', label: 'Work from (Hour)', min: 0, max: 12 },
+      { kind: 'range', key: 'workEnd', label: 'Work until (Hour)', min: 12, max: 24 },
+      { kind: 'check', key: 'intensive', label: 'Intensive 10–12' },
+      {
+        kind: 'select',
+        key: 'nwStyle',
+        label: 'Style',
+        options: [
+          ['shade', 'Shade'],
+          ['hatch', 'Hatch'],
+          ['disabled', 'Disabled'],
+        ],
+      },
+    ],
+  ],
+  [
+    'Bars',
+    [
+      { kind: 'range', key: 'rowHeight', label: 'Row height', min: 24, max: 64 },
+      { kind: 'range', key: 'barHeight', label: 'Bar height %', min: 20, max: 100, step: 5 },
+      { kind: 'range', key: 'radius', label: 'Radius', min: 0, max: 16 },
+      {
+        kind: 'select',
+        key: 'label',
+        label: 'Label',
+        options: [
+          ['auto', 'Auto'],
+          ['inside', 'Inside'],
+          ['right', 'Right'],
+          ['left', 'Left'],
+          ['none', 'None'],
+        ],
+      },
+      {
+        kind: 'select',
+        key: 'milestone',
+        label: 'Milestone',
+        options: [
+          ['diamond', 'Diamond'],
+          ['circle', 'Circle'],
+          ['square', 'Square'],
+        ],
+      },
+      {
+        kind: 'select',
+        key: 'groupStyle',
+        label: 'Group bar',
+        options: [
+          ['summary', 'Summary'],
+          ['bar', 'Bar'],
+        ],
+      },
+      { kind: 'range', key: 'arrowRadius', label: 'Arrow corners', min: 0, max: 12 },
+      { kind: 'check', key: 'baseline', label: 'Baseline' },
+      { kind: 'check', key: 'criticalPath', label: 'Critical path' },
+    ],
+  ],
+  [
+    'Columns',
+    [
+      {
+        kind: 'select',
+        key: 'panelCols',
+        label: 'Panel',
+        options: [
+          ['default', 'Name · Start · End · %'],
+          ['status', 'Name · Status · Start · %'],
+          ['minimal', 'Name only'],
+          ['legacy', '1.x (5 columns)'],
+        ],
+      },
+      {
+        kind: 'select',
+        key: 'tableCols',
+        label: 'Table view',
+        options: [
+          ['default', 'Default (8, + baseline)'],
+          ['everything', 'Every built-in'],
+          ['schedule', 'Schedule only'],
+        ],
+      },
+    ],
+  ],
+  ['State', [{ kind: 'check', key: 'stateKey', label: 'Remember layout' }]],
 ];
 
 function renderControls(): void {
@@ -178,8 +277,17 @@ function renderControls(): void {
       } else if (c.kind === 'range') {
         const out = document.createElement('output');
         out.textContent = String(value);
-        const input = Object.assign(document.createElement('input'), { type: 'range', min: c.min, max: c.max, step: c.step ?? 1, value });
-        input.addEventListener('input', () => { out.textContent = input.value; update(c.key, Number(input.value)); });
+        const input = Object.assign(document.createElement('input'), {
+          type: 'range',
+          min: c.min,
+          max: c.max,
+          step: c.step ?? 1,
+          value,
+        });
+        input.addEventListener('input', () => {
+          out.textContent = input.value;
+          update(c.key, Number(input.value));
+        });
         label.append(input, out);
       } else {
         const input = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!value });
@@ -204,9 +312,15 @@ gantt.addEventListener('view-mode-change', e => {
   apply();
 });
 
-gantt.addEventListener('task-dragged', e => { log.textContent = `moved ${e.detail.taskId} by ${e.detail.daysMoved} day(s)`; });
-gantt.addEventListener('task-resized', e => { log.textContent = `resized ${e.detail.taskId} (${e.detail.handle}) by ${e.detail.daysDelta} day(s)`; });
-gantt.addEventListener('state-change', e => { log.textContent = `state: ${e.detail.view} · panel ${e.detail.panelWidth ?? '—'}px · ${e.detail.viewMode}`; });
+gantt.addEventListener('task-dragged', e => {
+  log.textContent = `moved ${e.detail.taskId} by ${e.detail.daysMoved} day(s)`;
+});
+gantt.addEventListener('task-resized', e => {
+  log.textContent = `resized ${e.detail.taskId} (${e.detail.handle}) by ${e.detail.daysDelta} day(s)`;
+});
+gantt.addEventListener('state-change', e => {
+  log.textContent = `state: ${e.detail.view} · panel ${e.detail.panelWidth ?? '—'}px · ${e.detail.viewMode}`;
+});
 
 const dark = document.getElementById('dark')!;
 dark.addEventListener('click', () => {

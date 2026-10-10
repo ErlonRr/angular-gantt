@@ -1,19 +1,20 @@
+import { defineComponent, h, onMounted, onBeforeUnmount, shallowRef, toRaw, watch, type PropType } from 'vue';
 import {
-  defineComponent, h, onMounted, onBeforeUnmount, shallowRef, toRaw, watch,
-  type PropType,
-} from 'vue';
-import {
-  GANTRY_EVENTS, GANTRY_PROPERTIES,
-  type GantryElement, type GantryEventDetailMap, type VanillaColumnDef,
-  type GanttDataSourceConfig, type GanttDataSource, type GanttBarRenderer,
+  GANTRY_EVENTS,
+  GANTRY_PROPERTIES,
+  type GantryElement,
+  type GantryEventDetailMap,
+  type VanillaColumnDef,
+  type GanttDataSourceConfig,
+  type GanttDataSource,
+  type GanttBarRenderer,
 } from '@gantry/vanilla';
 import type { GanttTask, GanttOptions, GanttAnnotation } from '@gantry/core';
 
 /** Vue emit names: `task-dragged` → `taskDragged` (use `@task-dragged` in templates). */
 type Camel<S extends string> = S extends `${infer A}-${infer B}` ? `${A}${Capitalize<Camel<B>>}` : S;
 type Emits = {
-  [K in keyof GantryEventDetailMap as Camel<K>]:
-    (detail: GantryEventDetailMap[K]) => boolean;
+  [K in keyof GantryEventDetailMap as Camel<K>]: (detail: GantryEventDetailMap[K]) => boolean;
 };
 
 const camel = (s: string) => s.replace(/-(\w)/g, (_, c: string) => c.toUpperCase());
@@ -47,12 +48,12 @@ export const Gantry = defineComponent({
     dataSource: optional(Object as PropType<GanttDataSourceConfig | GanttDataSource | null>),
     renderBar: optional(Function as PropType<GanttBarRenderer>),
   },
-  emits: Object.fromEntries(
-    Object.keys(GANTRY_EVENTS).map(type => [camel(type), null]),
-  ) as unknown as Emits,
+  emits: Object.fromEntries(Object.keys(GANTRY_EVENTS).map(type => [camel(type), null])) as unknown as Emits,
   setup(props, { emit }) {
     const element = shallowRef<GantryElement | null>(null);
-    const setElement = (el: unknown) => { element.value = el as GantryElement | null; };
+    const setElement = (el: unknown) => {
+      element.value = el as GantryElement | null;
+    };
 
     const assign = (key: (typeof GANTRY_PROPERTIES)[number], value: unknown) => {
       const el = element.value;
@@ -63,7 +64,8 @@ export const Gantry = defineComponent({
     };
 
     const listeners = Object.keys(GANTRY_EVENTS).map(type => {
-      const listener = (e: Event) => (emit as (event: string, detail: unknown) => void)(camel(type), (e as CustomEvent).detail);
+      const listener = (e: Event) =>
+        (emit as (event: string, detail: unknown) => void)(camel(type), (e as CustomEvent).detail);
       return [type, listener] as const;
     });
 
@@ -71,7 +73,11 @@ export const Gantry = defineComponent({
       for (const key of GANTRY_PROPERTIES) {
         assign(key, props[key]);
         const isArray = key === 'tasks' || key === 'columns' || key === 'annotations';
-        watch(() => props[key], v => assign(key, v), { deep: isArray ? 1 : false });
+        watch(
+          () => props[key],
+          v => assign(key, v),
+          { deep: isArray ? 1 : false },
+        );
       }
       for (const [type, listener] of listeners) element.value!.addEventListener(type, listener);
     });

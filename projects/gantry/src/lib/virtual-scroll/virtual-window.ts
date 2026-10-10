@@ -9,11 +9,11 @@
 
 export interface VirtualWindow {
   /** First rendered item index (inclusive), overscan already applied */
-  first:         number;
+  first: number;
   /** Last rendered item index (inclusive), overscan already applied */
-  last:          number;
+  last: number;
   /** Spacer height (px) above the first rendered item */
-  paddingTop:    number;
+  paddingTop: number;
   /** Spacer height (px) below the last rendered item */
   paddingBottom: number;
 }
@@ -39,15 +39,12 @@ export function computeVirtualWindow(
   }
 
   const first = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const last  = Math.min(
-    itemCount - 1,
-    Math.ceil((scrollTop + viewportHeight) / itemHeight) + overscan,
-  );
+  const last = Math.min(itemCount - 1, Math.ceil((scrollTop + viewportHeight) / itemHeight) + overscan);
 
   return {
     first,
     last,
-    paddingTop:    first * itemHeight,
+    paddingTop: first * itemHeight,
     paddingBottom: Math.max(0, (itemCount - last - 1) * itemHeight),
   };
 }

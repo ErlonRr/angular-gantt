@@ -36,30 +36,30 @@ import {
   ContentChild,
 } from '@angular/core';
 
-import { GanttColumnService }  from './gantt-column.service';
+import { GanttColumnService } from './gantt-column.service';
 import { ColumnDef, ColumnRenderer, ColumnCellContext } from '../types';
 
 // Re-exported for backward compatibility — the canonical definition lives in types.ts
 export type { ColumnCellContext } from '../types';
 
 @Directive({
-  selector:  '[ganttColumn]',
+  selector: '[ganttColumn]',
   standalone: true,
 })
 export class GanttColumnDefDirective implements OnInit, OnDestroy {
   // ── Required input ───────────────────────────────────────
-  readonly key   = input.required<string>({ alias: 'ganttColumn' });
+  readonly key = input.required<string>({ alias: 'ganttColumn' });
 
   // ── Optional inputs ───────────────────────────────────────
   // Unset inputs inherit from a built-in column with the same key (else core defaults apply)
-  readonly label    = input<string | undefined>(undefined);
-  readonly width    = input<number | undefined>(undefined);
+  readonly label = input<string | undefined>(undefined);
+  readonly width = input<number | undefined>(undefined);
   readonly minWidth = input<number | undefined>(undefined);
   readonly maxWidth = input<number | undefined>(undefined);
-  readonly visible  = input<boolean | undefined>(undefined);
+  readonly visible = input<boolean | undefined>(undefined);
   readonly sortable = input<boolean | undefined>(undefined);
   /** Function-based renderer — overrides template cell if provided */
-  readonly render   = input<ColumnRenderer | undefined>(undefined);
+  readonly render = input<ColumnRenderer | undefined>(undefined);
 
   /** Optional ng-template for the cell content */
   @ContentChild(TemplateRef)
@@ -102,6 +102,6 @@ export class GanttColumnDefDirective implements OnInit, OnDestroy {
 
   /** Exposed for the task list to use as a TemplateRef per-cell */
   getTemplate(): TemplateRef<ColumnCellContext> | undefined {
-    return this.cellTemplate ?? (this.tpl ?? undefined);
+    return this.cellTemplate ?? this.tpl ?? undefined;
   }
 }

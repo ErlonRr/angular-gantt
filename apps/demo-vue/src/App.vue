@@ -14,7 +14,11 @@ const criticalPath = ref(false);
 const dark = ref(true);
 const log = ref('');
 
-const options = computed(() => ({ viewMode: viewMode.value, baseline: baseline.value, criticalPath: criticalPath.value }));
+const options = computed(() => ({
+  viewMode: viewMode.value,
+  baseline: baseline.value,
+  criticalPath: criticalPath.value,
+}));
 
 function applyDates(e: TaskDragEvent | TaskResizeEvent) {
   const task = tasks.value.find(t => t.id === e.taskId);

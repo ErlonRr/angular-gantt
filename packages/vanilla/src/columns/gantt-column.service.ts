@@ -8,8 +8,11 @@
  */
 
 import {
-  buildBuiltinColumns, mergeColumnDefs, resolveViewColumns,
-  type GanttView, type ResolvedGanttConfig,
+  buildBuiltinColumns,
+  mergeColumnDefs,
+  resolveViewColumns,
+  type GanttView,
+  type ResolvedGanttConfig,
 } from '@gantry/core';
 import type { VanillaColumnDef as ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -130,9 +133,9 @@ export class GanttColumnService {
   toggleVisible(key: string, view?: ViewKey, config?: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>): void {
     const current = config
       ? (view ? [view] : (['split', 'table'] as const)).some(v => this.columnsFor(v, config).some(c => c.key === key))
-      : (view && this.visibility[view].get(key))
-        ?? this.visibility.all.get(key)
-        ?? this._columns().find(c => c.key === key)?.visible !== false;
+      : ((view && this.visibility[view].get(key)) ??
+        this.visibility.all.get(key) ??
+        this._columns().find(c => c.key === key)?.visible !== false);
     this.setVisible(key, !current, view);
   }
 }

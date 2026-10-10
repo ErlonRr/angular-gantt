@@ -10,24 +10,19 @@
 
 import { Injectable, signal, computed, inject } from '@angular/core';
 
-import {
-  GanttLabels, GanttFormats, GanttOptions, GanttI18n,
-  DEFAULT_LABELS, DEFAULT_FORMATS,
-} from '../types';
+import { GanttLabels, GanttFormats, GanttOptions, GanttI18n, DEFAULT_LABELS, DEFAULT_FORMATS } from '../types';
 import { GANTT_GLOBAL_CONFIG } from './gantt-theme.service';
 
 @Injectable()
 export class GanttI18nService {
   private readonly globalConfig = inject(GANTT_GLOBAL_CONFIG);
 
-  private readonly _locale  = signal<string | undefined>(undefined);
-  private readonly _labels  = signal<Partial<GanttLabels>>({});
+  private readonly _locale = signal<string | undefined>(undefined);
+  private readonly _labels = signal<Partial<GanttLabels>>({});
   private readonly _formats = signal<Partial<GanttFormats>>({});
 
   /** Effective dayjs locale id (undefined → dayjs default, English). */
-  readonly locale = computed<string | undefined>(
-    () => this._locale() ?? this.globalConfig.locale,
-  );
+  readonly locale = computed<string | undefined>(() => this._locale() ?? this.globalConfig.locale);
 
   /** Effective, fully-populated UI labels. */
   readonly labels = computed<GanttLabels>(() => ({
@@ -55,8 +50,8 @@ export class GanttI18nService {
 
   /** Convenience bundle for the pure formatters. */
   readonly bundle = computed<GanttI18n>(() => ({
-    locale:  this.locale(),
-    labels:  this.labels(),
+    locale: this.locale(),
+    labels: this.labels(),
     formats: this.formats(),
   }));
 

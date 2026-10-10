@@ -20,23 +20,19 @@ import { DragSession, type DragTiming, type DragPreview } from '@gantry/core';
 
 export type { DragPreview };
 
-export type DragState =
-  | { kind: 'idle' }
-  | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };
+export type DragState = { kind: 'idle' } | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };
 
 @Injectable()
 export class GanttDragService {
-
   // ── FSM state ──────────────────────────────────────────────
   readonly state = signal<DragState>({ kind: 'idle' });
 
   /** Preview geometry while dragging/resizing (null when idle) */
   readonly preview = signal<DragPreview | null>(null);
 
-  readonly isDragging  = computed(() => this.state().kind === 'dragging');
-  readonly isResizing  = computed(() =>
-    this.state().kind === 'resizing-left' || this.state().kind === 'resizing-right');
-  readonly isActive    = computed(() => this.state().kind !== 'idle');
+  readonly isDragging = computed(() => this.state().kind === 'dragging');
+  readonly isResizing = computed(() => this.state().kind === 'resizing-left' || this.state().kind === 'resizing-right');
+  readonly isActive = computed(() => this.state().kind !== 'idle');
   readonly activeTaskId = computed(() => {
     const s = this.state();
     return s.kind !== 'idle' ? s.taskId : null;
@@ -66,9 +62,21 @@ export class GanttDragService {
     event.stopPropagation();
 
     const task = geo.row.task;
-    const session = new DragSession(task.id, handle, task.start, task.end ?? task.start, event.clientX, geo, this.timing);
+    const session = new DragSession(
+      task.id,
+      handle,
+      task.start,
+      task.end ?? task.start,
+      event.clientX,
+      geo,
+      this.timing,
+    );
     this.session = session;
-    try { captureEl.setPointerCapture(event.pointerId); } catch { /* synthetic event */ }
+    try {
+      captureEl.setPointerCapture(event.pointerId);
+    } catch {
+      /* synthetic event */
+    }
 
     this.state.set({
       kind: handle === 'left' ? 'resizing-left' : handle === 'right' ? 'resizing-right' : 'dragging',

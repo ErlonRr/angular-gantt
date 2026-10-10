@@ -9,8 +9,13 @@ import { computeCriticalPath, longestChain } from '../gantt-cpm';
 import { DEFAULT_LABELS, type GanttTask } from '../types';
 
 const day = (d: number) => new Date(2026, 0, d);
-const task = (id: string, extra: Partial<GanttTask> = {}): GanttTask =>
-  ({ id, name: id, start: day(1), end: day(3), ...extra });
+const task = (id: string, extra: Partial<GanttTask> = {}): GanttTask => ({
+  id,
+  name: id,
+  start: day(1),
+  end: day(3),
+  ...extra,
+});
 
 // ─── normalizeTasks ──────────────────────────────────────────
 
@@ -50,7 +55,10 @@ describe('normalizeTasks', () => {
 
   it('flattenTree keeps tasks whose parentId is null', () => {
     const rows = flattenTree([task('a', { parentId: null as unknown as string }), task('b', { parentId: 'a' })]);
-    expect(rows.map(r => [r.task.id, r.level])).toEqual([['a', 0], ['b', 1]]);
+    expect(rows.map(r => [r.task.id, r.level])).toEqual([
+      ['a', 0],
+      ['b', 1],
+    ]);
   });
 
   it('default columns render a task without end', () => {
@@ -65,8 +73,10 @@ describe('normalizeTasks', () => {
 describe('sortRoots', () => {
   it('sorts root groups and keeps each subtree under its root', () => {
     const tasks = [
-      task('b', { start: day(5) }), task('b1', { parentId: 'b', start: day(6) }),
-      task('a', { start: day(1) }), task('a1', { parentId: 'a', start: day(2) }),
+      task('b', { start: day(5) }),
+      task('b1', { parentId: 'b', start: day(6) }),
+      task('a', { start: day(1) }),
+      task('a1', { parentId: 'a', start: day(2) }),
       task('a1x', { parentId: 'a1', start: day(2) }),
     ];
     const rows = flattenTree(tasks);
@@ -77,14 +87,18 @@ describe('sortRoots', () => {
   });
 
   it('is stable for equal keys', () => {
-    const rows = flattenTree([task('x', { start: day(1) }), task('y', { start: day(1) }), task('z', { start: day(1) })]);
+    const rows = flattenTree([
+      task('x', { start: day(1) }),
+      task('y', { start: day(1) }),
+      task('z', { start: day(1) }),
+    ]);
     expect(sortRoots(rows, columnComparator('progress')).map(r => r.task.id)).toEqual(['x', 'y', 'z']);
   });
 
   it('sorts 10k rows in linear time', () => {
     const tasks: GanttTask[] = [];
     for (let i = 0; i < 2_000; i++) {
-      tasks.push(task(`r${i}`, { start: day(1 + (i * 7) % 300) }));
+      tasks.push(task(`r${i}`, { start: day(1 + ((i * 7) % 300)) }));
       for (let j = 0; j < 4; j++) tasks.push(task(`r${i}-${j}`, { parentId: `r${i}`, start: day(2) }));
     }
     const rows = flattenTree(tasks);
@@ -150,8 +164,10 @@ describe('computeCriticalPath — end date modes', () => {
     // Exclusive: z (4d) then w (1d) = 5 beats x→y→w (3d). Inclusive: x→y→w (6d) beats z alone (5d) —
     // z's last day overlaps w's first, so they no longer chain.
     const chainable = [
-      task('x', { start: day(1), end: day(2) }), task('z', { start: day(1), end: day(5) }),
-      task('y', { start: day(3), end: day(4) }), task('w', { start: day(5), end: day(6) }),
+      task('x', { start: day(1), end: day(2) }),
+      task('z', { start: day(1), end: day(5) }),
+      task('y', { start: day(3), end: day(4) }),
+      task('w', { start: day(5), end: day(6) }),
     ];
     expect(longestChain(chainable)).toEqual(['z', 'w']);
     expect(longestChain(chainable, { endDateMode: 'inclusive' })).toEqual(['x', 'y', 'w']);

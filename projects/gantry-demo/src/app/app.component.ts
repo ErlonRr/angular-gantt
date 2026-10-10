@@ -11,23 +11,25 @@ import { DemoFrameComponent } from './shell/demo-frame.component';
     <app-demo-sidebar />
     <app-demo-frame class="ide-content" />
   `,
-  styles: [`
-    :host {
-      display: flex;
-      flex-direction: row;
-      height: 100vh;
-      width: 100vw;
-      overflow: hidden;
-      background: hsl(var(--bg));
-      color: hsl(var(--fg));
-    }
-    .ide-content {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-  `],
+  styles: [
+    `
+      :host {
+        display: flex;
+        flex-direction: row;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        background: hsl(var(--bg));
+        color: hsl(var(--fg));
+      }
+      .ide-content {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+    `,
+  ],
 })
 export class AppComponent {}

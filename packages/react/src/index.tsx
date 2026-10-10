@@ -1,15 +1,27 @@
 import {
-  createElement, forwardRef, useEffect, useImperativeHandle, useRef,
-  type CSSProperties, type HTMLAttributes,
+  createElement,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  type CSSProperties,
+  type HTMLAttributes,
 } from 'react';
 import {
-  GANTRY_EVENTS, GANTRY_PROPERTIES,
-  type GantryElement, type GantryProperties, type GantryEventCallbacks,
+  GANTRY_EVENTS,
+  GANTRY_PROPERTIES,
+  type GantryElement,
+  type GantryProperties,
+  type GantryEventCallbacks,
 } from '@gantry/vanilla';
 
 export type {
-  GantryElement, GantryProperties, GantryEventCallbacks, VanillaColumnDef as ColumnDef,
-  GanttDataSourceConfig, GanttBarRenderer,
+  GantryElement,
+  GantryProperties,
+  GantryEventCallbacks,
+  VanillaColumnDef as ColumnDef,
+  GanttDataSourceConfig,
+  GanttBarRenderer,
 } from '@gantry/vanilla';
 export { GanttDataSource } from '@gantry/vanilla';
 export * from '@gantry/core';
@@ -64,7 +76,10 @@ export const Gantry = forwardRef<GantryElement, GantryProps>(function Gantry(pro
 
   const native: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(props)) {
-    if (!(GANTRY_PROPERTIES as readonly string[]).includes(k) && !(Object.values(GANTRY_EVENTS) as string[]).includes(k)) {
+    if (
+      !(GANTRY_PROPERTIES as readonly string[]).includes(k) &&
+      !(Object.values(GANTRY_EVENTS) as string[]).includes(k)
+    ) {
       native[k] = v;
     }
   }

@@ -14,10 +14,25 @@
  */
 
 import {
-  GanttTask, GanttOptions, GanttAnnotation, GanttTheme, GanttFlatRow, GanttState, GanttView,
-  GanttI18n, ViewMode, computeCriticalPath, resolveConfig, resolveLength, taskSpan,
-  initialScrollLeft, initialScrollChanged, zoomAnchorScroll,
-  type ResolvedGanttConfig, type BarVisual, type TimelineModel,
+  GanttTask,
+  GanttOptions,
+  GanttAnnotation,
+  GanttTheme,
+  GanttFlatRow,
+  GanttState,
+  GanttView,
+  GanttI18n,
+  ViewMode,
+  computeCriticalPath,
+  resolveConfig,
+  resolveLength,
+  taskSpan,
+  initialScrollLeft,
+  initialScrollChanged,
+  zoomAnchorScroll,
+  type ResolvedGanttConfig,
+  type BarVisual,
+  type TimelineModel,
 } from '@gantry/core';
 import { GanttThemeService } from './services/gantt-theme.service';
 import { GanttI18nService } from './services/gantt-i18n.service';
@@ -33,14 +48,13 @@ import { GanttToolbarComponent } from './annotations/gantt-toolbar.component';
 import { GanttTooltip } from './tooltip/gantt-tooltip';
 import { GanttDataSource } from './datasource/gantt-datasource';
 import { computeVirtualWindow } from './virtual-scroll/virtual-window';
-import type {
-  VanillaColumnDef, GanttDataSourceConfig, GantryEventDetailMap, GantryEventMap,
-} from './types';
+import type { VanillaColumnDef, GanttDataSourceConfig, GantryEventDetailMap, GantryEventMap } from './types';
 
 const STATE_PREFIX = 'gantry:';
 
 const template = typeof document === 'undefined' ? null : document.createElement('template');
-if (template) template.innerHTML = `
+if (template)
+  template.innerHTML = `
   <style>
     :host {
       display: block;
@@ -231,23 +245,35 @@ const parseBool = (v: string | null) => v !== null && v !== 'false';
 // Typed event listener overloads (`el.addEventListener('task-dragged', e => e.detail.taskId)`)
 export interface GantryElement {
   addEventListener<K extends keyof GantryEventMap>(
-    type: K, listener: (this: GantryElement, ev: GantryEventMap[K]) => unknown,
-    options?: boolean | AddEventListenerOptions): void;
+    type: K,
+    listener: (this: GantryElement, ev: GantryEventMap[K]) => unknown,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
   addEventListener<K extends keyof HTMLElementEventMap>(
-    type: K, listener: (this: GantryElement, ev: HTMLElementEventMap[K]) => unknown,
-    options?: boolean | AddEventListenerOptions): void;
+    type: K,
+    listener: (this: GantryElement, ev: HTMLElementEventMap[K]) => unknown,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
   addEventListener(
-    type: string, listener: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions): void;
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void;
   removeEventListener<K extends keyof GantryEventMap>(
-    type: K, listener: (this: GantryElement, ev: GantryEventMap[K]) => unknown,
-    options?: boolean | EventListenerOptions): void;
+    type: K,
+    listener: (this: GantryElement, ev: GantryEventMap[K]) => unknown,
+    options?: boolean | EventListenerOptions,
+  ): void;
   removeEventListener<K extends keyof HTMLElementEventMap>(
-    type: K, listener: (this: GantryElement, ev: HTMLElementEventMap[K]) => unknown,
-    options?: boolean | EventListenerOptions): void;
+    type: K,
+    listener: (this: GantryElement, ev: HTMLElementEventMap[K]) => unknown,
+    options?: boolean | EventListenerOptions,
+  ): void;
   removeEventListener(
-    type: string, listener: EventListenerOrEventListenerObject,
-    options?: boolean | EventListenerOptions): void;
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ): void;
 }
 
 // Allow importing (not defining) the element during SSR, where HTMLElement doesn't exist
@@ -313,8 +339,11 @@ export class GantryElement extends BaseElement {
   private initialScrollDone = false;
   /** Timeline the canvas was last painted with — anchors the scroll when it changes */
   private paintedTimeline?: TimelineModel;
-  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string> } =
-    { tasks: null, key: '', ids: new Set() };
+  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string> } = {
+    tasks: null,
+    key: '',
+    ids: new Set(),
+  };
   private lastViewMode: string;
   private restoredStateKey?: string;
   private stateTimer?: ReturnType<typeof setTimeout>;
@@ -349,11 +378,15 @@ export class GantryElement extends BaseElement {
     this.scrollSvc.bindViewports(this.panelEl, this.canvasViewportEl);
     this.scrollSvc.onScroll = () => this.scheduleRender(false);
     // The panel only scrolls horizontally; forward vertical wheel to the timeline
-    this.panelEl.addEventListener('wheel', e => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-      this.canvasViewportEl.scrollTop += e.deltaY;
-      e.preventDefault();
-    }, { passive: false });
+    this.panelEl.addEventListener(
+      'wheel',
+      e => {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        this.canvasViewportEl.scrollTop += e.deltaY;
+        e.preventDefault();
+      },
+      { passive: false },
+    );
 
     this.dragSvc.onTaskDragged = e => {
       this.layout.updateTask(e.taskId, { start: e.newStart, end: e.newEnd });
@@ -366,8 +399,7 @@ export class GantryElement extends BaseElement {
       this.scheduleRender();
     };
     this.dragSvc.preview.subscribe(() => this.scheduleRender(false));
-    this.dragSvc.state.subscribe(s =>
-      this.canvasContainerEl.classList.toggle('gantry-dragging', s.kind !== 'idle'));
+    this.dragSvc.state.subscribe(s => this.canvasContainerEl.classList.toggle('gantry-dragging', s.kind !== 'idle'));
 
     this.selSvc.onChange = e => {
       this.emit('selection-change', e);
@@ -445,14 +477,18 @@ export class GantryElement extends BaseElement {
   // ── Properties ────────────────────────────────────────────
 
   /** Tasks to display. Ignored while a `dataSource` is set. */
-  get tasks(): GanttTask[] { return this.layout.tasks(); }
+  get tasks(): GanttTask[] {
+    return this.layout.tasks();
+  }
   set tasks(val: GanttTask[]) {
     if (this._dataSource) return;
     this.layout.setTasks(val ?? []);
     this.scheduleRender();
   }
 
-  get columns(): VanillaColumnDef[] { return this.colSvc.columns; }
+  get columns(): VanillaColumnDef[] {
+    return this.colSvc.columns;
+  }
   set columns(val: VanillaColumnDef[] | null | undefined) {
     this.columnsProp = val?.length ? val : null;
     // options.columns, when set, keeps priority
@@ -463,7 +499,9 @@ export class GantryElement extends BaseElement {
     this.scheduleRender();
   }
 
-  get options(): GanttOptions { return this._options; }
+  get options(): GanttOptions {
+    return this._options;
+  }
   set options(val: GanttOptions | null | undefined) {
     const opts = val ?? {};
     const prev = this._options;
@@ -484,7 +522,8 @@ export class GantryElement extends BaseElement {
     const view = opts.view ?? (opts.panel?.collapsed ? 'chart' : undefined);
     const prevView = prev.view ?? (prev.panel?.collapsed ? 'chart' : undefined);
     if (view && view !== prevView) this.layout.view.set(view);
-    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) this.layout.panelWidthPx.set(null);
+    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth)
+      this.layout.panelWidthPx.set(null);
     if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this.initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this.restoredStateKey) {
       this.restoredStateKey = opts.stateKey;
@@ -494,44 +533,72 @@ export class GantryElement extends BaseElement {
     this.scheduleRender();
   }
 
-  get annotations(): GanttAnnotation[] { return this._annotations; }
+  get annotations(): GanttAnnotation[] {
+    return this._annotations;
+  }
   set annotations(val: GanttAnnotation[]) {
     this._annotations = val ?? [];
     this.scheduleRender();
   }
 
   /** `true` / `false` / `'auto'` (follows `prefers-color-scheme`). */
-  get darkMode(): boolean | 'auto' { return this._darkMode; }
+  get darkMode(): boolean | 'auto' {
+    return this._darkMode;
+  }
   set darkMode(val: boolean | 'auto') {
     this._darkMode = val;
     this.themeSvc.setDarkMode(val);
     this.scheduleRender();
   }
 
-  get showToolbar(): boolean { return this._showToolbar; }
-  set showToolbar(val: boolean) { this._showToolbar = val; this.scheduleRender(); }
+  get showToolbar(): boolean {
+    return this._showToolbar;
+  }
+  set showToolbar(val: boolean) {
+    this._showToolbar = val;
+    this.scheduleRender();
+  }
 
-  get enableDrag(): boolean { return this._enableDrag; }
-  set enableDrag(val: boolean) { this._enableDrag = val; this.scheduleRender(); }
+  get enableDrag(): boolean {
+    return this._enableDrag;
+  }
+  set enableDrag(val: boolean) {
+    this._enableDrag = val;
+    this.scheduleRender();
+  }
 
-  get enableResize(): boolean { return this._enableResize; }
-  set enableResize(val: boolean) { this._enableResize = val; this.scheduleRender(); }
+  get enableResize(): boolean {
+    return this._enableResize;
+  }
+  set enableResize(val: boolean) {
+    this._enableResize = val;
+    this.scheduleRender();
+  }
 
-  get tooltipEnabled(): boolean { return this._tooltipEnabled; }
+  get tooltipEnabled(): boolean {
+    return this._tooltipEnabled;
+  }
   set tooltipEnabled(val: boolean) {
     this._tooltipEnabled = val;
     if (!val) this.tooltip.hide();
   }
 
   /** Floating legend explaining the vertical markers (today + annotations). */
-  get showLegend(): boolean { return this._showLegend; }
-  set showLegend(val: boolean) { this._showLegend = val; this.scheduleRender(); }
+  get showLegend(): boolean {
+    return this._showLegend;
+  }
+  set showLegend(val: boolean) {
+    this._showLegend = val;
+    this.scheduleRender();
+  }
 
   /**
    * Lazy, paged loading. Pass `{ fetcher, pageSize }` or a `GanttDataSource`.
    * While set, it owns the task list (the `tasks` property is ignored).
    */
-  get dataSource(): GanttDataSource | null { return this._dataSource; }
+  get dataSource(): GanttDataSource | null {
+    return this._dataSource;
+  }
   set dataSource(val: GanttDataSource | GanttDataSourceConfig | null | undefined) {
     if (this._dataSource) this._dataSource.onChange = undefined;
     const ds = val == null ? null : val instanceof GanttDataSource ? val : new GanttDataSource(val);
@@ -565,23 +632,38 @@ export class GantryElement extends BaseElement {
   }
 
   /** Replace or decorate the built-in bar SVG (see `GanttBarRenderer`). */
-  get renderBar(): GanttBarRenderer | undefined { return this._renderBar; }
-  set renderBar(fn: GanttBarRenderer | undefined) { this._renderBar = fn; this.scheduleRender(); }
+  get renderBar(): GanttBarRenderer | undefined {
+    return this._renderBar;
+  }
+  set renderBar(fn: GanttBarRenderer | undefined) {
+    this._renderBar = fn;
+    this.scheduleRender();
+  }
 
   // ── Public API ────────────────────────────────────────────
 
-  zoomIn(): void { this.layout.zoomIn(); this.scheduleRender(); }
-  zoomOut(): void { this.layout.zoomOut(); this.scheduleRender(); }
+  zoomIn(): void {
+    this.layout.zoomIn();
+    this.scheduleRender();
+  }
+  zoomOut(): void {
+    this.layout.zoomOut();
+    this.scheduleRender();
+  }
 
   /** Active zoom level (a `ViewMode` or a custom `zoomLevels` name). */
-  get viewMode(): string { return this.layout.viewMode(); }
+  get viewMode(): string {
+    return this.layout.viewMode();
+  }
   setViewMode(mode: ViewMode | string): void {
     this.layout.viewMode.set(mode);
     this.scheduleRender();
   }
 
   /** Current view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). */
-  get view(): GanttView { return this.layout.view(); }
+  get view(): GanttView {
+    return this.layout.view();
+  }
   setView(view: GanttView): void {
     if (view === this.layout.view()) return;
     this.layout.view.set(view);
@@ -627,7 +709,9 @@ export class GantryElement extends BaseElement {
   setSelectedTasks(ids: string[]): void {
     this.selSvc.setSelected(ids);
   }
-  clearSelection(): void { this.selSvc.clear(); }
+  clearSelection(): void {
+    this.selSvc.clear();
+  }
   selectAll(): void {
     const selection = this.layout.config()?.selection;
     if (!selection?.enabled || !selection.multi) return;
@@ -643,12 +727,22 @@ export class GantryElement extends BaseElement {
     this.scheduleRender();
   }
 
-  collapseAll(): void { this.layout.collapseAll(); this.saveState(); this.scheduleRender(); }
-  expandAll(): void { this.layout.expandAll(); this.saveState(); this.scheduleRender(); }
+  collapseAll(): void {
+    this.layout.collapseAll();
+    this.saveState();
+    this.scheduleRender();
+  }
+  expandAll(): void {
+    this.layout.expandAll();
+    this.saveState();
+    this.scheduleRender();
+  }
 
   /** Show / hide a column (also persisted with `stateKey` via its width map). */
   /** Show / hide a column in both views, or only in the split panel / the table view. */
-  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void { this.colSvc.setVisible(key, visible, view); }
+  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void {
+    this.colSvc.setVisible(key, visible, view);
+  }
   /** Show a column if the view (both views by default) hides it, else hide it. */
   toggleColumnVisible(key: string, view?: 'split' | 'table'): void {
     this.colSvc.toggleVisible(key, view, this.layout.config() ?? undefined);
@@ -724,7 +818,11 @@ export class GantryElement extends BaseElement {
     this.emit('state-change', state);
     const key = this._options.stateKey;
     if (key) {
-      try { window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state)); } catch { /* storage unavailable */ }
+      try {
+        window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state));
+      } catch {
+        /* storage unavailable */
+      }
     }
   }
 
@@ -753,7 +851,11 @@ export class GantryElement extends BaseElement {
   /** Resolve options + interactive state into the config the render model reads. */
   private reconfigure(): ResolvedGanttConfig {
     const i18n = this.i18nBundle();
-    const cfg = resolveConfig({ ...this._options, viewMode: this.layout.viewMode() }, this.themeSvc.resolvedTheme, i18n);
+    const cfg = resolveConfig(
+      { ...this._options, viewMode: this.layout.viewMode() },
+      this.themeSvc.resolvedTheme,
+      i18n,
+    );
     // A custom zoomLevels list may not contain the current level
     if (cfg.level.name !== this.layout.viewMode()) this.layout.viewMode.set(cfg.level.name);
     this.layout.i18n.set(i18n);
@@ -801,7 +903,10 @@ export class GantryElement extends BaseElement {
     this.canvasContainerEl.style.marginBottom = `${Math.max(0, panelSB - canvasSB)}px`;
 
     // Virtual window shared by both panes
-    const viewportH = Math.max(rowHeight, (this.canvasViewportEl.clientHeight || this.panelEl.clientHeight || 500) - headerHeight);
+    const viewportH = Math.max(
+      rowHeight,
+      (this.canvasViewportEl.clientHeight || this.panelEl.clientHeight || 500) - headerHeight,
+    );
     const vw = computeVirtualWindow(this.scrollSvc.scrollTop, rowHeight, viewportH, rows.length, 4);
     const windowRows = rows.slice(vw.first, vw.last + 1);
 
@@ -901,8 +1006,8 @@ export class GantryElement extends BaseElement {
 
     // Lazy loading: fetch the next page when the window nears the end — never while
     // a failed page waits for `retry()`, and the first page only per `initialPage`
-    if (ds && ds.hasMore && !ds.isLoading && ds.error === null && ds.loadedCount > 0
-      && vw.last >= rows.length - 3) void ds.loadNext();
+    if (ds && ds.hasMore && !ds.isLoading && ds.error === null && ds.loadedCount > 0 && vw.last >= rows.length - 3)
+      void ds.loadNext();
   }
 
   /** Focus the rebuilt control that had focus before the render (toolbar, sort header, collapse…). */
@@ -934,7 +1039,12 @@ export class GantryElement extends BaseElement {
     let width: number;
     if (view === 'table') width = hostW;
     else if (view === 'chart') width = 0;
-    else width = this.clampPanel(this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320), cfg, hostW - splitterW);
+    else
+      width = this.clampPanel(
+        this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320),
+        cfg,
+        hostW - splitterW,
+      );
     if (width !== this.panelPx) {
       this.panelPx = width;
       this.panelEl.style.width = `${width}px`;
@@ -1041,7 +1151,11 @@ export class GantryElement extends BaseElement {
       const startW = this.panelPx;
       const available = (this.mainEl.clientWidth || 1000) - splitter.offsetWidth;
       this.mainEl.classList.add('is-resizing');
-      try { splitter.setPointerCapture(e.pointerId); } catch { /* synthetic event */ }
+      try {
+        splitter.setPointerCapture(e.pointerId);
+      } catch {
+        /* synthetic event */
+      }
       const move = (ev: PointerEvent) => {
         this.layout.panelWidthPx.set(this.clampPanel(startW + ev.clientX - startX, cfg, available));
         this.scheduleRender(false);
@@ -1064,10 +1178,16 @@ export class GantryElement extends BaseElement {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         this.togglePanel();
-      } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.layout.view() === 'split' && cfg.panel.resizable) {
+      } else if (
+        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+        this.layout.view() === 'split' &&
+        cfg.panel.resizable
+      ) {
         e.preventDefault();
         const available = (this.mainEl.clientWidth || 1000) - splitter.offsetWidth;
-        this.layout.panelWidthPx.set(this.clampPanel(this.panelPx + (e.key === 'ArrowLeft' ? -24 : 24), cfg, available));
+        this.layout.panelWidthPx.set(
+          this.clampPanel(this.panelPx + (e.key === 'ArrowLeft' ? -24 : 24), cfg, available),
+        );
         this.saveState();
         this.scheduleRender(false);
       }
@@ -1127,8 +1247,8 @@ export class GantryElement extends BaseElement {
     canvas.addEventListener('pointermove', e => {
       if (this.dragSvc.state().kind !== 'idle') return;
       const bar = this.barAt(e.target);
-      canvas.style.cursor = bar && bar.classList.contains('gantt-bar-draggable') && this.resizeHandleAt(bar, e.clientX)
-        ? 'ew-resize' : '';
+      canvas.style.cursor =
+        bar && bar.classList.contains('gantt-bar-draggable') && this.resizeHandleAt(bar, e.clientX) ? 'ew-resize' : '';
       if (!this._tooltipEnabled) return;
       const task = bar && this.layout.geometryById.get(bar.getAttribute('data-task-id')!)?.row.task;
       if (task) {

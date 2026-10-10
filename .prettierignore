@@ -1,0 +1,21 @@
+# Generated / vendored
+dist/
+**/dist/
+node_modules/
+pnpm-lock.yaml
+coverage/
+test-results/
+playwright-report/
+e2e/__screenshots__/
+.angular/
+.svelte-kit/
+# Written by Changesets
+CHANGELOG.md
+**/CHANGELOG.md
+# External skills (managed by `npx skills`, see skills-lock.json)
+.claude/skills/accessibility/
+.claude/skills/angular-developer/
+.claude/skills/svelte-core-bestpractices/
+.claude/skills/vue-best-practices/
+.claude/skills/web-design-guidelines/
+skills-lock.json

@@ -16,7 +16,9 @@ function pages(total: number) {
   return { calls, fetcher };
 }
 
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('PagedLoader', () => {
   it('loads pages in order and stops after a short page', async () => {
@@ -68,10 +70,12 @@ describe('PagedLoader', () => {
 
   it('reset() discards a load still in flight', async () => {
     let release!: (v: number[]) => void;
-    const slow = new Promise<number[]>(r => { release = r; });
+    const slow = new Promise<number[]>(r => {
+      release = r;
+    });
     let first = true;
     const loader = new PagedLoader<number>({
-      fetcher: async () => (first ? (first = false, slow) : [42]),
+      fetcher: async () => (first ? ((first = false), slow) : [42]),
       pageSize: 1,
     });
     const stale = loader.loadNext();
@@ -83,7 +87,9 @@ describe('PagedLoader', () => {
 
   it('retries a failed page with exponential backoff, then sets error', async () => {
     vi.useFakeTimers();
-    const fetcher = vi.fn(async () => { throw new Error('offline'); });
+    const fetcher = vi.fn(async () => {
+      throw new Error('offline');
+    });
     const loader = new PagedLoader<number>({ fetcher, retries: 2, retryDelay: 100 });
     const done = loader.loadNext();
     await vi.advanceTimersByTimeAsync(0);

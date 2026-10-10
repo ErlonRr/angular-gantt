@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/vanilla/**"
+  - 'packages/vanilla/**'
 ---
 
 # @gantry/vanilla (<gantry-element>) rules

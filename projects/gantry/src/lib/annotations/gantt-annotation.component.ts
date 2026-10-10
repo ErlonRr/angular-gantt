@@ -14,12 +14,7 @@
 //  the today marker pulse on first render.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
 import { GanttAnnotation, GanttTheme, GanttLayoutParams } from '../types';
 import { dateToPixel } from '../gantt-math';
@@ -27,27 +22,26 @@ import { dateToPixel } from '../gantt-math';
 // ─── Resolved annotation (dates converted to px) ─────────────
 
 interface ResolvedAnnotation {
-  raw:       GanttAnnotation;
-  x1:        number;
-  x2:        number | null;
-  color:     string;
+  raw: GanttAnnotation;
+  x1: number;
+  x2: number | null;
+  color: string;
   dashArray: string | null;
-  isToday:   boolean;
+  isToday: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────
 
 @Component({
-  selector:   'g[ganttAnnotations]',   // attribute selector — renders inside SVG
-  standalone:  true,
+  selector: 'g[ganttAnnotations]', // attribute selector — renders inside SVG
+  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '[attr.aria-hidden]': '"true"',
-    'style':              'pointer-events: none;',
+    style: 'pointer-events: none;',
   },
   template: `
     @for (ann of resolved(); track ann.x1) {
-
       <!-- ── Shaded region (x1 → x2) ──────────────────────── -->
       @if (ann.x2 !== null) {
         <rect
@@ -62,8 +56,10 @@ interface ResolvedAnnotation {
 
       <!-- ── Vertical line ─────────────────────────────────── -->
       <line
-        [attr.x1]="ann.x1" [attr.y1]="0"
-        [attr.x2]="ann.x1" [attr.y2]="totalHeight()"
+        [attr.x1]="ann.x1"
+        [attr.y1]="0"
+        [attr.x2]="ann.x1"
+        [attr.y2]="totalHeight()"
         [attr.stroke]="ann.color"
         [attr.stroke-width]="ann.isToday ? 2 : 1.5"
         [attr.stroke-dasharray]="ann.dashArray"
@@ -72,11 +68,7 @@ interface ResolvedAnnotation {
 
       <!-- ── Today triangle marker ─────────────────────────── -->
       @if (ann.isToday) {
-        <polygon
-          animate.enter="gantt-today-enter"
-          [attr.points]="todayTriangle(ann.x1)"
-          [attr.fill]="ann.color"
-        />
+        <polygon animate.enter="gantt-today-enter" [attr.points]="todayTriangle(ann.x1)" [attr.fill]="ann.color" />
         <!-- Today label -->
         <text
           animate.enter="gantt-today-enter"
@@ -87,7 +79,8 @@ interface ResolvedAnnotation {
           font-weight="600"
           [attr.font-family]="theme().fontFamily"
           style="user-select:none;"
-        >TODAY</text>
+          >TODAY</text
+        >
       }
 
       <!-- ── Annotation label ───────────────────────────────── -->
@@ -112,37 +105,50 @@ interface ResolvedAnnotation {
             [attr.font-family]="theme().fontFamily"
             dominant-baseline="central"
             style="user-select:none;"
-          >{{ ann.raw.label.text }}</text>
+            >{{ ann.raw.label.text }}</text
+          >
         </g>
       }
     }
   `,
-  styles: [`
-    @keyframes gantt-today-enter {
-      from { opacity: 0; transform: scaleY(0.4); transform-origin: top center; }
-      to   { opacity: 1; transform: scaleY(1); }
-    }
-    @media (prefers-reduced-motion: reduce) {
+  styles: [
+    `
       @keyframes gantt-today-enter {
-        from { opacity: 0; }
-        to   { opacity: 1; }
+        from {
+          opacity: 0;
+          transform: scaleY(0.4);
+          transform-origin: top center;
+        }
+        to {
+          opacity: 1;
+          transform: scaleY(1);
+        }
       }
-    }
-  `],
+      @media (prefers-reduced-motion: reduce) {
+        @keyframes gantt-today-enter {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+      }
+    `,
+  ],
 })
 export class GanttAnnotationComponent {
-
   // ── Inputs ────────────────────────────────────────────────
-  readonly annotations   = input<GanttAnnotation[]>([]);
-  readonly layoutParams  = input.required<GanttLayoutParams>();
-  readonly theme         = input.required<GanttTheme>();
-  readonly totalHeight   = input<number>(0);
-  readonly showToday     = input<boolean>(true);
+  readonly annotations = input<GanttAnnotation[]>([]);
+  readonly layoutParams = input.required<GanttLayoutParams>();
+  readonly theme = input.required<GanttTheme>();
+  readonly totalHeight = input<number>(0);
+  readonly showToday = input<boolean>(true);
 
   // ── Resolved annotations ──────────────────────────────────
   protected readonly resolved = computed<ResolvedAnnotation[]>(() => {
     const { origin, pxPerDay } = this.layoutParams();
-    const theme   = this.theme();
+    const theme = this.theme();
     const result: ResolvedAnnotation[] = [];
 
     // Today annotation (auto-generated if showToday is true)
@@ -150,16 +156,16 @@ export class GanttAnnotationComponent {
       const todayX = dateToPixel(new Date(), origin, pxPerDay);
       result.push({
         raw: {
-          x1:      new Date(),
+          x1: new Date(),
           isToday: true,
-          color:   theme.todayColor,
-          label:   undefined,
+          color: theme.todayColor,
+          label: undefined,
         },
-        x1:        todayX,
-        x2:        null,
-        color:     theme.todayColor,
+        x1: todayX,
+        x2: null,
+        color: theme.todayColor,
         dashArray: null,
-        isToday:   true,
+        isToday: true,
       });
     }
 
@@ -169,12 +175,12 @@ export class GanttAnnotationComponent {
       const x2 = ann.x2 ? dateToPixel(ann.x2, origin, pxPerDay) : null;
 
       result.push({
-        raw:       ann,
+        raw: ann,
         x1,
         x2,
-        color:     ann.color ?? theme.arrowColor,
+        color: ann.color ?? theme.arrowColor,
         dashArray: ann.isToday ? null : '5 3',
-        isToday:   ann.isToday ?? false,
+        isToday: ann.isToday ?? false,
       });
     }
 

@@ -6,8 +6,13 @@
 
 import dayjs from 'dayjs';
 import type {
-  TimeUnit, GanttScale, GanttZoomLevel, ScaleFormat, ScaleFormatContext,
-  GanttLabels, GanttI18n,
+  TimeUnit,
+  GanttScale,
+  GanttZoomLevel,
+  ScaleFormat,
+  ScaleFormatContext,
+  GanttLabels,
+  GanttI18n,
 } from '../types';
 import { ViewMode, DEFAULT_LABELS } from '../types';
 import { calendarDays, dateToPixel, toLocalDay } from '../gantt-math';
@@ -16,7 +21,12 @@ import { calendarDays, dateToPixel, toLocalDay } from '../gantt-math';
 
 /** Average length of each unit in days (used to derive px/day from a cell width). */
 export const UNIT_DAYS: Record<TimeUnit, number> = {
-  hour: 1 / 24, day: 1, week: 7, month: 30.436875, quarter: 91.310625, year: 365.2425,
+  hour: 1 / 24,
+  day: 1,
+  week: 7,
+  month: 30.436875,
+  quarter: 91.310625,
+  year: 365.2425,
 };
 
 /**
@@ -25,7 +35,9 @@ export const UNIT_DAYS: Record<TimeUnit, number> = {
  */
 export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1 = 1): Date {
   const d = toLocalDay(date);
-  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  const y = d.getFullYear(),
+    m = d.getMonth(),
+    day = d.getDate();
   switch (unit) {
     case 'hour': {
       const h = d.getHours();
@@ -42,22 +54,34 @@ export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1
       const weekIdx = Math.floor(Math.floor(calendarDays(ws)) / 7);
       return new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() - (((weekIdx % step) + step) % step) * 7);
     }
-    case 'month':   return new Date(y, m - (m % step), 1);
-    case 'quarter': return new Date(y, m - (m % (3 * step)), 1);
-    case 'year':    return new Date(y - (y % step), 0, 1);
+    case 'month':
+      return new Date(y, m - (m % step), 1);
+    case 'quarter':
+      return new Date(y, m - (m % (3 * step)), 1);
+    case 'year':
+      return new Date(y - (y % step), 0, 1);
   }
 }
 
 /** `date` + n × unit, in local calendar arithmetic. */
 export function unitAdd(date: Date, unit: TimeUnit, n: number): Date {
-  const y = date.getFullYear(), m = date.getMonth(), d = date.getDate(), h = date.getHours();
+  const y = date.getFullYear(),
+    m = date.getMonth(),
+    d = date.getDate(),
+    h = date.getHours();
   switch (unit) {
-    case 'hour':    return new Date(y, m, d, h + n, date.getMinutes());
-    case 'day':     return new Date(y, m, d + n, h, date.getMinutes());
-    case 'week':    return new Date(y, m, d + 7 * n, h, date.getMinutes());
-    case 'month':   return new Date(y, m + n, d);
-    case 'quarter': return new Date(y, m + 3 * n, d);
-    case 'year':    return new Date(y + n, m, d);
+    case 'hour':
+      return new Date(y, m, d, h + n, date.getMinutes());
+    case 'day':
+      return new Date(y, m, d + n, h, date.getMinutes());
+    case 'week':
+      return new Date(y, m, d + 7 * n, h, date.getMinutes());
+    case 'month':
+      return new Date(y, m + n, d);
+    case 'quarter':
+      return new Date(y, m + 3 * n, d);
+    case 'year':
+      return new Date(y + n, m, d);
   }
 }
 
@@ -104,8 +128,12 @@ export const QUARTER_YEAR_FORMAT: ScaleFormat = (s, _e, ctx) =>
 export const HALF_FORMAT: ScaleFormat = (s, _e, ctx) => `${ctx.labels.halfPrefix}${s.getMonth() < 6 ? 1 : 2}`;
 
 const DEFAULT_UNIT_FORMAT: Record<TimeUnit, ScaleFormat> = {
-  hour: 'HH', day: 'D', week: WEEK_FORMATS.number, month: 'MMM YYYY',
-  quarter: QUARTER_YEAR_FORMAT, year: 'YYYY',
+  hour: 'HH',
+  day: 'D',
+  week: WEEK_FORMATS.number,
+  month: 'MMM YYYY',
+  quarter: QUARTER_YEAR_FORMAT,
+  year: 'YYYY',
 };
 
 export function formatScaleLabel(scale: GanttScale, start: Date, end: Date, ctx: ScaleFormatContext): string {
@@ -117,30 +145,54 @@ export function formatScaleLabel(scale: GanttScale, start: Date, end: Date, ctx:
 
 /** The built-in zoom levels, finest first. Names match `ViewMode`. */
 export const DEFAULT_ZOOM_LEVELS: GanttZoomLevel[] = [
-  { name: ViewMode.Hour, pxPerDay: 960, scales: [
-    { unit: 'day', format: 'ddd D MMM', align: 'start' },
-    { unit: 'hour', format: 'HH' },
-  ] },
-  { name: ViewMode.Day, pxPerDay: 48, scales: [
-    { unit: 'month', format: 'MMMM YYYY', align: 'start' },
-    { unit: 'day', format: 'D' },
-  ] },
-  { name: ViewMode.Week, pxPerDay: 20, scales: [
-    { unit: 'month', format: 'MMM YYYY', align: 'start' },
-    { unit: 'week', format: WEEK_FORMATS.number },
-  ] },
-  { name: ViewMode.Month, pxPerDay: 8, scales: [
-    { unit: 'quarter', format: QUARTER_YEAR_FORMAT, align: 'start' },
-    { unit: 'month', format: 'MMM' },
-  ] },
-  { name: ViewMode.Quarter, pxPerDay: 4, scales: [
-    { unit: 'year', format: 'YYYY', align: 'start' },
-    { unit: 'quarter', format: QUARTER_FORMAT },
-  ] },
-  { name: ViewMode.Year, pxPerDay: 2, scales: [
-    { unit: 'year', format: 'YYYY', align: 'start' },
-    { unit: 'month', step: 6, format: HALF_FORMAT },
-  ] },
+  {
+    name: ViewMode.Hour,
+    pxPerDay: 960,
+    scales: [
+      { unit: 'day', format: 'ddd D MMM', align: 'start' },
+      { unit: 'hour', format: 'HH' },
+    ],
+  },
+  {
+    name: ViewMode.Day,
+    pxPerDay: 48,
+    scales: [
+      { unit: 'month', format: 'MMMM YYYY', align: 'start' },
+      { unit: 'day', format: 'D' },
+    ],
+  },
+  {
+    name: ViewMode.Week,
+    pxPerDay: 20,
+    scales: [
+      { unit: 'month', format: 'MMM YYYY', align: 'start' },
+      { unit: 'week', format: WEEK_FORMATS.number },
+    ],
+  },
+  {
+    name: ViewMode.Month,
+    pxPerDay: 8,
+    scales: [
+      { unit: 'quarter', format: QUARTER_YEAR_FORMAT, align: 'start' },
+      { unit: 'month', format: 'MMM' },
+    ],
+  },
+  {
+    name: ViewMode.Quarter,
+    pxPerDay: 4,
+    scales: [
+      { unit: 'year', format: 'YYYY', align: 'start' },
+      { unit: 'quarter', format: QUARTER_FORMAT },
+    ],
+  },
+  {
+    name: ViewMode.Year,
+    pxPerDay: 2,
+    scales: [
+      { unit: 'year', format: 'YYYY', align: 'start' },
+      { unit: 'month', step: 6, format: HALF_FORMAT },
+    ],
+  },
 ];
 
 /** px per day of a zoom level (from `pxPerDay`, or derived from `cellWidth`). */
@@ -177,37 +229,37 @@ export function withLegacyHeaderFormats(level: GanttZoomLevel, i18n?: GanttI18n)
 // ─── Tier cells ───────────────────────────────────────────────
 
 export interface ScaleCell {
-  start:     Date;
+  start: Date;
   /** Exclusive end of the period */
-  end:       Date;
-  x:         number;
-  width:     number;
-  label:     string;
+  end: Date;
+  x: number;
+  width: number;
+  label: string;
   className?: string;
   /** The period contains "now" */
   isCurrent: boolean;
 }
 
 export interface ScaleTier {
-  unit:   TimeUnit;
-  step:   number;
-  y:      number;
+  unit: TimeUnit;
+  step: number;
+  y: number;
   height: number;
-  align:  'center' | 'start';
-  cells:  ScaleCell[];
+  align: 'center' | 'start';
+  cells: ScaleCell[];
 }
 
 export interface BuildTiersInput {
-  scales:    GanttScale[];
-  start:     Date;
-  end:       Date;
-  pxPerDay:  number;
+  scales: GanttScale[];
+  start: Date;
+  end: Date;
+  pxPerDay: number;
   /** Tier heights when a scale has none: [upper tiers, bottom tier] */
-  heights?:  [number, number];
+  heights?: [number, number];
   weekStart?: 0 | 1;
-  locale?:   string;
-  labels?:   GanttLabels;
-  now?:      Date;
+  locale?: string;
+  labels?: GanttLabels;
+  now?: Date;
 }
 
 /** Period boundaries (start dates) of a unit inside [start, end), the first one possibly before `start`. */
@@ -253,7 +305,10 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
     }
 
     const tier: ScaleTier = {
-      unit: scale.unit, step, y, height,
+      unit: scale.unit,
+      step,
+      y,
+      height,
       align: scale.align ?? (isBottom ? 'center' : 'start'),
       cells,
     };

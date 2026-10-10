@@ -61,7 +61,6 @@ export interface GanttDataSourceConfig<T extends GanttTask = GanttTask> {
 // ─── GanttDataSource ─────────────────────────────────────────
 
 export class GanttDataSource<T extends GanttTask = GanttTask> {
-
   private readonly _loader?: PagedLoader<T>;
   /** Bumped on every loader change — the signals below re-read the loader */
   private readonly _version = signal(0);
@@ -96,13 +95,13 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
   constructor(config: GanttDataSourceConfig<T> = {}) {
     if (config.data || !config.fetcher) {
       this._static.set(config.data ?? []);
-      this.items       = this._static.asReadonly();
-      this.isLoading   = signal(false).asReadonly();
-      this.hasMore     = signal(false).asReadonly();
+      this.items = this._static.asReadonly();
+      this.isLoading = signal(false).asReadonly();
+      this.hasMore = signal(false).asReadonly();
       this.loadedCount = computed(() => this._static().length);
-      this.page        = signal(0).asReadonly();
-      this.nextPage    = signal(1).asReadonly();
-      this.error       = signal<unknown>(null).asReadonly();
+      this.page = signal(0).asReadonly();
+      this.nextPage = signal(1).asReadonly();
+      this.error = signal<unknown>(null).asReadonly();
       return;
     }
 
@@ -116,17 +115,18 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
     this._loader = loader;
     loader.subscribe(() => this._version.update(v => v + 1));
 
-    const read = <R>(get: () => R): Signal<R> => computed(() => {
-      this._version();
-      return get();
-    });
-    this.items       = read(() => loader.items);
-    this.isLoading   = read(() => loader.isLoading);
-    this.hasMore     = read(() => loader.hasMore);
+    const read = <R>(get: () => R): Signal<R> =>
+      computed(() => {
+        this._version();
+        return get();
+      });
+    this.items = read(() => loader.items);
+    this.isLoading = read(() => loader.isLoading);
+    this.hasMore = read(() => loader.hasMore);
     this.loadedCount = read(() => loader.loadedCount);
-    this.page        = read(() => loader.page);
-    this.nextPage    = read(() => loader.nextPage);
-    this.error       = read(() => loader.error);
+    this.page = read(() => loader.page);
+    this.nextPage = read(() => loader.nextPage);
+    this.error = read(() => loader.error);
 
     if (loader.autoStart) void loader.loadNext();
   }

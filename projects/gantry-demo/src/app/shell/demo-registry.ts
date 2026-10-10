@@ -7,26 +7,26 @@
 // ─────────────────────────────────────────────────────────────
 
 export const PACKAGE_NAME = 'ngx-gantry';
-export const INSTALL_CMD  = 'npm i ngx-gantry';
-export const REPO_URL     = 'https://github.com/ErlonRr/angular-gantt';
-export const NPM_URL      = 'https://www.npmjs.com/package/ngx-gantry';
-export const DOCS_URL     = 'https://github.com/ErlonRr/angular-gantt#readme';
+export const INSTALL_CMD = 'npm i ngx-gantry';
+export const REPO_URL = 'https://github.com/ErlonRr/angular-gantt';
+export const NPM_URL = 'https://www.npmjs.com/package/ngx-gantry';
+export const DOCS_URL = 'https://github.com/ErlonRr/angular-gantt#readme';
 
 export interface DemoEntry {
   /** Route path (without leading slash) */
-  path:        string;
+  path: string;
   /** Sidebar label */
-  label:       string;
+  label: string;
   /** One-line description shown under the label */
   description: string;
   /** Glyph shown in the leading badge */
-  icon:        string;
+  icon: string;
   /** Grouping bucket */
-  category:    DemoCategory;
+  category: DemoCategory;
   /** Longer "what this shows" blurb for the usage panel */
-  blurb:       string;
+  blurb: string;
   /** Copy-pasteable usage snippet */
-  usage:       string;
+  usage: string;
 }
 
 export type DemoCategory = 'Showcase' | 'Core' | 'Performance' | 'Extensibility';
@@ -36,14 +36,14 @@ export const DEMO_CATEGORY_ORDER: DemoCategory[] = ['Showcase', 'Core', 'Perform
 
 export const DEMOS: DemoEntry[] = [
   {
-    path:        'roadmap',
-    label:       'Product roadmap',
+    path: 'roadmap',
+    label: 'Product roadmap',
     description: 'Squads · milestones · custom columns',
-    icon:        '★',
-    category:    'Showcase',
-    blurb:       'Groups (squads), release milestones, dependencies and baselines, plus rich custom panel columns (owner avatar + status badge) and a live EN/IT locale switch.',
-    usage:
-`import { GantryComponent, ColumnDef, ColumnCellContext } from 'ngx-gantry';
+    icon: '★',
+    category: 'Showcase',
+    blurb:
+      'Groups (squads), release milestones, dependencies and baselines, plus rich custom panel columns (owner avatar + status badge) and a live EN/IT locale switch.',
+    usage: `import { GantryComponent, ColumnDef, ColumnCellContext } from 'ngx-gantry';
 
 @Component({
   imports: [GantryComponent],
@@ -65,14 +65,14 @@ export class Roadmap {
 }`,
   },
   {
-    path:        'demo',
-    label:       'Project board',
+    path: 'demo',
+    label: 'Project board',
     description: 'Dependencies · baseline · critical path',
-    icon:        '▦',
-    category:    'Core',
-    blurb:       'The everyday board: task tree with groups & milestones, FS/FF/SS/SF dependencies with lag, baselines, the critical path, annotations, drag & resize, and selection.',
-    usage:
-`import { GantryComponent, GanttTask, DependencyType } from 'ngx-gantry';
+    icon: '▦',
+    category: 'Core',
+    blurb:
+      'The everyday board: task tree with groups & milestones, FS/FF/SS/SF dependencies with lag, baselines, the critical path, annotations, drag & resize, and selection.',
+    usage: `import { GantryComponent, GanttTask, DependencyType } from 'ngx-gantry';
 
 tasks: GanttTask[] = [
   { id: 'a', name: 'Discovery', start: new Date('2026-01-05'), end: new Date('2026-01-31'), progress: 100 },
@@ -87,14 +87,14 @@ tasks: GanttTask[] = [
         [showLegend]="true" />`,
   },
   {
-    path:        'lazy',
-    label:       'Lazy load',
+    path: 'lazy',
+    label: 'Lazy load',
     description: '120 tasks · paginated datasource',
-    icon:        '⚡',
-    category:    'Performance',
-    blurb:       'A paginated data source (the shared core PagedLoader, exposed as signals) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
-    usage:
-`import { createGanttDataSource } from 'ngx-gantry';
+    icon: '⚡',
+    category: 'Performance',
+    blurb:
+      'A paginated data source (the shared core PagedLoader, exposed as signals) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
+    usage: `import { createGanttDataSource } from 'ngx-gantry';
 
 ds = createGanttDataSource({
   fetcher: (page, size) =>
@@ -106,14 +106,14 @@ ds = createGanttDataSource({
 <gantry [dataSource]="ds" />`,
   },
   {
-    path:        'custom-bar',
-    label:       'Custom bars',
+    path: 'custom-bar',
+    label: 'Custom bars',
     description: 'Bar registry · custom epic bars',
-    icon:        '◆',
-    category:    'Extensibility',
-    blurb:       'Plug any Angular component in as a bar type via the bar registry — here an "epic" bar drawn with your own SVG, selected per task with barType.',
-    usage:
-`import { GanttBarBase, GanttBarContext, provideGanttBar } from 'ngx-gantry';
+    icon: '◆',
+    category: 'Extensibility',
+    blurb:
+      'Plug any Angular component in as a bar type via the bar registry — here an "epic" bar drawn with your own SVG, selected per task with barType.',
+    usage: `import { GanttBarBase, GanttBarContext, provideGanttBar } from 'ngx-gantry';
 
 @Component({
   selector: 'g[epicBar]',

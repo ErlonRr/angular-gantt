@@ -16,8 +16,11 @@
 
 import { Injectable, signal, computed, effect, inject, untracked } from '@angular/core';
 import {
-  buildBuiltinColumns, mergeColumnDefs, resolveViewColumns,
-  type GanttView, type ResolvedGanttConfig,
+  buildBuiltinColumns,
+  mergeColumnDefs,
+  resolveViewColumns,
+  type GanttView,
+  type ResolvedGanttConfig,
 } from '@gantry/core';
 import { ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -30,9 +33,7 @@ export class GanttColumnService {
 
   /** Localised built-in columns for the current i18n config. */
   private builtinDefs(): ColumnDef[] {
-    return buildBuiltinColumns(
-      this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat,
-    ) as ColumnDef[];
+    return buildBuiltinColumns(this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat) as ColumnDef[];
   }
 
   /** Consumer-provided definitions (null = built-in columns). */
@@ -79,15 +80,24 @@ export class GanttColumnService {
     });
     let base: ColumnDef[] = this._custom ? mergeColumnDefs(this._custom, builtins) : builtins;
     if (this._directives.size) {
-      base = base.map(c => { const d = this._directives.get(c.key); return d ? mergeColumnDefs([d], [c])[0] : c; });
+      base = base.map(c => {
+        const d = this._directives.get(c.key);
+        return d ? mergeColumnDefs([d], [c])[0] : c;
+      });
     }
     const extra = this._extraColumns(base);
     if (extra.length || this._removed.size || this._order) {
       base = [...base, ...extra].filter(c => !this._removed.has(c.key));
       if (this._order) {
         const order = this._order;
-        const rank = (k: string) => { const i = order.indexOf(k); return i < 0 ? order.length : i; };
-        base = base.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c.key) - rank(b.c.key) || a.i - b.i).map(x => x.c);
+        const rank = (k: string) => {
+          const i = order.indexOf(k);
+          return i < 0 ? order.length : i;
+        };
+        base = base
+          .map((c, i) => ({ c, i }))
+          .sort((a, b) => rank(a.c.key) - rank(b.c.key) || a.i - b.i)
+          .map(x => x.c);
       }
     }
     this._builtins.set(builtins.map(apply));
@@ -99,7 +109,8 @@ export class GanttColumnService {
     const extra: ColumnDef[] = [];
     for (const c of [...this._directives.values(), ...this._added]) {
       // A new key gets a label and a width when the definition leaves them out
-      if (!base.some(b => b.key === c.key) && !extra.some(e => e.key === c.key)) extra.push({ ...c, label: c.label ?? c.key, width: c.width ?? 120 });
+      if (!base.some(b => b.key === c.key) && !extra.some(e => e.key === c.key))
+        extra.push({ ...c, label: c.label ?? c.key, width: c.width ?? 120 });
     }
     return extra;
   }
@@ -133,25 +144,22 @@ export class GanttColumnService {
   }
 
   /** @deprecated Use `columnsFor(view, config)` — visibility now depends on the view. */
-  readonly visibleColumns = computed(() =>
-    this._columns().filter(c => c.visible !== false)
-  );
+  readonly visibleColumns = computed(() => this._columns().filter(c => c.visible !== false));
 
   /** @deprecated CSS grid-template-columns of `visibleColumns` */
   readonly gridTemplate = computed(() =>
     this.visibleColumns()
       .map(c => `${c.width}px`)
-      .join(' ')
+      .join(' '),
   );
 
   /** Current width of every column, by key (for state persistence) */
   readonly widths = computed<Record<string, number>>(() =>
-    Object.fromEntries([...this._builtins(), ...this._columns()].map(c => [c.key, c.width])));
+    Object.fromEntries([...this._builtins(), ...this._columns()].map(c => [c.key, c.width])),
+  );
 
   /** @deprecated Unused; the panel width comes from `panel.width` */
-  readonly totalPanelWidth = computed(() =>
-    this.visibleColumns().reduce((sum, c) => sum + c.width, 0)
-  );
+  readonly totalPanelWidth = computed(() => this.visibleColumns().reduce((sum, c) => sum + c.width, 0));
 
   // ── Init from consumer config ─────────────────────────────
   /**
@@ -210,9 +218,9 @@ export class GanttColumnService {
   toggleVisible(key: string, view?: ViewKey, config?: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>): void {
     const current = config
       ? (view ? [view] : (['split', 'table'] as const)).some(v => this.columnsFor(v, config).some(c => c.key === key))
-      : (view && this._visibility[view].get(key))
-        ?? this._visibility.all.get(key)
-        ?? this._columns().find(c => c.key === key)?.visible !== false;
+      : ((view && this._visibility[view].get(key)) ??
+        this._visibility.all.get(key) ??
+        this._columns().find(c => c.key === key)?.visible !== false);
     this.setVisible(key, !current, view);
   }
 

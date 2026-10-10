@@ -38,25 +38,22 @@ export { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme };
 // ─── Config token ─────────────────────────────────────────────
 
 export interface GanttGlobalConfig {
-  theme?:    Partial<GanttTheme>;
+  theme?: Partial<GanttTheme>;
   darkMode?: boolean | 'auto';
   /** Default dayjs locale id (e.g. 'it') — load it first: import 'dayjs/locale/it' */
-  locale?:   string;
+  locale?: string;
   /** Default UI string overrides (i18n) */
-  labels?:   Partial<GanttLabels>;
+  labels?: Partial<GanttLabels>;
   /** Default date / header format overrides */
-  formats?:  Partial<GanttFormats>;
+  formats?: Partial<GanttFormats>;
 }
 
-export const GANTT_GLOBAL_CONFIG = new InjectionToken<GanttGlobalConfig>(
-  'GANTT_GLOBAL_CONFIG',
-  { factory: () => ({}) },
-);
+export const GANTT_GLOBAL_CONFIG = new InjectionToken<GanttGlobalConfig>('GANTT_GLOBAL_CONFIG', {
+  factory: () => ({}),
+});
 
 export function provideGantt(config: GanttGlobalConfig = {}): EnvironmentProviders {
-  return makeEnvironmentProviders([
-    { provide: GANTT_GLOBAL_CONFIG, useValue: config },
-  ]);
+  return makeEnvironmentProviders([{ provide: GANTT_GLOBAL_CONFIG, useValue: config }]);
 }
 
 function applyThemeToDom(el: HTMLElement, theme: Required<GanttTheme>): void {
@@ -67,15 +64,14 @@ function applyThemeToDom(el: HTMLElement, theme: Required<GanttTheme>): void {
 
 @Injectable()
 export class GanttThemeService {
-
-  private readonly cfg        = inject(GANTT_GLOBAL_CONFIG, { optional: true }) ?? {};
+  private readonly cfg = inject(GANTT_GLOBAL_CONFIG, { optional: true }) ?? {};
   private readonly destroyRef = inject(DestroyRef);
-  private readonly injector   = inject(Injector);
+  private readonly injector = inject(Injector);
 
-  private readonly _darkMode       = signal<boolean | 'auto'>(this.cfg.darkMode ?? false);
-  private readonly _prefersDark    = signal<boolean>(false);
+  private readonly _darkMode = signal<boolean | 'auto'>(this.cfg.darkMode ?? false);
+  private readonly _prefersDark = signal<boolean>(false);
   /** From `[options].theme` — replaced whenever the options change */
-  private readonly _optionsTheme   = signal<Partial<GanttTheme>>({});
+  private readonly _optionsTheme = signal<Partial<GanttTheme>>({});
   /** From `setTheme()` / `patchTheme()` — survives options changes */
   private readonly _customOverride = signal<Partial<GanttTheme>>({});
 

@@ -22,9 +22,9 @@ jobs:
       github.event.workflow_run.head_sha == github.sha
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # version commits + tags
-      pull-requests: write  # "Version packages" PR
-      id-token: write       # npm provenance
+      contents: write # version commits + tags
+      pull-requests: write # "Version packages" PR
+      id-token: write # npm provenance
     steps:
       - uses: actions/checkout@v4
         with:

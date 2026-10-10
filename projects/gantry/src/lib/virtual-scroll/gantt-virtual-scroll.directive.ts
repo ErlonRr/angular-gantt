@@ -45,35 +45,34 @@ import {
 import { computeVirtualWindow } from './virtual-window';
 
 @Directive({
-  selector:  '[ganttVirtualScroll]',
+  selector: '[ganttVirtualScroll]',
   standalone: true,
-  exportAs:  'ganttVirtualScroll',
+  exportAs: 'ganttVirtualScroll',
 })
 export class GanttVirtualScrollDirective<T> implements OnInit, OnDestroy {
-
   // ── Inputs ────────────────────────────────────────────────
   /** Full item array */
   readonly ganttVirtualScroll = input.required<T[]>();
   /** Fixed height of each item in px */
-  readonly vsItemHeight       = input<number>(36);
+  readonly vsItemHeight = input<number>(36);
   /** Extra items to render above and below the visible window */
-  readonly vsOverscan         = input<number>(4);
+  readonly vsOverscan = input<number>(4);
   /** Enable/disable virtualisation (useful for small lists) */
-  readonly vsEnabled          = input<boolean>(true);
+  readonly vsEnabled = input<boolean>(true);
 
   // ── Outputs ───────────────────────────────────────────────
-  readonly vsVisibleItems   = output<T[]>();
-  readonly vsPaddingTop     = output<number>();
-  readonly vsPaddingBottom  = output<number>();
+  readonly vsVisibleItems = output<T[]>();
+  readonly vsPaddingTop = output<number>();
+  readonly vsPaddingBottom = output<number>();
   /** Emits [firstIndex, lastIndex] of the visible window */
-  readonly vsRangeChange    = output<[number, number]>();
+  readonly vsRangeChange = output<[number, number]>();
 
   // ── Internal state ────────────────────────────────────────
-  private readonly _scrollTop  = signal<number>(0);
+  private readonly _scrollTop = signal<number>(0);
   private readonly _hostHeight = signal<number>(0);
 
-  private readonly el      = inject(ElementRef<HTMLElement>);
-  private readonly zone    = inject(NgZone);
+  private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly zone = inject(NgZone);
   private readonly injector = inject(Injector);
 
   private _scrollHandler!: () => void;
@@ -89,11 +88,11 @@ export class GanttVirtualScrollDirective<T> implements OnInit, OnDestroy {
       this._hostHeight(),
       this.ganttVirtualScroll().length,
       this.vsOverscan(),
-    )
+    ),
   );
 
   private readonly _firstVisible = computed(() => this._window().first);
-  private readonly _lastVisible  = computed(() => this._window().last);
+  private readonly _lastVisible = computed(() => this._window().last);
 
   // ── Lifecycle ─────────────────────────────────────────────
 
@@ -127,7 +126,7 @@ export class GanttVirtualScrollDirective<T> implements OnInit, OnDestroy {
     // Main effect — emit window changes to the consumer (ngOnInit is not an injection context)
     runInInjectionContext(this.injector, () => {
       effect(() => {
-        const items   = this.ganttVirtualScroll();
+        const items = this.ganttVirtualScroll();
         const enabled = this.vsEnabled();
 
         if (!enabled || items.length === 0) {

@@ -24,9 +24,7 @@ export class GanttScrollService {
   }
 
   private sync(source: 'panel' | 'canvas'): void {
-    const [from, to] = source === 'canvas'
-      ? [this.canvasEl!, this.panelEl!]
-      : [this.panelEl!, this.canvasEl!];
+    const [from, to] = source === 'canvas' ? [this.canvasEl!, this.panelEl!] : [this.panelEl!, this.canvasEl!];
     // The mirrored pane fires its own scroll event; equal offsets end the loop.
     if (to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
 
@@ -66,8 +64,11 @@ export class GanttScrollService {
 
 /** `smooth` becomes `instant` when the user prefers reduced motion. */
 function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
-  return behavior === 'smooth' && typeof matchMedia === 'function'
-    && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : behavior;
+  return behavior === 'smooth' &&
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'instant'
+    : behavior;
 }
 
 // `scrollTo` is missing on some non-browser DOMs (jsdom); fall back to assignment.

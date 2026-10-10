@@ -5,8 +5,16 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import {
-  buildBuiltinColumns, buildColumnContext, computeCellVisual, mergeColumnDefs, resolveViewColumns,
-  taskStatus, taskDependencies, taskDurationLabel, findColumn, DEFAULT_PANEL_COLUMNS,
+  buildBuiltinColumns,
+  buildColumnContext,
+  computeCellVisual,
+  mergeColumnDefs,
+  resolveViewColumns,
+  taskStatus,
+  taskDependencies,
+  taskDurationLabel,
+  findColumn,
+  DEFAULT_PANEL_COLUMNS,
 } from '../render/columns';
 import { resolveConfig } from '../render/config';
 import { LightTheme, DarkTheme } from '../render/theme';
@@ -15,13 +23,22 @@ import { flattenTree, sortTree, columnComparator, buildDefaultColumns, DEFAULT_C
 import { DEFAULT_LABELS, DependencyType, TaskType, type ColumnDef, type GanttOptions, type GanttTask } from '../types';
 
 const day = (m: number, d: number, h = 0) => new Date(2026, m, d, h);
-const task = (id: string, extra: Partial<GanttTask> = {}): GanttTask =>
-  ({ id, name: id, start: day(9, 5), end: day(9, 10), ...extra });
+const task = (id: string, extra: Partial<GanttTask> = {}): GanttTask => ({
+  id,
+  name: id,
+  start: day(9, 5),
+  end: day(9, 10),
+  ...extra,
+});
 const builtins = buildBuiltinColumns(DEFAULT_LABELS);
 const keys = (cols: ColumnDef[]) => cols.map(c => c.key);
-const resolve = (view: 'split' | 'table' | 'chart', options: GanttOptions = {}, columns: ColumnDef[] = builtins, custom = false,
-  visibility?: Parameters<typeof resolveViewColumns>[0]['visibility']) =>
-  resolveViewColumns({ columns, builtins, custom, view, config: resolveConfig(options, LightTheme), visibility });
+const resolve = (
+  view: 'split' | 'table' | 'chart',
+  options: GanttOptions = {},
+  columns: ColumnDef[] = builtins,
+  custom = false,
+  visibility?: Parameters<typeof resolveViewColumns>[0]['visibility'],
+) => resolveViewColumns({ columns, builtins, custom, view, config: resolveConfig(options, LightTheme), visibility });
 
 // ─── taskStatus ──────────────────────────────────────────────
 
@@ -68,7 +85,16 @@ describe('taskStatus', () => {
 describe('resolveViewColumns', () => {
   it('defaults: a lean panel, a data-rich table, nothing in chart view', () => {
     expect(keys(resolve('split'))).toEqual([...DEFAULT_PANEL_COLUMNS]);
-    expect(keys(resolve('table'))).toEqual(['name', 'type', 'status', 'start', 'end', 'duration', 'progress', 'predecessors']);
+    expect(keys(resolve('table'))).toEqual([
+      'name',
+      'type',
+      'status',
+      'start',
+      'end',
+      'duration',
+      'progress',
+      'predecessors',
+    ]);
     expect(keys(resolve('table', { baseline: true }))).toHaveLength(11);
     expect(resolve('chart')).toEqual([]);
   });
@@ -87,7 +113,10 @@ describe('resolveViewColumns', () => {
   it('explicit key lists pick built-ins too, in order, and skip unknown keys once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const cols = mergeColumnDefs([{ key: 'owner', label: 'Owner', width: 80, visible: false }], builtins);
-    const opts: GanttOptions = { panel: { columns: ['status', 'name', 'owner', 'nope', 'name'] }, table: { columns: ['id', 'nope'] } };
+    const opts: GanttOptions = {
+      panel: { columns: ['status', 'name', 'owner', 'nope', 'name'] },
+      table: { columns: ['id', 'nope'] },
+    };
     expect(keys(resolve('split', opts, cols, true))).toEqual(['status', 'name', 'owner']);
     expect(keys(resolve('table', opts, cols, true))).toEqual(['id']);
     expect(warn).toHaveBeenCalledTimes(1);
@@ -95,8 +124,20 @@ describe('resolveViewColumns', () => {
   });
 
   it('runtime visibility: global hides everywhere, per view wins and can add a column', () => {
-    const visibility = { all: new Map([['start', false]]), split: new Map([['status', true], ['start', true]]) };
-    expect(keys(resolve('split', {}, builtins, false, visibility))).toEqual(['name', 'start', 'end', 'progress', 'status']);
+    const visibility = {
+      all: new Map([['start', false]]),
+      split: new Map([
+        ['status', true],
+        ['start', true],
+      ]),
+    };
+    expect(keys(resolve('split', {}, builtins, false, visibility))).toEqual([
+      'name',
+      'start',
+      'end',
+      'progress',
+      'status',
+    ]);
     expect(keys(resolve('table', {}, builtins, false, visibility))).not.toContain('start');
   });
 });
@@ -105,7 +146,10 @@ describe('resolveViewColumns', () => {
 
 describe('mergeColumnDefs', () => {
   it('a custom column with its own cell keeps it and never inherits tableOnly / visible', () => {
-    const [status] = mergeColumnDefs<ColumnDef>([{ key: 'status', label: 'State', width: 90, cellTemplate: 'tpl' }], builtins);
+    const [status] = mergeColumnDefs<ColumnDef>(
+      [{ key: 'status', label: 'State', width: 90, cellTemplate: 'tpl' }],
+      builtins,
+    );
     expect(status.render).toBeUndefined();
     expect(status.sortValue).toBeUndefined();
     expect(status.tableOnly).toBeUndefined();
@@ -131,7 +175,13 @@ describe('built-in cells', () => {
   ];
   const ctx = buildColumnContext({ tasks, now: day(9, 8), config: null });
   const rows = flattenTree(tasks);
-  const cell = (key: string, id: string) => computeCellVisual(builtins.find(c => c.key === key)!, rows.find(r => r.task.id === id)!, ctx, LightTheme);
+  const cell = (key: string, id: string) =>
+    computeCellVisual(
+      builtins.find(c => c.key === key)!,
+      rows.find(r => r.task.id === id)!,
+      ctx,
+      LightTheme,
+    );
 
   it('status text, dot colour and data', () => {
     expect(cell('status', 'a')).toMatchObject({ text: 'Done', status: 'done', dotColor: LightTheme.statusDone });
@@ -145,15 +195,33 @@ describe('built-in cells', () => {
   it('variance against the baseline end, duration of the drawn span', () => {
     expect(cell('variance', 'c').text).toBe('+3d');
     expect(cell('variance', 'a').text).toBe('');
-    const inclusive = buildColumnContext({ tasks, now: day(9, 8), config: { endDateMode: 'inclusive', normalizeDateOnly: true } });
+    const inclusive = buildColumnContext({
+      tasks,
+      now: day(9, 8),
+      config: { endDateMode: 'inclusive', normalizeDateOnly: true },
+    });
     const one = flattenTree([task('d', { start: day(0, 5), end: day(0, 5) })])[0];
-    expect(computeCellVisual(builtins.find(c => c.key === 'duration')!, one, inclusive, LightTheme).text).toBe('1 day');
+    expect(
+      computeCellVisual(
+        builtins.find(c => c.key === 'duration')!,
+        one,
+        inclusive,
+        LightTheme,
+      ).text,
+    ).toBe('1 day');
   });
 
   it('type labels', () => {
     expect(cell('type', 'a').text).toBe('Task');
     const g = flattenTree([task('g'), task('k', { parentId: 'g' })])[0];
-    expect(computeCellVisual(builtins.find(c => c.key === 'type')!, g, ctx, LightTheme).text).toBe('Group');
+    expect(
+      computeCellVisual(
+        builtins.find(c => c.key === 'type')!,
+        g,
+        ctx,
+        LightTheme,
+      ).text,
+    ).toBe('Group');
   });
 
   it('dependency shapes', () => {
@@ -166,7 +234,14 @@ describe('built-in cells', () => {
     const it = buildBuiltinColumns({ ...DEFAULT_LABELS, colStatus: 'Stato', statusDone: 'Completata' });
     expect(it.find(c => c.key === 'status')!.label).toBe('Stato');
     const r = flattenTree([tasks[0]])[0];
-    expect(computeCellVisual(it.find(c => c.key === 'status')!, r, ctx, LightTheme).text).toBe('Completata');
+    expect(
+      computeCellVisual(
+        it.find(c => c.key === 'status')!,
+        r,
+        ctx,
+        LightTheme,
+      ).text,
+    ).toBe('Completata');
   });
 
   it('the legacy column builders are unchanged', () => {
@@ -191,8 +266,13 @@ describe('sorting by column', () => {
   const col = (key: string) => builtins.find(c => c.key === key);
 
   it('status sorts by lifecycle rank, custom statuses last', () => {
-    const tasks = [task('done', { progress: 100 }), task('late', { end: day(9, 6) }), task('soon', { start: day(9, 20), end: day(9, 25) }),
-      task('custom', { status: 'blocked' }), task('now')];
+    const tasks = [
+      task('done', { progress: 100 }),
+      task('late', { end: day(9, 6) }),
+      task('soon', { start: day(9, 20), end: day(9, 25) }),
+      task('custom', { status: 'blocked' }),
+      task('now'),
+    ];
     const rows = flattenTree(tasks);
     const asc = sortTree(rows, columnComparator('status', 'asc', { column: col('status'), ctx: ctx(tasks) }));
     expect(asc.map(r => r.task.id)).toEqual(['soon', 'now', 'late', 'done', 'custom']);
@@ -201,9 +281,17 @@ describe('sorting by column', () => {
   });
 
   it('names sort numerically, at every level of the tree', () => {
-    const tasks = [task('p'), task('Task 10', { parentId: 'p' }), task('Task 2', { parentId: 'p' }),
-      task('Task 1', { parentId: 'Task 10' }), task('Task 0', { parentId: 'Task 10' })];
-    const sorted = sortTree(flattenTree(tasks), columnComparator('name', 'asc', { column: col('name'), ctx: ctx(tasks) }));
+    const tasks = [
+      task('p'),
+      task('Task 10', { parentId: 'p' }),
+      task('Task 2', { parentId: 'p' }),
+      task('Task 1', { parentId: 'Task 10' }),
+      task('Task 0', { parentId: 'Task 10' }),
+    ];
+    const sorted = sortTree(
+      flattenTree(tasks),
+      columnComparator('name', 'asc', { column: col('name'), ctx: ctx(tasks) }),
+    );
     expect(sorted.map(r => r.task.id)).toEqual(['p', 'Task 2', 'Task 10', 'Task 0', 'Task 1']);
   });
 
@@ -211,8 +299,11 @@ describe('sorting by column', () => {
     const tasks = [task('none'), task('b1', { baseline: { start: day(9, 3), end: day(9, 9) } })];
     const rows = flattenTree(tasks);
     for (const dir of ['asc', 'desc'] as const) {
-      expect(sortTree(rows, columnComparator('baselineStart', dir, { column: col('baselineStart'), ctx: ctx(tasks) }))
-        .map(r => r.task.id)).toEqual(['b1', 'none']);
+      expect(
+        sortTree(rows, columnComparator('baselineStart', dir, { column: col('baselineStart'), ctx: ctx(tasks) })).map(
+          r => r.task.id,
+        ),
+      ).toEqual(['b1', 'none']);
     }
   });
 
@@ -225,13 +316,20 @@ describe('sorting by column', () => {
 
 describe('column model edge cases', () => {
   it('a timed milestone is due at the end of its local day', () => {
-    const m = task('m', { type: TaskType.Milestone, start: new Date(2026, 9, 10, 15, 15), end: new Date(2026, 9, 10, 15, 15) });
+    const m = task('m', {
+      type: TaskType.Milestone,
+      start: new Date(2026, 9, 10, 15, 15),
+      end: new Date(2026, 9, 10, 15, 15),
+    });
     expect(taskStatus(m, new Date(2026, 9, 10, 23, 59))).toBe('inProgress');
     expect(taskStatus(m, new Date(2026, 9, 11, 0, 0))).toBe('overdue');
   });
 
   it('explicitly undefined consumer keys keep the built-in renderer', () => {
-    const [start] = mergeColumnDefs<ColumnDef>([{ key: 'start', label: 'Begins', width: 90, render: undefined, cellTemplate: undefined }], builtins);
+    const [start] = mergeColumnDefs<ColumnDef>(
+      [{ key: 'start', label: 'Begins', width: 90, render: undefined, cellTemplate: undefined }],
+      builtins,
+    );
     expect(typeof start.render).toBe('function');
     expect(start.builtin).toBe(true);
   });
@@ -252,14 +350,21 @@ describe('column model edge cases', () => {
   it('runtime edits change the default lists instead of exposing every built-in', () => {
     const owner: ColumnDef = { key: 'owner', label: 'Owner', width: 100 };
     const cols = resolveViewColumns({
-      columns: [...builtins, owner], builtins, custom: false, view: 'split', config: resolveConfig({}, LightTheme),
+      columns: [...builtins, owner],
+      builtins,
+      custom: false,
+      view: 'split',
+      config: resolveConfig({}, LightTheme),
       edits: { added: [owner], removed: ['end'], order: ['owner'] },
     });
     expect(keys(cols)).toEqual(['owner', 'name', 'start', 'progress']);
   });
 
   it('a built-in column outside the consumer catalogue still sorts by its rule', () => {
-    const tasks = [task('long', { start: day(9, 1), end: day(9, 20) }), task('short', { start: day(9, 1), end: day(9, 2) })];
+    const tasks = [
+      task('long', { start: day(9, 1), end: day(9, 20) }),
+      task('short', { start: day(9, 1), end: day(9, 2) }),
+    ];
     const ctx = buildColumnContext({ tasks, now: day(9, 8), config: null });
     const column = findColumn([{ key: 'name', label: 'N', width: 100 }], builtins, 'duration');
     const sorted = sortTree(flattenTree(tasks), columnComparator('duration', 'asc', { column, ctx }));

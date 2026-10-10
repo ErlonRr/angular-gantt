@@ -25,7 +25,10 @@ export class GanttTooltip {
   private task: GanttTask | null = null;
   private visible = false;
 
-  constructor(root: ShadowRoot | HTMLElement, private readonly i18n: GanttI18nService) {
+  constructor(
+    root: ShadowRoot | HTMLElement,
+    private readonly i18n: GanttI18nService,
+  ) {
     this.popover = document.createElement('div');
     this.popover.setAttribute('popover', 'manual');
     this.popover.setAttribute('role', 'tooltip');
@@ -61,7 +64,11 @@ export class GanttTooltip {
     clearTimeout(this.showTimer);
     this.visible = false;
     this.task = null;
-    try { this.popover.hidePopover(); } catch { /* not open / unsupported */ }
+    try {
+      this.popover.hidePopover();
+    } catch {
+      /* not open / unsupported */
+    }
     this.popover.style.display = 'none';
   }
 
@@ -70,7 +77,11 @@ export class GanttTooltip {
     this.applyStyles(theme);
     this.popover.innerHTML = this.buildHTML(this.task);
     this.popover.style.display = 'block';
-    try { this.popover.showPopover(); } catch { /* unsupported — still shown via display */ }
+    try {
+      this.popover.showPopover();
+    } catch {
+      /* unsupported — still shown via display */
+    }
     this.visible = true;
     this.position();
   }
@@ -121,19 +132,21 @@ export class GanttTooltip {
       <div style="font-weight:600;font-size:13px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
         ${esc(task.name)}
       </div>
-      ${isMilestone
-        ? row(labels.ttMilestone, formatDate(task.start, fmt, locale))
-        : row(labels.ttStart, formatDate(task.start, fmt, locale))
-          + row(labels.ttEnd, formatDate(end, fmt, locale))
-          + row(labels.ttDuration, taskDurationLabel(task, this.dates, labels))
-          + `<div style="margin-top:6px;">
+      ${
+        isMilestone
+          ? row(labels.ttMilestone, formatDate(task.start, fmt, locale))
+          : row(labels.ttStart, formatDate(task.start, fmt, locale)) +
+            row(labels.ttEnd, formatDate(end, fmt, locale)) +
+            row(labels.ttDuration, taskDurationLabel(task, this.dates, labels)) +
+            `<div style="margin-top:6px;">
               <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
                 <span style="opacity:0.6">${esc(labels.ttProgress)}</span><span>${prog}%</span>
               </div>
               <div style="height:3px;background:rgba(127,127,127,0.25);border-radius:2px;overflow:hidden;">
                 <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
               </div>
-            </div>`}
+            </div>`
+      }
     `;
   }
 

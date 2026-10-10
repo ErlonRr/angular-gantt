@@ -11,8 +11,8 @@ import { BaseComponent } from '../core/base-component';
 
 export interface GanttHeaderProps {
   timeline: TimelineModel;
-  config:   ResolvedGanttConfig;
-  labels:   GanttLabels;
+  config: ResolvedGanttConfig;
+  labels: GanttLabels;
 }
 
 export class GanttHeaderComponent extends BaseComponent<GanttHeaderProps> {
@@ -53,9 +53,10 @@ export class GanttHeaderComponent extends BaseComponent<GanttHeaderProps> {
         el.className = `g-cell${cell.isCurrent && i === lastTier ? ' g-cell--current' : ''}${cell.className ? ` ${cell.className}` : ''}`;
         // Upper tiers are delimiters by definition; lower cells only at major boundaries
         const isMajor = cell.x > 0 && (i < lastTier || majorSet.has(cell.x));
-        const border = isMajor && major
-          ? `${major.width}px ${major.dash ? 'dashed' : 'solid'} ${major.color}`
-          : `1px solid ${theme.borderColor}`;
+        const border =
+          isMajor && major
+            ? `${major.width}px ${major.dash ? 'dashed' : 'solid'} ${major.color}`
+            : `1px solid ${theme.borderColor}`;
         el.style.cssText = `left:${cell.x}px;width:${cell.width}px;border-left:${cell.x > 0 ? border : 'none'};`;
         const label = document.createElement('span');
         label.className = 'g-cell-label';

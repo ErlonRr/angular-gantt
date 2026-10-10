@@ -8,12 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "customConditions": [
-      "@gantry/source"
-    ],
+    "customConditions": ["@gantry/source"],
     "noEmit": true
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }

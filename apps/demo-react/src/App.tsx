@@ -25,15 +25,23 @@ export default function App() {
         <h1>Gantry · React</h1>
         <div className="demo-group">
           <span className="demo-label">Features</span>
-          <button aria-pressed={baseline} onClick={() => setBaseline(b => !b)}>Baseline</button>
-          <button aria-pressed={criticalPath} onClick={() => setCriticalPath(c => !c)}>Critical path</button>
-          <button aria-pressed={dark} onClick={() => setDark(d => !d)}>Dark</button>
+          <button aria-pressed={baseline} onClick={() => setBaseline(b => !b)}>
+            Baseline
+          </button>
+          <button aria-pressed={criticalPath} onClick={() => setCriticalPath(c => !c)}>
+            Critical path
+          </button>
+          <button aria-pressed={dark} onClick={() => setDark(d => !d)}>
+            Dark
+          </button>
           <button onClick={() => gantt.current?.scrollToToday()}>Today</button>
         </div>
         <div className="demo-group">
           <span className="demo-label">View</span>
           <select value={viewMode} onChange={e => setViewMode(e.target.value)}>
-            {Object.values(ViewMode).map(v => <option key={v}>{v}</option>)}
+            {Object.values(ViewMode).map(v => (
+              <option key={v}>{v}</option>
+            ))}
           </select>
         </div>
         <span className="demo-log">{log}</span>

@@ -36,8 +36,9 @@ export class GanttThemeService {
     this._hostEl = hostEl;
     this.setDarkMode(initialDarkMode);
     const update = () => this.apply();
-    this._unsubscribe = [this._darkMode, this._prefersDark, this._optionsTheme, this._apiTheme]
-      .map(s => (s as typeof this._darkMode).subscribe(update as never));
+    this._unsubscribe = [this._darkMode, this._prefersDark, this._optionsTheme, this._apiTheme].map(s =>
+      (s as typeof this._darkMode).subscribe(update as never),
+    );
   }
 
   setDarkMode(mode: boolean | 'auto'): void {

@@ -12,41 +12,41 @@ import type { ResolvedGanttConfig } from './config';
 export type TimeBandKind = 'weekend' | 'holiday' | 'off-hours' | 'intensive' | 'custom';
 
 export interface TimeBand {
-  x:          number;
-  width:      number;
-  kind:       TimeBandKind;
-  color:      string;
+  x: number;
+  width: number;
+  kind: TimeBandKind;
+  color: string;
   className?: string;
-  label?:     string;
+  label?: string;
 }
 
 export interface TimelineModel {
-  start:        Date;
-  end:          Date;
-  pxPerDay:     number;
-  totalWidth:   number;
+  start: Date;
+  end: Date;
+  pxPerDay: number;
+  totalWidth: number;
   headerHeight: number;
-  tiers:        ScaleTier[];
+  tiers: ScaleTier[];
   /** x of the bottom-tier cell boundaries that aren't major delimiters */
-  minorLines:   number[];
+  minorLines: number[];
   /** x of the period delimiters (month / year / day…) */
-  majorLines:   number[];
-  bands:        TimeBand[];
+  majorLines: number[];
+  bands: TimeBand[];
   /** x of "now", or -1 when out of range / hidden */
-  todayX:       number;
+  todayX: number;
   /** Earliest start and latest end of the tasks as drawn (null without tasks) */
-  extent:       { start: Date; end: Date } | null;
+  extent: { start: Date; end: Date } | null;
   toX(date: Date): number;
   toDate(x: number): Date;
 }
 
 export interface TimelineInput {
-  tasks:          GanttTask[];
-  config:         ResolvedGanttConfig;
+  tasks: GanttTask[];
+  config: ResolvedGanttConfig;
   /** Visible width of the timeline viewport (for `fitToWidth`) */
   viewportWidth?: number;
-  i18n?:          GanttI18n;
-  now?:           Date;
+  i18n?: GanttI18n;
+  now?: Date;
 }
 
 // ─── Task dates as drawn ──────────────────────────────────────
@@ -93,9 +93,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
       if (s.end > extent.end) extent.end = s.end;
     }
   }
-  let { start, end } = snapRange(
-    spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now,
-  );
+  let { start, end } = snapRange(spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now);
 
   const pxPerDay = cfg.pxPerDay;
   const startDays = calendarDays(start, cfg.normalizeDateOnly);
@@ -110,7 +108,9 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
 
   const tiers = buildTiers({
     scales: cfg.scales,
-    start, end, pxPerDay,
+    start,
+    end,
+    pxPerDay,
     heights: cfg.tierHeights,
     weekStart: cfg.weekStart,
     locale: i18n?.locale,
@@ -121,10 +121,13 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
   // Delimiters: major = boundaries of `majorUnit` (default: the tier above the bottom one)
   const majorScale = cfg.gridLines.majorUnit
     ? { unit: cfg.gridLines.majorUnit, step: 1 }
-    : cfg.scales.length > 1 ? cfg.scales[cfg.scales.length - 2] : null;
+    : cfg.scales.length > 1
+      ? cfg.scales[cfg.scales.length - 2]
+      : null;
   const majorLines = majorScale
     ? unitBoundaries(start, end, majorScale.unit, majorScale.step ?? 1, cfg.weekStart)
-        .map(toX).filter(x => x > 0 && x < totalWidth)
+        .map(toX)
+        .filter(x => x > 0 && x < totalWidth)
     : [];
   const majorSet = new Set(majorLines);
   const bottomTier = tiers[tiers.length - 1];
@@ -133,7 +136,10 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
   const todayX = cfg.showToday ? toX(now) : -1;
 
   return {
-    start, end, pxPerDay, totalWidth,
+    start,
+    end,
+    pxPerDay,
+    totalWidth,
     headerHeight: tiers.reduce((h, t) => h + t.height, 0),
     tiers,
     minorLines,
@@ -155,7 +161,9 @@ const HOUR_SCALE_MIN_PX_PER_HOUR = 6;
  * `highlightTime` callback. Contiguous bands of the same kind/colour merge.
  */
 export function computeTimeBands(
-  start: Date, end: Date, pxPerDay: number,
+  start: Date,
+  end: Date,
+  pxPerDay: number,
   cfg: Pick<ResolvedGanttConfig, 'nonWorking' | 'highlightTime' | 'theme'>,
   toX: (d: Date) => number,
 ): TimeBand[] {
@@ -165,13 +173,25 @@ export function computeTimeBands(
   const minPx = nw?.minPxPerDay ?? 12;
   if ((!nw && !cfg.highlightTime) || pxPerDay < minPx) return bands;
 
-  const push = (from: Date, to: Date, kind: TimeBandKind, color: string, extra?: { className?: string; label?: string }) => {
+  const push = (
+    from: Date,
+    to: Date,
+    kind: TimeBandKind,
+    color: string,
+    extra?: { className?: string; label?: string },
+  ) => {
     const x = toX(from);
     const width = toX(to) - x;
     if (width <= 0) return;
     const prev = bands[bands.length - 1];
-    if (prev && prev.kind === kind && prev.color === color && prev.className === extra?.className
-        && prev.x + prev.width === x && prev.label === extra?.label) {
+    if (
+      prev &&
+      prev.kind === kind &&
+      prev.color === color &&
+      prev.className === extra?.className &&
+      prev.x + prev.width === x &&
+      prev.label === extra?.label
+    ) {
       prev.width += width;
     } else {
       bands.push({ x, width, kind, color, ...extra });
@@ -195,7 +215,8 @@ export function computeTimeBands(
       push(day, next, 'weekend', theme.weekendBg);
       continue;
     }
-    if (custom) push(day, next, 'custom', custom.color ?? theme.weekendBg, { className: custom.className, label: custom.label });
+    if (custom)
+      push(day, next, 'custom', custom.color ?? theme.weekendBg, { className: custom.className, label: custom.label });
 
     if (!hourScale || !nw) continue;
     // Off-hours = complement of the working ranges for this weekday
@@ -216,7 +237,11 @@ export function computeTimeBands(
   if (hourScale && cfg.highlightTime) {
     for (const hour of unitBoundaries(start, end, 'hour', 1, 1)) {
       const h = cfg.highlightTime(hour, 'hour');
-      if (h) push(hour, unitAdd(hour, 'hour', 1), 'custom', h.color ?? theme.intensiveBg, { className: h.className, label: h.label });
+      if (h)
+        push(hour, unitAdd(hour, 'hour', 1), 'custom', h.color ?? theme.intensiveBg, {
+          className: h.className,
+          label: h.label,
+        });
     }
   }
   return bands;

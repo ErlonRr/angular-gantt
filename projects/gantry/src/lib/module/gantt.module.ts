@@ -21,39 +21,26 @@
 //    provideGanttBar({ type: 'sprint', component: SprintBarComponent })
 // ─────────────────────────────────────────────────────────────
 
-import {
-  NgModule,
-  ModuleWithProviders,
-  EnvironmentProviders,
-  makeEnvironmentProviders,
-} from '@angular/core';
+import { NgModule, ModuleWithProviders, EnvironmentProviders, makeEnvironmentProviders } from '@angular/core';
 
-import {
-  GANTT_GLOBAL_CONFIG,
-  GanttGlobalConfig,
-  provideGantt,
-} from '../services/gantt-theme.service';
+import { GANTT_GLOBAL_CONFIG, GanttGlobalConfig, provideGantt } from '../services/gantt-theme.service';
 
-import {
-  GANTT_BAR_DEF,
-  provideGanttBar,
-  GanttBarDef,
-} from '../bar-registry';
+import { GANTT_BAR_DEF, provideGanttBar, GanttBarDef } from '../bar-registry';
 
-import { GanttTaskBarComponent }   from '../bars/task-bar.component';
+import { GanttTaskBarComponent } from '../bars/task-bar.component';
 import { GanttMilestoneComponent } from '../bars/milestone.component';
-import { GanttGroupBarComponent }  from '../bars/group-bar.component';
-import { GantryComponent }       from '../gantt-component/gantry.component';
+import { GanttGroupBarComponent } from '../bars/group-bar.component';
+import { GantryComponent } from '../gantt-component/gantry.component';
 import { GanttColumnDefDirective } from '../columns/gantt-column.directive';
-import { GanttLoadMoreComponent }  from '../datasource/gantt-load-more.component';
-import { GanttToolbarComponent }   from '../annotations/gantt-toolbar.component';
+import { GanttLoadMoreComponent } from '../datasource/gantt-load-more.component';
+import { GanttToolbarComponent } from '../annotations/gantt-toolbar.component';
 
 // ─── Built-in bar defs ────────────────────────────────────────
 
 export const BUILT_IN_BAR_DEFS: GanttBarDef[] = [
-  { type: 'task',      component: GanttTaskBarComponent   },
+  { type: 'task', component: GanttTaskBarComponent },
   { type: 'milestone', component: GanttMilestoneComponent },
-  { type: 'group',     component: GanttGroupBarComponent  },
+  { type: 'group', component: GanttGroupBarComponent },
 ];
 
 // ─── Environment provider factory ────────────────────────────
@@ -85,18 +72,8 @@ export function provideGanttLib(config: GanttGlobalConfig = {}): EnvironmentProv
 // ─── NgModule ─────────────────────────────────────────────────
 
 @NgModule({
-  imports: [
-    GantryComponent,
-    GanttColumnDefDirective,
-    GanttLoadMoreComponent,
-    GanttToolbarComponent,
-  ],
-  exports: [
-    GantryComponent,
-    GanttColumnDefDirective,
-    GanttLoadMoreComponent,
-    GanttToolbarComponent,
-  ],
+  imports: [GantryComponent, GanttColumnDefDirective, GanttLoadMoreComponent, GanttToolbarComponent],
+  exports: [GantryComponent, GanttColumnDefDirective, GanttLoadMoreComponent, GanttToolbarComponent],
 })
 export class GanttModule {
   static forRoot(config: GanttGlobalConfig = {}): ModuleWithProviders<GanttModule> {

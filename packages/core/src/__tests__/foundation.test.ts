@@ -4,7 +4,16 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { dateToPixel, pixelToDate, addDays, diffDays, generateHeaderRows, zoomIn, zoomOut, getTimelineRange } from '../gantt-math';
+import {
+  dateToPixel,
+  pixelToDate,
+  addDays,
+  diffDays,
+  generateHeaderRows,
+  zoomIn,
+  zoomOut,
+  getTimelineRange,
+} from '../gantt-math';
 import { flattenTree, filterVisible, reindexVisible } from '../gantt-data';
 import { computeCriticalPath } from '../gantt-cpm';
 import { ViewMode, DependencyType, TaskType, GanttTask } from '../types';
@@ -52,7 +61,7 @@ describe('diffDays', () => {
 
 describe('generateHeaderRows — Month view', () => {
   const start = new Date('2026-01-01');
-  const end   = new Date('2026-06-30');
+  const end = new Date('2026-06-30');
   const pxPerDay = 8;
 
   it('top row has Q1 and Q2', () => {
@@ -189,7 +198,7 @@ describe('computeCriticalPath', () => {
     ];
     const { criticalIds, floatMap } = computeCriticalPath(parallelTasks);
     expect(criticalIds.has('A')).toBe(true);
-    expect((floatMap.get('B') ?? 0)).toBeGreaterThan(0);
+    expect(floatMap.get('B') ?? 0).toBeGreaterThan(0);
   });
 
   it('handles empty task array', () => {
@@ -210,9 +219,11 @@ describe('computeCriticalPath', () => {
     const tasks: GanttTask[] = [
       { id: 'A', name: 'A', start: new Date('2026-01-01'), end: new Date('2026-01-06') },
       {
-        id: 'B', name: 'B',
-        start: new Date('2026-01-09'), end: new Date('2026-01-14'),
-        dependency: { taskId: 'A', type: DependencyType.FS, lag: 3 }
+        id: 'B',
+        name: 'B',
+        start: new Date('2026-01-09'),
+        end: new Date('2026-01-14'),
+        dependency: { taskId: 'A', type: DependencyType.FS, lag: 3 },
       },
     ];
     const { floatMap } = computeCriticalPath(tasks);

@@ -7,14 +7,7 @@
 //  themes the shell and the chart in one shot.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Injectable,
-  signal,
-  computed,
-  effect,
-  DestroyRef,
-  inject,
-} from '@angular/core';
+import { Injectable, signal, computed, effect, DestroyRef, inject } from '@angular/core';
 
 /** `true` = dark, `false` = light, `'auto'` = follow OS preference */
 export type ThemeMode = boolean | 'auto';
@@ -30,8 +23,7 @@ export class AppThemeService {
   readonly mode = this._mode.asReadonly();
 
   private readonly _systemDark = signal<boolean>(
-    typeof window !== 'undefined' &&
-    window.matchMedia?.('(prefers-color-scheme: dark)').matches === true,
+    typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches === true,
   );
 
   /** Resolved boolean — what the UI actually shows right now. */

@@ -9,14 +9,14 @@
 
 ## Packages
 
-| Framework | Package | Install | Docs |
-|---|---|---|---|
-| **Angular 20+** | `ngx-gantry` | `npm i ngx-gantry` | [below](#angular-ngx-gantry) |
-| **React 18 / 19** | `@gantry/react` | `npm i @gantry/react` | [packages/react](packages/react/README.md) |
-| **Vue 3.5+** | `@gantry/vue` | `npm i @gantry/vue` | [packages/vue](packages/vue/README.md) |
-| **Svelte 5** | `@gantry/svelte` | `npm i @gantry/svelte` | [packages/svelte](packages/svelte/README.md) |
+| Framework            | Package           | Install                 | Docs                                           |
+| -------------------- | ----------------- | ----------------------- | ---------------------------------------------- |
+| **Angular 20+**      | `ngx-gantry`      | `npm i ngx-gantry`      | [below](#angular-ngx-gantry)                   |
+| **React 18 / 19**    | `@gantry/react`   | `npm i @gantry/react`   | [packages/react](packages/react/README.md)     |
+| **Vue 3.5+**         | `@gantry/vue`     | `npm i @gantry/vue`     | [packages/vue](packages/vue/README.md)         |
+| **Svelte 5**         | `@gantry/svelte`  | `npm i @gantry/svelte`  | [packages/svelte](packages/svelte/README.md)   |
 | **Vanilla JS / any** | `@gantry/vanilla` | `npm i @gantry/vanilla` | [packages/vanilla](packages/vanilla/README.md) |
-| Framework-free logic | `@gantry/core` | `npm i @gantry/core` | [packages/core](packages/core/README.md) |
+| Framework-free logic | `@gantry/core`    | `npm i @gantry/core`    | [packages/core](packages/core/README.md)       |
 
 ```
 @gantry/core      types · timeline math · tree helpers · critical path (no DOM, no framework)
@@ -32,7 +32,7 @@
 ```tsx
 // React
 import { Gantry, ViewMode } from '@gantry/react';
-<Gantry tasks={tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={e => save(e)} />
+<Gantry tasks={tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={e => save(e)} />;
 ```
 
 ```vue
@@ -69,24 +69,27 @@ render model — an option behaves identically everywhere. Try them all live in 
 import { ViewMode, WEEK_FORMATS } from '@gantry/core';
 
 options = {
-  viewMode: ViewMode.Week,            // Hour · Day · Week · Month · Quarter · Year, or a custom level name
-  weekStart: 1,                       // 1 = Monday (ISO weeks), 0 = Sunday
-  scales: [                           // header tiers, top → bottom (any number)
+  viewMode: ViewMode.Week, // Hour · Day · Week · Month · Quarter · Year, or a custom level name
+  weekStart: 1, // 1 = Monday (ISO weeks), 0 = Sunday
+  scales: [
+    // header tiers, top → bottom (any number)
     { unit: 'month', format: 'MMMM YYYY' },
-    { unit: 'week', format: WEEK_FORMATS.rangeMonth },   // "4–11 Mar"
+    { unit: 'week', format: WEEK_FORMATS.rangeMonth }, // "4–11 Mar"
   ],
-  zoomLevels: [                       // replace the built-in presets
+  zoomLevels: [
+    // replace the built-in presets
     { name: 'Sprint', cellWidth: 120, scales: [{ unit: 'month' }, { unit: 'week', step: 2, format: '[W]W' }] },
   ],
   gridLines: {
-    major: { color: '#94a3b8', width: 1.5, dash: '4 3' },  // period delimiters (header + body)
-    minor: { width: 1 },                                     // between cells; `false` hides
-    horizontal: false,                                       // row separators
-    majorUnit: 'month',                                      // default: the tier above the bottom one
+    major: { color: '#94a3b8', width: 1.5, dash: '4 3' }, // period delimiters (header + body)
+    minor: { width: 1 }, // between cells; `false` hides
+    horizontal: false, // row separators
+    majorUnit: 'month', // default: the tier above the bottom one
   },
-  headerHeight: 32, subHeaderHeight: 28,
-  fitToWidth: true,                   // the timeline always fills the viewport
-  initialScroll: 'auto',              // 'auto' · 'today' · 'start' · a Date · false
+  headerHeight: 32,
+  subHeaderHeight: 28,
+  fitToWidth: true, // the timeline always fills the viewport
+  initialScroll: 'auto', // 'auto' · 'today' · 'start' · a Date · false
 };
 ```
 
@@ -106,13 +109,13 @@ options = {
 ```ts
 options = {
   nonWorkingTime: {
-    weekends: true,                                   // or weekday numbers, e.g. [5, 6]
+    weekends: true, // or weekday numbers, e.g. [5, 6]
     holidays: [new Date(2026, 11, 25), { start: d1, end: d2, label: 'Shutdown', color: '#fee2e2' }],
-    workingHours: { start: 9, end: 18 },              // or per weekday: { 1: [{ start: 9, end: 13 }, { start: 14, end: 18 }] }
+    workingHours: { start: 9, end: 18 }, // or per weekday: { 1: [{ start: 9, end: 13 }, { start: 14, end: 18 }] }
     intensiveHours: [{ start: 10, end: 12, label: 'Focus', color: 'rgba(245,158,11,.2)' }],
-    style: 'shade',                                   // 'shade' | 'hatch' | 'disabled'
+    style: 'shade', // 'shade' | 'hatch' | 'disabled'
     showInHeader: true,
-    minPxPerDay: 12,                                  // hide day shading in dense zoom levels
+    minPxPerDay: 12, // hide day shading in dense zoom levels
   },
   highlightTime: (start, unit) => (isRelease(start) ? { color: '#dcfce7', label: 'Release' } : null),
 };
@@ -127,14 +130,14 @@ Shading is visual only — durations stay in calendar days. Colours default to t
 options = {
   rowHeight: 40,
   bar: {
-    height: '60%',                    // px or % of the row
+    height: '60%', // px or % of the row
     radius: 6,
     minWidth: 4,
     progress: { show: true, color: '#1e3a8a', opacity: 0.3 },
     label: { position: 'auto', template: t => `${t.name} · ${t.progress ?? 0}%` }, // inside | left | right | auto | none
   },
-  milestone: { size: 18, shape: 'diamond' },          // diamond | circle | square
-  groupBar: { style: 'summary', height: '40%' },      // summary (bracket) | bar
+  milestone: { size: 18, shape: 'diamond' }, // diamond | circle | square
+  groupBar: { style: 'summary', height: '40%' }, // summary (bracket) | bar
   arrows: { width: 1.5, headSize: 5, radius: 6, offset: 12, color: '#64748b' },
   indentSize: 16,
 };
@@ -148,15 +151,22 @@ For full control replace the bar renderer (`renderBar` in the Web Component / bi
 
 ```ts
 options = {
-  panel: { width: '30%', minWidth: 160, maxWidth: '70%', resizable: true, collapsible: true, collapsed: false,
-           columns: ['name', 'start', 'end', 'progress'] },   // keys shown next to the timeline
+  panel: {
+    width: '30%',
+    minWidth: 160,
+    maxWidth: '70%',
+    resizable: true,
+    collapsible: true,
+    collapsed: false,
+    columns: ['name', 'start', 'end', 'progress'],
+  }, // keys shown next to the timeline
   table: { columns: ['name', 'type', 'status', 'start', 'end', 'duration', 'progress', 'predecessors'] },
-  view: 'split',                      // 'split' | 'table' (every useful field, animated) | 'chart'
+  view: 'split', // 'split' | 'table' (every useful field, animated) | 'chart'
   toolbar: { zoom: true, viewModes: ['Day', 'Week', 'Month'], today: true, viewToggle: true }, // or false
-  stateKey: 'project-42',             // remember panel width, view, zoom, column widths, collapsed rows, sort
+  stateKey: 'project-42', // remember panel width, view, zoom, column widths, collapsed rows, sort
 };
 columns = [
-  { key: 'name', label: 'Task', width: 220, flex: true },          // flex: fills spare panel width
+  { key: 'name', label: 'Task', width: 220, flex: true }, // flex: fills spare panel width
   { key: 'owner', label: 'Owner', width: 120, align: 'center' },
   { key: 'budget', label: 'Budget', width: 100, tableOnly: true }, // only in the table view
 ];
@@ -182,16 +192,16 @@ columns = [
 Colours, font and radius come from the theme (`options.theme`, `setTheme()`, `patchTheme()`,
 light/dark/auto). They are also exposed as CSS custom properties on the chart root:
 
-| Variable | Theme key | | Variable | Theme key |
-|---|---|---|---|---|
-| `--gantt-bg` | `backgroundColor` | | `--gantt-grid-line` | `gridLine` |
-| `--gantt-header-bg` | `headerBackground` | | `--gantt-grid-line-major` | `gridLineMajor` |
-| `--gantt-bar` | `barColor` | | `--gantt-today` | `todayColor` |
-| `--gantt-bar-radius` | `barRadius` | | `--gantt-weekend-bg` | `weekendBg` |
-| `--gantt-milestone` | `milestoneColor` | | `--gantt-holiday-bg` | `holidayBg` |
-| `--gantt-critical` | `criticalColor` | | `--gantt-off-hours-bg` | `offHoursBg` |
-| `--gantt-arrow` | `arrowColor` | | `--gantt-intensive-bg` | `intensiveBg` |
-| `--gantt-text` / `-sec` / `-muted` | text colours | | `--gantt-sel-bg` / `--gantt-sel-border` | selection |
+| Variable                           | Theme key          |     | Variable                                | Theme key       |
+| ---------------------------------- | ------------------ | --- | --------------------------------------- | --------------- |
+| `--gantt-bg`                       | `backgroundColor`  |     | `--gantt-grid-line`                     | `gridLine`      |
+| `--gantt-header-bg`                | `headerBackground` |     | `--gantt-grid-line-major`               | `gridLineMajor` |
+| `--gantt-bar`                      | `barColor`         |     | `--gantt-today`                         | `todayColor`    |
+| `--gantt-bar-radius`               | `barRadius`        |     | `--gantt-weekend-bg`                    | `weekendBg`     |
+| `--gantt-milestone`                | `milestoneColor`   |     | `--gantt-holiday-bg`                    | `holidayBg`     |
+| `--gantt-critical`                 | `criticalColor`    |     | `--gantt-off-hours-bg`                  | `offHoursBg`    |
+| `--gantt-arrow`                    | `arrowColor`       |     | `--gantt-intensive-bg`                  | `intensiveBg`   |
+| `--gantt-text` / `-sec` / `-muted` | text colours       |     | `--gantt-sel-bg` / `--gantt-sel-border` | selection       |
 
 ---
 
@@ -209,21 +219,21 @@ npm i ngx-gantry
 
 ## Features
 
-| Feature | Detail |
-|---|---|
-| **Signals** | All state via `signal()` / `computed()` / `effect()` — no RxJS |
-| **Zoneless** | Works with `provideZonelessChangeDetection()` |
-| **Bar registry** | Plug in any custom bar component via `provideGanttBar()` |
-| **Virtual scroll** | Scroll-position windowing, zero CDK |
-| **Lazy load** | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry |
-| **Drag & resize** | Pointer Events API + `setPointerCapture()` |
-| **Selection** | Single / Ctrl+Click toggle / Shift+Click range |
-| **Keyboard** | `Escape`, `Ctrl+A`, `+/-` zoom, `T` today |
-| **Sorting** | Click a sortable column header: ascending → descending → original order |
-| **Tooltip** | Native Popover API — zero CDK Overlay |
-| **Dark / light** | Auto `prefers-color-scheme` + manual toggle |
-| **Animations** | `animate.enter` / `animate.leave` (Angular 20.2 native) |
-| **Dependencies** | Only `dayjs` (MIT, 7KB) |
+| Feature            | Detail                                                                                                                |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Signals**        | All state via `signal()` / `computed()` / `effect()` — no RxJS                                                        |
+| **Zoneless**       | Works with `provideZonelessChangeDetection()`                                                                         |
+| **Bar registry**   | Plug in any custom bar component via `provideGanttBar()`                                                              |
+| **Virtual scroll** | Scroll-position windowing, zero CDK                                                                                   |
+| **Lazy load**      | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry |
+| **Drag & resize**  | Pointer Events API + `setPointerCapture()`                                                                            |
+| **Selection**      | Single / Ctrl+Click toggle / Shift+Click range                                                                        |
+| **Keyboard**       | `Escape`, `Ctrl+A`, `+/-` zoom, `T` today                                                                             |
+| **Sorting**        | Click a sortable column header: ascending → descending → original order                                               |
+| **Tooltip**        | Native Popover API — zero CDK Overlay                                                                                 |
+| **Dark / light**   | Auto `prefers-color-scheme` + manual toggle                                                                           |
+| **Animations**     | `animate.enter` / `animate.leave` (Angular 20.2 native)                                                               |
+| **Dependencies**   | Only `dayjs` (MIT, 7KB)                                                                                               |
 
 ---
 
@@ -237,10 +247,7 @@ import { provideGanttLib } from 'ngx-gantry';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
-  providers: [
-    provideZonelessChangeDetection(),
-    provideGanttLib({ darkMode: 'auto' }),
-  ],
+  providers: [provideZonelessChangeDetection(), provideGanttLib({ darkMode: 'auto' })],
 });
 ```
 
@@ -341,10 +348,10 @@ list. The Web Component takes the same config (`gantt.dataSource = { fetcher, pa
 The task list has two faces. Next to the timeline (`view: 'split'`) it is a **lean panel**;
 in the full **table view** (`view: 'table'`, toolbar "Table") it shows every useful field:
 
-| View | Default columns |
-|---|---|
-| split panel | `name` · `start` · `end` · `progress` |
-| table view | `name` · `type` · `status` · `start` · `end` · `duration` · `progress` · `predecessors` (+ `baselineStart` · `baselineEnd` · `variance` with `baseline: true`) |
+| View        | Default columns                                                                                                                                                |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| split panel | `name` · `start` · `end` · `progress`                                                                                                                          |
+| table view  | `name` · `type` · `status` · `start` · `end` · `duration` · `progress` · `predecessors` (+ `baselineStart` · `baselineEnd` · `variance` with `baseline: true`) |
 
 Built-in keys: `id`, `name`, `type`, `status`, `start`, `end`, `duration`, `progress`,
 `predecessors`, `baselineStart`, `baselineEnd`, `variance` — every one sortable (except
@@ -352,11 +359,11 @@ Built-in keys: `id`, `name`, `type`, `status`, `start`, `end`, `duration`, `prog
 
 ```ts
 options = {
-  panel: { columns: ['name', 'status', 'start', 'progress'] },           // the split panel
+  panel: { columns: ['name', 'status', 'start', 'progress'] }, // the split panel
   table: { columns: ['id', 'name', 'owner', 'status', 'start', 'end'] }, // the table view
 };
 // The 1.x panel: panel: { columns: ['name', 'start', 'end', 'duration', 'progress'] }
-gantt.setColumnVisible('status', true, 'split');   // per view; omit the view for both
+gantt.setColumnVisible('status', true, 'split'); // per view; omit the view for both
 gantt.toggleColumnVisible('baselineStart', 'table'); // flips what the view shows now
 ```
 
@@ -402,10 +409,11 @@ columns: ColumnDef[] = [
 
 <gantry [series]="tasks" [columns]="columns()" />
 ```
+
 ```ts
 statusTpl = viewChild<TemplateRef<ColumnCellContext>>('statusCell');
 columns = computed<ColumnDef[]>(() => [
-  { key: 'name',   label: 'Initiative', width: 210 },
+  { key: 'name', label: 'Initiative', width: 210 },
   { key: 'status', label: 'Status', width: 100, cellTemplate: this.statusTpl() },
 ]);
 ```
@@ -453,22 +461,22 @@ near-black when `barTextColor` is unreadable on a custom `barColor` (an explicit
 are exported from `@gantry/core`. The 1.x colours are available as `LegacyLightTheme` /
 `LegacyDarkTheme`. Full token map:
 
-| `GanttTheme` field | CSS variable | | `GanttTheme` field | CSS variable |
-|---|---|---|---|---|
-| `backgroundColor` | `--gantt-bg` | | `borderColor` | `--gantt-border` |
-| `headerBackground` | `--gantt-header-bg` | | `gridLine` | `--gantt-grid-line` |
-| `rowBg` | `--gantt-row-bg` | | `todayColor` | `--gantt-today` |
-| `rowBgAlt` | `--gantt-row-bg-alt` | | `textPrimary` | `--gantt-text` |
-| `barColor` | `--gantt-bar` | | `textSecondary` | `--gantt-text-sec` |
-| `barTextColor` | `--gantt-bar-text` | | `textMuted` | `--gantt-text-muted` |
-| `barRadius` | `--gantt-bar-radius` | | `fontFamily` | `--gantt-font` |
-| `milestoneColor` | `--gantt-milestone` | | `fontSize` | `--gantt-font-size` |
-| `baselineColor` | `--gantt-baseline` | | `arrowColor` | `--gantt-arrow` |
-| `criticalColor` | `--gantt-critical` | | `tooltipBg` | `--gantt-tooltip-bg` |
-| `panelBg` | `--gantt-panel-bg` | | `tooltipBorder` | `--gantt-tooltip-bdr` |
-| `panelBorder` | `--gantt-panel-border` | | `tooltipText` | `--gantt-tooltip-txt` |
-| `selectionBg` | `--gantt-sel-bg` | | `selectionBorder` | `--gantt-sel-border` |
-| `scrollbarTrack` | `--gantt-scrollbar-track` | | `scrollbarThumb` | `--gantt-scrollbar-thumb` |
+| `GanttTheme` field | CSS variable              |     | `GanttTheme` field | CSS variable              |
+| ------------------ | ------------------------- | --- | ------------------ | ------------------------- |
+| `backgroundColor`  | `--gantt-bg`              |     | `borderColor`      | `--gantt-border`          |
+| `headerBackground` | `--gantt-header-bg`       |     | `gridLine`         | `--gantt-grid-line`       |
+| `rowBg`            | `--gantt-row-bg`          |     | `todayColor`       | `--gantt-today`           |
+| `rowBgAlt`         | `--gantt-row-bg-alt`      |     | `textPrimary`      | `--gantt-text`            |
+| `barColor`         | `--gantt-bar`             |     | `textSecondary`    | `--gantt-text-sec`        |
+| `barTextColor`     | `--gantt-bar-text`        |     | `textMuted`        | `--gantt-text-muted`      |
+| `barRadius`        | `--gantt-bar-radius`      |     | `fontFamily`       | `--gantt-font`            |
+| `milestoneColor`   | `--gantt-milestone`       |     | `fontSize`         | `--gantt-font-size`       |
+| `baselineColor`    | `--gantt-baseline`        |     | `arrowColor`       | `--gantt-arrow`           |
+| `criticalColor`    | `--gantt-critical`        |     | `tooltipBg`        | `--gantt-tooltip-bg`      |
+| `panelBg`          | `--gantt-panel-bg`        |     | `tooltipBorder`    | `--gantt-tooltip-bdr`     |
+| `panelBorder`      | `--gantt-panel-border`    |     | `tooltipText`      | `--gantt-tooltip-txt`     |
+| `selectionBg`      | `--gantt-sel-bg`          |     | `selectionBorder`  | `--gantt-sel-border`      |
+| `scrollbarTrack`   | `--gantt-scrollbar-track` |     | `scrollbarThumb`   | `--gantt-scrollbar-thumb` |
 
 ---
 
@@ -505,13 +513,13 @@ Global defaults: `provideGanttLib({ locale: 'it', labels: {…}, formats: {…} 
 
 ## Providers & setup
 
-| Provider | Use |
-|---|---|
-| `provideGanttLib(config?)` | One call in `bootstrapApplication` — registers built-in bars + global config (`theme`, `darkMode`, `locale`, `labels`, `formats`). |
-| `GanttModule.forRoot(config?)` | Same, for NgModule apps. |
-| `provideGantt(config?)` | Global config only (no bar registration). |
-| `provideGanttBar({ type, component })` | Register a custom bar type (see above). |
-| `new GanttDataSource({ fetcher, pageSize, initialPage, retries })` | Build a lazy data source (`createGanttDataSource()` is equivalent). |
+| Provider                                                           | Use                                                                                                                                |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `provideGanttLib(config?)`                                         | One call in `bootstrapApplication` — registers built-in bars + global config (`theme`, `darkMode`, `locale`, `labels`, `formats`). |
+| `GanttModule.forRoot(config?)`                                     | Same, for NgModule apps.                                                                                                           |
+| `provideGantt(config?)`                                            | Global config only (no bar registration).                                                                                          |
+| `provideGanttBar({ type, component })`                             | Register a custom bar type (see above).                                                                                            |
+| `new GanttDataSource({ fetcher, pageSize, initialPage, retries })` | Build a lazy data source (`createGanttDataSource()` is equivalent).                                                                |
 
 ---
 
@@ -519,41 +527,41 @@ Global defaults: `provideGanttLib({ locale: 'it', labels: {…}, formats: {…} 
 
 Provided per `<gantry>` instance — inject them from a custom bar/child to read or drive state.
 
-| Service | What it exposes |
-|---|---|
-| `GanttThemeService` | `resolvedTheme`, `isDark`, `setDarkMode`, `patchTheme`, `setCustomTheme` |
-| `GanttI18nService` | `locale`, `labels`, `formats` (resolved signals) |
-| `GanttColumnService` | column defs: `columns`, `visibleColumns`, `setColumnWidth`, `setVisible` |
-| `GanttSelectionService` | `selectedIds`, `handleClick`, `selectAll`, `clear` |
-| `GanttLayoutService` | geometry & view state: `viewMode`, `visibleRows`, `rowGeometries`, `todayX` |
-| `GanttScrollService` | `scrollLeft`, `scrollTop`, `scrollToDate`, `scrollToToday` |
-| `GanttDragService` | drag/resize FSM state |
-| `GanttBarRegistry` | custom bar registration (`register`, `resolve`) |
+| Service                 | What it exposes                                                             |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `GanttThemeService`     | `resolvedTheme`, `isDark`, `setDarkMode`, `patchTheme`, `setCustomTheme`    |
+| `GanttI18nService`      | `locale`, `labels`, `formats` (resolved signals)                            |
+| `GanttColumnService`    | column defs: `columns`, `visibleColumns`, `setColumnWidth`, `setVisible`    |
+| `GanttSelectionService` | `selectedIds`, `handleClick`, `selectAll`, `clear`                          |
+| `GanttLayoutService`    | geometry & view state: `viewMode`, `visibleRows`, `rowGeometries`, `todayX` |
+| `GanttScrollService`    | `scrollLeft`, `scrollTop`, `scrollToDate`, `scrollToToday`                  |
+| `GanttDragService`      | drag/resize FSM state                                                       |
+| `GanttBarRegistry`      | custom bar registration (`register`, `resolve`)                             |
 
 ---
 
 ## Inputs & Outputs
 
-| Input | Type | Default |
-|---|---|---|
-| `series` | `GanttTask[]` | `[]` |
-| `dataSource` | `GanttDataSource \| null` | `null` |
-| `options` | `GanttOptions` | `{}` |
-| `annotations` | `GanttAnnotation[]` | `[]` |
-| `columns` | `ColumnDef[]` | `[]` |
-| `darkMode` | `boolean \| 'auto'` | `false` |
-| `showToolbar` | `boolean` | `true` |
-| `enableDrag` / `enableResize` | `boolean` | `true` |
-| `tooltipEnabled` | `boolean` | `true` |
-| `showLegend` | `boolean` | `false` |
+| Input                         | Type                      | Default |
+| ----------------------------- | ------------------------- | ------- |
+| `series`                      | `GanttTask[]`             | `[]`    |
+| `dataSource`                  | `GanttDataSource \| null` | `null`  |
+| `options`                     | `GanttOptions`            | `{}`    |
+| `annotations`                 | `GanttAnnotation[]`       | `[]`    |
+| `columns`                     | `ColumnDef[]`             | `[]`    |
+| `darkMode`                    | `boolean \| 'auto'`       | `false` |
+| `showToolbar`                 | `boolean`                 | `true`  |
+| `enableDrag` / `enableResize` | `boolean`                 | `true`  |
+| `tooltipEnabled`              | `boolean`                 | `true`  |
+| `showLegend`                  | `boolean`                 | `false` |
 
-| Output | Payload |
-|---|---|
-| `taskDragged` | `TaskDragEvent` |
-| `taskResized` | `TaskResizeEvent` |
-| `selectionChange` | `SelectionChangeEvent` |
-| `rowClick` / `rowDblClick` | row / geometry |
-| `loadError` | `{ error, page }` — a data-source page failed after its retries |
+| Output                     | Payload                                                         |
+| -------------------------- | --------------------------------------------------------------- |
+| `taskDragged`              | `TaskDragEvent`                                                 |
+| `taskResized`              | `TaskResizeEvent`                                               |
+| `selectionChange`          | `SelectionChangeEvent`                                          |
+| `rowClick` / `rowDblClick` | row / geometry                                                  |
+| `loadError`                | `{ error, page }` — a data-source page failed after its retries |
 
 ---
 
@@ -578,12 +586,12 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ## Keyboard shortcuts
 
-| Key | Action |
-|---|---|
-| `Escape` | Clear selection |
-| `Ctrl+A` | Select all |
-| `+` / `-` | Zoom in / out |
-| `T` | Scroll to today |
+| Key       | Action          |
+| --------- | --------------- |
+| `Escape`  | Clear selection |
+| `Ctrl+A`  | Select all      |
+| `+` / `-` | Zoom in / out   |
+| `T`       | Scroll to today |
 
 ---
 
@@ -627,25 +635,25 @@ and navigating via the sidebar works without it.
 
 A pnpm workspace (`pnpm-workspace.yaml`):
 
-| Path | What |
-|---|---|
-| `packages/core` | `@gantry/core` — framework-free logic, shared by every binding |
-| `packages/vanilla` | `@gantry/vanilla` — the `<gantry-element>` Web Component |
-| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component |
-| `projects/gantry` | `ngx-gantry` — the Angular library (imports `@gantry/core`) |
-| `projects/gantry-demo` | Angular showcase app |
-| `apps/demo-*` | one Vite demo per framework |
+| Path                                                | What                                                           |
+| --------------------------------------------------- | -------------------------------------------------------------- |
+| `packages/core`                                     | `@gantry/core` — framework-free logic, shared by every binding |
+| `packages/vanilla`                                  | `@gantry/vanilla` — the `<gantry-element>` Web Component       |
+| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                 |
+| `projects/gantry`                                   | `ngx-gantry` — the Angular library (imports `@gantry/core`)    |
+| `projects/gantry-demo`                              | Angular showcase app                                           |
+| `apps/demo-*`                                       | one Vite demo per framework                                    |
 
-| Script | Effect |
-|---|---|
-| `pnpm dev:angular` / `dev:vanilla` / `dev:react` / `dev:vue` / `dev:svelte` | run a demo (packages resolve from source, so library edits hot-reload); `dev:vanilla` is the options playground |
-| `pnpm build` | build all packages, the Angular library, the showcase and the demos |
-| `pnpm test` | Vitest: core (Node) + Web Component (happy-dom) |
-| `pnpm typecheck` | type-check every package |
-| `pnpm changeset` | describe a change for the next release (see [`.changeset/README.md`](.changeset/README.md)) |
-| `pnpm test:tz` | core tests in other time zones (Los Angeles, Kolkata) |
-| `pnpm e2e` · `pnpm e2e:full` | Playwright end-to-end tests on every binding (after `pnpm build`; `e2e:full` builds first) |
-| `pnpm e2e:visual` · `pnpm e2e:update` | compare / regenerate the screenshot baselines (`e2e/__screenshots__`) in the Playwright container (Docker/Podman) — same pixels as CI |
+| Script                                                                      | Effect                                                                                                                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev:angular` / `dev:vanilla` / `dev:react` / `dev:vue` / `dev:svelte` | run a demo (packages resolve from source, so library edits hot-reload); `dev:vanilla` is the options playground                       |
+| `pnpm build`                                                                | build all packages, the Angular library, the showcase and the demos                                                                   |
+| `pnpm test`                                                                 | Vitest: core (Node) + Web Component (happy-dom)                                                                                       |
+| `pnpm typecheck`                                                            | type-check every package                                                                                                              |
+| `pnpm changeset`                                                            | describe a change for the next release (see [`.changeset/README.md`](.changeset/README.md))                                           |
+| `pnpm test:tz`                                                              | core tests in other time zones (Los Angeles, Kolkata)                                                                                 |
+| `pnpm e2e` · `pnpm e2e:full`                                                | Playwright end-to-end tests on every binding (after `pnpm build`; `e2e:full` builds first)                                            |
+| `pnpm e2e:visual` · `pnpm e2e:update`                                       | compare / regenerate the screenshot baselines (`e2e/__screenshots__`) in the Playwright container (Docker/Podman) — same pixels as CI |
 
 Workspace packages expose a `@gantry/source` export condition pointing at
 their TypeScript sources; the demos, tests and type-checks use it, so nothing
@@ -655,13 +663,13 @@ has to be built first. Published consumers never see that condition.
 
 The repo ships a shared [Claude Code](https://claude.com/claude-code) setup:
 
-| Path | What |
-|---|---|
-| `CLAUDE.md` | architecture, commands and hard rules (no auto-commits, render model in core, date rules) |
-| `.claude/rules/` | per-area rules loaded when files in that area are touched (core, Web Component, Angular, bindings, docs) |
-| `.claude/skills/` | `/gantry-feature` (add an option end to end), `/gantry-visual-qa` (browser checks), `/gantry-release` (manual), plus vetted external skills: `angular-developer`, `accessibility`, `svelte-core-bestpractices`, `vue-best-practices`, `web-design-guidelines` (sources in `skills-lock.json`) |
-| `.claude/agents/` | `gantry-reviewer` (parity & invariants review), `gantry-qa` (browser QA), `gantry-docs-sync` (docs, changeset, playground) |
-| `.claude/settings.json` | safe commands pre-approved; commit / push / tag / publish always ask; unit tests of the edited package run after each edit (`GANTRY_HOOK_TESTS=0` to skip) |
+| Path                    | What                                                                                                                                                                                                                                                                                          |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE.md`             | architecture, commands and hard rules (no auto-commits, render model in core, date rules)                                                                                                                                                                                                     |
+| `.claude/rules/`        | per-area rules loaded when files in that area are touched (core, Web Component, Angular, bindings, docs)                                                                                                                                                                                      |
+| `.claude/skills/`       | `/gantry-feature` (add an option end to end), `/gantry-visual-qa` (browser checks), `/gantry-release` (manual), plus vetted external skills: `angular-developer`, `accessibility`, `svelte-core-bestpractices`, `vue-best-practices`, `web-design-guidelines` (sources in `skills-lock.json`) |
+| `.claude/agents/`       | `gantry-reviewer` (parity & invariants review), `gantry-qa` (browser QA), `gantry-docs-sync` (docs, changeset, playground)                                                                                                                                                                    |
+| `.claude/settings.json` | safe commands pre-approved; commit / push / tag / publish always ask; unit tests of the edited package run after each edit (`GANTRY_HOOK_TESTS=0` to skip)                                                                                                                                    |
 
 The browser QA works without Claude too: `pnpm build && pnpm e2e` runs the Playwright suite
 in `e2e/` on the Web Component, React, Vue, Svelte and Angular demos (console errors,
@@ -695,10 +703,10 @@ webpack in the toolchain. The live showcase replaces a component workshop such a
 
 ## Dependencies
 
-| Package | License | Size |
-|---|---|---|
-| `dayjs` | MIT | 7KB |
-| `@gantry/core` | MIT | shared logic from this repo |
+| Package        | License | Size                        |
+| -------------- | ------- | --------------------------- |
+| `dayjs`        | MIT     | 7KB                         |
+| `@gantry/core` | MIT     | shared logic from this repo |
 
 Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses native Popover API).
 
@@ -711,6 +719,7 @@ Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses nati
 <br/>
 
 ### [1.0.1] — 2026-08-08
+
 - **Scroll Tearing & Ping-Pong**: Resolved visual bar duplication during vertical scrolling by replacing fragile microtask lock with a robust scroll-source timeout lock.
 - **Vertical Scroll Alignment**: Synchronized task list and SVG canvas vertical scroll positions 1:1 without header height distortion.
 - **Today Marker**: Removed top vertical line from header to avoid obscuring date labels, and updated positioning to reflect exact time-of-day.
@@ -718,6 +727,7 @@ Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses nati
 - **Group Bar Defaults**: Ensured `TaskType.Group` resolves to `'group'` bar type by default.
 
 ### [1.0.0] — 2026-07-25
+
 - **Initial Public Release**: Zoneless, signal-based Angular 20+ Gantt chart.
 
 ---
@@ -725,4 +735,3 @@ Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses nati
 For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
 
 </details>
-

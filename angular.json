@@ -51,9 +51,7 @@
               },
               "projects/gantry-demo/src/favicon.ico"
             ],
-            "styles": [
-              "projects/gantry-demo/src/styles.scss"
-            ],
+            "styles": ["projects/gantry-demo/src/styles.scss"],
             "scripts": []
           },
           "configurations": {

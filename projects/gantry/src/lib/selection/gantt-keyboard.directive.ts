@@ -19,25 +19,24 @@
 import { Directive, inject, input } from '@angular/core';
 
 import { GanttSelectionService } from './gantt-selection.service';
-import { GanttLayoutService }    from '../layout/gantt-layout.service';
-import { GanttScrollService }    from '../scroll/gantt-scroll.service';
-import { GanttDragService }      from '../drag/gantt-drag.service';
-import { GanttFlatRow }          from '../types';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { GanttScrollService } from '../scroll/gantt-scroll.service';
+import { GanttDragService } from '../drag/gantt-drag.service';
+import { GanttFlatRow } from '../types';
 
 @Directive({
-  selector:   '[ganttKeyboard]',
-  standalone:  true,
+  selector: '[ganttKeyboard]',
+  standalone: true,
   host: { '(keydown)': 'onKeyDown($event)' },
 })
 export class GanttKeyboardDirective {
-
   /** @deprecated Ignored — the visible rows come from the layout service. */
   readonly visibleRows = input<GanttFlatRow[]>([]);
 
   private readonly selection = inject(GanttSelectionService);
-  private readonly layout    = inject(GanttLayoutService);
-  private readonly scroll    = inject(GanttScrollService);
-  private readonly drag      = inject(GanttDragService);
+  private readonly layout = inject(GanttLayoutService);
+  private readonly scroll = inject(GanttScrollService);
+  private readonly drag = inject(GanttDragService);
 
   onKeyDown(event: KeyboardEvent): void {
     if (event.defaultPrevented || isTextEntry(event)) return;
@@ -90,7 +89,9 @@ export class GanttKeyboardDirective {
 function isTextEntry(event: KeyboardEvent): boolean {
   const origin = event.composedPath()[0];
   if (!(origin instanceof HTMLElement)) return false;
-  return /^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName)
-    || origin.isContentEditable
-    || origin.closest('.gantry-splitter') !== null;
+  return (
+    /^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName) ||
+    origin.isContentEditable ||
+    origin.closest('.gantry-splitter') !== null
+  );
 }

@@ -1,11 +1,11 @@
 ---
 paths:
-  - "README.md"
-  - "CHANGELOG.md"
-  - "packages/*/README.md"
-  - "projects/gantry/README.md"
-  - ".changeset/**"
-  - "apps/**"
+  - 'README.md'
+  - 'CHANGELOG.md'
+  - 'packages/*/README.md'
+  - 'projects/gantry/README.md'
+  - '.changeset/**'
+  - 'apps/**'
 ---
 
 # Docs, demos and release notes

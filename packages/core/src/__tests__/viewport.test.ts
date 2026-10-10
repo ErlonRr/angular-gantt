@@ -15,7 +15,12 @@ const tasks: GanttTask[] = [
 ];
 const VW = 800;
 const timeline = (now: Date, options: GanttOptions = {}, list = tasks) =>
-  buildTimeline({ tasks: list, config: resolveConfig({ viewMode: 'Week', ...options }, LightTheme), viewportWidth: VW, now });
+  buildTimeline({
+    tasks: list,
+    config: resolveConfig({ viewMode: 'Week', ...options }, LightTheme),
+    viewportWidth: VW,
+    now,
+  });
 
 describe('TimelineModel.extent', () => {
   it('spans the earliest start to the latest end', () => {
@@ -31,7 +36,10 @@ describe('TimelineModel.extent', () => {
 describe('initialScrollLeft', () => {
   const left = (now: Date, initialScroll: GanttOptions['initialScroll'], list = tasks) => {
     const tl = timeline(now, {}, list);
-    return { tl, x: initialScrollLeft({ timeline: tl, initialScroll: initialScroll ?? 'auto', viewportWidth: VW, now }) };
+    return {
+      tl,
+      x: initialScrollLeft({ timeline: tl, initialScroll: initialScroll ?? 'auto', viewportWidth: VW, now }),
+    };
   };
 
   it("'auto' centres today when it falls within the tasks", () => {
@@ -87,7 +95,8 @@ describe('zoomAnchorScroll', () => {
   it('keeps the date under the anchor when zooming', () => {
     const week = timeline(now, { viewMode: 'Week' });
     const day = timeline(now, { viewMode: 'Day' });
-    const scrollLeft = 300, anchorX = VW / 2;
+    const scrollLeft = 300,
+      anchorX = VW / 2;
     const before = week.toDate(scrollLeft + anchorX);
     const next = zoomAnchorScroll(week, day, scrollLeft, anchorX);
     const after = day.toDate(next + anchorX);
@@ -96,7 +105,10 @@ describe('zoomAnchorScroll', () => {
 
   it('keeps the left-edge date when the range start moves', () => {
     const tl = timeline(now);
-    const earlier = timeline(now, {}, [...tasks, { id: 'c', name: 'C', start: new Date(2025, 10, 3), end: new Date(2025, 10, 10) }]);
+    const earlier = timeline(now, {}, [
+      ...tasks,
+      { id: 'c', name: 'C', start: new Date(2025, 10, 3), end: new Date(2025, 10, 10) },
+    ]);
     expect(earlier.start < tl.start).toBe(true);
     const next = zoomAnchorScroll(tl, earlier, 120, 0);
     expect(earlier.toDate(next).getTime()).toBe(tl.toDate(120).getTime());

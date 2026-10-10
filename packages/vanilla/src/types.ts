@@ -4,8 +4,17 @@
  */
 
 import type {
-  ColumnDef, GanttFlatRow, GanttTask, GanttOptions, GanttAnnotation, GanttState,
-  TaskDragEvent, TaskResizeEvent, SelectionChangeEvent, PagedLoaderConfig, ColumnContext,
+  ColumnDef,
+  GanttFlatRow,
+  GanttTask,
+  GanttOptions,
+  GanttAnnotation,
+  GanttState,
+  TaskDragEvent,
+  TaskResizeEvent,
+  SelectionChangeEvent,
+  PagedLoaderConfig,
+  ColumnContext,
 } from '@gantry/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
 import type { GanttBarRenderer } from './layout/gantt-canvas.component';
@@ -57,8 +66,18 @@ export interface GantryProperties {
 }
 
 export const GANTRY_PROPERTIES = [
-  'tasks', 'columns', 'options', 'annotations', 'darkMode', 'showToolbar',
-  'enableDrag', 'enableResize', 'tooltipEnabled', 'showLegend', 'dataSource', 'renderBar',
+  'tasks',
+  'columns',
+  'options',
+  'annotations',
+  'darkMode',
+  'showToolbar',
+  'enableDrag',
+  'enableResize',
+  'tooltipEnabled',
+  'showLegend',
+  'dataSource',
+  'renderBar',
 ] as const satisfies readonly (keyof GantryProperties)[];
 
 /** DOM event name → camelCase callback name used by the React / Vue / Svelte bindings. */

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "projects/gantry/**"
+  - 'projects/gantry/**'
 ---
 
 # ngx-gantry (Angular) rules

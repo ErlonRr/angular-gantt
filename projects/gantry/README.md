@@ -23,10 +23,7 @@ import { provideGanttLib } from 'ngx-gantry';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
-  providers: [
-    provideZonelessChangeDetection(),
-    provideGanttLib({ darkMode: 'auto' }),
-  ],
+  providers: [provideZonelessChangeDetection(), provideGanttLib({ darkMode: 'auto' })],
 });
 ```
 
@@ -39,17 +36,20 @@ import { GantryComponent, GanttTask } from 'ngx-gantry';
   selector: 'app-root',
   imports: [GantryComponent],
   template: `
-    <gantry
-      [series]="tasks"
-      [options]="{ viewMode: 'Month', rowHeight: 36, baseline: true }"
-      [showLegend]="true"
-    />
+    <gantry [series]="tasks" [options]="{ viewMode: 'Month', rowHeight: 36, baseline: true }" [showLegend]="true" />
   `,
 })
 export class AppComponent {
   tasks: GanttTask[] = [
     { id: '1', name: 'Discovery', start: new Date('2026-01-05'), end: new Date('2026-01-31'), progress: 100 },
-    { id: '2', name: 'Build', start: new Date('2026-02-01'), end: new Date('2026-03-15'), progress: 40, dependency: '1' },
+    {
+      id: '2',
+      name: 'Build',
+      start: new Date('2026-02-01'),
+      end: new Date('2026-03-15'),
+      progress: 40,
+      dependency: '1',
+    },
   ];
 }
 ```
@@ -93,6 +93,7 @@ Full docs, demos and issues:
 <br/>
 
 ### [1.0.1] — 2026-08-08
+
 - **Scroll Tearing & Ping-Pong**: Resolved visual bar duplication during vertical scrolling by replacing fragile microtask lock with a robust scroll-source timeout lock.
 - **Vertical Scroll Alignment**: Synchronized task list and SVG canvas vertical scroll positions 1:1 without header height distortion.
 - **Today Marker**: Removed top vertical line from header to avoid obscuring date labels, and updated positioning to reflect exact time-of-day.
@@ -100,6 +101,7 @@ Full docs, demos and issues:
 - **Group Bar Defaults**: Ensured `TaskType.Group` resolves to `'group'` bar type by default.
 
 ### [1.0.0] — 2026-07-25
+
 - **Initial Public Release**: Zoneless, signal-based Angular 20+ Gantt chart.
 
 ---
@@ -107,4 +109,3 @@ Full docs, demos and issues:
 For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
 
 </details>
-

@@ -60,12 +60,18 @@ export class GanttSelectionService {
 
   rangeSelect(toId: string, allRows: GanttFlatRow[]): void {
     const fromId = this._lastSelected();
-    if (!fromId) { this.selectSingle(toId); return; }
+    if (!fromId) {
+      this.selectSingle(toId);
+      return;
+    }
 
     const fromIdx = allRows.findIndex(r => r.task.id === fromId);
     const toIdx = allRows.findIndex(r => r.task.id === toId);
 
-    if (fromIdx < 0 || toIdx < 0) { this.selectSingle(toId); return; }
+    if (fromIdx < 0 || toIdx < 0) {
+      this.selectSingle(toId);
+      return;
+    }
 
     const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
     const rangeIds = allRows.slice(lo, hi + 1).map(r => r.task.id);

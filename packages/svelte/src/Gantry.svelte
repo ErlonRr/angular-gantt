@@ -13,14 +13,33 @@
   import type { GantryElement, GantryProperties, GantryEventCallbacks } from '@gantry/vanilla';
   import type { HTMLAttributes } from 'svelte/elements';
 
-  type Props = GantryProperties & GantryEventCallbacks
-    & Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | keyof GantryEventCallbacks>
-    & { element?: GantryElement };
+  type Props = GantryProperties &
+    GantryEventCallbacks &
+    Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | keyof GantryEventCallbacks> & {
+      element?: GantryElement;
+    };
 
   let {
-    tasks, columns, options, annotations, darkMode, showToolbar, enableDrag,
-    enableResize, tooltipEnabled, showLegend, dataSource, renderBar,
-    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange, onStateChange, onLoadError,
+    tasks,
+    columns,
+    options,
+    annotations,
+    darkMode,
+    showToolbar,
+    enableDrag,
+    enableResize,
+    tooltipEnabled,
+    showLegend,
+    dataSource,
+    renderBar,
+    onTaskDragged,
+    onTaskResized,
+    onSelectionChange,
+    onRowClick,
+    onRowDblClick,
+    onViewModeChange,
+    onStateChange,
+    onLoadError,
     element = $bindable(),
     style = '',
     ...rest
@@ -29,21 +48,52 @@
   // One effect per property so a change re-assigns only that property.
   // $state.snapshot reads data arrays deeply (tracking in-place mutation)
   // and hands the element a plain copy instead of a proxy.
-  $effect(() => { if (element && tasks !== undefined) element.tasks = $state.snapshot(tasks) as typeof tasks; });
-  $effect(() => { if (element && annotations !== undefined) element.annotations = $state.snapshot(annotations) as typeof annotations; });
-  $effect(() => { if (element && columns !== undefined) element.columns = columns; });
-  $effect(() => { if (element && options !== undefined) element.options = options; });
-  $effect(() => { if (element && darkMode !== undefined) element.darkMode = darkMode; });
-  $effect(() => { if (element && showToolbar !== undefined) element.showToolbar = showToolbar; });
-  $effect(() => { if (element && enableDrag !== undefined) element.enableDrag = enableDrag; });
-  $effect(() => { if (element && enableResize !== undefined) element.enableResize = enableResize; });
-  $effect(() => { if (element && tooltipEnabled !== undefined) element.tooltipEnabled = tooltipEnabled; });
-  $effect(() => { if (element && showLegend !== undefined) element.showLegend = showLegend; });
-  $effect(() => { if (element && dataSource !== undefined) element.dataSource = dataSource; });
-  $effect(() => { if (element && renderBar !== undefined) element.renderBar = renderBar; });
+  $effect(() => {
+    if (element && tasks !== undefined) element.tasks = $state.snapshot(tasks) as typeof tasks;
+  });
+  $effect(() => {
+    if (element && annotations !== undefined) element.annotations = $state.snapshot(annotations) as typeof annotations;
+  });
+  $effect(() => {
+    if (element && columns !== undefined) element.columns = columns;
+  });
+  $effect(() => {
+    if (element && options !== undefined) element.options = options;
+  });
+  $effect(() => {
+    if (element && darkMode !== undefined) element.darkMode = darkMode;
+  });
+  $effect(() => {
+    if (element && showToolbar !== undefined) element.showToolbar = showToolbar;
+  });
+  $effect(() => {
+    if (element && enableDrag !== undefined) element.enableDrag = enableDrag;
+  });
+  $effect(() => {
+    if (element && enableResize !== undefined) element.enableResize = enableResize;
+  });
+  $effect(() => {
+    if (element && tooltipEnabled !== undefined) element.tooltipEnabled = tooltipEnabled;
+  });
+  $effect(() => {
+    if (element && showLegend !== undefined) element.showLegend = showLegend;
+  });
+  $effect(() => {
+    if (element && dataSource !== undefined) element.dataSource = dataSource;
+  });
+  $effect(() => {
+    if (element && renderBar !== undefined) element.renderBar = renderBar;
+  });
 
   const callbacks = $derived<GantryEventCallbacks>({
-    onTaskDragged, onTaskResized, onSelectionChange, onRowClick, onRowDblClick, onViewModeChange, onStateChange, onLoadError,
+    onTaskDragged,
+    onTaskResized,
+    onSelectionChange,
+    onRowClick,
+    onRowDblClick,
+    onViewModeChange,
+    onStateChange,
+    onLoadError,
   });
 
   $effect(() => {
@@ -61,8 +111,5 @@
   });
 </script>
 
-<gantry-element
-  bind:this={element}
-  style="display: block; width: 100%; height: 100%; {style}"
-  {...rest}
+<gantry-element bind:this={element} style="display: block; width: 100%; height: 100%; {style}" {...rest}
 ></gantry-element>

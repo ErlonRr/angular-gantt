@@ -45,16 +45,16 @@ export abstract class GanttBarBase {
 
 export interface GanttBarDef {
   /** Key used in GanttTask.barType — e.g. 'task', 'milestone', 'sprint' */
-  type:      string;
+  type: string;
   component: Type<GanttBarBase>;
 }
 
 // ─── Multi-provider token ─────────────────────────────────────
 
-export const GANTT_BAR_DEF = new InjectionToken<GanttBarDef[]>(
-  'GANTT_BAR_DEF',
-  { providedIn: 'root', factory: () => [] },
-);
+export const GANTT_BAR_DEF = new InjectionToken<GanttBarDef[]>('GANTT_BAR_DEF', {
+  providedIn: 'root',
+  factory: () => [],
+});
 
 // ─── Registry service ─────────────────────────────────────────
 
@@ -88,7 +88,7 @@ export class GanttBarRegistry {
     if (!cmp) {
       throw new Error(
         `[GanttBarRegistry] No component for bar type '${type}' and no 'task' fallback registered. ` +
-        `Did you call GanttModule.forRoot() or provideGantt()?`
+          `Did you call GanttModule.forRoot() or provideGantt()?`,
       );
     }
     return cmp;
@@ -118,7 +118,5 @@ export class GanttBarRegistry {
  * });
  */
 export function provideGanttBar(def: GanttBarDef): EnvironmentProviders {
-  return makeEnvironmentProviders([
-    { provide: GANTT_BAR_DEF, useValue: def, multi: true },
-  ]);
+  return makeEnvironmentProviders([{ provide: GANTT_BAR_DEF, useValue: def, multi: true }]);
 }

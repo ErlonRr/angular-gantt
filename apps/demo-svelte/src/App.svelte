@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/svelte';
+  import {
+    Gantry,
+    ViewMode,
+    type GantryElement,
+    type GanttTask,
+    type TaskDragEvent,
+    type TaskResizeEvent,
+  } from '@gantry/svelte';
   import { createDemoData } from '@gantry/core/demo';
   import '../../demo.css';
 
@@ -47,8 +54,14 @@
     {options}
     darkMode={dark}
     showLegend
-    onTaskDragged={e => { applyDates(e); log = `moved ${e.taskId} by ${e.daysMoved} day(s)`; }}
-    onTaskResized={e => { applyDates(e); log = `resized ${e.taskId} (${e.handle}) by ${e.daysDelta} day(s)`; }}
+    onTaskDragged={e => {
+      applyDates(e);
+      log = `moved ${e.taskId} by ${e.daysMoved} day(s)`;
+    }}
+    onTaskResized={e => {
+      applyDates(e);
+      log = `resized ${e.taskId} (${e.handle}) by ${e.daysDelta} day(s)`;
+    }}
     onSelectionChange={e => (log = `selected: ${e.selectedIds.join(', ') || 'none'}`)}
     onViewModeChange={e => (viewMode = e.viewMode)}
   />

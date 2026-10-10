@@ -12,27 +12,24 @@ export type DragHandle = 'bar' | 'left' | 'right';
 
 export interface DragTiming {
   pxPerDay: number;
-  toX:      (d: Date) => number;
+  toX: (d: Date) => number;
   /** Start/end as drawn (date-only normalisation, inclusive ends) */
-  span:     (start: Date, end: Date) => { start: Date; end: Date };
+  span: (start: Date, end: Date) => { start: Date; end: Date };
   /** Snap to whole days, or whole hours on hour scales */
-  snap:     'day' | 'hour';
+  snap: 'day' | 'hour';
 }
 
 export interface DragPreview {
-  taskId:    string;
-  x:         number;
-  width:     number;
-  y:         number;
-  height:    number;
+  taskId: string;
+  x: number;
+  width: number;
+  y: number;
+  height: number;
   /** Movement in snap units (days, or hours on hour scales) */
   daysDelta: number;
 }
 
-export type DragResult =
-  | { kind: 'drag'; event: TaskDragEvent }
-  | { kind: 'resize'; event: TaskResizeEvent }
-  | null;
+export type DragResult = { kind: 'drag'; event: TaskDragEvent } | { kind: 'resize'; event: TaskResizeEvent } | null;
 
 const addHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000);
 

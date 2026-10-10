@@ -13,11 +13,11 @@ export type InitialScroll = 'auto' | 'today' | 'start' | Date | false;
 export const START_SCROLL_MARGIN = 32;
 
 export interface InitialScrollInput {
-  timeline:      TimelineModel;
+  timeline: TimelineModel;
   initialScroll: InitialScroll;
   /** Visible width of the timeline viewport */
   viewportWidth: number;
-  now:           Date;
+  now: Date;
 }
 
 /**

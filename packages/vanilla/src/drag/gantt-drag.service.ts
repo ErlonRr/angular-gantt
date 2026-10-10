@@ -5,16 +5,18 @@
  */
 
 import {
-  RowGeometry, TaskDragEvent, TaskResizeEvent, DragSession,
-  type DragTiming, type DragPreview,
+  RowGeometry,
+  TaskDragEvent,
+  TaskResizeEvent,
+  DragSession,
+  type DragTiming,
+  type DragPreview,
 } from '@gantry/core';
 import { createState } from '../core/state';
 
 export type { DragPreview };
 
-export type DragState =
-  | { kind: 'idle' }
-  | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };
+export type DragState = { kind: 'idle' } | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };
 
 export class GanttDragService {
   readonly state = createState<DragState>({ kind: 'idle' });
@@ -37,16 +39,28 @@ export class GanttDragService {
     event: PointerEvent,
     geo: RowGeometry,
     handle: 'bar' | 'left' | 'right',
-    captureEl: SVGElement | HTMLElement
+    captureEl: SVGElement | HTMLElement,
   ): void {
     if (this.session) return;
     event.preventDefault();
     event.stopPropagation();
 
     const task = geo.row.task;
-    const session = new DragSession(task.id, handle, task.start, task.end ?? task.start, event.clientX, geo, this.timing);
+    const session = new DragSession(
+      task.id,
+      handle,
+      task.start,
+      task.end ?? task.start,
+      event.clientX,
+      geo,
+      this.timing,
+    );
     this.session = session;
-    try { captureEl.setPointerCapture(event.pointerId); } catch { /* synthetic event */ }
+    try {
+      captureEl.setPointerCapture(event.pointerId);
+    } catch {
+      /* synthetic event */
+    }
 
     this.state.set({
       kind: handle === 'left' ? 'resizing-left' : handle === 'right' ? 'resizing-right' : 'dragging',

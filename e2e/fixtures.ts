@@ -12,15 +12,22 @@ type Fixtures = { chart: Chart; pageErrors: string[] };
  * Every test fails if the page logs an error or throws.
  */
 export const test = base.extend<Fixtures>({
-  pageErrors: [async ({ page }, use) => {
-    const errors: string[] = [];
-    page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
-    page.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
-    await page.clock.setFixedTime(NOW);
-    await use(errors);
-    expect(errors, 'the page logged errors').toEqual([]);
-  }, { auto: true }],
-  chart: async ({ page }, use) => { await use(new Chart(page)); },
+  pageErrors: [
+    async ({ page }, use) => {
+      const errors: string[] = [];
+      page.on('pageerror', e => errors.push(`pageerror: ${e.message}`));
+      page.on('console', m => {
+        if (m.type() === 'error') errors.push(`console: ${m.text()}`);
+      });
+      await page.clock.setFixedTime(NOW);
+      await use(errors);
+      expect(errors, 'the page logged errors').toEqual([]);
+    },
+    { auto: true },
+  ],
+  chart: async ({ page }, use) => {
+    await use(new Chart(page));
+  },
 });
 export { expect };
 
@@ -41,10 +48,18 @@ export const SEL = {
 export class Chart {
   constructor(readonly page: Page) {}
 
-  host(): Locator { return this.page.locator('gantry-element, gantry').first(); }
-  get(selector: string): Locator { return this.host().locator(selector); }
-  viewport(): Locator { return this.get(SEL.viewport).first(); }
-  panel(): Locator { return this.get(SEL.panel).first(); }
+  host(): Locator {
+    return this.page.locator('gantry-element, gantry').first();
+  }
+  get(selector: string): Locator {
+    return this.host().locator(selector);
+  }
+  viewport(): Locator {
+    return this.get(SEL.viewport).first();
+  }
+  panel(): Locator {
+    return this.get(SEL.panel).first();
+  }
 
   async open(url: string): Promise<void> {
     await this.page.goto(url);
@@ -53,10 +68,13 @@ export class Chart {
 
   /** Run `fn` against the element hosting the chart (shadow root for the Web Component). */
   evalRoot<R, A = undefined>(fn: (root: ParentNode, arg: A) => R, arg?: A): Promise<R> {
-    return this.host().evaluate((host, [src, a]) => {
-      const root = (host as HTMLElement).shadowRoot ?? host;
-      return new Function('root', 'arg', `return (${src})(root, arg)`)(root, a);
-    }, [fn.toString(), arg] as const) as Promise<R>;
+    return this.host().evaluate(
+      (host, [src, a]) => {
+        const root = (host as HTMLElement).shadowRoot ?? host;
+        return new Function('root', 'arg', `return (${src})(root, arg)`)(root, a);
+      },
+      [fn.toString(), arg] as const,
+    ) as Promise<R>;
   }
 
   /** Bounding box, retried: the Web Component rebuilds parts of its DOM on every render. */

@@ -12,49 +12,48 @@
 
 :root {
   // Radius scale (blog: --radius 0.75rem)
-  --app-radius:    0.75rem;
+  --app-radius: 0.75rem;
   --app-radius-md: calc(var(--app-radius) - 2px);
   --app-radius-sm: calc(var(--app-radius) - 4px);
 
   // Typography — system fallback stack (Geist-compatible metrics,
   // zero network dependency). Swap for @font-face Geist later if desired.
-  --app-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --app-font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
-    Menlo, Consolas, monospace;
+  --app-font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --app-font-mono: ui-monospace, 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Menlo, Consolas, monospace;
 
   // ── Palette (light) — raw HSL triplets ──────────────────────
-  --bg:          0 0% 100%;
-  --fg:          0 0% 3.9%;
-  --card:        0 0% 100%;
-  --muted:       0 0% 96.1%;
-  --muted-fg:    0 0% 45.1%;
-  --border:      0 0% 89.8%;
-  --primary:     262 83% 58%;
-  --primary-fg:  0 0% 98%;
-  --accent:      0 0% 96.1%;
-  --success:     142 71% 38%;
-  --ring:        262 83% 58%;
+  --bg: 0 0% 100%;
+  --fg: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --muted: 0 0% 96.1%;
+  --muted-fg: 0 0% 45.1%;
+  --border: 0 0% 89.8%;
+  --primary: 262 83% 58%;
+  --primary-fg: 0 0% 98%;
+  --accent: 0 0% 96.1%;
+  --success: 142 71% 38%;
+  --ring: 262 83% 58%;
 
   // Shadows
   --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --app-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+  --app-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
   --app-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.14);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme='dark'] {
   // Dark "terminal/OS craft": charcoal viola-tinted, not neutral black
-  --bg:          260 20% 7%;
-  --fg:          260 14% 96%;
-  --card:        260 18% 10%;
-  --muted:       260 12% 14%;
-  --muted-fg:    260 8% 64%;
-  --border:      260 14% 17%;
-  --primary:     262 83% 62%;
-  --primary-fg:  0 0% 100%;
-  --accent:      260 14% 15%;
-  --success:     142 64% 52%;
-  --ring:        262 83% 66%;
+  --bg: 260 20% 7%;
+  --fg: 260 14% 96%;
+  --card: 260 18% 10%;
+  --muted: 260 12% 14%;
+  --muted-fg: 260 8% 64%;
+  --border: 260 14% 17%;
+  --primary: 262 83% 62%;
+  --primary-fg: 0 0% 100%;
+  --accent: 260 14% 15%;
+  --success: 142 64% 52%;
+  --ring: 262 83% 66%;
 
   --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --app-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
@@ -64,7 +63,10 @@
 // ── Shared utilities ──────────────────────────────────────────
 
 .app-hover-lift {
-  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.12s ease;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.12s ease;
 }
 .app-hover-lift:hover {
   transform: translateY(-2px);
@@ -78,6 +80,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-hover-lift { transition: none; }
-  .app-hover-lift:hover { transform: none; }
+  .app-hover-lift {
+    transition: none;
+  }
+  .app-hover-lift:hover {
+    transform: none;
+  }
 }

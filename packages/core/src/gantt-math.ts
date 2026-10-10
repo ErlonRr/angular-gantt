@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import dayjs from 'dayjs';
-import isoWeek  from 'dayjs/plugin/isoWeek.js';
+import isoWeek from 'dayjs/plugin/isoWeek.js';
 import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
 import advancedFormat from 'dayjs/plugin/advancedFormat.js';
 
@@ -16,7 +16,12 @@ dayjs.extend(advancedFormat);
 
 import { ViewMode, HeaderCell, HeaderRow, GanttTask, GanttI18n, GanttLabels, TimeUnit } from './types';
 import {
-  DEFAULT_ZOOM_LEVELS, findZoomLevel, withLegacyHeaderFormats, buildTiers, unitStart, unitAdd,
+  DEFAULT_ZOOM_LEVELS,
+  findZoomLevel,
+  withLegacyHeaderFormats,
+  buildTiers,
+  unitStart,
+  unitAdd,
   type ScaleTier,
 } from './render/scales';
 
@@ -27,22 +32,22 @@ export type { HeaderCell, HeaderRow };
 
 /** Pixels per day for each ViewMode at 1× zoom */
 export const PX_PER_DAY: Record<ViewMode, number> = {
-  [ViewMode.Hour]:   960,
-  [ViewMode.Day]:     48,
-  [ViewMode.Week]:    20,
-  [ViewMode.Month]:    8,
-  [ViewMode.Quarter]:  4,
-  [ViewMode.Year]:     2,
+  [ViewMode.Hour]: 960,
+  [ViewMode.Day]: 48,
+  [ViewMode.Week]: 20,
+  [ViewMode.Month]: 8,
+  [ViewMode.Quarter]: 4,
+  [ViewMode.Year]: 2,
 };
 
 /** Row header heights [top row px, bottom row px] */
 export const HEADER_HEIGHTS: Record<ViewMode, [number, number]> = {
-  [ViewMode.Hour]:    [32, 28],
-  [ViewMode.Day]:     [32, 28],
-  [ViewMode.Week]:    [32, 28],
-  [ViewMode.Month]:   [32, 28],
+  [ViewMode.Hour]: [32, 28],
+  [ViewMode.Day]: [32, 28],
+  [ViewMode.Week]: [32, 28],
+  [ViewMode.Month]: [32, 28],
   [ViewMode.Quarter]: [32, 28],
-  [ViewMode.Year]:    [32, 28],
+  [ViewMode.Year]: [32, 28],
 };
 
 // ─── Calendar time ────────────────────────────────────────────
@@ -56,8 +61,13 @@ const DAY_MS = 86_400_000;
 
 /** `true` for dates like `new Date('2026-01-05')`: midnight UTC, not local midnight. */
 export function isUtcDateOnly(d: Date): boolean {
-  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0
-    && d.getUTCMilliseconds() === 0 && d.getTimezoneOffset() !== 0;
+  return (
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0 &&
+    d.getTimezoneOffset() !== 0
+  );
 }
 
 /**
@@ -83,7 +93,9 @@ export function parseDate(input: string | number | Date): Date {
 /** Fractional local-calendar days since 1970-01-01. */
 export function calendarDays(date: Date, normalizeDateOnly = true): number {
   const d = normalizeDateOnly ? toLocalDay(date) : date;
-  const y = d.getFullYear(), m = d.getMonth(), day = d.getDate();
+  const y = d.getFullYear(),
+    m = d.getMonth(),
+    day = d.getDate();
   const midnight = new Date(y, m, day).getTime();
   const next = new Date(y, m, day + 1).getTime();
   return Math.round(Date.UTC(y, m, day) / DAY_MS) + (d.getTime() - midnight) / (next - midnight);
@@ -93,7 +105,9 @@ export function calendarDays(date: Date, normalizeDateOnly = true): number {
 export function fromCalendarDays(value: number): Date {
   const whole = Math.floor(value);
   const base = new Date(whole * DAY_MS);
-  const y = base.getUTCFullYear(), m = base.getUTCMonth(), day = base.getUTCDate();
+  const y = base.getUTCFullYear(),
+    m = base.getUTCMonth(),
+    day = base.getUTCDate();
   const midnight = new Date(y, m, day).getTime();
   const next = new Date(y, m, day + 1).getTime();
   return new Date(midnight + (value - whole) * (next - midnight));
@@ -136,8 +150,13 @@ export function addDays(date: Date, days: number): Date {
     return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
   }
   return new Date(
-    date.getFullYear(), date.getMonth(), date.getDate() + days,
-    date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds(),
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate() + days,
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds(),
   );
 }
 
@@ -152,7 +171,7 @@ export function diffDays(a: Date, b: Date): number {
 
 export interface TimelineRange {
   start: Date;
-  end:   Date;
+  end: Date;
 }
 
 /** Earliest start / latest end over tasks and their baselines (null when empty). */
@@ -205,14 +224,12 @@ export function snapRange(
   now: Date = new Date(),
 ): TimelineRange {
   const today = snapToDay(now);
-  const extent = taskExtent(tasks, includeDate)
-    ?? { start: addDays(today, -30), end: addDays(today, 60) };
+  const extent = taskExtent(tasks, includeDate) ?? { start: addDays(today, -30), end: addDays(today, 60) };
   const step = scale.step ?? 1;
   const start = unitStart(addDays(extent.start, -paddingDays), scale.unit, step, weekStart);
   const lastCell = unitStart(addDays(extent.end, paddingDays), scale.unit, step, weekStart);
-  const end = lastCell.getTime() === extent.end.getTime() && paddingDays === 0
-    ? lastCell
-    : unitAdd(lastCell, scale.unit, step);
+  const end =
+    lastCell.getTime() === extent.end.getTime() && paddingDays === 0 ? lastCell : unitAdd(lastCell, scale.unit, step);
   return { start, end };
 }
 
@@ -233,7 +250,9 @@ export function generateHeaderRows(
   const level = findZoomLevel(DEFAULT_ZOOM_LEVELS, viewMode);
   const tiers = buildTiers({
     scales: withLegacyHeaderFormats(level, i18n),
-    start, end, pxPerDay,
+    start,
+    end,
+    pxPerDay,
     heights: HEADER_HEIGHTS[viewMode] ?? [32, 28],
     locale: i18n?.locale,
     labels: i18n?.labels,
@@ -248,9 +267,9 @@ export function generateHeaderRows(
 // ─── Grid line generation ─────────────────────────────────────
 
 export interface GridLine {
-  x:      number;
+  x: number;
   isMajor: boolean;
-  label?:  string;
+  label?: string;
 }
 
 /**
@@ -258,12 +277,7 @@ export interface GridLine {
  * Minor lines = bottom-row cell boundaries; major lines = real top-row period
  * boundaries (e.g. month starts in Week view, even mid-week).
  */
-export function generateGridLines(
-  viewMode: ViewMode,
-  start: Date,
-  end: Date,
-  pxPerDay: number,
-): GridLine[] {
+export function generateGridLines(viewMode: ViewMode, start: Date, end: Date, pxPerDay: number): GridLine[] {
   const [topRow, botRow] = generateHeaderRows(viewMode, start, end, pxPerDay);
   const major = new Set(topRow.cells.map(c => c.x).filter(x => x > 0));
   const lines: GridLine[] = [];
@@ -310,11 +324,11 @@ export function formatDate(date: Date, fmt = 'MMM D, YYYY', locale?: string): st
 
 export function durationLabel(start: Date, end: Date, labels?: Partial<GanttLabels>): string {
   const days = diffDays(start, end);
-  if (days < 1)   return labels?.durationLessThanDay ?? '< 1 day';
+  if (days < 1) return labels?.durationLessThanDay ?? '< 1 day';
   if (days === 1) return labels?.durationDay ?? '1 day';
-  if (days < 7)   return labels?.durationDays ? labels.durationDays(days) : `${days} days`;
+  if (days < 7) return labels?.durationDays ? labels.durationDays(days) : `${days} days`;
   const weeks = Math.floor(days / 7);
-  const rem   = days % 7;
+  const rem = days % 7;
   if (rem === 0) return labels?.durationWeeks ? labels.durationWeeks(weeks) : `${weeks}w`;
   return labels?.durationWeeksDays ? labels.durationWeeksDays(weeks, rem) : `${weeks}w ${rem}d`;
 }

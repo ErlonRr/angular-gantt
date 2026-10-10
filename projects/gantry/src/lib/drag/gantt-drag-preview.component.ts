@@ -8,21 +8,16 @@
 //  (e.g. "+3d") so the user knows exactly how far they've moved.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { DragPreview }  from './gantt-drag.service';
-import { GanttTheme }   from '../types';
+import { DragPreview } from './gantt-drag.service';
+import { GanttTheme } from '../types';
 
 @Component({
-  selector:   'g[ganttDragPreview]',
-  standalone:  true,
+  selector: 'g[ganttDragPreview]',
+  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { 'style': 'pointer-events: none;' },
+  host: { style: 'pointer-events: none;' },
   template: `
     @if (preview()) {
       <!-- Ghost bar -->
@@ -50,18 +45,20 @@ import { GanttTheme }   from '../types';
         text-anchor="middle"
         dominant-baseline="auto"
         style="user-select:none;"
-      >{{ deltaLabel() }}</svg:text>
+      >
+        {{ deltaLabel() }}
+      </svg:text>
     }
   `,
 })
 export class GanttDragPreviewComponent {
   readonly preview = input<DragPreview | null>(null);
-  readonly theme   = input.required<GanttTheme>();
+  readonly theme = input.required<GanttTheme>();
   /** Bar height in px (from the bar's render visual) */
   readonly barHeight = input<number | null>(null);
-  readonly radius    = input<number>(4);
+  readonly radius = input<number>(4);
   /** Snap unit, for the delta label */
-  readonly unit      = input<'day' | 'hour'>('day');
+  readonly unit = input<'day' | 'hour'>('day');
 
   protected readonly ghostHeight = computed(() => {
     const p = this.preview();

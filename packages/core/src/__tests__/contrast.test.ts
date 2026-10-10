@@ -51,7 +51,10 @@ describe('readableOn', () => {
 });
 
 describe('default palettes (WCAG AA)', () => {
-  for (const [name, theme] of [['light', LightTheme], ['dark', DarkTheme]] as const) {
+  for (const [name, theme] of [
+    ['light', LightTheme],
+    ['dark', DarkTheme],
+  ] as const) {
     it(`${name}: bar labels ≥ 4.5:1 on bar and critical fills`, () => {
       expect(ratio(theme.barColor, theme.barTextColor)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(theme.criticalColor, theme.barTextColor)).toBeGreaterThanOrEqual(4.5);
@@ -63,7 +66,15 @@ describe('default palettes (WCAG AA)', () => {
     });
 
     it(`${name}: bars, markers and arrows ≥ 3:1 against the background`, () => {
-      for (const key of ['barColor', 'criticalColor', 'todayColor', 'arrowColor', 'selectionBorder', 'baselineColor', 'milestoneColor'] as const) {
+      for (const key of [
+        'barColor',
+        'criticalColor',
+        'todayColor',
+        'arrowColor',
+        'selectionBorder',
+        'baselineColor',
+        'milestoneColor',
+      ] as const) {
         expect(ratio(theme[key], theme.backgroundColor), key).toBeGreaterThanOrEqual(3);
       }
     });
@@ -77,9 +88,16 @@ describe('default palettes (WCAG AA)', () => {
 
 describe('bar labels on custom colours', () => {
   const geoFor = (barColor?: string, textColor?: string): RowGeometry => {
-    const [row] = flattenTree([{
-      id: 't', name: 'Task', start: new Date(2026, 0, 1), end: new Date(2026, 0, 20), barColor, textColor,
-    }]);
+    const [row] = flattenTree([
+      {
+        id: 't',
+        name: 'Task',
+        start: new Date(2026, 0, 1),
+        end: new Date(2026, 0, 20),
+        barColor,
+        textColor,
+      },
+    ]);
     return { row, y: 0, height: 40, barX: 0, barWidth: 400 } as RowGeometry;
   };
   const cfg = resolveConfig({ bar: { label: { position: 'inside' } } }, LightTheme);

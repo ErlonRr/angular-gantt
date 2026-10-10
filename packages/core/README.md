@@ -17,21 +17,26 @@ npm i @gantry/core
 
 ## What's inside
 
-| Area | Exports |
-|---|---|
-| Types | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and the `ViewMode`, `TaskType`, `DependencyType` enums |
-| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel` |
-| Tree data | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns` |
-| Scheduling | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain` |
-| i18n | `DEFAULT_LABELS`, `DEFAULT_FORMATS` |
+| Area          | Exports                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Types         | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and the `ViewMode`, `TaskType`, `DependencyType` enums |
+| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel`                              |
+| Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                              |
+| Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                          |
+| i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                        |
 
 ```ts
 import { computeCriticalPath, DependencyType } from '@gantry/core';
 
 const { criticalIds } = computeCriticalPath([
   { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
-  { id: 'b', name: 'Build', start: new Date('2026-01-21'), end: new Date('2026-02-28'),
-    dependency: { taskId: 'a', type: DependencyType.FS } },
+  {
+    id: 'b',
+    name: 'Build',
+    start: new Date('2026-01-21'),
+    end: new Date('2026-02-28'),
+    dependency: { taskId: 'a', type: DependencyType.FS },
+  },
 ]);
 ```
 
@@ -40,7 +45,7 @@ Sample data for demos and docs lives in a separate entry point, `@gantry/core/de
 ```ts
 import { createDemoData, anchorToToday, DEMO_TASKS } from '@gantry/core/demo';
 
-const { tasks, annotations } = createDemoData();          // today ≈ 40% into the plan
+const { tasks, annotations } = createDemoData(); // today ≈ 40% into the plan
 const later = createDemoData({ now: new Date(2027, 0, 4), at: 0.8 });
 const mine = anchorToToday(myTemplate, { at: 0.5 }).tasks; // any template, whole-week shift
 ```

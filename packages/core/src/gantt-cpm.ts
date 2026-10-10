@@ -22,22 +22,22 @@ import type { ResolvedGanttConfig } from './render/config';
 // ─── Internal graph node ──────────────────────────────────────
 
 interface CPMNode {
-  id:       string;
-  duration: number;   // calendar days (fractional for hour-level tasks)
-  es:       number;   // Early Start  (days from project start)
-  ef:       number;   // Early Finish
-  ls:       number;   // Late Start
-  lf:       number;   // Late Finish
-  float:    number;   // Total float (slack)
-  preds:    CPMEdge[];
-  succs:    CPMEdge[];
+  id: string;
+  duration: number; // calendar days (fractional for hour-level tasks)
+  es: number; // Early Start  (days from project start)
+  ef: number; // Early Finish
+  ls: number; // Late Start
+  lf: number; // Late Finish
+  float: number; // Total float (slack)
+  preds: CPMEdge[];
+  succs: CPMEdge[];
 }
 
 interface CPMEdge {
   fromId: string;
-  toId:   string;
-  type:   DependencyType;
-  lag:    number;      // days (positive = delay, negative = lead)
+  toId: string;
+  type: DependencyType;
+  lag: number; // days (positive = delay, negative = lead)
 }
 
 // ─── Parse dependency field ───────────────────────────────────
@@ -45,9 +45,9 @@ interface CPMEdge {
 function parseDeps(task: GanttTask): CPMEdge[] {
   return taskDependencies(task).map(dep => ({
     fromId: dep.taskId,
-    toId:   task.id,
-    type:   dep.type ?? DependencyType.FS,
-    lag:    dep.lag  ?? 0,
+    toId: task.id,
+    type: dep.type ?? DependencyType.FS,
+    lag: dep.lag ?? 0,
   }));
 }
 
@@ -78,9 +78,9 @@ export interface CPMResult {
   /** Task IDs on the critical path (float === 0) */
   criticalIds: Set<string>;
   /** Float per task ID (days) */
-  floatMap:    Map<string, number>;
+  floatMap: Map<string, number>;
   /** Warning messages (cycles, missing predecessors) */
-  warnings:    string[];
+  warnings: string[];
 }
 
 /**
@@ -106,7 +106,11 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
     nodeMap.set(t.id, {
       id: t.id,
       duration,
-      es: 0, ef: 0, ls: 0, lf: 0, float: 0,
+      es: 0,
+      ef: 0,
+      ls: 0,
+      lf: 0,
+      float: 0,
       preds: [],
       succs: [],
     });
@@ -139,7 +143,7 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
 
   const topoOrder: string[] = [];
   while (queue.length) {
-    const id   = queue.shift()!;
+    const id = queue.shift()!;
     topoOrder.push(id);
     const node = nodeMap.get(id)!;
     for (const e of node.succs) {
@@ -203,7 +207,7 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
 
   // Reverse topological order
   for (let i = topoOrder.length - 1; i >= 0; i--) {
-    const id   = topoOrder[i];
+    const id = topoOrder[i];
     const node = nodeMap.get(id)!;
 
     for (const e of node.succs) {
@@ -237,7 +241,7 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
 
   // ── 6. Float & critical path ─────────────────────────────────
   const criticalIds = new Set<string>();
-  const floatMap    = new Map<string, number>();
+  const floatMap = new Map<string, number>();
 
   for (const [id, node] of nodeMap) {
     const float = node.ls - node.es;
@@ -262,12 +266,12 @@ export function longestChain(tasks: GanttTask[], options: CPMOptions = {}): stri
   const sorted = tasks
     .map(task => ({ id: task.id, ...spanOf(task, options) }))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
-  const dp     = new Map<string, number>();  // taskId → cumulative days
-  const prev   = new Map<string, string>();  // taskId → predecessor
+  const dp = new Map<string, number>(); // taskId → cumulative days
+  const prev = new Map<string, string>(); // taskId → predecessor
 
   for (const t of sorted) {
     const dur = spanDays(t);
-    let best  = dur;
+    let best = dur;
     let bestPred: string | undefined;
 
     for (const p of sorted) {
@@ -275,7 +279,7 @@ export function longestChain(tasks: GanttTask[], options: CPMOptions = {}): stri
       if (p.end <= t.start) {
         const candidate = (dp.get(p.id) ?? 0) + dur;
         if (candidate > best + EPS) {
-          best     = candidate;
+          best = candidate;
           bestPred = p.id;
         }
       }
@@ -286,7 +290,7 @@ export function longestChain(tasks: GanttTask[], options: CPMOptions = {}): stri
   }
 
   // Trace back from node with max dp
-  let cursor = [...dp.entries()].reduce((a, b) => b[1] > a[1] ? b : a)[0];
+  let cursor = [...dp.entries()].reduce((a, b) => (b[1] > a[1] ? b : a))[0];
   const chain: string[] = [];
   while (cursor) {
     chain.unshift(cursor);

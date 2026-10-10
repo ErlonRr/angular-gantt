@@ -9,7 +9,7 @@ type Boxes = Record<string, { x: number; y: number; w: number; h: number }>;
 
 /** Bar boxes by task id, relative to the timeline SVG (independent of page layout and scroll). */
 function barBoxes(chart: Chart): Promise<Boxes> {
-  return chart.evalRoot((root) => {
+  return chart.evalRoot(root => {
     const svg = root.querySelector('.gantt-bars-layer')?.closest('svg');
     if (!svg) return {};
     const o = svg.getBoundingClientRect();
@@ -25,7 +25,9 @@ function barBoxes(chart: Chart): Promise<Boxes> {
 
 async function webComponentBoxes(chart: Chart, url: string): Promise<Boxes> {
   await chart.open(url);
-  await chart.host().evaluate((el, o) => { (el as HTMLElement & { options: object }).options = o; }, OPTIONS);
+  await chart.host().evaluate((el, o) => {
+    (el as HTMLElement & { options: object }).options = o;
+  }, OPTIONS);
   await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeVisible();
   await chart.page.waitForTimeout(100);
   return barBoxes(chart);
@@ -39,7 +41,9 @@ test('bars match pixel for pixel across the Web Component, React, Vue, Svelte an
   for (const name of ['react', 'vue', 'svelte'] as const) {
     others[name] = await webComponentBoxes(chart, `http://localhost:${TARGETS[name].port}/`);
   }
-  await chart.open(`http://localhost:${TARGETS.angular.port}/demo?options=${encodeURIComponent(JSON.stringify(OPTIONS))}`);
+  await chart.open(
+    `http://localhost:${TARGETS.angular.port}/demo?options=${encodeURIComponent(JSON.stringify(OPTIONS))}`,
+  );
   await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeVisible();
   others['angular'] = await barBoxes(chart);
 
@@ -48,7 +52,8 @@ test('bars match pixel for pixel across the Web Component, React, Vue, Svelte an
     const common = Object.keys(reference).filter(id => id in boxes);
     expect(common.length, `${name}: bars in common`).toBeGreaterThan(5);
     for (const id of common) {
-      const a = reference[id], b = boxes[id];
+      const a = reference[id],
+        b = boxes[id];
       for (const k of ['x', 'y', 'w', 'h'] as const) {
         expect(Math.abs(a[k] - b[k]), `${name} · ${id} · ${k}`).toBeLessThanOrEqual(0.5);
       }

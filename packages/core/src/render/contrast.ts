@@ -64,7 +64,10 @@ export function readableOn(background: string, preferred: string, min = MIN_TEXT
   let bestRatio = ratio;
   for (const candidate of FALLBACK_TEXT) {
     const r = contrastRatio(background, candidate) ?? 0;
-    if (r > bestRatio) { best = candidate; bestRatio = r; }
+    if (r > bestRatio) {
+      best = candidate;
+      bestRatio = r;
+    }
   }
   return best;
 }

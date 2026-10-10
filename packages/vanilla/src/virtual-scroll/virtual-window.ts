@@ -29,10 +29,7 @@ export function computeVirtualWindow(
   }
 
   const first = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const last = Math.min(
-    itemCount - 1,
-    Math.ceil((scrollTop + viewportHeight) / itemHeight) + overscan
-  );
+  const last = Math.min(itemCount - 1, Math.ceil((scrollTop + viewportHeight) / itemHeight) + overscan);
 
   return {
     first,
@@ -49,12 +46,7 @@ export class GanttVirtualScrollEngine {
   private onWindowChange: (vw: VirtualWindow) => void;
   private rafId?: number;
 
-  constructor(
-    viewportEl: HTMLElement,
-    itemHeight: number,
-    onWindowChange: (vw: VirtualWindow) => void,
-    overscan = 4
-  ) {
+  constructor(viewportEl: HTMLElement, itemHeight: number, onWindowChange: (vw: VirtualWindow) => void, overscan = 4) {
     this.viewportEl = viewportEl;
     this.itemHeight = itemHeight;
     this.onWindowChange = onWindowChange;

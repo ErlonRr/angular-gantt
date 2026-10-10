@@ -1,8 +1,8 @@
 ---
 paths:
-  - "packages/react/**"
-  - "packages/vue/**"
-  - "packages/svelte/**"
+  - 'packages/react/**'
+  - 'packages/vue/**'
+  - 'packages/svelte/**'
 ---
 
 # React / Vue / Svelte binding rules

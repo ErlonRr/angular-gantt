@@ -6,85 +6,113 @@
 // ─────────────────────────────────────────────────────────────
 
 import type {
-  GanttOptions, GanttTheme, GanttScale, GanttZoomLevel, GanttLength, GanttLineStyle,
-  GanttHourRange, GanttTimeHighlight, GanttView, GanttTask, TimeUnit, GanttI18n,
+  GanttOptions,
+  GanttTheme,
+  GanttScale,
+  GanttZoomLevel,
+  GanttLength,
+  GanttLineStyle,
+  GanttHourRange,
+  GanttTimeHighlight,
+  GanttView,
+  GanttTask,
+  TimeUnit,
+  GanttI18n,
 } from '../types';
 import { DEFAULT_ZOOM_LEVELS, findZoomLevel, levelPxPerDay, withLegacyHeaderFormats } from './scales';
 import { cssPx } from './theme';
 import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
 
-export interface ResolvedLine { color: string; width: number; dash?: string }
-
-export interface ResolvedHoliday { from: number; to: number; label?: string; color?: string }
-
-export interface ResolvedNonWorking {
-  weekends:     Set<number>;
-  /** Epoch-day ranges, inclusive */
-  holidays:     ResolvedHoliday[];
-  /** Working hours for a weekday (null = no hour shading) */
-  workingHours: ((weekday: number) => GanttHourRange[]) | null;
-  intensive:    (GanttHourRange & { color?: string; label?: string })[];
-  style:        'shade' | 'hatch' | 'disabled';
-  showInHeader: boolean;
-  minPxPerDay:  number;
+export interface ResolvedLine {
+  color: string;
+  width: number;
+  dash?: string;
 }
 
-export interface ResolvedToolbar { zoom: boolean; viewModes: string[] | false; today: boolean; viewToggle: boolean }
+export interface ResolvedHoliday {
+  from: number;
+  to: number;
+  label?: string;
+  color?: string;
+}
+
+export interface ResolvedNonWorking {
+  weekends: Set<number>;
+  /** Epoch-day ranges, inclusive */
+  holidays: ResolvedHoliday[];
+  /** Working hours for a weekday (null = no hour shading) */
+  workingHours: ((weekday: number) => GanttHourRange[]) | null;
+  intensive: (GanttHourRange & { color?: string; label?: string })[];
+  style: 'shade' | 'hatch' | 'disabled';
+  showInHeader: boolean;
+  minPxPerDay: number;
+}
+
+export interface ResolvedToolbar {
+  zoom: boolean;
+  viewModes: string[] | false;
+  today: boolean;
+  viewToggle: boolean;
+}
 
 export interface ResolvedGanttConfig {
-  theme:           Required<GanttTheme>;
-  zoomLevels:      GanttZoomLevel[];
-  level:           GanttZoomLevel;
-  scales:          GanttScale[];
-  pxPerDay:        number;
-  weekStart:       0 | 1;
-  fitToWidth:      boolean;
-  initialScroll:   InitialScroll;
+  theme: Required<GanttTheme>;
+  zoomLevels: GanttZoomLevel[];
+  level: GanttZoomLevel;
+  scales: GanttScale[];
+  pxPerDay: number;
+  weekStart: 0 | 1;
+  fitToWidth: boolean;
+  initialScroll: InitialScroll;
   timelinePadding: number;
   /** [upper tiers, bottom tier] default heights */
-  tierHeights:     [number, number];
-  rowHeight:       number;
-  indentSize:      number;
+  tierHeights: [number, number];
+  rowHeight: number;
+  indentSize: number;
   gridLines: {
-    minor:      ResolvedLine | null;
-    major:      ResolvedLine | null;
+    minor: ResolvedLine | null;
+    major: ResolvedLine | null;
     horizontal: ResolvedLine | null;
     majorUnit?: TimeUnit;
   };
-  nonWorking:      ResolvedNonWorking | null;
-  highlightTime?:  (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
-  endDateMode:     'exclusive' | 'inclusive';
+  nonWorking: ResolvedNonWorking | null;
+  highlightTime?: (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
+  endDateMode: 'exclusive' | 'inclusive';
   normalizeDateOnly: boolean;
   bar: {
-    height:   GanttLength;
-    radius:   number;
+    height: GanttLength;
+    radius: number;
     minWidth: number;
     progress: { show: boolean; color?: string; opacity: number };
-    label:    { position: 'inside' | 'left' | 'right' | 'auto' | 'none'; template?: (task: GanttTask) => string; color?: string };
+    label: {
+      position: 'inside' | 'left' | 'right' | 'auto' | 'none';
+      template?: (task: GanttTask) => string;
+      color?: string;
+    };
   };
   milestone: { size?: number; shape: 'diamond' | 'circle' | 'square' };
-  groupBar:  { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
-  arrows:    { width: number; headSize: number; radius: number; color?: string; offset: number };
+  groupBar: { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
+  arrows: { width: number; headSize: number; radius: number; color?: string; offset: number };
   panel: {
-    width:       GanttLength;
-    minWidth:    number;
-    maxWidth?:   GanttLength;
-    resizable:   boolean;
+    width: GanttLength;
+    minWidth: number;
+    maxWidth?: GanttLength;
+    resizable: boolean;
     collapsible: boolean;
-    collapsed:   boolean;
+    collapsed: boolean;
     /** Explicit split-view column keys; null = derive (see `resolveViewColumns`) */
-    columns:     string[] | null;
+    columns: string[] | null;
   };
   /** Explicit table-view column keys; null = derive */
-  table:         { columns: string[] | null };
-  view:          GanttView;
-  toolbar:       ResolvedToolbar | false;
-  showToday:     boolean;
-  baseline:      boolean;
-  criticalPath:  boolean;
+  table: { columns: string[] | null };
+  view: GanttView;
+  toolbar: ResolvedToolbar | false;
+  showToday: boolean;
+  baseline: boolean;
+  criticalPath: boolean;
   /** `enableSelection` / `multiSelect` (both default true) */
-  selection:     { enabled: boolean; multi: boolean };
+  selection: { enabled: boolean; multi: boolean };
 }
 
 const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
@@ -96,9 +124,7 @@ const epochDay = (d: Date) => Math.floor(calendarDays(d));
 export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): ResolvedNonWorking | null {
   if (opts === false) return null;
   const o = opts ?? {};
-  const weekends = new Set<number>(
-    o.weekends === false ? [] : Array.isArray(o.weekends) ? o.weekends : [0, 6],
-  );
+  const weekends = new Set<number>(o.weekends === false ? [] : Array.isArray(o.weekends) ? o.weekends : [0, 6]);
   const holidays: ResolvedHoliday[] = (o.holidays ?? []).map(h => {
     const hol = h instanceof Date ? { start: h } : h;
     return { from: epochDay(hol.start), to: epochDay(hol.end ?? hol.start), label: hol.label, color: hol.color };
@@ -195,17 +221,20 @@ export function resolveConfig(
       maxWidth: options.panel?.maxWidth,
       resizable: options.panel?.resizable ?? true,
       collapsible: options.panel?.collapsible ?? true,
-      collapsed: options.panel?.collapsed ?? (options.panelVisible === false),
+      collapsed: options.panel?.collapsed ?? options.panelVisible === false,
       columns: options.panel?.columns ?? null,
     },
     table: { columns: options.table?.columns ?? null },
     view: options.view ?? 'split',
-    toolbar: toolbar === false ? false : {
-      zoom: toolbar?.zoom ?? true,
-      viewModes: toolbar?.viewModes ?? zoomLevels.map(l => l.name),
-      today: toolbar?.today ?? true,
-      viewToggle: toolbar?.viewToggle ?? true,
-    },
+    toolbar:
+      toolbar === false
+        ? false
+        : {
+            zoom: toolbar?.zoom ?? true,
+            viewModes: toolbar?.viewModes ?? zoomLevels.map(l => l.name),
+            today: toolbar?.today ?? true,
+            viewToggle: toolbar?.viewToggle ?? true,
+          },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
     criticalPath: options.criticalPath ?? false,

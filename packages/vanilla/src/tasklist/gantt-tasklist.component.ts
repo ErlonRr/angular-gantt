@@ -62,8 +62,20 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
 
   render(): void {
     const {
-      visibleRows, rowCount, columns, rowHeight, selectedIds, theme, labels,
-      colHeaderHeight, indentSize, paddingTop, paddingBottom, sort, loadMore, cellContext,
+      visibleRows,
+      rowCount,
+      columns,
+      rowHeight,
+      selectedIds,
+      theme,
+      labels,
+      colHeaderHeight,
+      indentSize,
+      paddingTop,
+      paddingBottom,
+      sort,
+      loadMore,
+      cellContext,
     } = this.props;
 
     const visibleColumns = columns;
@@ -82,7 +94,8 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     this.element.setAttribute('aria-colcount', String(visibleColumns.length));
     this.element.setAttribute('aria-label', labels.ariaTaskList);
     this.element.setAttribute('aria-multiselectable', 'true');
-    this.element.style.cssText = 'display:flex;flex-direction:column;position:relative;width:max-content;min-width:100%;';
+    this.element.style.cssText =
+      'display:flex;flex-direction:column;position:relative;width:max-content;min-width:100%;';
 
     // ── Column headers ───────────────────────────────────────
     const headerRow = document.createElement('div');
@@ -251,7 +264,9 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       this.resizing = true;
       // Listen on window: the list re-renders while resizing, replacing this handle
       const move = (ev: PointerEvent) => {
-        const width = Math.round(Math.min(col.maxWidth ?? 800, Math.max(col.minWidth ?? 40, startWidth + ev.clientX - startX)));
+        const width = Math.round(
+          Math.min(col.maxWidth ?? 800, Math.max(col.minWidth ?? 40, startWidth + ev.clientX - startX)),
+        );
         this.columnWidthChange$.emit({ key: col.key, width });
       };
       const end = () => {
@@ -260,7 +275,9 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         window.removeEventListener('pointercancel', end);
         this.columnResizeEnd$.emit();
         // let the click that follows pointerup see `resizing`
-        setTimeout(() => { this.resizing = false; });
+        setTimeout(() => {
+          this.resizing = false;
+        });
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', end);
@@ -269,7 +286,13 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     return handle;
   }
 
-  private nameCell(row: GanttFlatRow, theme: GanttTheme, labels: GanttLabels, indentSize: number, text: string): HTMLElement {
+  private nameCell(
+    row: GanttFlatRow,
+    theme: GanttTheme,
+    labels: GanttLabels,
+    indentSize: number,
+    text: string,
+  ): HTMLElement {
     const wrapper = document.createElement('span');
     wrapper.style.cssText = `
       display: flex;
@@ -286,7 +309,10 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       btn.className = 'gantt-collapse-btn';
       btn.dataset['focusKey'] = `collapse:${row.task.id}`;
       btn.setAttribute('aria-expanded', String(!row.isCollapsed));
-      btn.setAttribute('aria-label', row.isCollapsed ? labels.ariaExpand(row.task.name) : labels.ariaCollapse(row.task.name));
+      btn.setAttribute(
+        'aria-label',
+        row.isCollapsed ? labels.ariaExpand(row.task.name) : labels.ariaCollapse(row.task.name),
+      );
       btn.style.cssText = `
         flex-shrink: 0;
         border: none;
@@ -312,7 +338,7 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
     const icon = document.createElement('span');
     icon.setAttribute('aria-hidden', 'true');
     icon.style.cssText = `flex-shrink: 0; font-size: 10px; color: ${row.task.barColor ?? theme.textMuted};`;
-    icon.textContent = row.hasChildren ? '▤' : (row.barType === 'milestone' ? '◆' : '▬');
+    icon.textContent = row.hasChildren ? '▤' : row.barType === 'milestone' ? '◆' : '▬';
     wrapper.appendChild(icon);
 
     const nameSpan = document.createElement('span');
@@ -333,7 +359,12 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
    * element announces failures in its own `.gantt-sr-alert`); every state keeps an element
    * with `data-focus-key="load-more"` so keyboard focus survives Retry / Load more.
    */
-  private loadMoreFooter(state: GanttLoadMoreState, theme: GanttTheme, labels: GanttLabels, rowHeight: number): HTMLElement {
+  private loadMoreFooter(
+    state: GanttLoadMoreState,
+    theme: GanttTheme,
+    labels: GanttLabels,
+    rowHeight: number,
+  ): HTMLElement {
     const footer = document.createElement('div');
     footer.className = 'gantt-tl-load-more';
     footer.style.cssText = `
@@ -363,7 +394,10 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
       box.style.cssText = 'display:flex;align-items:center;gap:8px;';
       const msg = document.createElement('span');
       msg.textContent = labels.loadError;
-      box.append(msg, button(labels.retry, () => this.retry$.emit()));
+      box.append(
+        msg,
+        button(labels.retry, () => this.retry$.emit()),
+      );
       footer.appendChild(box);
     } else if (state.hasMore) {
       footer.appendChild(button(labels.loadMore, () => this.loadMore$.emit()));

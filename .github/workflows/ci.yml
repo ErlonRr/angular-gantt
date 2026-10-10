@@ -57,7 +57,7 @@ jobs:
       - run: pnpm e2e
         env:
           HOME: /root
-          GANTRY_E2E_VISUAL: '1'   # same image as `pnpm e2e:update`: compare the screenshot baselines
+          GANTRY_E2E_VISUAL: '1' # same image as `pnpm e2e:update`: compare the screenshot baselines
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:

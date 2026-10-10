@@ -19,15 +19,7 @@
 //    <g ganttTaskBar [ganttTooltip]="geo" [tooltipTheme]="theme" />
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Directive,
-  ElementRef,
-  inject,
-  input,
-  OnDestroy,
-  OnInit,
-  DOCUMENT,
-} from '@angular/core';
+import { Directive, ElementRef, inject, input, OnDestroy, OnInit, DOCUMENT } from '@angular/core';
 
 import { RowGeometry, GanttTheme } from '../types';
 import { formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
@@ -40,37 +32,38 @@ const SHOW_DELAY = 320;
 /** Delay (ms) before hiding — allows moving pointer into tooltip */
 const HIDE_DELAY = 120;
 /** Offset from pointer position */
-const OFFSET_X   = 12;
-const OFFSET_Y   = 8;
+const OFFSET_X = 12;
+const OFFSET_Y = 8;
 
 @Directive({
-  selector:  '[ganttTooltip]',
+  selector: '[ganttTooltip]',
   standalone: true,
   host: {
     '(pointerenter)': 'onEnter($event)',
     '(pointerleave)': 'onLeave()',
-    '(pointermove)':  'onMove($event)',
-    '(pointerdown)':  'onLeave()',   // hide on click start
+    '(pointermove)': 'onMove($event)',
+    '(pointerdown)': 'onLeave()', // hide on click start
   },
 })
 export class GanttTooltipDirective implements OnInit, OnDestroy {
-
   readonly ganttTooltip = input.required<RowGeometry>();
   readonly tooltipTheme = input<GanttTheme | null>(null);
   readonly tooltipEnabled = input<boolean>(true);
   /** How task dates are read, so the duration matches the bar and the Duration column */
-  readonly tooltipDates = input<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>(
-    { endDateMode: 'exclusive', normalizeDateOnly: true });
+  readonly tooltipDates = input<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>({
+    endDateMode: 'exclusive',
+    normalizeDateOnly: true,
+  });
 
-  private readonly doc  = inject(DOCUMENT);
-  private readonly el   = inject(ElementRef);
+  private readonly doc = inject(DOCUMENT);
+  private readonly el = inject(ElementRef);
   private readonly i18n = inject(GanttI18nService);
 
   private _popover: HTMLElement | null = null;
   private _showTimer = 0;
   private _hideTimer = 0;
-  private _lastX     = 0;
-  private _lastY     = 0;
+  private _lastX = 0;
+  private _lastY = 0;
 
   ngOnInit(): void {
     this._createPopover();
@@ -151,15 +144,15 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
   }
 
   private _position(clientX: number, clientY: number): void {
-    const pop  = this._popover;
-    if (!pop)  return;
+    const pop = this._popover;
+    if (!pop) return;
 
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const rect = pop.getBoundingClientRect();
 
     let left = clientX + OFFSET_X;
-    let top  = clientY + OFFSET_Y;
+    let top = clientY + OFFSET_Y;
 
     // Flip horizontally if tooltip overflows right edge
     if (left + rect.width > vw - 8) {
@@ -171,47 +164,49 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     }
 
     pop.style.left = `${Math.max(8, left)}px`;
-    pop.style.top  = `${Math.max(8, top)}px`;
+    pop.style.top = `${Math.max(8, top)}px`;
   }
 
   private _applyPopoverStyles(pop: HTMLElement, theme: GanttTheme | null): void {
-    const bg  = theme?.tooltipBg     ?? '#FFFFFF';
+    const bg = theme?.tooltipBg ?? '#FFFFFF';
     const bdr = theme?.tooltipBorder ?? '#E2E8F0';
-    const txt = theme?.tooltipText   ?? '#1E293B';
+    const txt = theme?.tooltipText ?? '#1E293B';
 
     Object.assign(pop.style, {
-      position:     'fixed',
-      zIndex:       '9999',
+      position: 'fixed',
+      zIndex: '9999',
       pointerEvents: 'none',
-      padding:      '8px 12px',
+      padding: '8px 12px',
       borderRadius: '6px',
-      background:   bg,
-      border:       `1px solid ${bdr}`,
-      color:        txt,
-      fontFamily:   theme?.fontFamily ?? 'system-ui, sans-serif',
-      fontSize:     '12px',
-      boxShadow:    '0 4px 16px rgba(0,0,0,0.12)',
-      maxWidth:     '280px',
-      minWidth:     '160px',
+      background: bg,
+      border: `1px solid ${bdr}`,
+      color: txt,
+      fontFamily: theme?.fontFamily ?? 'system-ui, sans-serif',
+      fontSize: '12px',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
+      maxWidth: '280px',
+      minWidth: '160px',
       // CSS animation — no @angular/animations
-      transition:   'opacity 0.12s ease',
-      display:      'none',   // overridden by popover API
+      transition: 'opacity 0.12s ease',
+      display: 'none', // overridden by popover API
     });
   }
 
   // ── HTML builder ─────────────────────────────────────────
 
   private _buildHTML(): string {
-    const task  = this.ganttTooltip().row.task;
+    const task = this.ganttTooltip().row.task;
     const labels = this.i18n.labels();
     const locale = this.i18n.locale();
-    const fmt    = this.i18n.formats().dateFormat;
+    const fmt = this.i18n.formats().dateFormat;
     const start = formatDate(task.start, fmt, locale);
-    const end   = formatDate(task.end, fmt, locale);
-    const dur   = taskDurationLabel(task, this.tooltipDates(), labels);
-    const prog  = task.progress ?? 0;
+    const end = formatDate(task.end, fmt, locale);
+    const dur = taskDurationLabel(task, this.tooltipDates(), labels);
+    const prog = task.progress ?? 0;
 
-    const progressBar = task.progress != null ? `
+    const progressBar =
+      task.progress != null
+        ? `
       <div style="margin-top:6px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
           <span style="opacity:0.6">${this._esc(labels.ttProgress)}</span>
@@ -220,11 +215,13 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
         <div style="height:3px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden;">
           <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
         </div>
-      </div>` : '';
+      </div>`
+        : '';
 
-    const milestone = task.type === 'milestone'
-      ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ ${this._esc(labels.ttMilestone)}</div>`
-      : '';
+    const milestone =
+      task.type === 'milestone'
+        ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ ${this._esc(labels.ttMilestone)}</div>`
+        : '';
 
     return `
       <div style="font-weight:600;font-size:13px;margin-bottom:6px;
@@ -246,10 +243,6 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
   }
 
   private _esc(s: string): string {
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 }

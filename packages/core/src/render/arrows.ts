@@ -10,12 +10,12 @@ import type { BarVisual } from './bars';
 
 export interface ArrowVisual {
   /** Path of the line (ends at the base of the arrow head) */
-  d:        string;
+  d: string;
   /** Arrow head polygon points */
-  head:     string;
-  color:    string;
-  width:    number;
-  dashed:   boolean;
+  head: string;
+  color: string;
+  width: number;
+  dashed: boolean;
   critical: boolean;
   lagLabel: { text: string; x: number; y: number } | null;
 }
@@ -33,9 +33,14 @@ export function roundedPolyline(points: Pt[], r: number): string {
     const inLen = Math.hypot(cx - px, cy - py);
     const outLen = Math.hypot(nx - cx, ny - cy);
     const rr = Math.min(r, inLen / 2, outLen / 2);
-    if (rr <= 0.5) { d += `L${cx},${cy}`; continue; }
-    const ax = cx - ((cx - px) / inLen) * rr, ay = cy - ((cy - py) / inLen) * rr;
-    const bx = cx + ((nx - cx) / outLen) * rr, by = cy + ((ny - cy) / outLen) * rr;
+    if (rr <= 0.5) {
+      d += `L${cx},${cy}`;
+      continue;
+    }
+    const ax = cx - ((cx - px) / inLen) * rr,
+      ay = cy - ((cy - py) / inLen) * rr;
+    const bx = cx + ((nx - cx) / outLen) * rr,
+      by = cy + ((ny - cy) / outLen) * rr;
     d += `L${ax},${ay}Q${cx},${cy} ${bx},${by}`;
   }
   const [lx, ly] = points[points.length - 1];
@@ -69,22 +74,44 @@ export function computeArrowVisual(
   let points: Pt[];
   if (type === DependencyType.SS) {
     const vx = Math.min(ex, baseX) - offset;
-    points = [[ex, ey], [vx, ey], [vx, ty], [baseX, ty]];
+    points = [
+      [ex, ey],
+      [vx, ey],
+      [vx, ty],
+      [baseX, ty],
+    ];
   } else if (type === DependencyType.FF) {
     const vx = Math.max(ex, baseX) + offset;
-    points = [[ex, ey], [vx, ey], [vx, ty], [baseX, ty]];
+    points = [
+      [ex, ey],
+      [vx, ey],
+      [vx, ty],
+      [baseX, ty],
+    ];
   } else {
     // FS: exit right, enter left — SF: exit left, enter right
     const dir = fromRight ? 1 : -1;
     const vx = ex + dir * offset;
     const fits = fromRight ? vx <= baseX - 2 : vx >= baseX + 2;
     if (fits) {
-      points = [[ex, ey], [vx, ey], [vx, ty], [baseX, ty]];
+      points = [
+        [ex, ey],
+        [vx, ey],
+        [vx, ty],
+        [baseX, ty],
+      ];
     } else {
       // U-turn through the gap between the two rows
       const midY = ty > ey ? rowBoundary.fromBottom : rowBoundary.fromTop;
       const approachX = baseX - dir * offset;
-      points = [[ex, ey], [vx, ey], [vx, midY], [approachX, midY], [approachX, ty], [baseX, ty]];
+      points = [
+        [ex, ey],
+        [vx, ey],
+        [vx, midY],
+        [approachX, midY],
+        [approachX, ty],
+        [baseX, ty],
+      ];
     }
   }
 
@@ -96,7 +123,7 @@ export function computeArrowVisual(
   return {
     d: roundedPolyline(points, radius),
     head,
-    color: isCritical ? cfg.theme.criticalColor : cfg.arrows.color ?? cfg.theme.arrowColor,
+    color: isCritical ? cfg.theme.criticalColor : (cfg.arrows.color ?? cfg.theme.arrowColor),
     width: isCritical ? width + 0.5 : width,
     dashed: lag !== 0,
     critical: isCritical,

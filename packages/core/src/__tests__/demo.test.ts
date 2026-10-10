@@ -7,11 +7,11 @@ import { DEMO_TASKS, DEMO_ANNOTATIONS, createDemoData, anchorToToday } from '../
 import { calendarDays, taskExtent, toLocalDay, diffDays } from '../gantt-math';
 
 const NOWS = [
-  new Date(2026, 9, 10),          // a Saturday
-  new Date(2026, 2, 29, 12),      // a DST change in Europe
+  new Date(2026, 9, 10), // a Saturday
+  new Date(2026, 2, 29, 12), // a DST change in Europe
   new Date(2026, 11, 31),
   new Date(2028, 1, 29),
-  new Date(2027, 5, 1, 23, 30),   // late evening
+  new Date(2027, 5, 1, 23, 30), // late evening
 ];
 
 const ratio = (now: Date, tasks: typeof DEMO_TASKS) => {
@@ -32,8 +32,12 @@ describe('createDemoData', () => {
         const src = DEMO_TASKS[i];
         expect(weekday(t.start)).toBe(weekday(src.start));
         expect(diffDays(t.start, t.end)).toBe(diffDays(src.start, src.end));
-        expect({ ...t, start: 0, end: 0, baseline: !!t.baseline })
-          .toEqual({ ...src, start: 0, end: 0, baseline: !!src.baseline });
+        expect({ ...t, start: 0, end: 0, baseline: !!t.baseline }).toEqual({
+          ...src,
+          start: 0,
+          end: 0,
+          baseline: !!src.baseline,
+        });
         if (src.baseline) expect(weekday(t.baseline!.end)).toBe(weekday(src.baseline.end));
       });
       annotations.forEach((a, i) => expect(weekday(a.x1)).toBe(weekday(DEMO_ANNOTATIONS[i].x1)));
@@ -48,7 +52,11 @@ describe('createDemoData', () => {
   });
 
   it('moves tasks and annotations by the same whole number of weeks', () => {
-    const { tasks, annotations, offsetDays } = anchorToToday(DEMO_TASKS, { now: new Date(2026, 9, 10) }, DEMO_ANNOTATIONS);
+    const { tasks, annotations, offsetDays } = anchorToToday(
+      DEMO_TASKS,
+      { now: new Date(2026, 9, 10) },
+      DEMO_ANNOTATIONS,
+    );
     expect(offsetDays % 7).toBe(0);
     expect(diffDays(DEMO_TASKS[0].start, tasks[0].start)).toBe(offsetDays);
     expect(diffDays(DEMO_ANNOTATIONS[0].x1, annotations[0].x1)).toBe(offsetDays);

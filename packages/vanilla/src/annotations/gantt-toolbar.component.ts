@@ -9,11 +9,11 @@ import { BaseComponent } from '../core/base-component';
 import { EventEmitter } from '../core/event-emitter';
 
 export interface GanttToolbarProps {
-  toolbar:     ResolvedToolbar;
-  zoomLevels:  GanttZoomLevel[];
+  toolbar: ResolvedToolbar;
+  zoomLevels: GanttZoomLevel[];
   currentView: string;
-  view:        GanttView;
-  labels:      GanttLabels;
+  view: GanttView;
+  labels: GanttLabels;
 }
 
 export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
@@ -40,7 +40,14 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
       return g;
     };
     // `focusKey` lets the element restore focus after the toolbar is rebuilt
-    const button = (parent: HTMLElement, text: string, title: string, focusKey: string, onClick: () => void, cls = 'gantt-tb-btn') => {
+    const button = (
+      parent: HTMLElement,
+      text: string,
+      title: string,
+      focusKey: string,
+      onClick: () => void,
+      cls = 'gantt-tb-btn',
+    ) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = cls;
@@ -72,13 +79,24 @@ export class GanttToolbarComponent extends BaseComponent<GanttToolbarProps> {
     }
 
     if (toolbar.today) {
-      button(group(), `◎ ${labels.todayButton}`, labels.todayButton, 'today', () => this.scrollToToday$.emit(), 'gantt-tb-btn gantt-tb-today');
+      button(
+        group(),
+        `◎ ${labels.todayButton}`,
+        labels.todayButton,
+        'today',
+        () => this.scrollToToday$.emit(),
+        'gantt-tb-btn gantt-tb-today',
+      );
     }
 
     if (toolbar.viewToggle) {
       const g = group();
       g.classList.add('gantt-tb-pills', 'gantt-tb-views');
-      const views: [GanttView, string][] = [['split', labels.viewSplit], ['table', labels.viewTable], ['chart', labels.viewChart]];
+      const views: [GanttView, string][] = [
+        ['split', labels.viewSplit],
+        ['table', labels.viewTable],
+        ['chart', labels.viewChart],
+      ];
       for (const [v, text] of views) {
         const b = button(g, text, text, `view:${v}`, () => this.viewChange$.emit(v), 'gantt-tb-pill');
         b.setAttribute('aria-pressed', String(v === view));

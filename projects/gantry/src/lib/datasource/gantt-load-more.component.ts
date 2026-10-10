@@ -25,8 +25,8 @@ import { GanttTheme } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
-  selector:   'gantt-load-more',
-  standalone:  true,
+  selector: 'gantt-load-more',
+  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'gantt-tl-load-more',
@@ -35,26 +35,38 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     '(focusin)': 'hasFocus = true',
     '(focusout)': 'onFocusOut($event)',
     '[attr.aria-busy]': 'isLoading() || null',
-    '[style.display]':         '"block"',
-    '[style.padding]':         '"8px 12px"',
-    '[style.border-top]':      '"1px solid " + theme().borderColor',
+    '[style.display]': '"block"',
+    '[style.padding]': '"8px 12px"',
+    '[style.border-top]': '"1px solid " + theme().borderColor',
     '[style.background-color]': 'theme().panelBg',
   },
   template: `
     @if (isLoading()) {
       <!-- Loading spinner -->
-      <div [style.display]="'flex'" [style.align-items]="'center'" [style.gap]="'8px'"
-           [style.color]="theme().textMuted" [style.font-size]="theme().fontSize"
-           [style.font-family]="theme().fontFamily">
+      <div
+        [style.display]="'flex'"
+        [style.align-items]="'center'"
+        [style.gap]="'8px'"
+        [style.color]="theme().textMuted"
+        [style.font-size]="theme().fontSize"
+        [style.font-family]="theme().fontFamily"
+      >
         <div class="gantt-spinner"></div>
         <span>{{ labels().loading }}</span>
       </div>
     } @else if (error()) {
       <!-- Failed page: message + retry -->
-      <div role="alert" class="gantt-load-error"
-           [style.display]="'flex'" [style.align-items]="'center'" [style.justify-content]="'center'"
-           [style.gap]="'8px'" [style.color]="theme().textSecondary" [style.font-size]="theme().fontSize"
-           [style.font-family]="theme().fontFamily">
+      <div
+        role="alert"
+        class="gantt-load-error"
+        [style.display]="'flex'"
+        [style.align-items]="'center'"
+        [style.justify-content]="'center'"
+        [style.gap]="'8px'"
+        [style.color]="theme().textSecondary"
+        [style.font-size]="theme().fontSize"
+        [style.font-family]="theme().fontFamily"
+      >
         <span>{{ labels().loadError }}</span>
         <button
           type="button"
@@ -68,7 +80,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.font-family]="theme().fontFamily"
           [style.cursor]="'pointer'"
           (click)="retry.emit()"
-        >{{ labels().retry }}</button>
+        >
+          {{ labels().retry }}
+        </button>
       </div>
     } @else if (hasMore()) {
       @if (autoLoad()) {
@@ -94,44 +108,52 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       }
     } @else {
       <!-- All loaded -->
-      <div [style.text-align]="'center'" [style.color]="theme().textMuted"
-           [style.font-size]="'11px'" [style.padding]="'4px 0'"
-           [style.font-family]="theme().fontFamily">
+      <div
+        [style.text-align]="'center'"
+        [style.color]="theme().textMuted"
+        [style.font-size]="'11px'"
+        [style.padding]="'4px 0'"
+        [style.font-family]="theme().fontFamily"
+      >
         ✓ {{ labels().allLoaded(loadedCount()) }}
       </div>
     }
   `,
-  styles: [`
-    @keyframes gantt-spin {
-      to { transform: rotate(360deg); }
-    }
-    .gantt-spinner {
-      width: 14px; height: 14px;
-      border: 2px solid var(--gantt-border, #E2E8F0);
-      border-top-color: var(--gantt-bar, #2563EB);
-      border-radius: 50%;
-      animation: gantt-spin 0.7s linear infinite;
-      flex-shrink: 0;
-    }
-    .gantt-load-more-btn:hover {
-      background: var(--gantt-row-bg-alt, #F8FAFC) !important;
-    }
-  `],
+  styles: [
+    `
+      @keyframes gantt-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .gantt-spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid var(--gantt-border, #e2e8f0);
+        border-top-color: var(--gantt-bar, #2563eb);
+        border-radius: 50%;
+        animation: gantt-spin 0.7s linear infinite;
+        flex-shrink: 0;
+      }
+      .gantt-load-more-btn:hover {
+        background: var(--gantt-row-bg-alt, #f8fafc) !important;
+      }
+    `,
+  ],
 })
 export class GanttLoadMoreComponent implements OnInit, OnDestroy {
-
-  readonly theme       = input.required<GanttTheme>();
-  readonly isLoading   = input<boolean>(false);
-  readonly hasMore     = input<boolean>(false);
+  readonly theme = input.required<GanttTheme>();
+  readonly isLoading = input<boolean>(false);
+  readonly hasMore = input<boolean>(false);
   /** The last page failed: show the error and a Retry button (no auto-load) */
-  readonly error       = input<boolean>(false);
+  readonly error = input<boolean>(false);
   readonly loadedCount = input<number>(0);
-  readonly totalCount  = input<number>(0);
+  readonly totalCount = input<number>(0);
   /** Auto-trigger load when sentinel scrolls into view */
-  readonly autoLoad    = input<boolean>(true);
+  readonly autoLoad = input<boolean>(true);
 
   readonly loadMore = output<void>();
-  readonly retry    = output<void>();
+  readonly retry = output<void>();
 
   protected readonly labels = inject(GanttI18nService).labels;
   private readonly el = inject(ElementRef<HTMLElement>);
@@ -142,7 +164,9 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
   constructor() {
     // Retry / Load more turn into "Loading…" and back: keep keyboard focus in the footer
     afterRenderEffect(() => {
-      this.isLoading(); this.error(); this.hasMore();
+      this.isLoading();
+      this.error();
+      this.hasMore();
       const host = this.el.nativeElement as HTMLElement;
       if (!this.hasFocus || host.contains(document.activeElement)) return;
       (host.querySelector('button') ?? host).focus({ preventScroll: true });

@@ -6,18 +6,10 @@
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
-    "lib": [
-      "DOM",
-      "DOM.Iterable",
-      "ESNext"
-    ],
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "noEmit": true,
-    "customConditions": [
-      "@gantry/source"
-    ],
+    "customConditions": ["@gantry/source"],
     "isolatedModules": true
   },
-  "include": [
-    "src/**/*"
-  ]
+  "include": ["src/**/*"]
 }

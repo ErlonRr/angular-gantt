@@ -15,25 +15,20 @@
 //  when the selection actually changes.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Injectable,
-  signal,
-  computed,
-} from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 
 import { GanttFlatRow, SelectionChangeEvent } from '../types';
 
 @Injectable()
 export class GanttSelectionService {
-
   // ── State ────────────────────────────────────────────────
-  private readonly _selectedIds  = signal<Set<string>>(new Set());
+  private readonly _selectedIds = signal<Set<string>>(new Set());
   private readonly _lastSelected = signal<string | null>(null);
 
   // ── Public signals ────────────────────────────────────────
-  readonly selectedIds   = this._selectedIds.asReadonly();
+  readonly selectedIds = this._selectedIds.asReadonly();
   readonly selectedCount = computed(() => this._selectedIds().size);
-  readonly hasSelection  = computed(() => this._selectedIds().size > 0);
+  readonly hasSelection = computed(() => this._selectedIds().size > 0);
 
   /** Callback wired by GantryComponent to emit output event */
   onChange?: (e: SelectionChangeEvent) => void;
@@ -56,12 +51,8 @@ export class GanttSelectionService {
    * Main entry — called by the canvas or task-list on row click.
    * Dispatches to the correct sub-handler based on modifier keys.
    */
-  handleClick(
-    id: string,
-    event: MouseEvent | KeyboardEvent,
-    allVisibleRows: GanttFlatRow[],
-  ): void {
-    const ctrl  = event.ctrlKey || event.metaKey;
+  handleClick(id: string, event: MouseEvent | KeyboardEvent, allVisibleRows: GanttFlatRow[]): void {
+    const ctrl = event.ctrlKey || event.metaKey;
     const shift = event.shiftKey;
 
     if (shift && this._lastSelected()) {
@@ -142,16 +133,20 @@ export class GanttSelectionService {
 
   private _rangeSelect(toId: string, allRows: GanttFlatRow[]): void {
     const fromId = this._lastSelected();
-    if (!fromId) { this._selectSingle(toId); return; }
+    if (!fromId) {
+      this._selectSingle(toId);
+      return;
+    }
 
     const fromIdx = allRows.findIndex(r => r.task.id === fromId);
-    const toIdx   = allRows.findIndex(r => r.task.id === toId);
+    const toIdx = allRows.findIndex(r => r.task.id === toId);
 
-    if (fromIdx < 0 || toIdx < 0) { this._selectSingle(toId); return; }
+    if (fromIdx < 0 || toIdx < 0) {
+      this._selectSingle(toId);
+      return;
+    }
 
-    const [lo, hi] = fromIdx <= toIdx
-      ? [fromIdx, toIdx]
-      : [toIdx,   fromIdx];
+    const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
 
     const rangeIds = allRows.slice(lo, hi + 1).map(r => r.task.id);
 

@@ -3,10 +3,7 @@
  * Vanilla JS i18n & localization service.
  */
 
-import {
-  GanttLabels, GanttFormats, GanttOptions, GanttI18n,
-  DEFAULT_LABELS, DEFAULT_FORMATS
-} from '@gantry/core';
+import { GanttLabels, GanttFormats, GanttOptions, GanttI18n, DEFAULT_LABELS, DEFAULT_FORMATS } from '@gantry/core';
 import { createState } from '../core/state';
 
 export class GanttI18nService {

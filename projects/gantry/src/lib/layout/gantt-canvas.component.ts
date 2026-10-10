@@ -65,18 +65,37 @@ let nextCanvasId = 0;
   },
   template: `
     <div [style.width.px]="timeline().totalWidth" [style.height.px]="totalHeight()" [style.position]="'relative'">
-      <svg #svgEl [attr.width]="timeline().totalWidth" [attr.height]="totalHeight()"
-        [style.display]="'block'" [style.overflow]="'visible'"
-        role="list" [attr.aria-label]="i18n.labels().ariaChart"
+      <svg
+        #svgEl
+        [attr.width]="timeline().totalWidth"
+        [attr.height]="totalHeight()"
+        [style.display]="'block'"
+        [style.overflow]="'visible'"
+        role="list"
+        [attr.aria-label]="i18n.labels().ariaChart"
         (pointerdown)="onPointerDown($event)"
         (pointermove)="onPointerMove($event)"
         (click)="onClick($event)"
-        (dblclick)="onDblClick($event)">
-
+        (dblclick)="onDblClick($event)"
+      >
         @if (hatch()) {
           <defs>
-            <pattern [attr.id]="uid + '-hatch'" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="6" [attr.stroke]="config().theme.textMuted" stroke-width="1.5" stroke-opacity="0.35"/>
+            <pattern
+              [attr.id]="uid + '-hatch'"
+              width="6"
+              height="6"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
+              <line
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="6"
+                [attr.stroke]="config().theme.textMuted"
+                stroke-width="1.5"
+                stroke-opacity="0.35"
+              />
             </pattern>
           </defs>
         }
@@ -84,20 +103,35 @@ let nextCanvasId = 0;
         <!-- Rows -->
         <g class="gantt-rows" aria-hidden="true">
           @for (geo of visibleGeometries(); track geo.row.task.id) {
-            <svg:rect [attr.x]="0" [attr.y]="geo.y" [attr.width]="timeline().totalWidth"
-              [attr.height]="geo.height" [attr.fill]="rowBg(geo)"/>
+            <svg:rect
+              [attr.x]="0"
+              [attr.y]="geo.y"
+              [attr.width]="timeline().totalWidth"
+              [attr.height]="geo.height"
+              [attr.fill]="rowBg(geo)"
+            />
           }
         </g>
 
         <!-- Non-working time (full height: unchanged while scrolling) -->
         <g class="gantt-bands" aria-hidden="true" pointer-events="none">
           @for (band of timeline().bands; track band.x) {
-            <svg:rect [attr.class]="'gantt-band gantt-band--' + band.kind + (band.className ? ' ' + band.className : '')"
-              [attr.x]="band.x" y="0" [attr.width]="band.width" [attr.height]="totalHeight()"
-              [attr.fill]="band.color"/>
+            <svg:rect
+              [attr.class]="'gantt-band gantt-band--' + band.kind + (band.className ? ' ' + band.className : '')"
+              [attr.x]="band.x"
+              y="0"
+              [attr.width]="band.width"
+              [attr.height]="totalHeight()"
+              [attr.fill]="band.color"
+            />
             @if (hatch() && band.kind !== 'intensive') {
-              <svg:rect [attr.x]="band.x" y="0" [attr.width]="band.width"
-                [attr.height]="totalHeight()" [attr.fill]="'url(#' + uid + '-hatch)'"/>
+              <svg:rect
+                [attr.x]="band.x"
+                y="0"
+                [attr.width]="band.width"
+                [attr.height]="totalHeight()"
+                [attr.fill]="'url(#' + uid + '-hatch)'"
+              />
             }
           }
         </g>
@@ -106,21 +140,44 @@ let nextCanvasId = 0;
         <g class="gantt-grid" aria-hidden="true" pointer-events="none" shape-rendering="crispEdges">
           @if (config().gridLines.minor; as minor) {
             @for (x of timeline().minorLines; track x) {
-              <svg:line class="gantt-grid-minor" [attr.x1]="x + 0.5" y1="0" [attr.x2]="x + 0.5" [attr.y2]="totalHeight()"
-                [attr.stroke]="minor.color" [attr.stroke-width]="minor.width" [attr.stroke-dasharray]="minor.dash ?? null"/>
+              <svg:line
+                class="gantt-grid-minor"
+                [attr.x1]="x + 0.5"
+                y1="0"
+                [attr.x2]="x + 0.5"
+                [attr.y2]="totalHeight()"
+                [attr.stroke]="minor.color"
+                [attr.stroke-width]="minor.width"
+                [attr.stroke-dasharray]="minor.dash ?? null"
+              />
             }
           }
           @if (config().gridLines.horizontal; as hz) {
             @for (geo of visibleGeometries(); track geo.row.task.id) {
-              <svg:line class="gantt-grid-row" [attr.x1]="0" [attr.y1]="geo.y + geo.height - 0.5"
-                [attr.x2]="timeline().totalWidth" [attr.y2]="geo.y + geo.height - 0.5"
-                [attr.stroke]="hz.color" [attr.stroke-width]="hz.width" [attr.stroke-dasharray]="hz.dash ?? null"/>
+              <svg:line
+                class="gantt-grid-row"
+                [attr.x1]="0"
+                [attr.y1]="geo.y + geo.height - 0.5"
+                [attr.x2]="timeline().totalWidth"
+                [attr.y2]="geo.y + geo.height - 0.5"
+                [attr.stroke]="hz.color"
+                [attr.stroke-width]="hz.width"
+                [attr.stroke-dasharray]="hz.dash ?? null"
+              />
             }
           }
           @if (config().gridLines.major; as major) {
             @for (x of timeline().majorLines; track x) {
-              <svg:line class="gantt-grid-major" [attr.x1]="x + 0.5" y1="0" [attr.x2]="x + 0.5" [attr.y2]="totalHeight()"
-                [attr.stroke]="major.color" [attr.stroke-width]="major.width" [attr.stroke-dasharray]="major.dash ?? null"/>
+              <svg:line
+                class="gantt-grid-major"
+                [attr.x1]="x + 0.5"
+                y1="0"
+                [attr.x2]="x + 0.5"
+                [attr.y2]="totalHeight()"
+                [attr.stroke]="major.color"
+                [attr.stroke-width]="major.width"
+                [attr.stroke-dasharray]="major.dash ?? null"
+              />
             }
           }
         </g>
@@ -129,19 +186,40 @@ let nextCanvasId = 0;
         <g class="gantt-annotations" aria-hidden="true" pointer-events="none">
           @for (ann of resolvedAnnotations(); track $index) {
             @if (ann.x2 !== null) {
-              <svg:rect [attr.x]="ann.x1" [attr.y]="windowTop()" [attr.width]="ann.x2 - ann.x1"
-                [attr.height]="windowHeight()" [attr.fill]="ann.color" [attr.opacity]="ann.opacity ?? 0.08"/>
+              <svg:rect
+                [attr.x]="ann.x1"
+                [attr.y]="windowTop()"
+                [attr.width]="ann.x2 - ann.x1"
+                [attr.height]="windowHeight()"
+                [attr.fill]="ann.color"
+                [attr.opacity]="ann.opacity ?? 0.08"
+              />
             }
-            <svg:line [attr.x1]="ann.x1" [attr.y1]="windowTop()" [attr.x2]="ann.x1" [attr.y2]="windowBottom()"
-              [attr.stroke]="ann.color" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.8"/>
+            <svg:line
+              [attr.x1]="ann.x1"
+              [attr.y1]="windowTop()"
+              [attr.x2]="ann.x1"
+              [attr.y2]="windowBottom()"
+              [attr.stroke]="ann.color"
+              stroke-width="1.5"
+              stroke-dasharray="5 3"
+              opacity="0.8"
+            />
           }
         </g>
 
         <!-- Today -->
         @if (timeline().todayX >= 0) {
-          <svg:line class="gantt-today" [attr.x1]="timeline().todayX" [attr.y1]="windowTop()"
-            [attr.x2]="timeline().todayX" [attr.y2]="windowBottom()"
-            [attr.stroke]="config().theme.todayColor" stroke-width="2" pointer-events="none"/>
+          <svg:line
+            class="gantt-today"
+            [attr.x1]="timeline().todayX"
+            [attr.y1]="windowTop()"
+            [attr.x2]="timeline().todayX"
+            [attr.y2]="windowBottom()"
+            [attr.stroke]="config().theme.todayColor"
+            stroke-width="2"
+            pointer-events="none"
+          />
         }
 
         <!-- Dependency arrows -->
@@ -154,8 +232,13 @@ let nextCanvasId = 0;
         <!-- Bars -->
         <g class="gantt-bars-layer">
           @for (geo of visibleGeometries(); track geo.row.task.id) {
-            <g [ganttTooltip]="geo" [tooltipTheme]="config().theme" [tooltipDates]="config()" [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
-              [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? 0.35 : null">
+            <g
+              [ganttTooltip]="geo"
+              [tooltipTheme]="config().theme"
+              [tooltipDates]="config()"
+              [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
+              [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? 0.35 : null"
+            >
               <g ganttBarHost [barComponent]="resolveBarComponent(geo.row.barType)" [ctx]="barContext(geo)"></g>
             </g>
           }
@@ -165,23 +248,41 @@ let nextCanvasId = 0;
         <g class="gantt-annotation-labels" aria-hidden="true" pointer-events="none">
           @for (ann of resolvedAnnotations(); track $index) {
             @if (ann.label) {
-              <svg:text [attr.x]="ann.x1 + 6" [attr.y]="windowTop() + 14" [attr.fill]="ann.label.color ?? ann.color"
-                [attr.font-size]="ann.label.fontSize ?? (fontPx() - 1)" [attr.font-weight]="ann.label.fontWeight ?? 600"
-                style="user-select:none">{{ ann.label.text }}</svg:text>
+              <svg:text
+                [attr.x]="ann.x1 + 6"
+                [attr.y]="windowTop() + 14"
+                [attr.fill]="ann.label.color ?? ann.color"
+                [attr.font-size]="ann.label.fontSize ?? fontPx() - 1"
+                [attr.font-weight]="ann.label.fontWeight ?? 600"
+                style="user-select:none"
+              >
+                {{ ann.label.text }}
+              </svg:text>
             }
           }
         </g>
 
         <!-- Drag preview ghost -->
-        <g ganttDragPreview [preview]="dragSvc.preview()" [theme]="config().theme"
-          [barHeight]="ghostHeight()" [radius]="config().bar.radius" [unit]="snapUnit()"></g>
+        <g
+          ganttDragPreview
+          [preview]="dragSvc.preview()"
+          [theme]="config().theme"
+          [barHeight]="ghostHeight()"
+          [radius]="config().bar.radius"
+          [unit]="snapUnit()"
+        ></g>
       </svg>
     </div>
   `,
-  styles: [`:host { outline: none; }`],
+  styles: [
+    `
+      :host {
+        outline: none;
+      }
+    `,
+  ],
 })
 export class GanttCanvasComponent {
-
   readonly timeline = input.required<TimelineModel>();
   readonly config = input.required<ResolvedGanttConfig>();
   readonly visibleGeometries = input.required<RowGeometry[]>();
@@ -221,7 +322,8 @@ export class GanttCanvasComponent {
   });
   private readonly hoverCursor = signal('');
   protected readonly cursor = computed(() =>
-    this.dragSvc.isDragging() ? 'grabbing' : this.dragSvc.isResizing() ? 'ew-resize' : this.hoverCursor());
+    this.dragSvc.isDragging() ? 'grabbing' : this.dragSvc.isResizing() ? 'ew-resize' : this.hoverCursor(),
+  );
 
   // ── Render model ──────────────────────────────────────────
 
@@ -240,7 +342,10 @@ export class GanttCanvasComponent {
       let v = cache.get(geo);
       if (!v) {
         v = computeBarVisual({
-          geo, cfg, toX: tl.toX, fontPx,
+          geo,
+          cfg,
+          toX: tl.toX,
+          fontPx,
           isCritical: crit.has(geo.row.task.id),
           resizable: resizable && geo.row.task.draggable !== false,
         });
@@ -267,8 +372,11 @@ export class GanttCanvasComponent {
         out.push({
           id: `${dep.taskId}->${geo.row.task.id}`,
           visual: computeArrowVisual(
-            visualOf(from), visualOf(geo), { type: dep.type ?? DependencyType.FS, lag: dep.lag },
-            cfg, { fromTop: from.y, fromBottom: from.y + from.height },
+            visualOf(from),
+            visualOf(geo),
+            { type: dep.type ?? DependencyType.FS, lag: dep.lag },
+            cfg,
+            { fromTop: from.y, fromBottom: from.y + from.height },
             crit.has(dep.taskId) && crit.has(geo.row.task.id),
           ),
         });
@@ -352,7 +460,8 @@ export class GanttCanvasComponent {
     if (this.dragSvc.isActive()) return;
     const hit = this.enableDrag() ? this.hitTest(event) : null;
     this.hoverCursor.set(
-      !hit || hit.geo.row.task.draggable === false ? '' : hit.handle === 'bar' ? 'grab' : 'ew-resize');
+      !hit || hit.geo.row.task.draggable === false ? '' : hit.handle === 'bar' ? 'grab' : 'ew-resize',
+    );
   }
 
   protected onClick(event: MouseEvent): void {
@@ -364,7 +473,11 @@ export class GanttCanvasComponent {
     if (!geo) return;
     if (this.enableSelection()) {
       const e = this.multiSelect() ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
-      this.selSvc.handleClick(geo.row.task.id, e, this.allGeometries().map(g => g.row));
+      this.selSvc.handleClick(
+        geo.row.task.id,
+        e,
+        this.allGeometries().map(g => g.row),
+      );
     }
     this.rowClick.emit(geo);
   }

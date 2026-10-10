@@ -6,9 +6,18 @@
 // ─────────────────────────────────────────────────────────────
 
 import {
-  DependencyType, TaskType,
-  type ColumnContext, type ColumnDef, type ColumnSortValue, type GanttDependency, type GanttFlatRow,
-  type GanttLabels, type GanttTask, type GanttTheme, type GanttView, type TaskStatus,
+  DependencyType,
+  TaskType,
+  type ColumnContext,
+  type ColumnDef,
+  type ColumnSortValue,
+  type GanttDependency,
+  type GanttFlatRow,
+  type GanttLabels,
+  type GanttTask,
+  type GanttTheme,
+  type GanttView,
+  type TaskStatus,
 } from '../types';
 import { calendarDays, durationLabel, formatDate, toLocalDay } from '../gantt-math';
 import { taskSpan } from './timeline';
@@ -42,7 +51,10 @@ const isTaskStatus = (s: unknown): s is TaskStatus => typeof s === 'string' && s
 export function taskStatus(
   task: GanttTask,
   now: Date,
-  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> = { endDateMode: 'exclusive', normalizeDateOnly: true },
+  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> = {
+    endDateMode: 'exclusive',
+    normalizeDateOnly: true,
+  },
 ): TaskStatus | (string & {}) {
   if (task.status) return task.status;
   const progress = task.progress ?? 0;
@@ -59,11 +71,16 @@ export function taskStatus(
 /** Theme colour of a status dot (custom statuses use the muted text colour). */
 export function statusColor(status: string, theme: Partial<GanttTheme> & Pick<GanttTheme, 'textMuted'>): string {
   switch (status) {
-    case 'notStarted': return theme.statusNotStarted ?? theme.textMuted;
-    case 'inProgress': return theme.statusInProgress ?? theme.textMuted;
-    case 'overdue':    return theme.statusOverdue ?? theme.textMuted;
-    case 'done':       return theme.statusDone ?? theme.textMuted;
-    default:           return theme.textMuted;
+    case 'notStarted':
+      return theme.statusNotStarted ?? theme.textMuted;
+    case 'inProgress':
+      return theme.statusInProgress ?? theme.textMuted;
+    case 'overdue':
+      return theme.statusOverdue ?? theme.textMuted;
+    case 'done':
+      return theme.statusDone ?? theme.textMuted;
+    default:
+      return theme.textMuted;
   }
 }
 
@@ -121,13 +138,23 @@ function contextOf(ctx: ColumnContext | undefined, task: GanttTask): ColumnConte
 export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFormat = 'MMM D, YYYY'): ColumnDef[] {
   const fmt = (d: Date | undefined) => (d ? formatDate(d, dateFormat, locale) : '');
   const span = (t: GanttTask, ctx: ColumnContext) => taskSpan(t, ctx);
-  const statusLabel = (s: string) => ({
-    notStarted: labels.statusNotStarted, inProgress: labels.statusInProgress,
-    overdue: labels.statusOverdue, done: labels.statusDone,
-  } as Record<string, string>)[s] ?? s;
-  const typeLabel = (t: string) => ({
-    [TaskType.Task]: labels.typeTask, [TaskType.Milestone]: labels.typeMilestone, [TaskType.Group]: labels.typeGroup,
-  } as Record<string, string>)[t] ?? t;
+  const statusLabel = (s: string) =>
+    (
+      ({
+        notStarted: labels.statusNotStarted,
+        inProgress: labels.statusInProgress,
+        overdue: labels.statusOverdue,
+        done: labels.statusDone,
+      }) as Record<string, string>
+    )[s] ?? s;
+  const typeLabel = (t: string) =>
+    (
+      ({
+        [TaskType.Task]: labels.typeTask,
+        [TaskType.Milestone]: labels.typeMilestone,
+        [TaskType.Group]: labels.typeGroup,
+      }) as Record<string, string>
+    )[t] ?? t;
   const variance = (t: GanttTask, ctx: ColumnContext): number | null => {
     if (!t.baseline) return null;
     const actual = calendarDays(span(t, ctx).end, false);
@@ -137,41 +164,122 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
 
   const col = (def: ColumnDef): ColumnDef => ({ builtin: true, sortable: true, ...def });
   return [
-    col({ key: 'id', label: labels.colId, width: 72, minWidth: 48,
-      render: r => r.task.id, sortValue: r => r.task.id }),
-    col({ key: 'name', label: labels.colName, width: 240, minWidth: 120, flex: true,
-      render: r => r.task.name, sortValue: r => r.task.name }),
-    col({ key: 'type', label: labels.colType, width: 104, minWidth: 72,
+    col({ key: 'id', label: labels.colId, width: 72, minWidth: 48, render: r => r.task.id, sortValue: r => r.task.id }),
+    col({
+      key: 'name',
+      label: labels.colName,
+      width: 240,
+      minWidth: 120,
+      flex: true,
+      render: r => r.task.name,
+      sortValue: r => r.task.name,
+    }),
+    col({
+      key: 'type',
+      label: labels.colType,
+      width: 104,
+      minWidth: 72,
       render: r => typeLabel(rowType(r)),
       // group, task, milestone, then custom bar types alphabetically
-      sortValue: r => { const t = rowType(r); return `${TYPE_RANK[t] ?? 3}:${t}`; } }),
-    col({ key: 'status', label: labels.colStatus, width: 120, minWidth: 88,
-      render: (r, ctx) => { const c = contextOf(ctx, r.task); return statusLabel(taskStatus(r.task, c.now, c)); },
+      sortValue: r => {
+        const t = rowType(r);
+        return `${TYPE_RANK[t] ?? 3}:${t}`;
+      },
+    }),
+    col({
+      key: 'status',
+      label: labels.colStatus,
+      width: 120,
+      minWidth: 88,
+      render: (r, ctx) => {
+        const c = contextOf(ctx, r.task);
+        return statusLabel(taskStatus(r.task, c.now, c));
+      },
       // not started, in progress, overdue, done, then custom statuses alphabetically
-      sortValue: (r, ctx) => { const s = taskStatus(r.task, ctx.now, ctx); return `${isTaskStatus(s) ? STATUS_RANK[s] : 4}:${s}`; } }),
-    col({ key: 'start', label: labels.colStart, width: 112, minWidth: 72,
-      render: r => fmt(r.task.start), sortValue: (r, ctx) => span(r.task, ctx).start }),
-    col({ key: 'end', label: labels.colEnd, width: 112, minWidth: 72,
-      render: r => fmt(r.task.end ?? r.task.start), sortValue: (r, ctx) => span(r.task, ctx).end }),
-    col({ key: 'duration', label: labels.colDuration, width: 96, minWidth: 60,
+      sortValue: (r, ctx) => {
+        const s = taskStatus(r.task, ctx.now, ctx);
+        return `${isTaskStatus(s) ? STATUS_RANK[s] : 4}:${s}`;
+      },
+    }),
+    col({
+      key: 'start',
+      label: labels.colStart,
+      width: 112,
+      minWidth: 72,
+      render: r => fmt(r.task.start),
+      sortValue: (r, ctx) => span(r.task, ctx).start,
+    }),
+    col({
+      key: 'end',
+      label: labels.colEnd,
+      width: 112,
+      minWidth: 72,
+      render: r => fmt(r.task.end ?? r.task.start),
+      sortValue: (r, ctx) => span(r.task, ctx).end,
+    }),
+    col({
+      key: 'duration',
+      label: labels.colDuration,
+      width: 96,
+      minWidth: 60,
       render: (r, ctx) => taskDurationLabel(r.task, contextOf(ctx, r.task), labels),
-      sortValue: (r, ctx) => { const s = span(r.task, ctx); return calendarDays(s.end, false) - calendarDays(s.start, false); } }),
-    col({ key: 'progress', label: labels.colProgress, width: 56, minWidth: 44, align: 'end',
-      render: r => `${r.task.progress ?? 0}%`, sortValue: r => r.task.progress ?? 0 }),
-    col({ key: 'predecessors', label: labels.colPredecessors, width: 160, minWidth: 80, sortable: false,
+      sortValue: (r, ctx) => {
+        const s = span(r.task, ctx);
+        return calendarDays(s.end, false) - calendarDays(s.start, false);
+      },
+    }),
+    col({
+      key: 'progress',
+      label: labels.colProgress,
+      width: 56,
+      minWidth: 44,
+      align: 'end',
+      render: r => `${r.task.progress ?? 0}%`,
+      sortValue: r => r.task.progress ?? 0,
+    }),
+    col({
+      key: 'predecessors',
+      label: labels.colPredecessors,
+      width: 160,
+      minWidth: 80,
+      sortable: false,
       render: (r, ctx) => {
         const c = contextOf(ctx, r.task);
         return taskDependencies(r.task)
-          .map(d => labels.dependency(c.taskById.get(d.taskId)?.name ?? d.taskId, d.type ?? DependencyType.FS, d.lag ?? 0))
+          .map(d =>
+            labels.dependency(c.taskById.get(d.taskId)?.name ?? d.taskId, d.type ?? DependencyType.FS, d.lag ?? 0),
+          )
           .join(', ');
-      } }),
-    col({ key: 'baselineStart', label: labels.colBaselineStart, width: 124, minWidth: 72,
-      render: r => fmt(r.task.baseline?.start), sortValue: r => r.task.baseline?.start }),
-    col({ key: 'baselineEnd', label: labels.colBaselineEnd, width: 124, minWidth: 72,
-      render: r => fmt(r.task.baseline?.end), sortValue: r => r.task.baseline?.end }),
-    col({ key: 'variance', label: labels.colVariance, width: 112, minWidth: 64, align: 'end',
-      render: (r, ctx) => { const v = variance(r.task, contextOf(ctx, r.task)); return v === null ? '' : labels.varianceDays(v); },
-      sortValue: (r, ctx) => variance(r.task, ctx) }),
+      },
+    }),
+    col({
+      key: 'baselineStart',
+      label: labels.colBaselineStart,
+      width: 124,
+      minWidth: 72,
+      render: r => fmt(r.task.baseline?.start),
+      sortValue: r => r.task.baseline?.start,
+    }),
+    col({
+      key: 'baselineEnd',
+      label: labels.colBaselineEnd,
+      width: 124,
+      minWidth: 72,
+      render: r => fmt(r.task.baseline?.end),
+      sortValue: r => r.task.baseline?.end,
+    }),
+    col({
+      key: 'variance',
+      label: labels.colVariance,
+      width: 112,
+      minWidth: 64,
+      align: 'end',
+      render: (r, ctx) => {
+        const v = variance(r.task, contextOf(ctx, r.task));
+        return v === null ? '' : labels.varianceDays(v);
+      },
+      sortValue: (r, ctx) => variance(r.task, ctx),
+    }),
   ];
 }
 
@@ -191,7 +299,12 @@ export function mergeColumnDefs<T extends ColumnDef>(custom: readonly T[], built
     const def = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined)) as T;
     const ownCell = def.render !== undefined || def.cellTemplate !== undefined;
     const inherited: Partial<ColumnDef> = {
-      label: b.label, width: b.width, minWidth: b.minWidth, maxWidth: b.maxWidth, align: b.align, flex: b.flex,
+      label: b.label,
+      width: b.width,
+      minWidth: b.minWidth,
+      maxWidth: b.maxWidth,
+      align: b.align,
+      flex: b.flex,
       ...(ownCell ? {} : { render: b.render, sortValue: b.sortValue, sortable: b.sortable, builtin: b.builtin }),
     };
     for (const k of Object.keys(inherited) as (keyof ColumnDef)[]) if (inherited[k] === undefined) delete inherited[k];
@@ -203,7 +316,7 @@ export function mergeColumnDefs<T extends ColumnDef>(custom: readonly T[], built
 
 export interface ColumnVisibility {
   /** Shown / hidden in both views (`setColumnVisible(key, visible)`) */
-  all?:   ReadonlyMap<string, boolean>;
+  all?: ReadonlyMap<string, boolean>;
   split?: ReadonlyMap<string, boolean>;
   table?: ReadonlyMap<string, boolean>;
 }
@@ -252,8 +365,14 @@ export function resolveViewColumns<T extends ColumnDef>(input: {
     }
     if (edits.order?.length) {
       const order = edits.order;
-      const rank = (k: string) => { const i = order.indexOf(k); return i < 0 ? order.length : i; };
-      keys = keys.map((k, i) => ({ k, i })).sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i).map(x => x.k);
+      const rank = (k: string) => {
+        const i = order.indexOf(k);
+        return i < 0 ? order.length : i;
+      };
+      keys = keys
+        .map((k, i) => ({ k, i }))
+        .sort((a, b) => rank(a.k) - rank(b.k) || a.i - b.i)
+        .map(x => x.k);
     }
   }
 
@@ -293,7 +412,11 @@ export function taskDurationLabel(
 }
 
 /** The column for `key` as a view resolves it: the consumer catalogue first, then the built-ins. */
-export function findColumn<T extends ColumnDef>(columns: readonly T[], builtins: readonly T[], key: string): T | undefined {
+export function findColumn<T extends ColumnDef>(
+  columns: readonly T[],
+  builtins: readonly T[],
+  key: string,
+): T | undefined {
   return columns.find(c => c.key === key) ?? builtins.find(c => c.key === key);
 }
 
@@ -307,7 +430,12 @@ export interface CellVisual {
 }
 
 /** What a (non-name, non-template) cell shows. */
-export function computeCellVisual(col: ColumnDef, row: GanttFlatRow, ctx: ColumnContext, theme: GanttTheme): CellVisual {
+export function computeCellVisual(
+  col: ColumnDef,
+  row: GanttFlatRow,
+  ctx: ColumnContext,
+  theme: GanttTheme,
+): CellVisual {
   const raw = col.render ? col.render(row, ctx) : (row.task as unknown as Record<string, unknown>)[col.key];
   const text = raw == null ? '' : String(raw);
   if (col.builtin && col.key === 'status') {
@@ -318,8 +446,17 @@ export function computeCellVisual(col: ColumnDef, row: GanttFlatRow, ctx: Column
 }
 
 /** Sort value of a column for a row: `sortValue`, else the raw task field. */
-export function columnSortValue(col: ColumnDef | undefined, key: string, row: GanttFlatRow, ctx: ColumnContext): ColumnSortValue {
+export function columnSortValue(
+  col: ColumnDef | undefined,
+  key: string,
+  row: GanttFlatRow,
+  ctx: ColumnContext,
+): ColumnSortValue {
   if (col?.sortValue) return col.sortValue(row, ctx);
   const v = (row.task as unknown as Record<string, unknown>)[key];
-  return v instanceof Date || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? v : v == null ? v : String(v);
+  return v instanceof Date || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+    ? v
+    : v == null
+      ? v
+      : String(v);
 }

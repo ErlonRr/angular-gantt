@@ -1,17 +1,43 @@
 // Render model: scales, delimiters, non-working time, bars, arrows, dates.
 import { describe, it, expect } from 'vitest';
 import {
-  ViewMode, DependencyType, GanttTask, GanttFlatRow, DEFAULT_LABELS,
-  resolveConfig, resolveTheme, buildTimeline, computeRowGeometries, computeBarVisual,
-  computeArrowVisual, buildTiers, WEEK_FORMATS, weekNumber, unitStart, taskSpan,
-  dateToPixel, parseDate, toLocalDay, diffDays, addDays, fitText, flattenTree, filterVisible, reindexVisible,
+  ViewMode,
+  DependencyType,
+  GanttTask,
+  GanttFlatRow,
+  DEFAULT_LABELS,
+  resolveConfig,
+  resolveTheme,
+  buildTimeline,
+  computeRowGeometries,
+  computeBarVisual,
+  computeArrowVisual,
+  buildTiers,
+  WEEK_FORMATS,
+  weekNumber,
+  unitStart,
+  taskSpan,
+  dateToPixel,
+  parseDate,
+  toLocalDay,
+  diffDays,
+  addDays,
+  fitText,
+  flattenTree,
+  filterVisible,
+  reindexVisible,
 } from '../index';
 import type { GanttOptions } from '../index';
 
 const theme = resolveTheme(false);
 const cfg = (o: GanttOptions = {}) => resolveConfig(o, theme);
-const t = (id: string, s: Date, e: Date, extra: Partial<GanttTask> = {}): GanttTask =>
-  ({ id, name: `Task ${id}`, start: s, end: e, ...extra });
+const t = (id: string, s: Date, e: Date, extra: Partial<GanttTask> = {}): GanttTask => ({
+  id,
+  name: `Task ${id}`,
+  start: s,
+  end: e,
+  ...extra,
+});
 const rows = (tasks: GanttTask[]): GanttFlatRow[] => reindexVisible(filterVisible(flattenTree(tasks, new Set())));
 
 describe('calendar time', () => {
@@ -46,7 +72,8 @@ describe('calendar time', () => {
 describe('scales', () => {
   const labels = DEFAULT_LABELS;
   const ctx = { unit: 'week' as const, step: 1, labels, weekStart: 1 as const };
-  const mon = new Date(2026, 0, 5), nextMon = new Date(2026, 0, 12);
+  const mon = new Date(2026, 0, 5),
+    nextMon = new Date(2026, 0, 12);
 
   it('ships week formats: number, label, range, rangeMonth', () => {
     const f = (fmt: unknown) => (fmt as (s: Date, e: Date, c: typeof ctx) => string)(mon, nextMon, ctx);
@@ -65,7 +92,9 @@ describe('scales', () => {
   it('builds N tiers with steps (6-hour cells)', () => {
     const tiers = buildTiers({
       scales: [{ unit: 'day' }, { unit: 'hour', step: 6, format: 'HH' }],
-      start: new Date(2026, 0, 5), end: new Date(2026, 0, 7), pxPerDay: 240,
+      start: new Date(2026, 0, 5),
+      end: new Date(2026, 0, 7),
+      pxPerDay: 240,
     });
     expect(tiers).toHaveLength(2);
     expect(tiers[1].cells.map(c => c.label)).toEqual(['00', '06', '12', '18', '00', '06', '12', '18']);
@@ -90,7 +119,11 @@ describe('timeline model', () => {
   });
 
   it('fills the viewport when fitToWidth', () => {
-    const tl = buildTimeline({ tasks, config: cfg({ viewMode: ViewMode.Year, showToday: false }), viewportWidth: 3000 });
+    const tl = buildTimeline({
+      tasks,
+      config: cfg({ viewMode: ViewMode.Year, showToday: false }),
+      viewportWidth: 3000,
+    });
     expect(tl.totalWidth).toBeGreaterThanOrEqual(3000);
   });
 
@@ -117,7 +150,9 @@ describe('timeline model', () => {
     const tl = buildTimeline({
       tasks: [t('h', new Date(2026, 0, 14, 9), new Date(2026, 0, 14, 17))],
       config: cfg({
-        viewMode: ViewMode.Hour, showToday: false, timelinePadding: 0,
+        viewMode: ViewMode.Hour,
+        showToday: false,
+        timelinePadding: 0,
         nonWorkingTime: { workingHours: { start: 9, end: 18 }, intensiveHours: [{ start: 10, end: 12 }] },
       }),
     });
@@ -162,7 +197,10 @@ describe('bars & arrows', () => {
   it('routes an overlapping FS link with a U-turn into the left edge', () => {
     const from = computeBarVisual({ geo: geos[0], cfg: c, toX: tl.toX });
     const to = computeBarVisual({ geo: geos[1], cfg: c, toX: tl.toX });
-    const a = computeArrowVisual(from, to, { type: DependencyType.FS }, c, { fromTop: geos[0].y, fromBottom: geos[0].y + 40 });
+    const a = computeArrowVisual(from, to, { type: DependencyType.FS }, c, {
+      fromTop: geos[0].y,
+      fromBottom: geos[0].y + 40,
+    });
     expect(a.d.match(/[LQ]/g)!.length).toBeGreaterThan(4);
     expect(a.head.startsWith(`${to.x},`)).toBe(true);
     expect(a.color).toBe(theme.arrowColor);

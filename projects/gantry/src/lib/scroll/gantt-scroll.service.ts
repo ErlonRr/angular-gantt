@@ -19,33 +19,26 @@
 //  Timeline header is inside the same scroll element as the chart (see GantryComponent).
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Injectable,
-  signal,
-  DestroyRef,
-  inject,
-  NgZone,
-} from '@angular/core';
+import { Injectable, signal, DestroyRef, inject, NgZone } from '@angular/core';
 
 import { dateToPixel, snapToDay } from '../gantt-math';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 
 @Injectable()
 export class GanttScrollService {
-
   // ── Public signals ────────────────────────────────────────
   /** Current horizontal scroll offset of the canvas (px) */
   readonly scrollLeft = signal<number>(0);
 
   /** Current vertical scroll offset shared by both panels (px) */
-  readonly scrollTop  = signal<number>(0);
+  readonly scrollTop = signal<number>(0);
 
   // ── Private refs ──────────────────────────────────────────
-  private _panel: HTMLElement | null  = null;
+  private _panel: HTMLElement | null = null;
   private _canvas: HTMLElement | null = null;
 
   /** rAF id */
-  private _rafId   = 0;
+  private _rafId = 0;
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly zone = inject(NgZone);
@@ -134,8 +127,8 @@ export class GanttScrollService {
     if (this._scrollSource === 'panel') return;
     this._scrollSource = 'canvas';
 
-    const el  = this._canvas!;
-    const top  = el.scrollTop;
+    const el = this._canvas!;
+    const top = el.scrollTop;
     const left = el.scrollLeft;
 
     this._rafId = requestAnimationFrame(() => {
@@ -177,12 +170,7 @@ export class GanttScrollService {
    * @param pxPerDay   Pixels per day (from GanttLayoutService)
    * @param behavior   'smooth' | 'instant' (default: 'smooth')
    */
-  scrollToDate(
-    date: Date,
-    origin: Date,
-    pxPerDay: number,
-    behavior: ScrollBehavior = 'smooth',
-  ): void {
+  scrollToDate(date: Date, origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this._canvas) return;
     const x = dateToPixel(date, origin, pxPerDay);
     const canvasWidth = this._canvas.clientWidth;
@@ -192,11 +180,7 @@ export class GanttScrollService {
   }
 
   /** Scroll to today */
-  scrollToToday(
-    origin: Date,
-    pxPerDay: number,
-    behavior: ScrollBehavior = 'smooth',
-  ): void {
+  scrollToToday(origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
     this.scrollToDate(snapToDay(new Date()), origin, pxPerDay, behavior);
   }
 
@@ -206,11 +190,7 @@ export class GanttScrollService {
    * @param rowHeight     row height in px
    * @param behavior      scroll behavior
    */
-  scrollToRow(
-    rowIndex: number,
-    rowHeight: number,
-    behavior: ScrollBehavior = 'smooth',
-  ): void {
+  scrollToRow(rowIndex: number, rowHeight: number, behavior: ScrollBehavior = 'smooth'): void {
     const y = rowIndex * rowHeight;
     const b = motionSafe(behavior);
     this._panel?.scrollTo({ top: y, behavior: b });
@@ -228,17 +208,20 @@ export class GanttScrollService {
   /** Returns the currently visible row range [firstIdx, lastIdx] */
   visibleRowRange(rowHeight: number): [number, number] {
     if (!this._canvas) return [0, 0];
-    const hh   = this._timelineHeaderOffset();
-    const top  = Math.max(0, this._canvas.scrollTop - hh);
+    const hh = this._timelineHeaderOffset();
+    const top = Math.max(0, this._canvas.scrollTop - hh);
     const height = Math.max(rowHeight, this._canvas.clientHeight - hh);
-    const first  = Math.floor(top / rowHeight);
-    const last   = Math.ceil((top + height) / rowHeight);
+    const first = Math.floor(top / rowHeight);
+    const last = Math.ceil((top + height) / rowHeight);
     return [first, last];
   }
 }
 
 /** `smooth` becomes `instant` when the user prefers reduced motion. */
 function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
-  return behavior === 'smooth' && typeof matchMedia === 'function'
-    && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : behavior;
+  return behavior === 'smooth' &&
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'instant'
+    : behavior;
 }

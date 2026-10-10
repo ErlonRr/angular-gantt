@@ -16,77 +16,145 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttTheme } from '../types';
 
 @Component({
-  selector:   'gantt-toolbar',
+  selector: 'gantt-toolbar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { 'role': 'toolbar' },
+  host: { role: 'toolbar' },
   template: `
     <div class="gantt-toolbar">
       @if (toolbar().zoom) {
         <div class="gantt-tb-group">
-          <button type="button" class="gantt-tb-btn" [title]="labels().zoomOut" [attr.aria-label]="labels().zoomOut"
-            (click)="zoomOut.emit()">−</button>
-          <button type="button" class="gantt-tb-btn" [title]="labels().zoomIn" [attr.aria-label]="labels().zoomIn"
-            (click)="zoomIn.emit()">+</button>
+          <button
+            type="button"
+            class="gantt-tb-btn"
+            [title]="labels().zoomOut"
+            [attr.aria-label]="labels().zoomOut"
+            (click)="zoomOut.emit()"
+          >
+            −
+          </button>
+          <button
+            type="button"
+            class="gantt-tb-btn"
+            [title]="labels().zoomIn"
+            [attr.aria-label]="labels().zoomIn"
+            (click)="zoomIn.emit()"
+          >
+            +
+          </button>
         </div>
       }
       @if (pills().length) {
         <div class="gantt-tb-group">
           @for (pill of pills(); track pill.name) {
-            <button type="button" class="gantt-tb-pill" [attr.aria-pressed]="pill.name === currentView()"
-              (click)="viewModeChange.emit(pill.name)">{{ pill.label }}</button>
+            <button
+              type="button"
+              class="gantt-tb-pill"
+              [attr.aria-pressed]="pill.name === currentView()"
+              (click)="viewModeChange.emit(pill.name)"
+            >
+              {{ pill.label }}
+            </button>
           }
         </div>
       }
       @if (toolbar().today) {
         <div class="gantt-tb-group">
-          <button type="button" class="gantt-tb-btn gantt-tb-today" (click)="scrollToToday.emit()">◎ {{ labels().todayButton }}</button>
+          <button type="button" class="gantt-tb-btn gantt-tb-today" (click)="scrollToToday.emit()">
+            ◎ {{ labels().todayButton }}
+          </button>
         </div>
       }
       <div class="gantt-tb-group gantt-tb-slot"><ng-content /></div>
       @if (toolbar().viewToggle) {
         <div class="gantt-tb-group gantt-tb-views">
           @for (v of views(); track v.view) {
-            <button type="button" class="gantt-tb-pill" [attr.aria-pressed]="v.view === view()"
-              (click)="viewChange.emit(v.view)">{{ v.label }}</button>
+            <button
+              type="button"
+              class="gantt-tb-pill"
+              [attr.aria-pressed]="v.view === view()"
+              (click)="viewChange.emit(v.view)"
+            >
+              {{ v.label }}
+            </button>
           }
         </div>
       }
     </div>
   `,
-  styles: [`
-    .gantt-toolbar {
-      display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-      padding: 6px 10px; background: var(--gantt-header-bg); border-bottom: 1px solid var(--gantt-border);
-    }
-    .gantt-tb-group { display: flex; align-items: center; gap: 3px; }
-    .gantt-tb-group + .gantt-tb-group { padding-left: 10px; border-left: 1px solid var(--gantt-border); }
-    .gantt-tb-slot:empty { display: none; }
-    .gantt-tb-views { margin-left: auto; border-left: none !important; }
-    .gantt-tb-btn, .gantt-tb-pill {
-      font: inherit; font-size: 12px; cursor: pointer; border-radius: 5px;
-      border: 1px solid var(--gantt-border); background: var(--gantt-panel-bg); color: var(--gantt-text-sec);
-      padding: 3px 10px;
-    }
-    .gantt-tb-pill { border-color: transparent; background: transparent; padding: 3px 8px; }
-    .gantt-tb-btn:hover, .gantt-tb-pill:hover { color: var(--gantt-text); border-color: var(--gantt-border); }
-    .gantt-tb-pill[aria-pressed="true"] { background: var(--gantt-bar); border-color: var(--gantt-bar); color: #fff; }
-    .gantt-tb-today { color: var(--gantt-today); border-color: color-mix(in srgb, var(--gantt-today) 45%, transparent); }
-  `],
+  styles: [
+    `
+      .gantt-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 6px 10px;
+        background: var(--gantt-header-bg);
+        border-bottom: 1px solid var(--gantt-border);
+      }
+      .gantt-tb-group {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .gantt-tb-group + .gantt-tb-group {
+        padding-left: 10px;
+        border-left: 1px solid var(--gantt-border);
+      }
+      .gantt-tb-slot:empty {
+        display: none;
+      }
+      .gantt-tb-views {
+        margin-left: auto;
+        border-left: none !important;
+      }
+      .gantt-tb-btn,
+      .gantt-tb-pill {
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        border-radius: 5px;
+        border: 1px solid var(--gantt-border);
+        background: var(--gantt-panel-bg);
+        color: var(--gantt-text-sec);
+        padding: 3px 10px;
+      }
+      .gantt-tb-pill {
+        border-color: transparent;
+        background: transparent;
+        padding: 3px 8px;
+      }
+      .gantt-tb-btn:hover,
+      .gantt-tb-pill:hover {
+        color: var(--gantt-text);
+        border-color: var(--gantt-border);
+      }
+      .gantt-tb-pill[aria-pressed='true'] {
+        background: var(--gantt-bar);
+        border-color: var(--gantt-bar);
+        color: #fff;
+      }
+      .gantt-tb-today {
+        color: var(--gantt-today);
+        border-color: color-mix(in srgb, var(--gantt-today) 45%, transparent);
+      }
+    `,
+  ],
 })
 export class GanttToolbarComponent {
   /** @deprecated styling now comes from the `--gantt-*` CSS variables */
-  readonly theme       = input<GanttTheme>();
-  readonly toolbar     = input<ResolvedToolbar>({ zoom: true, viewModes: false, today: true, viewToggle: false });
-  readonly zoomLevels  = input<GanttZoomLevel[]>([]);
+  readonly theme = input<GanttTheme>();
+  readonly toolbar = input<ResolvedToolbar>({ zoom: true, viewModes: false, today: true, viewToggle: false });
+  readonly zoomLevels = input<GanttZoomLevel[]>([]);
   readonly currentView = input<string>('Month');
-  readonly view        = input<GanttView>('split');
+  readonly view = input<GanttView>('split');
 
-  readonly zoomIn         = output<void>();
-  readonly zoomOut        = output<void>();
+  readonly zoomIn = output<void>();
+  readonly zoomOut = output<void>();
   readonly viewModeChange = output<string>();
-  readonly scrollToToday  = output<void>();
-  readonly viewChange     = output<GanttView>();
+  readonly scrollToToday = output<void>();
+  readonly viewChange = output<GanttView>();
 
   protected readonly labels = inject(GanttI18nService).labels;
 

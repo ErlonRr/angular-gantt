@@ -1,7 +1,7 @@
 ---
 name: gantry-feature
 description: Add or change a Gantry feature or configuration option end to end — core render model, Angular and Web Component painters, React/Vue/Svelte bindings, tests, playground, docs and changeset. Use when asked for a new option, a new visual capability, a rendering change, or to "make X configurable".
-argument-hint: "[feature or option to add/change]"
+argument-hint: '[feature or option to add/change]'
 ---
 
 # Add or change a Gantry feature

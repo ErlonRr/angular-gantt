@@ -69,7 +69,7 @@ export abstract class GanttBuiltinBar extends GanttBarBase {
 export const BUILTIN_BAR_HOST = {
   '[attr.data-task-id]': 'ctx().row.task.id',
   '[attr.data-bar-type]': 'ctx().row.barType',
-  'role': 'listitem',
+  role: 'listitem',
   '[attr.aria-label]': 'ariaLabel()',
   '[class.gantt-bar-draggable]': 'ctx().draggable !== false',
   '[class]': "ctx().row.task.className ?? ''",

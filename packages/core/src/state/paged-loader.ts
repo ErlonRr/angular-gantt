@@ -45,16 +45,30 @@ export class PagedLoader<T> {
     this._nextPage = this.startPage;
   }
 
-  get items(): T[] { return this._items; }
-  get isLoading(): boolean { return this._isLoading; }
-  get hasMore(): boolean { return this._hasMore; }
-  get loadedCount(): number { return this._items.length; }
+  get items(): T[] {
+    return this._items;
+  }
+  get isLoading(): boolean {
+    return this._isLoading;
+  }
+  get hasMore(): boolean {
+    return this._hasMore;
+  }
+  get loadedCount(): number {
+    return this._items.length;
+  }
   /** Last failure once the automatic retries are exhausted; `null` otherwise. */
-  get error(): unknown { return this._error; }
+  get error(): unknown {
+    return this._error;
+  }
   /** Page the next `loadNext()` requests (also the page that failed while `error` is set). */
-  get nextPage(): number { return this._nextPage; }
+  get nextPage(): number {
+    return this._nextPage;
+  }
   /** Last page loaded, 0 before the first one. */
-  get page(): number { return this._page; }
+  get page(): number {
+    return this._page;
+  }
 
   /** Listen to every change of items, loading, `hasMore` or error. Returns the unsubscribe function. */
   subscribe(listener: () => void): () => void {

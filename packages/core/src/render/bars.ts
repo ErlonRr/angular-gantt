@@ -17,44 +17,44 @@ const LABEL_PAD = 6;
 export type BarKind = 'task' | 'group' | 'milestone';
 
 export interface BarLabel {
-  text:   string;
-  x:      number;
-  y:      number;
+  text: string;
+  x: number;
+  y: number;
   anchor: 'start' | 'middle' | 'end';
   inside: boolean;
-  color:  string;
+  color: string;
 }
 
 export interface BarVisual {
-  kind:     BarKind;
+  kind: BarKind;
   /** Bounding box (milestones: the shape's box) */
-  x:        number;
-  y:        number;
-  width:    number;
-  height:   number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   /** Vertical centre of the bar */
-  cy:       number;
-  rx:       number;
+  cy: number;
+  rx: number;
   /** SVG path of the bar body */
-  path:     string;
-  fill:     string;
+  path: string;
+  fill: string;
   progress: { path: string; color: string; opacity: number } | null;
-  label:    BarLabel | null;
+  label: BarLabel | null;
   baseline: { x: number; width: number; y: number } | null;
   /** Summary-bar end caps (path), when `groupBar.style === 'summary'` */
-  caps:     string | null;
+  caps: string | null;
   /** Resize hit zones in SVG x coordinates (task bars only) */
-  handles:  { left: [number, number]; right: [number, number] } | null;
+  handles: { left: [number, number]; right: [number, number] } | null;
 }
 
 export interface BarVisualInput {
-  geo:        RowGeometry;
-  cfg:        ResolvedGanttConfig;
-  toX:        (d: Date) => number;
+  geo: RowGeometry;
+  cfg: ResolvedGanttConfig;
+  toX: (d: Date) => number;
   isCritical?: boolean;
   resizable?: boolean;
   /** Font size used for label fitting */
-  fontPx?:    number;
+  fontPx?: number;
 }
 
 /** Rough text width (no DOM measuring): average glyph ≈ 0.56em. */
@@ -87,7 +87,13 @@ export function roundedRectPath(x: number, y: number, w: number, h: number, rl: 
   ].join('');
 }
 
-function milestonePath(shape: 'diamond' | 'circle' | 'square', cx: number, cy: number, size: number, r: number): string {
+function milestonePath(
+  shape: 'diamond' | 'circle' | 'square',
+  cx: number,
+  cy: number,
+  size: number,
+  r: number,
+): string {
   const h = size / 2;
   switch (shape) {
     case 'circle':
@@ -143,8 +149,12 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
 
   // Progress fill (rounded on the left; on the right only when complete)
   let progress: BarVisual['progress'] = null;
-  const showProgress = kind === 'task' ? cfg.bar.progress.show
-    : kind === 'group' ? cfg.bar.progress.show && cfg.groupBar.showProgress : false;
+  const showProgress =
+    kind === 'task'
+      ? cfg.bar.progress.show
+      : kind === 'group'
+        ? cfg.bar.progress.show && cfg.groupBar.showProgress
+        : false;
   const pct = Math.min(Math.max(task.progress ?? 0, 0), 100);
   if (showProgress && pct > 0) {
     const pw = (width * pct) / 100;
@@ -163,21 +173,36 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     baseline = { x: bx, width: Math.max(toX(span.end) - bx, 2), y: Math.min(geo.y + rh - 2, y + height + 3) };
   }
 
-  const handles: BarVisual['handles'] = input.resizable && kind === 'task' && width >= RESIZE_HANDLE_PX * 3
-    ? { left: [x - 2, x + RESIZE_HANDLE_PX], right: [x + width - RESIZE_HANDLE_PX, x + width + 2] }
-    : null;
+  const handles: BarVisual['handles'] =
+    input.resizable && kind === 'task' && width >= RESIZE_HANDLE_PX * 3
+      ? { left: [x - 2, x + RESIZE_HANDLE_PX], right: [x + width - RESIZE_HANDLE_PX, x + width + 2] }
+      : null;
 
   return {
-    kind, x, y, width, height, cy, rx, path, fill, progress,
+    kind,
+    x,
+    y,
+    width,
+    height,
+    cy,
+    rx,
+    path,
+    fill,
+    progress,
     label: computeLabel(task, kind, { x, y, width, height, cy }, fill, cfg, fontPx),
-    baseline, caps, handles,
+    baseline,
+    caps,
+    handles,
   };
 }
 
 function computeLabel(
-  task: GanttTask, kind: BarKind,
+  task: GanttTask,
+  kind: BarKind,
   box: { x: number; y: number; width: number; height: number; cy: number },
-  fill: string, cfg: ResolvedGanttConfig, fontPx: number,
+  fill: string,
+  cfg: ResolvedGanttConfig,
+  fontPx: number,
 ): BarLabel | null {
   const opt = cfg.bar.label;
   if (opt.position === 'none') return null;

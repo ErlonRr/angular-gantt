@@ -8,12 +8,18 @@ import '../index';
 if (!window.localStorage) {
   const store = new Map<string, string>();
   const memoryStorage: Storage = {
-    get length() { return store.size; },
+    get length() {
+      return store.size;
+    },
     clear: () => store.clear(),
     getItem: k => store.get(k) ?? null,
     key: i => [...store.keys()][i] ?? null,
-    removeItem: k => { store.delete(k); },
-    setItem: (k, v) => { store.set(k, String(v)); },
+    removeItem: k => {
+      store.delete(k);
+    },
+    setItem: (k, v) => {
+      store.set(k, String(v));
+    },
   };
   Object.defineProperty(window, 'localStorage', { value: memoryStorage, configurable: true });
 }
@@ -39,8 +45,12 @@ const $$ = (el: GantryElement, sel: string) => [...el.shadowRoot!.querySelectorA
 describe('<gantry-element>', () => {
   let el: GantryElement;
 
-  beforeEach(() => { document.body.innerHTML = ''; });
-  afterEach(() => { el?.remove(); });
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+  afterEach(() => {
+    el?.remove();
+  });
 
   it('is registered and can be created with document.createElement', () => {
     expect(customElements.get('gantry-element')).toBe(GantryElement);
@@ -144,36 +154,46 @@ describe('<gantry-element>', () => {
   });
 
   it('sorts root rows by a column header click (asc → desc → original)', async () => {
-    el = await mount({ tasks: [
-      task('a', '2026-01-01', '2026-01-10', { name: 'Bravo' }),
-      task('b', '2026-01-01', '2026-01-10', { name: 'Alpha' }),
-    ] });
-    const names = () => $$(el, '.gantt-tl-row').map(r => r.textContent?.includes('Alpha') ? 'Alpha' : 'Bravo');
+    el = await mount({
+      tasks: [
+        task('a', '2026-01-01', '2026-01-10', { name: 'Bravo' }),
+        task('b', '2026-01-01', '2026-01-10', { name: 'Alpha' }),
+      ],
+    });
+    const names = () => $$(el, '.gantt-tl-row').map(r => (r.textContent?.includes('Alpha') ? 'Alpha' : 'Bravo'));
     const header = $(el, '.gantt-tl-col-header') as HTMLElement;
-    header.click(); await frame();
+    header.click();
+    await frame();
     expect(names()).toEqual(['Alpha', 'Bravo']);
-    (($(el, '.gantt-tl-col-header')) as HTMLElement).click(); await frame();
+    ($(el, '.gantt-tl-col-header') as HTMLElement).click();
+    await frame();
     expect(names()).toEqual(['Bravo', 'Alpha']);
-    (($(el, '.gantt-tl-col-header')) as HTMLElement).click(); await frame();
+    ($(el, '.gantt-tl-col-header') as HTMLElement).click();
+    await frame();
     expect(names()).toEqual(['Bravo', 'Alpha']);
     expect(el.layout.sort()).toBeNull();
   });
 
   it('collapses and expands groups', async () => {
-    el = await mount({ tasks: [
-      task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group }),
-      task('c', '2026-01-01', '2026-01-10', { parentId: 'g' }),
-    ] });
+    el = await mount({
+      tasks: [
+        task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group }),
+        task('c', '2026-01-01', '2026-01-10', { parentId: 'g' }),
+      ],
+    });
     expect($$(el, '.gantt-tl-row')).toHaveLength(2);
-    el.collapseAll(); await frame();
+    el.collapseAll();
+    await frame();
     expect($$(el, '.gantt-tl-row')).toHaveLength(1);
-    el.expandAll(); await frame();
+    el.expandAll();
+    await frame();
     expect($$(el, '.gantt-tl-row')).toHaveLength(2);
   });
 
   it('loads pages lazily from a dataSource', async () => {
     const fetcher = vi.fn(async (page: number, size: number) =>
-      page > 2 ? [] : Array.from({ length: size }, (_, i) => task(`p${page}-${i}`, '2026-01-01', '2026-01-05')));
+      page > 2 ? [] : Array.from({ length: size }, (_, i) => task(`p${page}-${i}`, '2026-01-01', '2026-01-05')),
+    );
     el = await mount();
     el.dataSource = { fetcher, pageSize: 5 };
     await vi.waitFor(() => expect(el.tasks.length).toBeGreaterThanOrEqual(5));
@@ -213,7 +233,12 @@ describe('<gantry-element>', () => {
 
   it('reports a failure that happened while disconnected once reconnected', async () => {
     let reject!: (e: Error) => void;
-    const fetcher = vi.fn(() => new Promise<GanttTask[]>((_, r) => { reject = r; }));
+    const fetcher = vi.fn(
+      () =>
+        new Promise<GanttTask[]>((_, r) => {
+          reject = r;
+        }),
+    );
     const errors: unknown[] = [];
     el = await mount();
     el.addEventListener('load-error', e => errors.push((e as CustomEvent).detail));
@@ -302,7 +327,8 @@ describe('<gantry-element>', () => {
   });
 
   describe('panel vs table-view columns', () => {
-    const headers = (e: GantryElement) => $$(e, '.gantt-tl-col-header').map(h => h.textContent?.replace(/[⇅▲▼]/g, '').trim());
+    const headers = (e: GantryElement) =>
+      $$(e, '.gantt-tl-col-header').map(h => h.textContent?.replace(/[⇅▲▼]/g, '').trim());
     const plan = () => [
       task('a', '2020-01-01', '2020-01-10', { name: 'Design', progress: 100 }),
       task('b', '2020-01-10', '2020-01-20', { name: 'Build', progress: 20, dependency: 'a' }),
@@ -341,7 +367,10 @@ describe('<gantry-element>', () => {
     });
 
     it('honours panel.columns, table.columns and per-view visibility', async () => {
-      el = await mount({ tasks: plan(), options: { panel: { columns: ['name', 'status'] }, table: { columns: ['id', 'name'] } } });
+      el = await mount({
+        tasks: plan(),
+        options: { panel: { columns: ['name', 'status'] }, table: { columns: ['id', 'name'] } },
+      });
       expect(headers(el)).toEqual(['Task Name', 'Status']);
       el.setColumnVisible('progress', true, 'split');
       await frame();
@@ -349,7 +378,7 @@ describe('<gantry-element>', () => {
       el.setView('table');
       await frame();
       expect(headers(el)).toEqual(['ID', 'Task Name']);
-      el.toggleColumnVisible('status', 'table');   // hidden by the table list → shown at the first call
+      el.toggleColumnVisible('status', 'table'); // hidden by the table list → shown at the first call
       await frame();
       expect(headers(el)).toEqual(['ID', 'Task Name', 'Status']);
     });
@@ -371,7 +400,10 @@ describe('<gantry-element>', () => {
         tasks: [task('long', '2020-01-01', '2020-03-01'), task('short', '2020-01-01', '2020-01-03')],
         options: { table: { columns: ['name', 'owner', 'duration'] } },
       });
-      el.columns = [{ key: 'name', label: 'Name', width: 200 }, { key: 'owner', label: 'Owner', width: 100, render: () => 'Ann' }];
+      el.columns = [
+        { key: 'name', label: 'Name', width: 200 },
+        { key: 'owner', label: 'Owner', width: 100, render: () => 'Ann' },
+      ];
       el.setView('table');
       await frame();
       ($$(el, '.gantt-tl-col-header')[2] as HTMLElement).click();
@@ -447,10 +479,12 @@ describe('<gantry-element>', () => {
     const active = (e: GantryElement) => e.shadowRoot!.activeElement as HTMLElement | null;
 
     it('keeps focus on the toolbar button, sort header and collapse toggle it was on', async () => {
-      el = await mount({ tasks: [
-        task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group }),
-        task('c', '2026-01-01', '2026-01-10', { parentId: 'g' }),
-      ] });
+      el = await mount({
+        tasks: [
+          task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group }),
+          task('c', '2026-01-01', '2026-01-10', { parentId: 'g' }),
+        ],
+      });
       const zoomIn = $(el, '[data-focus-key="zoom-in"]') as HTMLButtonElement;
       zoomIn.focus();
       zoomIn.click();
@@ -499,7 +533,9 @@ describe('<gantry-element>', () => {
 
     it('re-syncs the data source after a reconnect', async () => {
       let release!: () => void;
-      const gate = new Promise<void>(r => { release = r; });
+      const gate = new Promise<void>(r => {
+        release = r;
+      });
       const fetcher = vi.fn(async (page: number) => {
         await gate;
         return page === 1 ? [task('x', '2026-01-01', '2026-01-05')] : [];

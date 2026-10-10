@@ -28,7 +28,8 @@ export function normalizeTasks(tasks: GanttTask[]): GanttTask[] {
 
   // Break cycles: walk up each ancestor chain; a chain that re-enters itself
   // is cut at its last node, which becomes a root.
-  const VISITING = 1, DONE = 2;
+  const VISITING = 1,
+    DONE = 2;
   const state = new Map<string, number>();
   for (const t of tasks) {
     const path: string[] = [];
@@ -81,10 +82,7 @@ function buildChildMap(tasks: GanttTask[]): Map<string | undefined, GanttTask[]>
  * @param tasks         Raw task array (order is not significant)
  * @param collapsedIds  Set of task IDs whose children should be hidden
  */
-export function flattenTree(
-  tasks: GanttTask[],
-  collapsedIds: Set<string> = new Set(),
-): GanttFlatRow[] {
+export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new Set()): GanttFlatRow[] {
   const childMap = buildChildMap(normalizeTasks(tasks));
   const result: GanttFlatRow[] = [];
 
@@ -93,9 +91,7 @@ export function flattenTree(
   const stack: StackEntry[] = [];
 
   // Seed with root tasks (no parentId), sorted by start date
-  const roots = (childMap.get(undefined) ?? [])
-    .slice()
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
+  const roots = (childMap.get(undefined) ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime());
 
   // Push in reverse order so first task ends up on top
   for (let i = roots.length - 1; i >= 0; i--) {
@@ -107,15 +103,18 @@ export function flattenTree(
   while (stack.length) {
     const { task, level, parentHidden } = stack.pop()!;
 
-    const children = (childMap.get(task.id) ?? [])
-      .slice()
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
+    const children = (childMap.get(task.id) ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime());
 
-    const hasChildren  = children.length > 0;
-    const isCollapsed  = collapsedIds.has(task.id);
-    const hidden       = parentHidden;
-    const barType      = task.barType
-      ?? (task.type === TaskType.Milestone ? TaskType.Milestone : task.type === TaskType.Group ? TaskType.Group : TaskType.Task);
+    const hasChildren = children.length > 0;
+    const isCollapsed = collapsedIds.has(task.id);
+    const hidden = parentHidden;
+    const barType =
+      task.barType ??
+      (task.type === TaskType.Milestone
+        ? TaskType.Milestone
+        : task.type === TaskType.Group
+          ? TaskType.Group
+          : TaskType.Task);
 
     const row: GanttFlatRow = {
       task,
@@ -167,14 +166,11 @@ export function reindexVisible(rows: GanttFlatRow[]): GanttFlatRow[] {
 
 export type SortComparator = (a: GanttFlatRow, b: GanttFlatRow) => number;
 
-export const SORT_BY_START: SortComparator = (a, b) =>
-  a.task.start.getTime() - b.task.start.getTime();
+export const SORT_BY_START: SortComparator = (a, b) => a.task.start.getTime() - b.task.start.getTime();
 
-export const SORT_BY_NAME: SortComparator = (a, b) =>
-  a.task.name.localeCompare(b.task.name);
+export const SORT_BY_NAME: SortComparator = (a, b) => a.task.name.localeCompare(b.task.name);
 
-export const SORT_BY_PROGRESS: SortComparator = (a, b) =>
-  (a.task.progress ?? 0) - (b.task.progress ?? 0);
+export const SORT_BY_PROGRESS: SortComparator = (a, b) => (a.task.progress ?? 0) - (b.task.progress ?? 0);
 
 /**
  * Sort only the root-level tasks, preserving child order.
@@ -196,7 +192,10 @@ export function sortRoots(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatR
  * `rows` must be in depth-first order (as produced by `flattenTree`). Stable, O(N log N).
  */
 export function sortTree(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatRow[] {
-  interface Node { row: GanttFlatRow | null; children: Node[] }
+  interface Node {
+    row: GanttFlatRow | null;
+    children: Node[];
+  }
   const root: Node = { row: null, children: [] };
   const path: Node[] = [root];
   for (const row of rows) {
@@ -292,49 +291,49 @@ import { formatDate, durationLabel } from './gantt-math';
 /** @deprecated The legacy five columns. Use `buildBuiltinColumns()` and `resolveViewColumns()`. */
 export const DEFAULT_COLUMNS: ColumnDef[] = [
   {
-    key:     'name',
-    label:   'Task Name',
-    width:   240,
+    key: 'name',
+    label: 'Task Name',
+    width: 240,
     minWidth: 120,
     builtin: true,
     sortable: true,
-    render:  r => r.task.name,
+    render: r => r.task.name,
   },
   {
-    key:     'start',
-    label:   'Start',
-    width:   96,
+    key: 'start',
+    label: 'Start',
+    width: 96,
     minWidth: 72,
     builtin: true,
     sortable: true,
-    render:  r => formatDate(r.task.start),
+    render: r => formatDate(r.task.start),
   },
   {
-    key:     'end',
-    label:   'End',
-    width:   96,
+    key: 'end',
+    label: 'End',
+    width: 96,
     minWidth: 72,
     builtin: true,
     sortable: true,
-    render:  r => formatDate(r.task.end ?? r.task.start),
+    render: r => formatDate(r.task.end ?? r.task.start),
   },
   {
-    key:     'duration',
-    label:   'Duration',
-    width:   80,
+    key: 'duration',
+    label: 'Duration',
+    width: 80,
     minWidth: 60,
     builtin: true,
     sortable: true,
-    render:  r => durationLabel(r.task.start, r.task.end ?? r.task.start),
+    render: r => durationLabel(r.task.start, r.task.end ?? r.task.start),
   },
   {
-    key:     'progress',
-    label:   '%',
-    width:   56,
+    key: 'progress',
+    label: '%',
+    width: 56,
     minWidth: 44,
     builtin: true,
     sortable: true,
-    render:  r => `${r.task.progress ?? 0}%`,
+    render: r => `${r.task.progress ?? 0}%`,
   },
 ];
 
@@ -343,16 +342,52 @@ export const DEFAULT_COLUMNS: ColumnDef[] = [
  * Falls back to English (`DEFAULT_COLUMNS`) equivalents when no i18n is given.
  * @deprecated The legacy five columns. Use `buildBuiltinColumns()` and `resolveViewColumns()`.
  */
-export function buildDefaultColumns(
-  labels: GanttLabels,
-  locale?: string,
-  dateFormat = 'MMM D, YYYY',
-): ColumnDef[] {
+export function buildDefaultColumns(labels: GanttLabels, locale?: string, dateFormat = 'MMM D, YYYY'): ColumnDef[] {
   return [
-    { key: 'name',     label: labels.colName,     width: 240, minWidth: 120, builtin: true, sortable: true, render: r => r.task.name },
-    { key: 'start',    label: labels.colStart,    width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.start, dateFormat, locale) },
-    { key: 'end',      label: labels.colEnd,      width: 96,  minWidth: 72,  builtin: true, sortable: true, render: r => formatDate(r.task.end ?? r.task.start, dateFormat, locale) },
-    { key: 'duration', label: labels.colDuration, width: 80,  minWidth: 60,  builtin: true, sortable: true, render: r => durationLabel(r.task.start, r.task.end ?? r.task.start, labels) },
-    { key: 'progress', label: labels.colProgress, width: 56,  minWidth: 44,  builtin: true, sortable: true, render: r => `${r.task.progress ?? 0}%` },
+    {
+      key: 'name',
+      label: labels.colName,
+      width: 240,
+      minWidth: 120,
+      builtin: true,
+      sortable: true,
+      render: r => r.task.name,
+    },
+    {
+      key: 'start',
+      label: labels.colStart,
+      width: 96,
+      minWidth: 72,
+      builtin: true,
+      sortable: true,
+      render: r => formatDate(r.task.start, dateFormat, locale),
+    },
+    {
+      key: 'end',
+      label: labels.colEnd,
+      width: 96,
+      minWidth: 72,
+      builtin: true,
+      sortable: true,
+      render: r => formatDate(r.task.end ?? r.task.start, dateFormat, locale),
+    },
+    {
+      key: 'duration',
+      label: labels.colDuration,
+      width: 80,
+      minWidth: 60,
+      builtin: true,
+      sortable: true,
+      render: r => durationLabel(r.task.start, r.task.end ?? r.task.start, labels),
+    },
+    {
+      key: 'progress',
+      label: labels.colProgress,
+      width: 56,
+      minWidth: 44,
+      builtin: true,
+      sortable: true,
+      render: r => `${r.task.progress ?? 0}%`,
+    },
   ];
 }

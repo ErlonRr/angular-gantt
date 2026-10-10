@@ -16,14 +16,7 @@
 
 import { Injectable, signal, computed } from '@angular/core';
 
-import {
-  GanttTask,
-  GanttFlatRow,
-  RowGeometry,
-  GanttView,
-  GanttI18n,
-  ColumnDef,
-} from '../types';
+import { GanttTask, GanttFlatRow, RowGeometry, GanttView, GanttI18n, ColumnDef } from '../types';
 
 import {
   flattenTree,
@@ -55,7 +48,6 @@ export interface GanttSortState {
 
 @Injectable()
 export class GanttLayoutService {
-
   // ══════════════════════════════════════════════════════════
   //  Primary writable signals  (set by GantryComponent)
   // ══════════════════════════════════════════════════════════
@@ -111,12 +103,14 @@ export class GanttLayoutService {
   // ══════════════════════════════════════════════════════════
 
   /** Values time- and data-dependent cells read (status, predecessors, sort order) */
-  readonly columnContext = computed<ColumnContext>(() => buildColumnContext({
-    tasks: this.tasks(),
-    config: this.configSource()?.() ?? this.config(),
-    now: new Date(this.now()),
-    locale: (this.i18nSource()?.() ?? this.i18n())?.locale,
-  }));
+  readonly columnContext = computed<ColumnContext>(() =>
+    buildColumnContext({
+      tasks: this.tasks(),
+      config: this.configSource()?.() ?? this.config(),
+      now: new Date(this.now()),
+      locale: (this.i18nSource()?.() ?? this.i18n())?.locale,
+    }),
+  );
 
   /** All rows (DFS flat, including hidden); a sort reorders siblings at every level */
   readonly allRows = computed<GanttFlatRow[]>(() => {
@@ -128,9 +122,7 @@ export class GanttLayoutService {
   });
 
   /** Visible rows only (hidden === false) */
-  readonly visibleRows = computed<GanttFlatRow[]>(() =>
-    reindexVisible(filterVisible(this.allRows()))
-  );
+  readonly visibleRows = computed<GanttFlatRow[]>(() => reindexVisible(filterVisible(this.allRows())));
 
   readonly rowCount = computed(() => this.visibleRows().length);
 
@@ -145,49 +137,50 @@ export class GanttLayoutService {
     return c;
   });
 
-  readonly timeline = computed<TimelineModel>(() => buildTimeline({
-    tasks: this.tasks(),
-    config: this.cfg(),
-    viewportWidth: this.viewportWidth(),
-    i18n: this.i18nSource()?.() ?? this.i18n(),
-    now: new Date(this.now()),
-  }));
-
-  readonly rowGeometries = computed<RowGeometry[]>(() =>
-    computeRowGeometries(this.visibleRows(), this.timeline(), this.cfg())
+  readonly timeline = computed<TimelineModel>(() =>
+    buildTimeline({
+      tasks: this.tasks(),
+      config: this.cfg(),
+      viewportWidth: this.viewportWidth(),
+      i18n: this.i18nSource()?.() ?? this.i18n(),
+      now: new Date(this.now()),
+    }),
   );
 
-  readonly geometryById = computed<Map<string, RowGeometry>>(() =>
-    new Map(this.rowGeometries().map(g => [g.row.task.id, g]))
+  readonly rowGeometries = computed<RowGeometry[]>(() =>
+    computeRowGeometries(this.visibleRows(), this.timeline(), this.cfg()),
+  );
+
+  readonly geometryById = computed<Map<string, RowGeometry>>(
+    () => new Map(this.rowGeometries().map(g => [g.row.task.id, g])),
   );
 
   // ── Convenience accessors (stable public API) ─────────────
 
-  readonly rowHeight        = computed(() => this.cfg().rowHeight);
-  readonly startDate        = computed(() => this.timeline().start);
-  readonly endDate          = computed(() => this.timeline().end);
-  readonly pxPerDay         = computed(() => this.timeline().pxPerDay);
-  readonly totalWidth       = computed(() => this.timeline().totalWidth);
-  readonly totalHeight      = computed(() => this.rowCount() * this.rowHeight());
+  readonly rowHeight = computed(() => this.cfg().rowHeight);
+  readonly startDate = computed(() => this.timeline().start);
+  readonly endDate = computed(() => this.timeline().end);
+  readonly pxPerDay = computed(() => this.timeline().pxPerDay);
+  readonly totalWidth = computed(() => this.timeline().totalWidth);
+  readonly totalHeight = computed(() => this.rowCount() * this.rowHeight());
   readonly totalHeaderHeight = computed(() => this.timeline().headerHeight);
-  readonly todayX           = computed(() => this.timeline().todayX);
-  readonly showBaseline     = computed(() => this.cfg().baseline);
+  readonly todayX = computed(() => this.timeline().todayX);
+  readonly showBaseline = computed(() => this.cfg().baseline);
   readonly showCriticalPath = computed(() => this.cfg().criticalPath);
-  readonly showToday        = computed(() => this.cfg().showToday);
-  readonly panelVisible     = computed(() => this.view() === 'split');
+  readonly showToday = computed(() => this.cfg().showToday);
+  readonly panelVisible = computed(() => this.view() === 'split');
 
   /** Vertical grid lines (major = period delimiters) */
   readonly gridLines = computed<GridLine[]>(() => {
     const tl = this.timeline();
-    return [
-      ...tl.minorLines.map(x => ({ x, isMajor: false })),
-      ...tl.majorLines.map(x => ({ x, isMajor: true })),
-    ].sort((a, b) => a.x - b.x);
+    return [...tl.minorLines.map(x => ({ x, isMajor: false })), ...tl.majorLines.map(x => ({ x, isMajor: true }))].sort(
+      (a, b) => a.x - b.x,
+    );
   });
 
   readonly layoutParams = computed(() => ({
-    origin:    this.startDate(),
-    pxPerDay:  this.pxPerDay(),
+    origin: this.startDate(),
+    pxPerDay: this.pxPerDay(),
     rowHeight: this.rowHeight(),
   }));
 
@@ -233,9 +226,7 @@ export class GanttLayoutService {
 
   /** Update a single task in-place (no full re-render of unrelated rows) */
   updateTask(taskId: string, patch: Partial<GanttTask>): void {
-    this.tasks.update(tasks =>
-      tasks.map(t => t.id === taskId ? { ...t, ...patch } : t)
-    );
+    this.tasks.update(tasks => tasks.map(t => (t.id === taskId ? { ...t, ...patch } : t)));
   }
 
   private readonly seenIds = new Set<string>();

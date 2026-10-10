@@ -58,8 +58,13 @@ import {
   GanttFlatRow,
 } from '../types';
 import {
-  resolveConfig, resolveLength, initialScrollLeft, initialScrollChanged, zoomAnchorScroll,
-  type ResolvedGanttConfig, type TimelineModel,
+  resolveConfig,
+  resolveLength,
+  initialScrollLeft,
+  initialScrollChanged,
+  zoomAnchorScroll,
+  type ResolvedGanttConfig,
+  type TimelineModel,
 } from '@gantry/core';
 
 import { GanttLayoutService } from '../layout/gantt-layout.service';
@@ -95,10 +100,12 @@ const SPLITTER_PX = 6;
     GanttSelectionService,
     GanttDragService,
   ],
-  hostDirectives: [{
-    directive: GanttKeyboardDirective,
-    inputs: ['visibleRows'],
-  }],
+  hostDirectives: [
+    {
+      directive: GanttKeyboardDirective,
+      inputs: ['visibleRows'],
+    },
+  ],
   imports: [
     GanttToolbarComponent,
     GanttHeaderComponent,
@@ -107,7 +114,7 @@ const SPLITTER_PX = 6;
     GanttLoadMoreComponent,
   ],
   host: {
-    'class': 'gantry',
+    class: 'gantry',
     '[attr.data-view]': 'layout.view()',
     '[style.display]': '"flex"',
     '[style.flex-direction]': '"column"',
@@ -210,7 +217,9 @@ const SPLITTER_PX = 6;
               [title]="layout.view() === 'split' ? i18n.labels().hidePanel : i18n.labels().showPanel"
               (pointerdown)="$event.stopPropagation()"
               (click)="togglePanel()"
-            >{{ layout.view() === 'split' ? '‹' : '›' }}</button>
+            >
+              {{ layout.view() === 'split' ? '‹' : '›' }}
+            </button>
           }
         </div>
       }
@@ -251,9 +260,15 @@ const SPLITTER_PX = 6;
         @for (item of legendItems(); track item.label) {
           <span class="gantt-legend-item">
             <svg width="18" height="12" aria-hidden="true">
-              <line x1="9" y1="0" x2="9" y2="12"
-                [attr.stroke]="item.color" stroke-width="2"
-                [attr.stroke-dasharray]="item.dashed ? '3 2' : null" />
+              <line
+                x1="9"
+                y1="0"
+                x2="9"
+                y2="12"
+                [attr.stroke]="item.color"
+                stroke-width="2"
+                [attr.stroke-dasharray]="item.dashed ? '3 2' : null"
+              />
             </svg>
             <span>{{ item.label }}</span>
           </span>
@@ -264,79 +279,168 @@ const SPLITTER_PX = 6;
     <!-- ── Consumer footer slot ──────────────────────────────── -->
     <ng-content select="[ganttFooter]" />
   `,
-  styles: [`
-    :host { box-sizing: border-box; outline: none; }
-    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #2563EB); }
+  styles: [
+    `
+      :host {
+        box-sizing: border-box;
+        outline: none;
+      }
+      :host(:focus-visible) {
+        box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #2563eb);
+      }
 
-    .gantry-main { display: flex; flex: 1; overflow: hidden; min-height: 0; position: relative; }
+      .gantry-main {
+        display: flex;
+        flex: 1;
+        overflow: hidden;
+        min-height: 0;
+        position: relative;
+      }
 
-    .gantt-panel-scroll {
-      flex: 0 0 auto;
-      overflow-x: auto;
-      overflow-y: hidden;
-      background: var(--gantt-panel-bg);
-      transition: width .25s ease;
-    }
-    .gantt-timeline-scroll {
-      flex: 1;
-      overflow: auto;
-      position: relative;
-      min-width: 0;
-      min-height: 0;
-      background: var(--gantt-bg);
-      transition: opacity .25s ease;
-    }
-    .gantt-timeline-header { position: sticky; top: 0; z-index: 10; background: var(--gantt-header-bg); width: max-content; }
-    :host([data-view="table"]) .gantt-timeline-scroll { opacity: 0; pointer-events: none; }
-    .is-resizing .gantt-panel-scroll { transition: none; }
+      .gantt-panel-scroll {
+        flex: 0 0 auto;
+        overflow-x: auto;
+        overflow-y: hidden;
+        background: var(--gantt-panel-bg);
+        transition: width 0.25s ease;
+      }
+      .gantt-timeline-scroll {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+        background: var(--gantt-bg);
+        transition: opacity 0.25s ease;
+      }
+      .gantt-timeline-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--gantt-header-bg);
+        width: max-content;
+      }
+      :host([data-view='table']) .gantt-timeline-scroll {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .is-resizing .gantt-panel-scroll {
+        transition: none;
+      }
 
-    .gantry-splitter {
-      flex: 0 0 6px;
-      position: relative;
-      cursor: col-resize;
-      background: linear-gradient(to right, transparent 2px, var(--gantt-panel-border) 2px, var(--gantt-panel-border) 3px, transparent 3px);
-      z-index: 12;
-      outline: none;
-    }
-    .gantry-splitter:hover, .gantry-splitter:focus-visible, .is-resizing .gantry-splitter {
-      background: linear-gradient(to right, transparent 1px, var(--gantt-sel-border) 1px, var(--gantt-sel-border) 4px, transparent 4px);
-    }
-    .gantry-splitter.is-locked { cursor: default; }
-    .gantry-splitter-toggle {
-      position: absolute; left: 50%; transform: translate(-50%, -50%);
-      width: 18px; height: 32px; padding: 0;
-      border: 1px solid var(--gantt-border); border-radius: 9px;
-      background: var(--gantt-panel-bg); color: var(--gantt-text-sec);
-      font-size: 15px; font-weight: 600; line-height: 1; cursor: pointer;
-      box-shadow: 0 1px 4px rgba(0,0,0,.12); opacity: .85;
-    }
-    .gantry-splitter-toggle:hover { opacity: 1; color: var(--gantt-text); border-color: var(--gantt-sel-border); }
+      .gantry-splitter {
+        flex: 0 0 6px;
+        position: relative;
+        cursor: col-resize;
+        background: linear-gradient(
+          to right,
+          transparent 2px,
+          var(--gantt-panel-border) 2px,
+          var(--gantt-panel-border) 3px,
+          transparent 3px
+        );
+        z-index: 12;
+        outline: none;
+      }
+      .gantry-splitter:hover,
+      .gantry-splitter:focus-visible,
+      .is-resizing .gantry-splitter {
+        background: linear-gradient(
+          to right,
+          transparent 1px,
+          var(--gantt-sel-border) 1px,
+          var(--gantt-sel-border) 4px,
+          transparent 4px
+        );
+      }
+      .gantry-splitter.is-locked {
+        cursor: default;
+      }
+      .gantry-splitter-toggle {
+        position: absolute;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 18px;
+        height: 32px;
+        padding: 0;
+        border: 1px solid var(--gantt-border);
+        border-radius: 9px;
+        background: var(--gantt-panel-bg);
+        color: var(--gantt-text-sec);
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        opacity: 0.85;
+      }
+      .gantry-splitter-toggle:hover {
+        opacity: 1;
+        color: var(--gantt-text);
+        border-color: var(--gantt-sel-border);
+      }
 
-    .gantt-legend {
-      position: absolute; bottom: 12px; right: 12px; z-index: 15;
-      display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-radius: 8px; font-size: 11px;
-      background: var(--gantt-panel-bg); border: 1px solid var(--gantt-border); color: var(--gantt-text-sec);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.12); pointer-events: none;
-    }
-    .gantt-legend-title { font-weight: 700; text-transform: uppercase; letter-spacing: .4px; font-size: 9.5px; color: var(--gantt-text-muted); }
-    .gantt-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--gantt-text); }
+      .gantt-legend {
+        position: absolute;
+        bottom: 12px;
+        right: 12px;
+        z-index: 15;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 11px;
+        background: var(--gantt-panel-bg);
+        border: 1px solid var(--gantt-border);
+        color: var(--gantt-text-sec);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        pointer-events: none;
+      }
+      .gantt-legend-title {
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        font-size: 9.5px;
+        color: var(--gantt-text-muted);
+      }
+      .gantt-legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+        color: var(--gantt-text);
+      }
 
-    .gantt-timeline-scroll, .gantt-panel-scroll {
-      scrollbar-width: thin;
-      scrollbar-color: var(--gantt-scrollbar-thumb, #CBD5E1) var(--gantt-scrollbar-track, #F1F5F9);
-    }
-    .gantt-timeline-scroll::-webkit-scrollbar, .gantt-panel-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-    .gantt-timeline-scroll::-webkit-scrollbar-track, .gantt-panel-scroll::-webkit-scrollbar-track { background: var(--gantt-scrollbar-track, #F1F5F9); }
-    .gantt-timeline-scroll::-webkit-scrollbar-thumb, .gantt-panel-scroll::-webkit-scrollbar-thumb {
-      background: var(--gantt-scrollbar-thumb, #CBD5E1); border-radius: 3px;
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .gantt-panel-scroll, .gantt-timeline-scroll { transition: none; }
-    }
-  `],
+      .gantt-timeline-scroll,
+      .gantt-panel-scroll {
+        scrollbar-width: thin;
+        scrollbar-color: var(--gantt-scrollbar-thumb, #cbd5e1) var(--gantt-scrollbar-track, #f1f5f9);
+      }
+      .gantt-timeline-scroll::-webkit-scrollbar,
+      .gantt-panel-scroll::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .gantt-timeline-scroll::-webkit-scrollbar-track,
+      .gantt-panel-scroll::-webkit-scrollbar-track {
+        background: var(--gantt-scrollbar-track, #f1f5f9);
+      }
+      .gantt-timeline-scroll::-webkit-scrollbar-thumb,
+      .gantt-panel-scroll::-webkit-scrollbar-thumb {
+        background: var(--gantt-scrollbar-thumb, #cbd5e1);
+        border-radius: 3px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .gantt-panel-scroll,
+        .gantt-timeline-scroll {
+          transition: none;
+        }
+      }
+    `,
+  ],
 })
 export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
-
   // ── Injected services ─────────────────────────────────────
   protected readonly layout = inject(GanttLayoutService);
   protected readonly scrollSvc = inject(GanttScrollService);
@@ -381,7 +485,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Resolved configuration (shared render model) ─────────
   protected readonly cfg = computed<ResolvedGanttConfig>(() =>
-    resolveConfig({ ...this.options(), viewMode: this.layout.viewMode() }, this.themeSvc.resolvedTheme(), this.i18n.bundle()),
+    resolveConfig(
+      { ...this.options(), viewMode: this.layout.viewMode() },
+      this.themeSvc.resolvedTheme(),
+      this.i18n.bundle(),
+    ),
   );
   protected readonly theme = computed(() => this.cfg().theme);
   /** Consumer columns: `options.columns` wins over the `columns` input (compared by reference) */
@@ -406,7 +514,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     if (view === 'table') return hostW;
     if (view === 'chart') return 0;
     const cfg = this.cfg();
-    return this.clampPanel(this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320), cfg, hostW - SPLITTER_PX);
+    return this.clampPanel(
+      this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320),
+      cfg,
+      hostW - SPLITTER_PX,
+    );
   });
 
   /** Keep both panes' bottoms level despite either one's horizontal scrollbar */
@@ -454,13 +566,18 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Critical path ─────────────────────────────────────────
   /** Only these config fields affect the critical path (cfg itself changes with theme, i18n…) */
-  private readonly cpmConfig = computed(() => {
-    const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
-    return { criticalPath, endDateMode, normalizeDateOnly };
-  }, {
-    equal: (a, b) => a.criticalPath === b.criticalPath && a.endDateMode === b.endDateMode
-      && a.normalizeDateOnly === b.normalizeDateOnly,
-  });
+  private readonly cpmConfig = computed(
+    () => {
+      const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
+      return { criticalPath, endDateMode, normalizeDateOnly };
+    },
+    {
+      equal: (a, b) =>
+        a.criticalPath === b.criticalPath &&
+        a.endDateMode === b.endDateMode &&
+        a.normalizeDateOnly === b.normalizeDateOnly,
+    },
+  );
   readonly criticalIds = computed<Set<string>>(() => {
     const cfg = this.cpmConfig();
     if (!cfg.criticalPath) return new Set();
@@ -480,8 +597,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   });
 
   constructor() {
-    this.layout.bindConfig(() => this.cfg(), () => this.i18n.bundle());
-    this.layout.bindColumns(() => this.colSvc.columns(), () => this.colSvc.builtins());
+    this.layout.bindConfig(
+      () => this.cfg(),
+      () => this.i18n.bundle(),
+    );
+    this.layout.bindColumns(
+      () => this.colSvc.columns(),
+      () => this.colSvc.builtins(),
+    );
     // Every selection change — canvas, task list, keyboard or API — reaches the output
     this.selSvc.onChange = e => this.selectionChange.emit(e);
 
@@ -593,7 +716,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     const view = opts.view ?? (opts.panel?.collapsed || opts.panelVisible === false ? 'chart' : undefined);
     const prevView = prev.view ?? (prev.panel?.collapsed || prev.panelVisible === false ? 'chart' : undefined);
     if (view && view !== prevView) this.layout.view.set(view);
-    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) this.layout.panelWidthPx.set(null);
+    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth)
+      this.layout.panelWidthPx.set(null);
     if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this._initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this._restoredStateKey) {
       this._restoredStateKey = opts.stateKey;
@@ -663,7 +787,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     const startW = this.panelPx();
     const available = (this.mainWidth() || 1000) - SPLITTER_PX;
     this.splitterDragging.set(true);
-    try { el.setPointerCapture(e.pointerId); } catch { /* synthetic event */ }
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      /* synthetic event */
+    }
     const move = (ev: PointerEvent) =>
       this.layout.panelWidthPx.set(this.clampPanel(startW + ev.clientX - startX, cfg, available));
     const end = () => {
@@ -683,10 +811,16 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       this.togglePanel();
-    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && this.layout.view() === 'split' && this.cfg().panel.resizable) {
+    } else if (
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+      this.layout.view() === 'split' &&
+      this.cfg().panel.resizable
+    ) {
       e.preventDefault();
       const available = (this.mainWidth() || 1000) - SPLITTER_PX;
-      this.layout.panelWidthPx.set(this.clampPanel(this.panelPx() + (e.key === 'ArrowLeft' ? -24 : 24), this.cfg(), available));
+      this.layout.panelWidthPx.set(
+        this.clampPanel(this.panelPx() + (e.key === 'ArrowLeft' ? -24 : 24), this.cfg(), available),
+      );
       this.saveState();
     }
   }
@@ -719,10 +853,16 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Public API ────────────────────────────────────────────
 
-  zoomIn(): void { this.layout.zoomIn(); }
-  zoomOut(): void { this.layout.zoomOut(); }
+  zoomIn(): void {
+    this.layout.zoomIn();
+  }
+  zoomOut(): void {
+    this.layout.zoomOut();
+  }
 
-  setViewMode(mode: ViewMode | string): void { this.layout.viewMode.set(mode); }
+  setViewMode(mode: ViewMode | string): void {
+    this.layout.viewMode.set(mode);
+  }
 
   /** Switch view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). */
   setView(view: GanttView): void {
@@ -744,12 +884,15 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   scrollToDate(date: Date, behavior: ScrollBehavior = 'smooth'): void {
     // After the next render, so a pending zoom change has painted its new timeline
     // (the environment injector makes the hook schedule that render)
-    afterNextRender(() => {
-      if (!this.canvasEl()) return;
-      this._initialScrollDone = true;
-      const x = this.layout.timeline().toX(date);
-      this.scrollSvc.scrollToX(x - this.scrollSvc.viewportWidth / 2, behavior);
-    }, { injector: this.envInjector });
+    afterNextRender(
+      () => {
+        if (!this.canvasEl()) return;
+        this._initialScrollDone = true;
+        const x = this.layout.timeline().toX(date);
+        this.scrollSvc.scrollToX(x - this.scrollSvc.viewportWidth / 2, behavior);
+      },
+      { injector: this.envInjector },
+    );
   }
 
   /** Scroll the given task into view (vertically and horizontally). */
@@ -766,9 +909,13 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     return tasks.filter(t => ids.includes(t.id));
   }
 
-  setSelectedTasks(ids: string[]): void { this.selSvc.setSelected(ids); }
+  setSelectedTasks(ids: string[]): void {
+    this.selSvc.setSelected(ids);
+  }
 
-  clearSelection(): void { this.selSvc.clear(); }
+  clearSelection(): void {
+    this.selSvc.clear();
+  }
 
   selectAll(): void {
     const { enabled, multi } = this.cfg().selection;
@@ -780,16 +927,28 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.layout.updateTask(id, patch);
   }
 
-  appendTasks(tasks: GanttTask[]): void { this.layout.appendTasks(tasks); }
+  appendTasks(tasks: GanttTask[]): void {
+    this.layout.appendTasks(tasks);
+  }
 
-  collapseAll(): void { this.layout.collapseAll(); this.saveState(); }
-  expandAll(): void { this.layout.expandAll(); this.saveState(); }
+  collapseAll(): void {
+    this.layout.collapseAll();
+    this.saveState();
+  }
+  expandAll(): void {
+    this.layout.expandAll();
+    this.saveState();
+  }
 
   /** Show / hide a column. */
   /** Show / hide a column in both views, or only in the split panel / the table view. */
-  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void { this.colSvc.setVisible(key, visible, view); }
+  setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void {
+    this.colSvc.setVisible(key, visible, view);
+  }
   /** Show a column if the view (both views by default) hides it, else hide it. */
-  toggleColumnVisible(key: string, view?: 'split' | 'table'): void { this.colSvc.toggleVisible(key, view, this.cfg()); }
+  toggleColumnVisible(key: string, view?: 'split' | 'table'): void {
+    this.colSvc.toggleVisible(key, view, this.cfg());
+  }
 
   setTheme(override: Partial<GanttTheme>): void {
     this.themeSvc.setCustomTheme(override);
@@ -832,7 +991,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.stateChange.emit(state);
       const key = this.options().stateKey;
       if (key) {
-        try { window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state)); } catch { /* storage unavailable */ }
+        try {
+          window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state));
+        } catch {
+          /* storage unavailable */
+        }
       }
     }, 150);
   }
