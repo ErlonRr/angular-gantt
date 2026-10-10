@@ -16,7 +16,7 @@
 
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { GanttAnnotation, GanttTheme, GanttLayoutParams } from '../types';
+import { type GanttAnnotation, type GanttTheme, type GanttLayoutParams } from '../types';
 import { dateToPixel } from '../gantt-math';
 
 // ─── Resolved annotation (dates converted to px) ─────────────
@@ -44,7 +44,7 @@ interface ResolvedAnnotation {
     @for (ann of resolved(); track ann.x1) {
       <!-- ── Shaded region (x1 → x2) ──────────────────────── -->
       @if (ann.x2 !== null) {
-        <rect
+        <svg:rect
           [attr.x]="ann.x1"
           y="0"
           [attr.width]="ann.x2 - ann.x1"
@@ -55,7 +55,7 @@ interface ResolvedAnnotation {
       }
 
       <!-- ── Vertical line ─────────────────────────────────── -->
-      <line
+      <svg:line
         [attr.x1]="ann.x1"
         [attr.y1]="0"
         [attr.x2]="ann.x1"
@@ -68,9 +68,9 @@ interface ResolvedAnnotation {
 
       <!-- ── Today triangle marker ─────────────────────────── -->
       @if (ann.isToday) {
-        <polygon animate.enter="gantt-today-enter" [attr.points]="todayTriangle(ann.x1)" [attr.fill]="ann.color" />
+        <svg:polygon animate.enter="gantt-today-enter" [attr.points]="todayTriangle(ann.x1)" [attr.fill]="ann.color" />
         <!-- Today label -->
-        <text
+        <svg:text
           animate.enter="gantt-today-enter"
           [attr.x]="ann.x1 + 5"
           [attr.y]="16"
@@ -79,15 +79,16 @@ interface ResolvedAnnotation {
           font-weight="600"
           [attr.font-family]="theme().fontFamily"
           style="user-select:none;"
-          >TODAY</text
         >
+          TODAY
+        </svg:text>
       }
 
       <!-- ── Annotation label ───────────────────────────────── -->
       @if (ann.raw.label && !ann.isToday) {
-        <g>
+        <svg:g>
           <!-- Label background pill -->
-          <rect
+          <svg:rect
             [attr.x]="ann.x1 + 4"
             [attr.y]="2"
             [attr.width]="labelWidth(ann.raw.label.text)"
@@ -96,7 +97,7 @@ interface ResolvedAnnotation {
             [attr.fill]="ann.color"
             [attr.opacity]="0.15"
           />
-          <text
+          <svg:text
             [attr.x]="ann.x1 + 8"
             [attr.y]="13"
             [attr.fill]="ann.raw.label.color ?? ann.color"
@@ -105,9 +106,10 @@ interface ResolvedAnnotation {
             [attr.font-family]="theme().fontFamily"
             dominant-baseline="central"
             style="user-select:none;"
-            >{{ ann.raw.label.text }}</text
           >
-        </g>
+            {{ ann.raw.label.text }}
+          </svg:text>
+        </svg:g>
       }
     }
   `,

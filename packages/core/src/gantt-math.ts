@@ -14,9 +14,18 @@ dayjs.extend(isoWeek);
 dayjs.extend(quarterOfYear);
 dayjs.extend(advancedFormat);
 
-import { ViewMode, HeaderCell, HeaderRow, GanttTask, GanttI18n, GanttLabels, TimeUnit } from './types';
+import {
+  ViewMode,
+  type HeaderCell,
+  type HeaderRow,
+  type GanttTask,
+  type GanttI18n,
+  type GanttLabels,
+  type TimeUnit,
+} from './types';
 import {
   DEFAULT_ZOOM_LEVELS,
+  bottomScale,
   findZoomLevel,
   withLegacyHeaderFormats,
   buildTiers,
@@ -57,6 +66,8 @@ export const HEADER_HEIGHTS: Record<ViewMode, [number, number]> = {
 // daylight-saving changes). A plain `ms / 86_400_000` drifts by an hour per DST
 // change and misplaces bars against the day cells.
 
+// The one legitimate ms-per-day: converting a UTC calendar date to a day number
+// eslint-disable-next-line no-restricted-syntax
 const DAY_MS = 86_400_000;
 
 /** `true` for dates like `new Date('2026-01-05')`: midnight UTC, not local midnight. */
@@ -85,7 +96,7 @@ export function toLocalDay(d: Date): Date {
 export function parseDate(input: string | number | Date): Date {
   if (typeof input === 'string') {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-    if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   }
   return new Date(input);
 }
@@ -210,13 +221,13 @@ export function getTimelineRange(
   weekStart: 0 | 1 = 1,
 ): TimelineRange {
   const level = findZoomLevel(DEFAULT_ZOOM_LEVELS, viewMode);
-  return snapRange(tasks, level.scales[level.scales.length - 1], paddingDays, includeDate, weekStart);
+  return snapRange(tasks, bottomScale(level.scales), paddingDays, includeDate, weekStart);
 }
 
 /** Range snapped to whole cells of `scale` (shared by `getTimelineRange` and the timeline model). */
 export function snapRange(
   tasks: GanttTask[],
-  scale: { unit: TimeUnit; step?: number },
+  scale: { unit: TimeUnit; step?: number | undefined },
   paddingDays: number,
   includeDate?: Date | null,
   weekStart: 0 | 1 = 1,
@@ -254,14 +265,14 @@ export function generateHeaderRows(
     end,
     pxPerDay,
     heights: HEADER_HEIGHTS[viewMode] ?? [32, 28],
-    locale: i18n?.locale,
-    labels: i18n?.labels,
+    ...(i18n?.locale !== undefined && { locale: i18n.locale }),
+    ...(i18n?.labels && { labels: i18n.labels }),
   });
   const toRow = (t: ScaleTier): HeaderRow => ({
     height: t.height,
     cells: t.cells.map(c => ({ label: c.label, x: c.x, width: c.width, dateKey: c.start.toISOString() })),
   });
-  return [toRow(tiers[0]), toRow(tiers[tiers.length - 1])];
+  return [toRow(tiers[0]!), toRow(tiers.at(-1)!)];
 }
 
 // ─── Grid line generation ─────────────────────────────────────
@@ -269,7 +280,7 @@ export function generateHeaderRows(
 export interface GridLine {
   x: number;
   isMajor: boolean;
-  label?: string;
+  label?: string | undefined;
 }
 
 /**
@@ -303,12 +314,12 @@ const VIEW_ORDER: ViewMode[] = [
 
 export function zoomIn(current: ViewMode): ViewMode {
   const idx = VIEW_ORDER.indexOf(current);
-  return idx > 0 ? VIEW_ORDER[idx - 1] : current;
+  return VIEW_ORDER[idx - 1] ?? current;
 }
 
 export function zoomOut(current: ViewMode): ViewMode {
   const idx = VIEW_ORDER.indexOf(current);
-  return idx < VIEW_ORDER.length - 1 ? VIEW_ORDER[idx + 1] : current;
+  return idx < 0 ? current : (VIEW_ORDER[idx + 1] ?? current);
 }
 
 // ─── Utility ─────────────────────────────────────────────────

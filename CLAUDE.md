@@ -26,17 +26,19 @@ Angular (`projects/gantry/src/lib`) and the Web Component (`packages/vanilla/src
 
 pnpm 10.33 workspace. If `pnpm` fails (unconfigured mise shim) use `npx -y pnpm@10.33.0 <cmd>`.
 
-| Task                                                                                | Command                                                                                  |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Unit tests (core in Node + Web Component in happy-dom, ~3 s)                        | `pnpm test` · one project: `npx vitest run --project core`                               |
-| Date code in other time zones                                                       | `pnpm test:tz`                                                                           |
-| Typecheck all packages                                                              | `pnpm typecheck`                                                                         |
-| Build everything (packages → ngx-gantry → showcase → demos)                         | `pnpm build`                                                                             |
-| Angular library only (needs `@gantry/core` built)                                   | `pnpm --filter @gantry/core build && pnpm build:lib`                                     |
-| Dev servers                                                                         | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte` |
-| Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors) | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`               |
-| Screenshot baselines (Playwright container = CI pixels)                             | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate                           |
-| Release notes for a change                                                          | `pnpm changeset`                                                                         |
+| Task                                                                                   | Command                                                                                  |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Unit tests (core in Node + Web Component in happy-dom, ~3 s)                           | `pnpm test` · one project: `npx vitest run --project core`                               |
+| Date code in other time zones                                                          | `pnpm test:tz`                                                                           |
+| Typecheck packages, demos, e2e and the Angular projects                                | `pnpm typecheck`                                                                         |
+| Lint (type-checked TS, Angular templates + a11y, Svelte, Vue, React hooks, core rules) | `pnpm lint`                                                                              |
+| Format (Prettier; formatting-only commits go in `.git-blame-ignore-revs`)              | `pnpm format` · `pnpm format:check`                                                      |
+| Build everything (packages → ngx-gantry → showcase → demos)                            | `pnpm build`                                                                             |
+| Angular library only (needs `@gantry/core` built)                                      | `pnpm --filter @gantry/core build && pnpm build:lib`                                     |
+| Dev servers                                                                            | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte` |
+| Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors)    | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`               |
+| Screenshot baselines (Playwright container = CI pixels)                                | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate                           |
+| Release notes for a change                                                             | `pnpm changeset`                                                                         |
 
 Iterate with `pnpm test` + `pnpm typecheck`; run `pnpm build` and the browser QA before
 calling UI work done.

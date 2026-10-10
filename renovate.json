@@ -1,0 +1,53 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":dependencyDashboard"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/Rome",
+  "rangeStrategy": "bump",
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Angular moves as one (framework, CLI, build, compiler, ng-packagr, angular-eslint)",
+      "groupName": "Angular",
+      "matchPackageNames": ["@angular/**", "@angular-devkit/**", "ng-packagr", "angular-eslint", "@angular-eslint/**"]
+    },
+    {
+      "description": "Vite and its framework plugins",
+      "groupName": "Vite",
+      "matchPackageNames": [
+        "vite",
+        "vitest",
+        "@vitest/**",
+        "vite-plugin-dts",
+        "@vitejs/**",
+        "@sveltejs/vite-plugin-svelte"
+      ]
+    },
+    {
+      "description": "TypeScript and the type-aware tooling that pins it",
+      "groupName": "TypeScript",
+      "matchPackageNames": ["typescript", "typescript-eslint", "@typescript-eslint/**", "vue-tsc", "svelte-check"]
+    },
+    {
+      "description": "Lint and format",
+      "groupName": "Lint & format",
+      "matchPackageNames": ["eslint", "@eslint/**", "eslint-*", "globals", "prettier", "prettier-plugin-*"]
+    },
+    {
+      "description": "Playwright: @playwright/test and the CI container image (ci.yml) move together; scripts/e2e-container.sh reads the installed version",
+      "groupName": "Playwright",
+      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"]
+    },
+    {
+      "description": "Peer ranges of published packages are changed by hand (they are API)",
+      "matchDepTypes": ["peerDependencies"],
+      "enabled": false
+    },
+    {
+      "description": "GitHub Actions",
+      "groupName": "GitHub Actions",
+      "matchManagers": ["github-actions"]
+    }
+  ]
+}

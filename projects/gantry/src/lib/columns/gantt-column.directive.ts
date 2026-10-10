@@ -30,14 +30,14 @@ import {
   Injector,
   runInInjectionContext,
   untracked,
-  OnInit,
-  OnDestroy,
+  type OnInit,
+  type OnDestroy,
   TemplateRef,
   ContentChild,
 } from '@angular/core';
 
 import { GanttColumnService } from './gantt-column.service';
-import { ColumnDef, ColumnRenderer, ColumnCellContext } from '../types';
+import { type ColumnDef, type ColumnRenderer, type ColumnCellContext } from '../types';
 
 // Re-exported for backward compatibility — the canonical definition lives in types.ts
 export type { ColumnCellContext } from '../types';

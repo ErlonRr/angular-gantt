@@ -33,7 +33,7 @@ async function addRows(chart: Chart, n: number): Promise<void> {
 }
 
 /** `GANTRY_E2E_OPTIONS='{"viewMode":"Day"}'` merges a configuration into every Web Component target. */
-const EXTRA_OPTIONS = process.env.GANTRY_E2E_OPTIONS ? JSON.parse(process.env.GANTRY_E2E_OPTIONS) : null;
+const EXTRA_OPTIONS = process.env['GANTRY_E2E_OPTIONS'] ? JSON.parse(process.env['GANTRY_E2E_OPTIONS']) : null;
 
 /** Screenshots for human review: test-results/e2e/shots/<page>-<label>.png (also attached to the report). */
 async function shot(page: Page, info: TestInfo, name: string, label: string): Promise<void> {

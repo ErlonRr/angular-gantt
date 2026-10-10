@@ -41,5 +41,5 @@ export function createState<T>(initialValue: T): WritableState<T> {
     return () => subscribers.delete(fn);
   };
 
-  return read as WritableState<T>;
+  return read;
 }

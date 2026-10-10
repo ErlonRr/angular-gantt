@@ -51,10 +51,10 @@ export interface BarVisualInput {
   geo: RowGeometry;
   cfg: ResolvedGanttConfig;
   toX: (d: Date) => number;
-  isCritical?: boolean;
-  resizable?: boolean;
+  isCritical?: boolean | undefined;
+  resizable?: boolean | undefined;
   /** Font size used for label fitting */
-  fontPx?: number;
+  fontPx?: number | undefined;
 }
 
 /** Rough text width (no DOM measuring): average glyph ≈ 0.56em. */
@@ -168,7 +168,7 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
   // Baseline rail under the bar
   let baseline: BarVisual['baseline'] = null;
   if (cfg.baseline && task.baseline) {
-    const span = taskSpan(task.baseline as Pick<GanttTask, 'start' | 'end'>, cfg);
+    const span = taskSpan(task.baseline, cfg);
     const bx = toX(span.start);
     baseline = { x: bx, width: Math.max(toX(span.end) - bx, 2), y: Math.min(geo.y + rh - 2, y + height + 3) };
   }

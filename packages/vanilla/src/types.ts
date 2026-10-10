@@ -51,18 +51,18 @@ export type GantryEventMap = {
 
 /** Settable properties of `<gantry-element>` — what framework bindings forward. */
 export interface GantryProperties {
-  tasks?: GanttTask[];
-  columns?: VanillaColumnDef[];
-  options?: GanttOptions;
-  annotations?: GanttAnnotation[];
-  darkMode?: boolean | 'auto';
-  showToolbar?: boolean;
-  enableDrag?: boolean;
-  enableResize?: boolean;
-  tooltipEnabled?: boolean;
-  showLegend?: boolean;
-  dataSource?: GanttDataSourceConfig | GanttDataSource | null;
-  renderBar?: GanttBarRenderer;
+  tasks?: GanttTask[] | undefined;
+  columns?: VanillaColumnDef[] | undefined;
+  options?: GanttOptions | undefined;
+  annotations?: GanttAnnotation[] | undefined;
+  darkMode?: boolean | 'auto' | undefined;
+  showToolbar?: boolean | undefined;
+  enableDrag?: boolean | undefined;
+  enableResize?: boolean | undefined;
+  tooltipEnabled?: boolean | undefined;
+  showLegend?: boolean | undefined;
+  dataSource?: GanttDataSourceConfig | GanttDataSource | null | undefined;
+  renderBar?: GanttBarRenderer | undefined;
 }
 
 export const GANTRY_PROPERTIES = [
@@ -94,5 +94,6 @@ export const GANTRY_EVENTS = {
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */
 export type GantryEventCallbacks = {
-  [K in keyof GantryEventDetailMap as (typeof GANTRY_EVENTS)[K]]?: (detail: GantryEventDetailMap[K]) => void;
+  [K in keyof GantryEventDetailMap as (typeof GANTRY_EVENTS)[K]]?:
+    ((detail: GantryEventDetailMap[K]) => void) | undefined;
 };

@@ -17,8 +17,8 @@ import {
   ElementRef,
   EnvironmentInjector,
   Injector,
-  Type,
-  ComponentRef,
+  type Type,
+  type ComponentRef,
   createComponent,
   effect,
   inject,
@@ -26,8 +26,8 @@ import {
   runInInjectionContext,
 } from '@angular/core';
 
-import { GanttBarBase } from '../bar-registry';
-import { GanttBarContext } from '../types';
+import { type GanttBarBase } from '../bar-registry';
+import { type GanttBarContext } from '../types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -45,7 +45,7 @@ export class GanttBarHostComponent {
   private readonly _env = inject(EnvironmentInjector);
   private readonly _inj = inject(Injector);
   private readonly _appRef = inject(ApplicationRef);
-  private readonly _parent = inject(ElementRef<SVGGElement>);
+  private readonly _parent = inject<ElementRef<SVGGElement>>(ElementRef);
   private readonly _destroyRef = inject(DestroyRef);
 
   private _ref: ComponentRef<GanttBarBase> | null = null;

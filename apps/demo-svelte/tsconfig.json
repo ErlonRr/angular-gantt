@@ -1,14 +1,5 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "customConditions": ["@gantry/source"],
-    "strict": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "isolatedModules": true,
-    "lib": ["DOM", "DOM.Iterable", "ESNext"]
-  },
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {},
   "include": ["src/**/*"]
 }

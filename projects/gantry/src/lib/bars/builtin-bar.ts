@@ -7,7 +7,7 @@
 
 import { Directive, computed, input } from '@angular/core';
 import { cssPx } from '@gantry/core';
-import { GanttBarContext } from '../types';
+import { type GanttBarContext } from '../types';
 import { GanttBarBase } from '../bar-registry';
 
 /** Template shared by the built-in task / group / milestone bars. */

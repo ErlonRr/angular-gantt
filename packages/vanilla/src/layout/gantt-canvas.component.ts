@@ -7,11 +7,11 @@
  */
 
 import {
-  RowGeometry,
-  GanttAnnotation,
-  GanttBarContext,
-  GanttDependency,
-  GanttLabels,
+  type RowGeometry,
+  type GanttAnnotation,
+  type GanttBarContext,
+  type GanttDependency,
+  type GanttLabels,
   DependencyType,
   computeBarVisual,
   computeArrowVisual,
@@ -47,7 +47,7 @@ export interface GanttCanvasProps {
   enableDrag: boolean;
   enableResize: boolean;
   dragPreview: DragPreview | null;
-  renderBar?: GanttBarRenderer;
+  renderBar?: GanttBarRenderer | undefined;
 }
 
 /** Bands and vertical grid lines span the full height: they only change with the timeline. */
@@ -65,7 +65,7 @@ interface StaticLayer {
 export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
   /** Bar visuals of the last render, by task id (used for hit-testing) */
   visuals = new Map<string, BarVisual>();
-  private staticLayer?: StaticLayer;
+  private staticLayer?: StaticLayer | undefined;
 
   constructor(container: HTMLElement, props: GanttCanvasProps) {
     super(container, props);
@@ -308,7 +308,7 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
     }
 
     const grid = svgEl('g', { class: 'gantt-grid', 'aria-hidden': 'true', 'pointer-events': 'none' });
-    const vline = (x: number, style: { color: string; width: number; dash?: string }, cls: string) =>
+    const vline = (x: number, style: { color: string; width: number; dash?: string | undefined }, cls: string) =>
       grid.appendChild(
         svgEl('line', {
           class: cls,

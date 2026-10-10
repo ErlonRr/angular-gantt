@@ -195,22 +195,30 @@ export const DEFAULT_ZOOM_LEVELS: GanttZoomLevel[] = [
   },
 ];
 
+/** The bottom (finest) tier of a scale list — the one cells, snapping and padding follow. */
+export function bottomScale(scales: readonly GanttScale[]): GanttScale {
+  return scales.at(-1) ?? { unit: 'day' };
+}
+
 /** px per day of a zoom level (from `pxPerDay`, or derived from `cellWidth`). */
 export function levelPxPerDay(level: GanttZoomLevel): number {
   if (level.pxPerDay) return level.pxPerDay;
-  const bottom = level.scales[level.scales.length - 1];
+  const bottom = bottomScale(level.scales);
   const cellDays = UNIT_DAYS[bottom.unit] * (bottom.step ?? 1);
   return (level.cellWidth ?? 40) / cellDays;
 }
 
 export function findZoomLevel(levels: GanttZoomLevel[], name: string | undefined): GanttZoomLevel {
-  return levels.find(l => l.name === name) ?? levels.find(l => l.name === ViewMode.Month) ?? levels[0];
+  const level =
+    levels.find(l => l.name === name) ?? levels.find(l => l.name === (ViewMode.Month as string)) ?? levels[0];
+  if (!level) throw new Error('[gantry] zoomLevels is empty');
+  return level;
 }
 
 export function zoomStep(levels: GanttZoomLevel[], current: string, dir: 1 | -1): string {
   const i = levels.findIndex(l => l.name === current);
   if (i < 0) return levels[0]?.name ?? current;
-  return levels[Math.min(levels.length - 1, Math.max(0, i + dir))].name;
+  return levels[Math.min(levels.length - 1, Math.max(0, i + dir))]?.name ?? current;
 }
 
 /**
@@ -235,7 +243,7 @@ export interface ScaleCell {
   x: number;
   width: number;
   label: string;
-  className?: string;
+  className?: string | undefined;
   /** The period contains "now" */
   isCurrent: boolean;
 }
@@ -255,11 +263,11 @@ export interface BuildTiersInput {
   end: Date;
   pxPerDay: number;
   /** Tier heights when a scale has none: [upper tiers, bottom tier] */
-  heights?: [number, number];
-  weekStart?: 0 | 1;
-  locale?: string;
-  labels?: GanttLabels;
-  now?: Date;
+  heights?: [number, number] | undefined;
+  weekStart?: 0 | 1 | undefined;
+  locale?: string | undefined;
+  labels?: GanttLabels | undefined;
+  now?: Date | undefined;
 }
 
 /** Period boundaries (start dates) of a unit inside [start, end), the first one possibly before `start`. */
@@ -285,7 +293,13 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
     const step = scale.step ?? 1;
     const isBottom = i === scales.length - 1;
     const height = scale.height ?? (isBottom ? bottomH : upperH);
-    const ctx: ScaleFormatContext = { unit: scale.unit, step, locale, labels, weekStart };
+    const ctx: ScaleFormatContext = {
+      unit: scale.unit,
+      step,
+      labels,
+      weekStart,
+      ...(locale !== undefined && { locale }),
+    };
     const cells: ScaleCell[] = [];
 
     for (const cellStart of unitBoundaries(start, end, scale.unit, step, weekStart)) {

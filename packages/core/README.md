@@ -17,13 +17,13 @@ npm i @gantry/core
 
 ## What's inside
 
-| Area          | Exports                                                                                                                                                                                    |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Types         | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and the `ViewMode`, `TaskType`, `DependencyType` enums |
-| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel`                              |
-| Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                              |
-| Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                          |
-| i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                        |
+| Area          | Exports                                                                                                                                                                                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Types         | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and `ViewMode`, `TaskType`, `DependencyType` (`as const` objects with same-name types: `ViewMode.Week` works as a value and as a type) |
+| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel`                                                                                                              |
+| Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                                                                                                              |
+| Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                                                                                                          |
+| i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                                                                                                        |
 
 ```ts
 import { computeCriticalPath, DependencyType } from '@gantry/core';

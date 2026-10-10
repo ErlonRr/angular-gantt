@@ -21,11 +21,11 @@
 //    provideGanttBar({ type: 'sprint', component: SprintBarComponent })
 // ─────────────────────────────────────────────────────────────
 
-import { NgModule, ModuleWithProviders, EnvironmentProviders, makeEnvironmentProviders } from '@angular/core';
+import { NgModule, type ModuleWithProviders, type EnvironmentProviders, makeEnvironmentProviders } from '@angular/core';
 
-import { GANTT_GLOBAL_CONFIG, GanttGlobalConfig, provideGantt } from '../services/gantt-theme.service';
+import { GANTT_GLOBAL_CONFIG, type GanttGlobalConfig } from '../services/gantt-theme.service';
 
-import { GANTT_BAR_DEF, provideGanttBar, GanttBarDef } from '../bar-registry';
+import { GANTT_BAR_DEF, type GanttBarDef } from '../bar-registry';
 
 import { GanttTaskBarComponent } from '../bars/task-bar.component';
 import { GanttMilestoneComponent } from '../bars/milestone.component';

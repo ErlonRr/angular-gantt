@@ -19,13 +19,13 @@
 import {
   inject,
   InjectionToken,
-  Type,
-  EnvironmentProviders,
+  type Type,
+  type EnvironmentProviders,
   makeEnvironmentProviders,
   Injectable,
 } from '@angular/core';
 
-import { GanttBarContext } from './types';
+import { type GanttBarContext } from './types';
 
 // ─── Bar component contract ───────────────────────────────────
 

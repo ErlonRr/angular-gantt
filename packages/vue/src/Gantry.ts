@@ -60,7 +60,7 @@ export const Gantry = defineComponent({
       if (!el || value === undefined) return;
       const raw = toRaw(value);
       // Fresh array so the element sees a change after in-place mutation
-      (el as unknown as Record<string, unknown>)[key] = Array.isArray(raw) ? [...raw] : raw;
+      (el as unknown as Record<string, unknown>)[key] = Array.isArray(raw) ? [...(raw as unknown[])] : raw;
     };
 
     const listeners = Object.keys(GANTRY_EVENTS).map(type => {

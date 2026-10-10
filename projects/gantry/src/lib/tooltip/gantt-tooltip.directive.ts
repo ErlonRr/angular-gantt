@@ -19,9 +19,9 @@
 //    <g ganttTaskBar [ganttTooltip]="geo" [tooltipTheme]="theme" />
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, ElementRef, inject, input, OnDestroy, OnInit, DOCUMENT } from '@angular/core';
+import { Directive, ElementRef, inject, input, type OnDestroy, type OnInit, DOCUMENT } from '@angular/core';
 
-import { RowGeometry, GanttTheme } from '../types';
+import { TaskType, type RowGeometry, type GanttTheme } from '../types';
 import { formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
@@ -219,7 +219,7 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
         : '';
 
     const milestone =
-      task.type === 'milestone'
+      task.type === TaskType.Milestone
         ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ ${this._esc(labels.ttMilestone)}</div>`
         : '';
 

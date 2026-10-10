@@ -23,9 +23,9 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  OnInit,
-  AfterViewInit,
-  OnDestroy,
+  type OnInit,
+  type AfterViewInit,
+  type OnDestroy,
   input,
   output,
   signal,
@@ -43,19 +43,20 @@ import {
 } from '@angular/core';
 
 import {
-  GanttTask,
-  GanttOptions,
-  GanttAnnotation,
-  GanttTheme,
-  GanttState,
-  GanttView,
-  ViewMode,
-  ColumnDef,
-  TaskDragEvent,
-  TaskResizeEvent,
-  SelectionChangeEvent,
-  RowGeometry,
-  GanttFlatRow,
+  type GanttTask,
+  type GanttOptions,
+  type GanttAnnotation,
+  type GanttTheme,
+  type GanttThemeOverrides,
+  type GanttState,
+  type GanttView,
+  type ViewMode,
+  type ColumnDef,
+  type TaskDragEvent,
+  type TaskResizeEvent,
+  type SelectionChangeEvent,
+  type RowGeometry,
+  type GanttFlatRow,
 } from '../types';
 import {
   resolveConfig,
@@ -80,7 +81,7 @@ import { GanttSelectionService } from '../selection/gantt-selection.service';
 import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttKeyboardDirective } from '../selection/gantt-keyboard.directive';
 import { GanttLoadMoreComponent } from '../datasource/gantt-load-more.component';
-import { GanttDataSource } from '../datasource/gantt-datasource';
+import { type GanttDataSource } from '../datasource/gantt-datasource';
 import { computeCriticalPath } from '../gantt-cpm';
 import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
 
@@ -448,7 +449,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly i18n = inject(GanttI18nService);
   protected readonly colSvc = inject(GanttColumnService);
   protected readonly selSvc = inject(GanttSelectionService);
-  private readonly hostEl = inject(ElementRef<HTMLElement>);
+  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
 
   // ── DOM references ────────────────────────────────────────
@@ -728,7 +729,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Event handlers ────────────────────────────────────────
 
-  protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent }): void {
+  protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent | KeyboardEvent }): void {
     const { enabled, multi } = this.cfg().selection;
     if (enabled) {
       const ev = multi ? e.event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
@@ -860,7 +861,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.layout.zoomOut();
   }
 
-  setViewMode(mode: ViewMode | string): void {
+  setViewMode(mode: ViewMode | (string & {})): void {
     this.layout.viewMode.set(mode);
   }
 
@@ -950,11 +951,11 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.colSvc.toggleVisible(key, view, this.cfg());
   }
 
-  setTheme(override: Partial<GanttTheme>): void {
+  setTheme(override: GanttThemeOverrides): void {
     this.themeSvc.setCustomTheme(override);
   }
 
-  patchTheme(patch: Partial<GanttTheme>): void {
+  patchTheme(patch: GanttThemeOverrides): void {
     this.themeSvc.patchTheme(patch);
   }
 

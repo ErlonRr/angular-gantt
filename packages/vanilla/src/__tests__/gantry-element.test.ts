@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ViewMode, TaskType, GanttTask, PX_PER_DAY, TaskDragEvent, SelectionChangeEvent } from '@gantry/core';
+import {
+  ViewMode,
+  TaskType,
+  type GanttTask,
+  PX_PER_DAY,
+  type TaskDragEvent,
+  type SelectionChangeEvent,
+} from '@gantry/core';
 import { DEMO_TASKS } from '@gantry/core/demo';
 import { GantryElement } from '../gantry.element';
 import '../index';
@@ -393,6 +400,19 @@ describe('<gantry-element>', () => {
       el.setView('split');
       await frame();
       expect(($(el, '.gantry-canvas-viewport') as HTMLElement).inert).toBe(false);
+    });
+
+    it('keeps keyboard focus on a row selected with Enter, then on the chart once the row is gone', async () => {
+      el = await mount({ tasks: plan() });
+      const row = $(el, '.gantt-tl-row[data-task-id="b"]') as HTMLElement;
+      row.focus();
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await frame();
+      expect(el.getSelectedTasks().map(t => t.id)).toEqual(['b']);
+      expect((el.shadowRoot!.activeElement as HTMLElement | null)?.dataset['focusKey']).toBe('row:b');
+      el.tasks = [task('a', '2020-01-01', '2020-01-10')];
+      await frame();
+      expect(document.activeElement).toBe(el);
     });
 
     it('sorts by a built-in column listed next to custom columns', async () => {

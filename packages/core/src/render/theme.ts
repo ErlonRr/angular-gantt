@@ -5,7 +5,7 @@
 //  Default palettes meet WCAG AA: bar labels ≥ 4.5:1, bars / markers ≥ 3:1.
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttTheme } from '../types';
+import type { GanttTheme, GanttThemeOverrides } from '../types';
 
 export const LightTheme: Readonly<Required<GanttTheme>> = {
   backgroundColor: '#FFFFFF',
@@ -110,7 +110,7 @@ export const LegacyDarkTheme: Readonly<Required<GanttTheme>> = {
 };
 
 /** Light/dark base + overrides, with every optional field filled in. */
-export function resolveTheme(dark: boolean, override?: Partial<GanttTheme>): Required<GanttTheme> {
+export function resolveTheme(dark: boolean, override?: GanttThemeOverrides): Required<GanttTheme> {
   const base = dark ? DarkTheme : LightTheme;
   const out = { ...base, ...override } as Required<GanttTheme>;
   // An override may set undefined explicitly — fall back to the base value

@@ -13,7 +13,7 @@
 //    5. Float (slack) = LS - ES ; critical if float === 0
 // ─────────────────────────────────────────────────────────────
 
-import { GanttTask, DependencyType } from './types';
+import { type GanttTask, DependencyType } from './types';
 import { taskDependencies } from './render/columns';
 import { calendarDays } from './gantt-math';
 import { taskSpan } from './render/timeline';
@@ -206,8 +206,7 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
   }
 
   // Reverse topological order
-  for (let i = topoOrder.length - 1; i >= 0; i--) {
-    const id = topoOrder[i];
+  for (const id of [...topoOrder].reverse()) {
     const node = nodeMap.get(id)!;
 
     for (const e of node.succs) {

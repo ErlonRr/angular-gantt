@@ -34,15 +34,31 @@ export type DragResult = { kind: 'drag'; event: TaskDragEvent } | { kind: 'resiz
 const addHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000);
 
 export class DragSession {
+  readonly taskId: string;
+  readonly handle: DragHandle;
+  private readonly origStart: Date;
+  private readonly origEnd: Date;
+  private readonly startX: number;
+  private readonly row: { y: number; height: number };
+  private readonly timing: DragTiming;
+
   constructor(
-    readonly taskId: string,
-    readonly handle: DragHandle,
-    private readonly origStart: Date,
-    private readonly origEnd: Date,
-    private readonly startX: number,
-    private readonly row: { y: number; height: number },
-    private readonly timing: DragTiming,
-  ) {}
+    taskId: string,
+    handle: DragHandle,
+    origStart: Date,
+    origEnd: Date,
+    startX: number,
+    row: { y: number; height: number },
+    timing: DragTiming,
+  ) {
+    this.taskId = taskId;
+    this.handle = handle;
+    this.origStart = origStart;
+    this.origEnd = origEnd;
+    this.startX = startX;
+    this.row = row;
+    this.timing = timing;
+  }
 
   private get pxPerUnit(): number {
     return this.timing.snap === 'hour' ? this.timing.pxPerDay / 24 : this.timing.pxPerDay;

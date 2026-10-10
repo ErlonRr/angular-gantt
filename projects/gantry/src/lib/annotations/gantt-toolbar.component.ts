@@ -13,7 +13,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import type { GanttZoomLevel, GanttView, ResolvedToolbar } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
-import { GanttTheme } from '../types';
+import { type GanttTheme } from '../types';
 
 @Component({
   selector: 'gantt-toolbar',
@@ -169,12 +169,12 @@ export class GanttToolbarComponent {
       .map(l => ({ name: l.name, label: l.label ?? viewLabels[l.name] ?? l.name }));
   });
 
-  protected readonly views = computed(() => {
+  protected readonly views = computed<{ view: GanttView; label: string }[]>(() => {
     const l = this.labels();
     return [
-      { view: 'split' as GanttView, label: l.viewSplit },
-      { view: 'table' as GanttView, label: l.viewTable },
-      { view: 'chart' as GanttView, label: l.viewChart },
+      { view: 'split', label: l.viewSplit },
+      { view: 'table', label: l.viewTable },
+      { view: 'chart', label: l.viewChart },
     ];
   });
 }

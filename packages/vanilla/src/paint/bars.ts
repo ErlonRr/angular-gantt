@@ -10,7 +10,7 @@ export interface PaintBarOptions {
   theme: Required<GanttTheme>;
   fontPx: number;
   selected: boolean;
-  className?: string;
+  className?: string | undefined;
 }
 
 export function paintBar(v: BarVisual, opts: PaintBarOptions): SVGGElement {

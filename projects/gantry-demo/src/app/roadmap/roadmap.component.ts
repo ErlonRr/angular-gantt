@@ -7,18 +7,26 @@
 //  (Owner avatar + Status badge) rendered via `cellTemplate`.
 // ─────────────────────────────────────────────────────────────
 
-import { ChangeDetectionStrategy, Component, computed, inject, signal, viewChild, TemplateRef } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  signal,
+  viewChild,
+  type TemplateRef,
+} from '@angular/core';
 import {
   GantryComponent,
-  GanttTask,
-  GanttFlatRow,
-  ColumnDef,
-  ColumnCellContext,
-  GanttLabels,
+  type GanttTask,
+  type GanttFlatRow,
+  type ColumnDef,
+  type ColumnCellContext,
+  type GanttLabels,
   TaskType,
   DependencyType,
   ViewMode,
-  GanttOptions,
+  type GanttOptions,
 } from 'ngx-gantry';
 import 'dayjs/locale/it';
 import { anchorToToday } from '@gantry/core/demo';

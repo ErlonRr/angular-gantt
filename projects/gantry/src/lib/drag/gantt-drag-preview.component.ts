@@ -10,8 +10,8 @@
 
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-import { DragPreview } from './gantt-drag.service';
-import { GanttTheme } from '../types';
+import { type DragPreview } from './gantt-drag.service';
+import { type GanttTheme } from '../types';
 
 @Component({
   selector: 'g[ganttDragPreview]',

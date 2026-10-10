@@ -9,26 +9,60 @@ import type { BarVisual } from './render/bars';
 
 // ─── Enums ───────────────────────────────────────────────────
 
-export enum ViewMode {
-  Hour = 'Hour',
-  Day = 'Day',
-  Week = 'Week',
-  Month = 'Month',
-  Quarter = 'Quarter',
-  Year = 'Year',
+// Erasable `as const` objects (not TS enums): `ViewMode.Week` reads the same, the type is the
+// union of the values, and plain strings such as `'Week'` are accepted too.
+
+export const ViewMode = {
+  Hour: 'Hour',
+  Day: 'Day',
+  Week: 'Week',
+  Month: 'Month',
+  Quarter: 'Quarter',
+  Year: 'Year',
+} as const;
+export type ViewMode = (typeof ViewMode)[keyof typeof ViewMode];
+// Type-only namespace (erased at build): keeps member types such as `let m: ViewMode.Week` working
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export declare namespace ViewMode {
+  type Hour = typeof ViewMode.Hour;
+  type Day = typeof ViewMode.Day;
+  type Week = typeof ViewMode.Week;
+  type Month = typeof ViewMode.Month;
+  type Quarter = typeof ViewMode.Quarter;
+  type Year = typeof ViewMode.Year;
 }
 
-export enum DependencyType {
-  FS = 'FS', // Finish → Start  (default)
-  FF = 'FF', // Finish → Finish
-  SF = 'SF', // Start  → Finish
-  SS = 'SS', // Start  → Start
+export const DependencyType = {
+  /** Finish → Start (default) */
+  FS: 'FS',
+  /** Finish → Finish */
+  FF: 'FF',
+  /** Start → Finish */
+  SF: 'SF',
+  /** Start → Start */
+  SS: 'SS',
+} as const;
+export type DependencyType = (typeof DependencyType)[keyof typeof DependencyType];
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export declare namespace DependencyType {
+  type FS = typeof DependencyType.FS;
+  type FF = typeof DependencyType.FF;
+  type SF = typeof DependencyType.SF;
+  type SS = typeof DependencyType.SS;
 }
 
-export enum TaskType {
-  Task = 'task',
-  Milestone = 'milestone',
-  Group = 'group', // parent that collapses children
+export const TaskType = {
+  Task: 'task',
+  Milestone: 'milestone',
+  /** Parent that collapses children */
+  Group: 'group',
+} as const;
+export type TaskType = (typeof TaskType)[keyof typeof TaskType];
+// eslint-disable-next-line @typescript-eslint/no-namespace
+export declare namespace TaskType {
+  type Task = typeof TaskType.Task;
+  type Milestone = typeof TaskType.Milestone;
+  type Group = typeof TaskType.Group;
 }
 
 // ─── Core domain objects ──────────────────────────────────────
@@ -36,9 +70,9 @@ export enum TaskType {
 export interface GanttDependency {
   /** ID of the predecessor task */
   taskId: string;
-  type?: DependencyType;
+  type?: DependencyType | undefined;
   /** Lag in days — positive = delay, negative = lead */
-  lag?: number;
+  lag?: number | undefined;
 }
 
 export interface GanttBaseline {
@@ -55,43 +89,43 @@ export interface GanttTask {
   name: string;
   start: Date;
   end: Date;
-  progress?: number; // 0–100
-  type?: TaskType;
-  parentId?: string;
-  collapsed?: boolean;
-  dependency?: string | GanttDependency | GanttDependency[];
+  progress?: number | undefined; // 0–100
+  type?: TaskType | undefined;
+  parentId?: string | undefined;
+  collapsed?: boolean | undefined;
+  dependency?: string | GanttDependency | GanttDependency[] | undefined;
 
   /** Custom bar type key — resolved via GanttBarRegistry */
-  barType?: string;
+  barType?: string | undefined;
 
   /** Per-task style overrides */
-  barColor?: string;
-  rowColor?: string;
+  barColor?: string | undefined;
+  rowColor?: string | undefined;
   /** Text colour of the bar label */
-  textColor?: string;
-  progressColor?: string;
+  textColor?: string | undefined;
+  progressColor?: string | undefined;
   /** Extra CSS class on the bar element */
-  className?: string;
+  className?: string | undefined;
 
   /** Planned baseline dates for variance visualisation */
-  baseline?: GanttBaseline;
+  baseline?: GanttBaseline | undefined;
 
   /**
    * Timeline drag & resize for this row. Applies to any row (root, child, group).
    * When `false`, the bar does not move or resize; when omitted or `true`, the
    * global `enableDrag` / `enableResize` on the gantt apply.
    */
-  draggable?: boolean;
+  draggable?: boolean | undefined;
 
   /**
    * Explicit status from your data; wins over the derived one (built-in `status` column).
    * Built-in values are translated (`labels.status*`), any other string is shown as is.
    * Default: derived from progress, dates and now (see `taskStatus`).
    */
-  status?: TaskStatus | (string & {});
+  status?: TaskStatus | (string & {}) | undefined;
 
   /** Arbitrary extra data — passed through to bar components */
-  data?: Record<string, unknown>;
+  data?: Record<string, unknown> | undefined;
 }
 
 /** Lifecycle status of a task (built-in `status` column). */
@@ -168,7 +202,7 @@ export interface ColumnContext {
   now: Date;
   endDateMode: 'exclusive' | 'inclusive';
   normalizeDateOnly: boolean;
-  locale?: string;
+  locale?: string | undefined;
   /** Every loaded task by id (predecessor names) */
   taskById: ReadonlyMap<string, GanttTask>;
   /** Numeric, locale-aware string comparison ("Task 2" < "Task 10") */
@@ -199,55 +233,58 @@ export interface ColumnDef<TTemplate = any> {
   label: string;
   /** Initial width in px */
   width: number;
-  minWidth?: number;
-  maxWidth?: number;
+  minWidth?: number | undefined;
+  maxWidth?: number | undefined;
   /** Default visibility in both views (default true). A key listed in `panel.columns` / `table.columns` shows anyway. */
-  visible?: boolean;
-  sortable?: boolean;
+  visible?: boolean | undefined;
+  sortable?: boolean | undefined;
   /** Custom cell renderer — returns the cell text */
-  render?: ColumnRenderer;
+  render?: ColumnRenderer | undefined;
   /** Value the column sorts by. Default: the built-in rule for built-in keys, else `task[key]`. Empty values sort last. */
-  sortValue?: (row: GanttFlatRow, ctx: ColumnContext) => ColumnSortValue;
+  sortValue?: ((row: GanttFlatRow, ctx: ColumnContext) => ColumnSortValue) | undefined;
   /** Framework-specific cell template (e.g. Angular `<ng-template ganttColumn>`) */
-  cellTemplate?: TTemplate;
+  cellTemplate?: TTemplate | undefined;
   /** Used internally to mark built-in columns */
-  builtin?: boolean;
+  builtin?: boolean | undefined;
   /** Allow resizing by dragging the header edge (default true) */
-  resizable?: boolean;
+  resizable?: boolean | undefined;
   /** Cell text alignment (default 'start') */
-  align?: 'start' | 'center' | 'end';
+  align?: 'start' | 'center' | 'end' | undefined;
   /**
    * When you pass `columns` without `panel.columns`: leave this column out of the split-view
    * panel (it still shows in `view: 'table'`). Ignored for keys listed explicitly. Default false.
    */
-  tableOnly?: boolean;
+  tableOnly?: boolean | undefined;
   /** Grow to fill the remaining panel width (default: the last column grows) */
-  flex?: boolean;
+  flex?: boolean | undefined;
 }
 
 // ─── Annotations ─────────────────────────────────────────────
 
 export interface AnnotationLabel {
   text: string;
-  color?: string;
-  fontSize?: string;
-  fontWeight?: string;
-  offsetY?: number;
+  color?: string | undefined;
+  fontSize?: string | undefined;
+  fontWeight?: string | undefined;
+  offsetY?: number | undefined;
 }
 
 export interface GanttAnnotation {
   /** Start date (draws a vertical line) */
   x1: Date;
   /** Optional end date (draws a shaded region x1 → x2) */
-  x2?: Date;
-  color?: string;
-  opacity?: number;
-  label?: AnnotationLabel;
+  x2?: Date | undefined;
+  color?: string | undefined;
+  opacity?: number | undefined;
+  label?: AnnotationLabel | undefined;
   /** true = today marker special styling */
-  isToday?: boolean;
+  isToday?: boolean | undefined;
 }
 
 // ─── Theme ───────────────────────────────────────────────────
+
+/** Theme overrides: any subset of tokens; an `undefined` token keeps the built-in value. */
+export type GanttThemeOverrides = { [K in keyof GanttTheme]?: GanttTheme[K] | undefined };
 
 export interface GanttTheme {
   // Surfaces
@@ -468,15 +505,15 @@ export const DEFAULT_LABELS: GanttLabels = {
 export type HeaderFormatFn = (date: Date) => string;
 
 export interface GanttHeaderFormats {
-  top?: HeaderFormatFn;
-  bottom?: HeaderFormatFn;
+  top?: HeaderFormatFn | undefined;
+  bottom?: HeaderFormatFn | undefined;
 }
 
 export interface GanttFormats {
   /** dayjs format string for dates in columns & tooltip */
   dateFormat: string;
   /** Per-view header label overrides — omitted rows use the built-in formatter */
-  header?: Partial<Record<ViewMode, GanttHeaderFormats>>;
+  header?: Partial<Record<ViewMode, GanttHeaderFormats>> | undefined;
 }
 
 export const DEFAULT_FORMATS: GanttFormats = {
@@ -485,7 +522,7 @@ export const DEFAULT_FORMATS: GanttFormats = {
 
 /** Resolved i18n bundle passed to the pure header/date formatters. */
 export interface GanttI18n {
-  locale?: string;
+  locale?: string | undefined;
   labels: GanttLabels;
   formats: GanttFormats;
 }
@@ -500,7 +537,7 @@ export type TimeUnit = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 export interface ScaleFormatContext {
   unit: TimeUnit;
   step: number;
-  locale?: string;
+  locale?: string | undefined;
   labels: GanttLabels;
   weekStart: 0 | 1;
 }
@@ -512,14 +549,14 @@ export type ScaleFormat = string | ((start: Date, end: Date, ctx: ScaleFormatCon
 export interface GanttScale {
   unit: TimeUnit;
   /** Cell size in `unit`s (e.g. 6 hours, 2 weeks). Default 1 */
-  step?: number;
-  format?: ScaleFormat;
+  step?: number | undefined;
+  format?: ScaleFormat | undefined;
   /** Tier height in px */
-  height?: number;
+  height?: number | undefined;
   /** Extra CSS class for a cell (also used to colour it via your stylesheet) */
-  className?: (start: Date, end: Date) => string | undefined;
+  className?: ((start: Date, end: Date) => string | undefined) | undefined;
   /** `'start'` keeps labels pinned to the left edge while scrolling (default for upper tiers) */
-  align?: 'center' | 'start';
+  align?: 'center' | 'start' | undefined;
 }
 
 /** A named zoom preset: header tiers + horizontal density. */
@@ -528,36 +565,36 @@ export interface GanttZoomLevel {
   /** Header tiers, top → bottom; the last one is the finest */
   scales: GanttScale[];
   /** Width of one bottom-tier cell in px (alternative: `pxPerDay`) */
-  cellWidth?: number;
-  pxPerDay?: number;
+  cellWidth?: number | undefined;
+  pxPerDay?: number | undefined;
   /** Toolbar label (default: `labels.viewModes[name]` or `name`) */
-  label?: string;
+  label?: string | undefined;
 }
 
 export interface GanttLineStyle {
-  color?: string;
-  width?: number;
+  color?: string | undefined;
+  width?: number | undefined;
   /** SVG dash array, e.g. `'4 3'` */
-  dash?: string;
+  dash?: string | undefined;
 }
 
 export interface GanttGridLines {
   /** Lines between bottom-tier cells (days, weeks…) */
-  minor?: GanttLineStyle | false;
+  minor?: GanttLineStyle | false | undefined;
   /** Period delimiters (month / year / day…) drawn through header and body */
-  major?: GanttLineStyle | false;
+  major?: GanttLineStyle | false | undefined;
   /** Row separators */
-  horizontal?: GanttLineStyle | false;
+  horizontal?: GanttLineStyle | false | undefined;
   /** Unit of the major delimiters (default: the tier above the bottom one) */
-  majorUnit?: TimeUnit;
+  majorUnit?: TimeUnit | undefined;
 }
 
 export interface GanttHoliday {
   start: Date;
   /** Inclusive last day (default: same day) */
-  end?: Date;
-  label?: string;
-  color?: string;
+  end?: Date | undefined;
+  label?: string | undefined;
+  color?: string | undefined;
 }
 
 export interface GanttHourRange {
@@ -568,84 +605,88 @@ export interface GanttHourRange {
 
 export interface GanttNonWorkingTime {
   /** `true` = Saturday & Sunday; or a list of weekday numbers (0 = Sunday). Default `true` */
-  weekends?: boolean | number[];
-  holidays?: (Date | GanttHoliday)[];
+  weekends?: boolean | number[] | undefined;
+  holidays?: (Date | GanttHoliday)[] | undefined;
   /** Working hours; time outside is shaded in hour scales. Per-weekday map allowed. */
-  workingHours?: GanttHourRange | GanttHourRange[] | Partial<Record<number, GanttHourRange[]>>;
+  workingHours?: GanttHourRange | GanttHourRange[] | Partial<Record<number, GanttHourRange[]>> | undefined;
   /** Highlighted "intensive" hours, drawn in their own colour */
-  intensiveHours?: (GanttHourRange & { color?: string; label?: string })[];
+  intensiveHours?: (GanttHourRange & { color?: string | undefined; label?: string | undefined })[] | undefined;
   /** `'shade'` = tinted, `'hatch'` = diagonal stripes, `'disabled'` = greyed out */
-  style?: 'shade' | 'hatch' | 'disabled';
+  style?: 'shade' | 'hatch' | 'disabled' | undefined;
   /** Tint the matching header cells too (default true) */
-  showInHeader?: boolean;
+  showInHeader?: boolean | undefined;
   /** Hide day shading below this density (default 12 px/day: shown in Day / Week views) */
-  minPxPerDay?: number;
+  minPxPerDay?: number | undefined;
 }
 
 export interface GanttTimeHighlight {
-  color?: string;
-  className?: string;
-  label?: string;
+  color?: string | undefined;
+  className?: string | undefined;
+  label?: string | undefined;
 }
 
 export interface GanttBarOptions {
   /** Bar height: px or % of the row height (default `'60%'`) */
-  height?: GanttLength;
+  height?: GanttLength | undefined;
   /** Corner radius in px (default: theme `barRadius`) */
-  radius?: number;
-  minWidth?: number;
-  progress?: {
-    show?: boolean;
-    color?: string;
-    opacity?: number;
-  };
-  label?: {
-    /** `'auto'` = inside when it fits, otherwise to the right */
-    position?: 'inside' | 'left' | 'right' | 'auto' | 'none';
-    template?: (task: GanttTask) => string;
-    color?: string;
-  };
+  radius?: number | undefined;
+  minWidth?: number | undefined;
+  progress?:
+    | {
+        show?: boolean | undefined;
+        color?: string | undefined;
+        opacity?: number | undefined;
+      }
+    | undefined;
+  label?:
+    | {
+        /** `'auto'` = inside when it fits, otherwise to the right */
+        position?: 'inside' | 'left' | 'right' | 'auto' | 'none' | undefined;
+        template?: ((task: GanttTask) => string) | undefined;
+        color?: string | undefined;
+      }
+    | undefined;
 }
 
 export interface GanttMilestoneOptions {
   /** Diamond/circle size in px (default: 50% of the row height) */
-  size?: number;
-  shape?: 'diamond' | 'circle' | 'square';
+  size?: number | undefined;
+  shape?: 'diamond' | 'circle' | 'square' | undefined;
 }
 
 export interface GanttGroupBarOptions {
-  height?: GanttLength;
+  height?: GanttLength | undefined;
   /** `'summary'` = thin bracket bar with end caps, `'bar'` = regular bar */
-  style?: 'summary' | 'bar';
-  showProgress?: boolean;
+  style?: 'summary' | 'bar' | undefined;
+  showProgress?: boolean | undefined;
 }
 
 export interface GanttArrowOptions {
-  width?: number;
-  headSize?: number;
+  width?: number | undefined;
+  headSize?: number | undefined;
   /** Corner radius of the orthogonal path */
-  radius?: number;
-  color?: string;
+  radius?: number | undefined;
+  color?: string | undefined;
   /** Horizontal clearance before the first bend */
-  offset?: number;
+  offset?: number | undefined;
 }
 
 export interface GanttPanelOptions {
   /** Initial width: px or % of the chart (default `'30%'`) */
-  width?: GanttLength;
-  minWidth?: number;
-  maxWidth?: GanttLength;
+  width?: GanttLength | undefined;
+  minWidth?: number | undefined;
+  maxWidth?: GanttLength | undefined;
   /** Drag the splitter to resize — also past the last column (default true) */
-  resizable?: boolean;
+  resizable?: boolean | undefined;
   /** Show the collapse/expand toggle on the splitter (default true) */
-  collapsible?: boolean;
-  collapsed?: boolean;
+  collapsible?: boolean | undefined;
+  collapsed?: boolean | undefined;
   /**
    * Ordered column keys (built-in keys or keys of `columns`) for the split-view panel.
    * Default `['name', 'start', 'end', 'progress']`; with `columns` and no list: the
    * `columns` entries that are not `tableOnly` / `visible: false`.
    */
-  columns?: string[];
+  columns?: string[] | undefined;
 }
 
 export interface GanttTableOptions {
@@ -654,124 +695,124 @@ export interface GanttTableOptions {
    * 'duration', 'progress', 'predecessors']`, plus `['baselineStart', 'baselineEnd', 'variance']`
    * when `baseline` is on; with `columns` and no list: every `columns` entry not `visible: false`.
    */
-  columns?: string[];
+  columns?: string[] | undefined;
 }
 
 export type GanttView = 'split' | 'table' | 'chart';
 
 export interface GanttToolbarOptions {
-  zoom?: boolean;
+  zoom?: boolean | undefined;
   /** Zoom levels offered as pills (default: all) — `false` hides them */
-  viewModes?: string[] | false;
-  today?: boolean;
+  viewModes?: string[] | false | undefined;
+  today?: boolean | undefined;
   /** Split / table / chart switch */
-  viewToggle?: boolean;
+  viewToggle?: boolean | undefined;
 }
 
 /** UI state that can be persisted (`stateKey`) or restored (`setState`). */
 export interface GanttState {
-  panelWidth?: number;
-  panelCollapsed?: boolean;
-  view?: GanttView;
-  viewMode?: string;
-  columnWidths?: Record<string, number>;
-  collapsedIds?: string[];
-  sort?: { key: string; dir: 'asc' | 'desc' } | null;
+  panelWidth?: number | undefined;
+  panelCollapsed?: boolean | undefined;
+  view?: GanttView | undefined;
+  viewMode?: string | undefined;
+  columnWidths?: Record<string, number> | undefined;
+  collapsedIds?: string[] | undefined;
+  sort?: { key: string; dir: 'asc' | 'desc' } | null | undefined;
 }
 
 // ─── Global options ───────────────────────────────────────────
 
 export interface GanttOptions {
   /** Active zoom level: a `ViewMode` or the `name` of a custom `zoomLevels` entry */
-  viewMode?: ViewMode | (string & {});
-  rowHeight?: number;
-  headerHeight?: number;
-  subHeaderHeight?: number;
-  panelWidth?: number;
-  panelVisible?: boolean;
+  viewMode?: ViewMode | (string & {}) | undefined;
+  rowHeight?: number | undefined;
+  headerHeight?: number | undefined;
+  subHeaderHeight?: number | undefined;
+  panelWidth?: number | undefined;
+  panelVisible?: boolean | undefined;
 
   /** Column definitions — overrides defaults */
-  columns?: ColumnDef[];
+  columns?: ColumnDef[] | undefined;
 
-  theme?: Partial<GanttTheme>;
-  darkMode?: boolean | 'auto';
+  theme?: GanttThemeOverrides | undefined;
+  darkMode?: boolean | 'auto' | undefined;
 
   /** Show baseline bars */
-  baseline?: boolean;
+  baseline?: boolean | undefined;
   /** Show critical path */
-  criticalPath?: boolean;
+  criticalPath?: boolean | undefined;
   /** Show today annotation */
-  showToday?: boolean;
+  showToday?: boolean | undefined;
 
   /** Extra padding (days) added before first task and after last */
-  timelinePadding?: number;
+  timelinePadding?: number | undefined;
 
   // ── i18n / formatting ──
   /**
    * dayjs locale id (e.g. `'it'`). Month/day names in the header follow it.
    * Load the locale first in your app: `import 'dayjs/locale/it';`
    */
-  locale?: string;
+  locale?: string | undefined;
   /** Override any subset of the UI strings */
-  labels?: Partial<GanttLabels>;
+  labels?: Partial<GanttLabels> | undefined;
   /** Override date / header formats */
-  formats?: Partial<GanttFormats>;
+  formats?: Partial<GanttFormats> | undefined;
 
   /** Drag & resize */
-  enableDrag?: boolean;
-  enableResize?: boolean;
-  enableSelection?: boolean;
-  multiSelect?: boolean;
+  enableDrag?: boolean | undefined;
+  enableResize?: boolean | undefined;
+  enableSelection?: boolean | undefined;
+  multiSelect?: boolean | undefined;
 
-  annotations?: GanttAnnotation[];
+  annotations?: GanttAnnotation[] | undefined;
 
   // ── Timeline ──
   /** Zoom presets (replace the built-in Hour…Year levels) */
-  zoomLevels?: GanttZoomLevel[];
+  zoomLevels?: GanttZoomLevel[] | undefined;
   /** Header tiers for the current level (overrides the level's own scales) */
-  scales?: GanttScale[];
+  scales?: GanttScale[] | undefined;
   /** First day of the week: 1 = Monday (ISO, default), 0 = Sunday */
-  weekStart?: 0 | 1;
+  weekStart?: 0 | 1 | undefined;
   /** Stretch the timeline so it always fills the viewport (default true) */
-  fitToWidth?: boolean;
+  fitToWidth?: boolean | undefined;
   /**
    * Where the timeline scrolls on the first render with data. Default `'auto'`: today when
    * it is near the tasks, otherwise the earliest task. `'today'`, `'start'` (earliest task),
    * a `Date` (centred), or `false` to stay at the timeline start.
    */
-  initialScroll?: 'auto' | 'today' | 'start' | Date | false;
-  gridLines?: GanttGridLines;
+  initialScroll?: 'auto' | 'today' | 'start' | Date | false | undefined;
+  gridLines?: GanttGridLines | undefined;
   /** Weekends, holidays, working / intensive hours (visual only) */
-  nonWorkingTime?: GanttNonWorkingTime | false;
+  nonWorkingTime?: GanttNonWorkingTime | false | undefined;
   /** Custom shading per day / hour cell */
-  highlightTime?: (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
+  highlightTime?: ((start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined) | undefined;
   /**
    * How `task.end` is read: `'exclusive'` (default) — the bar ends at that instant;
    * `'inclusive'` — a date-only end covers that whole day.
    */
-  endDateMode?: 'exclusive' | 'inclusive';
+  endDateMode?: 'exclusive' | 'inclusive' | undefined;
   /**
    * Treat `new Date('2026-01-05')` (UTC midnight) as a local calendar day, so bars
    * line up with day cells in every time zone. Default true.
    */
-  normalizeDateOnly?: boolean;
+  normalizeDateOnly?: boolean | undefined;
 
   // ── Elements ──
-  bar?: GanttBarOptions;
-  milestone?: GanttMilestoneOptions;
-  groupBar?: GanttGroupBarOptions;
-  arrows?: GanttArrowOptions;
+  bar?: GanttBarOptions | undefined;
+  milestone?: GanttMilestoneOptions | undefined;
+  groupBar?: GanttGroupBarOptions | undefined;
+  arrows?: GanttArrowOptions | undefined;
   /** Tree indentation per level in px (default 16) */
-  indentSize?: number;
+  indentSize?: number | undefined;
 
   // ── Layout ──
-  panel?: GanttPanelOptions;
+  panel?: GanttPanelOptions | undefined;
   /** Columns of the full table view (`view: 'table'`) */
-  table?: GanttTableOptions;
-  view?: GanttView;
-  toolbar?: GanttToolbarOptions | false;
+  table?: GanttTableOptions | undefined;
+  view?: GanttView | undefined;
+  toolbar?: GanttToolbarOptions | false | undefined;
   /** Persist UI state (panel width, view, zoom, column widths…) in localStorage */
-  stateKey?: string;
+  stateKey?: string | undefined;
 }
 
 // ─── Events emitted by the component ─────────────────────────
@@ -822,18 +863,18 @@ export interface GanttBarContext {
   theme: GanttTheme;
   layoutParams: GanttLayoutParams;
   /** Whether this task is on the critical path */
-  isCritical?: boolean;
+  isCritical?: boolean | undefined;
   /** Whether this task row is currently selected */
-  isSelected?: boolean;
+  isSelected?: boolean | undefined;
   /** Whether drag-resize handles should be shown */
-  enableResize?: boolean;
+  enableResize?: boolean | undefined;
   /** Whether baseline bar should be rendered */
-  showBaseline?: boolean;
+  showBaseline?: boolean | undefined;
   /**
    * Effective drag/resize for this row (`enableDrag` ∧ `task.draggable` ∧ resize option).
    * Drives cursor and interaction affordances on the bar.
    */
-  draggable?: boolean;
+  draggable?: boolean | undefined;
   /** Geometry computed by the core render model (position, size, label…) */
-  visual?: BarVisual;
+  visual?: BarVisual | undefined;
 }

@@ -14,15 +14,16 @@
  */
 
 import {
-  GanttTask,
-  GanttOptions,
-  GanttAnnotation,
-  GanttTheme,
-  GanttFlatRow,
-  GanttState,
-  GanttView,
-  GanttI18n,
-  ViewMode,
+  type GanttTask,
+  type GanttOptions,
+  type GanttAnnotation,
+  type GanttTheme,
+  type GanttThemeOverrides,
+  type GanttFlatRow,
+  type GanttState,
+  type GanttView,
+  type GanttI18n,
+  type ViewMode,
   computeCriticalPath,
   resolveConfig,
   resolveLength,
@@ -30,6 +31,7 @@ import {
   initialScrollLeft,
   initialScrollChanged,
   zoomAnchorScroll,
+  bottomScale,
   type ResolvedGanttConfig,
   type BarVisual,
   type TimelineModel,
@@ -43,7 +45,7 @@ import { GanttSelectionService } from './selection/gantt-selection.service';
 import { GanttDragService } from './drag/gantt-drag.service';
 import { GanttHeaderComponent } from './header/gantt-header.component';
 import { GanttTaskListComponent } from './tasklist/gantt-tasklist.component';
-import { GanttCanvasComponent, GanttBarRenderer } from './layout/gantt-canvas.component';
+import { GanttCanvasComponent, type GanttBarRenderer } from './layout/gantt-canvas.component';
 import { GanttToolbarComponent } from './annotations/gantt-toolbar.component';
 import { GanttTooltip } from './tooltip/gantt-tooltip';
 import { GanttDataSource } from './datasource/gantt-datasource';
@@ -242,7 +244,9 @@ const BOOLEAN_ATTRS = {
 
 const parseBool = (v: string | null) => v !== null && v !== 'false';
 
-// Typed event listener overloads (`el.addEventListener('task-dragged', e => e.detail.taskId)`)
+// Typed event listener overloads (`el.addEventListener('task-dragged', e => e.detail.taskId)`):
+// interface + class merging is the standard way to type a custom element's events
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export interface GantryElement {
   addEventListener<K extends keyof GantryEventMap>(
     type: K,
@@ -280,6 +284,7 @@ export interface GantryElement {
 const BaseElement: typeof HTMLElement =
   typeof HTMLElement === 'undefined' ? (class {} as typeof HTMLElement) : HTMLElement;
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class GantryElement extends BaseElement {
   static readonly observedAttributes = ['dark-mode', 'view-mode', ...Object.keys(BOOLEAN_ATTRS)];
 
@@ -312,10 +317,10 @@ export class GantryElement extends BaseElement {
   /** Columns assigned through the `columns` property (options.columns overrides them) */
   private columnsProp: VanillaColumnDef[] | null = null;
 
-  private headerComp?: GanttHeaderComponent;
-  private tasklistComp?: GanttTaskListComponent;
-  private canvasComp?: GanttCanvasComponent;
-  private toolbarComp?: GanttToolbarComponent;
+  private headerComp?: GanttHeaderComponent | undefined;
+  private tasklistComp?: GanttTaskListComponent | undefined;
+  private canvasComp?: GanttCanvasComponent | undefined;
+  private toolbarComp?: GanttToolbarComponent | undefined;
 
   // ── Property backing fields ───────────────────────────────
   private _options: GanttOptions = {};
@@ -327,31 +332,31 @@ export class GantryElement extends BaseElement {
   private _tooltipEnabled = true;
   private _showLegend = false;
   private _dataSource: GanttDataSource | null = null;
-  private _renderBar?: GanttBarRenderer;
+  private _renderBar?: GanttBarRenderer | undefined;
 
   // ── Render bookkeeping ────────────────────────────────────
   private frame = 0;
   /** true = toolbar/header/config need re-resolving, not just the rows */
   private fullRenderPending = false;
-  private resizeObserver?: ResizeObserver;
-  private clock?: ReturnType<typeof setInterval>;
+  private resizeObserver?: ResizeObserver | undefined;
+  private clock?: ReturnType<typeof setInterval> | undefined;
   /** The first render with data has applied `initialScroll` (or a requested scroll) */
   private initialScrollDone = false;
   /** Timeline the canvas was last painted with — anchors the scroll when it changes */
-  private paintedTimeline?: TimelineModel;
+  private paintedTimeline?: TimelineModel | undefined;
   private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string> } = {
     tasks: null,
     key: '',
     ids: new Set(),
   };
   private lastViewMode: string;
-  private restoredStateKey?: string;
-  private stateTimer?: ReturnType<typeof setTimeout>;
+  private restoredStateKey?: string | undefined;
+  private stateTimer?: ReturnType<typeof setTimeout> | undefined;
   /** Last panel width actually applied (px) */
   private panelPx = 0;
-  private headerTimeline?: object;
+  private headerTimeline?: object | undefined;
   /** Scroll requested before the pending render — replayed on the new timeline */
-  private pendingScroll?: () => void;
+  private pendingScroll?: (() => void) | undefined;
 
   constructor() {
     super();
@@ -508,7 +513,7 @@ export class GantryElement extends BaseElement {
     this._options = opts;
     this.i18nSvc.apply(opts);
     // options.columns wins; removing it falls back to the `columns` property, else the built-ins
-    if (opts.columns?.length) this.colSvc.setColumns(opts.columns);
+    if (opts.columns?.length) this.colSvc.setColumns(opts.columns as VanillaColumnDef[]);
     else if (prev.columns?.length) {
       if (this.columnsProp) this.colSvc.setColumns(this.columnsProp);
       else this.colSvc.resetColumns();
@@ -655,7 +660,7 @@ export class GantryElement extends BaseElement {
   get viewMode(): string {
     return this.layout.viewMode();
   }
-  setViewMode(mode: ViewMode | string): void {
+  setViewMode(mode: ViewMode | (string & {})): void {
     this.layout.viewMode.set(mode);
     this.scheduleRender();
   }
@@ -749,11 +754,11 @@ export class GantryElement extends BaseElement {
   }
 
   /** Replace the custom theme overrides (on top of the light/dark base and `options.theme`). */
-  setTheme(override: Partial<GanttTheme>): void {
+  setTheme(override: GanttThemeOverrides): void {
     this.themeSvc.setTheme(override);
     this.scheduleRender();
   }
-  patchTheme(patch: Partial<GanttTheme>): void {
+  patchTheme(patch: GanttThemeOverrides): void {
     this.themeSvc.patchTheme(patch);
     this.scheduleRender();
   }
@@ -958,7 +963,7 @@ export class GantryElement extends BaseElement {
         pxPerDay: tl.pxPerDay,
         toX: tl.toX,
         span: (start, end) => taskSpan({ start, end }, cfg),
-        snap: cfg.scales[cfg.scales.length - 1].unit === 'hour' ? 'hour' : 'day',
+        snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
       });
       const allGeometries = layout.rowGeometries;
       const canvasProps = {
@@ -1020,6 +1025,9 @@ export class GantryElement extends BaseElement {
         return;
       }
     }
+    // The control is gone (e.g. its row scrolled out of the virtual window): keep focus on the
+    // chart, so its keyboard shortcuts keep working, instead of dropping it to <body>
+    this.focus({ preventScroll: true });
   }
 
   /** Keep the date at the viewport centre (zoom) or left edge (new range start) in place. */
@@ -1128,7 +1136,7 @@ export class GantryElement extends BaseElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  private onRowClick(row: GanttFlatRow, event: MouseEvent): void {
+  private onRowClick(row: GanttFlatRow, event: MouseEvent | KeyboardEvent): void {
     const { enabled, multi } = this.layout.cfg.selection;
     if (enabled) {
       const e = multi ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);

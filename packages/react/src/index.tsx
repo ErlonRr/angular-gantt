@@ -29,8 +29,8 @@ export * from '@gantry/core';
 type NativeProps = Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | keyof GantryEventCallbacks | 'children'>;
 
 export interface GantryProps extends GantryProperties, GantryEventCallbacks, NativeProps {
-  className?: string;
-  style?: CSSProperties;
+  className?: string | undefined;
+  style?: CSSProperties | undefined;
 }
 
 const DEFAULT_STYLE: CSSProperties = { display: 'block', width: '100%', height: '100%' };
@@ -54,7 +54,7 @@ export const Gantry = forwardRef<GantryElement, GantryProps>(function Gantry(pro
     useEffect(() => {
       const el = elRef.current;
       if (el && value !== undefined) (el as unknown as Record<string, unknown>)[key] = value;
-    }, [value]);
+    }, [key, value]);
   }
 
   // Keep the latest callbacks in a ref so listeners are attached only once

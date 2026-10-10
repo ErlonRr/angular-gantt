@@ -46,14 +46,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/__tests__/tsconfig.json"
   },
   "dependencies": {
     "@gantry/core": "workspace:^"
   },
   "devDependencies": {
-    "vite": "^6.0.0",
-    "vite-plugin-dts": "^4.0.0"
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
   },
   "publishConfig": {
     "access": "public",

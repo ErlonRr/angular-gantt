@@ -1,6 +1,8 @@
 {
+  "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist/out-tsc"
-  }
+    "types": ["node"]
+  },
+  "include": ["*.ts", "e2e/**/*.ts", "apps/*/vite.config.ts", "packages/*/vite.config.ts"]
 }

@@ -8,16 +8,16 @@ export interface PagedLoaderConfig<T> {
   /** Async fetcher for page `page` (1-based). Fewer than `pageSize` items = last page. */
   fetcher: (page: number, pageSize: number) => Promise<T[]>;
   /** Items per page (default 30) */
-  pageSize?: number;
+  pageSize?: number | undefined;
   /**
    * First page to load (1-based, default 1). `0` loads nothing until `loadNext()`
    * is called; paging then starts at page 1.
    */
-  initialPage?: number;
+  initialPage?: number | undefined;
   /** Automatic retries of a failed page before `error` is set (default 2) */
-  retries?: number;
+  retries?: number | undefined;
   /** Delay before the first automatic retry in ms, doubled on each attempt (default 500) */
-  retryDelay?: number;
+  retryDelay?: number | undefined;
 }
 
 export const DEFAULT_PAGE_SIZE = 30;
@@ -38,7 +38,10 @@ export class PagedLoader<T> {
   private _error: unknown = null;
   private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly config: PagedLoaderConfig<T>) {
+  private readonly config: PagedLoaderConfig<T>;
+
+  constructor(config: PagedLoaderConfig<T>) {
+    this.config = config;
     this.pageSize = Math.max(1, Math.floor(config.pageSize ?? DEFAULT_PAGE_SIZE));
     this.autoStart = config.initialPage !== 0;
     this.startPage = Math.max(1, Math.floor(config.initialPage || 1));
@@ -150,7 +153,7 @@ export class PagedLoader<T> {
       } catch (err) {
         if (gen !== this.generation) return;
         if (attempt < retries) {
-          await new Promise(resolve => setTimeout(resolve, delay * 2 ** attempt));
+          await new Promise<void>(resolve => setTimeout(resolve, delay * 2 ** attempt));
           if (gen !== this.generation) return;
           continue;
         }

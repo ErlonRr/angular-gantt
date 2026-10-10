@@ -44,7 +44,7 @@ export class GanttVirtualScrollEngine {
   private itemHeight: number;
   private overscan: number;
   private onWindowChange: (vw: VirtualWindow) => void;
-  private rafId?: number;
+  private rafId?: number | undefined;
 
   constructor(viewportEl: HTMLElement, itemHeight: number, onWindowChange: (vw: VirtualWindow) => void, overscan = 4) {
     this.viewportEl = viewportEl;
@@ -52,16 +52,15 @@ export class GanttVirtualScrollEngine {
     this.onWindowChange = onWindowChange;
     this.overscan = overscan;
 
-    this.onScroll = this.onScroll.bind(this);
     this.viewportEl.addEventListener('scroll', this.onScroll, { passive: true });
   }
 
-  private onScroll(): void {
+  private readonly onScroll = (): void => {
     if (this.rafId) cancelAnimationFrame(this.rafId);
     this.rafId = requestAnimationFrame(() => {
       this.recompute(this.itemCount);
     });
-  }
+  };
 
   private itemCount = 0;
 

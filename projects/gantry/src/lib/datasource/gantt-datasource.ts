@@ -21,10 +21,10 @@
 //  Component); this class only exposes its state as signals.
 // ─────────────────────────────────────────────────────────────
 
-import { signal, computed, Signal, Injector } from '@angular/core';
+import { signal, computed, type Signal, type Injector } from '@angular/core';
 import { PagedLoader } from '@gantry/core';
 
-import { GanttTask } from '../types';
+import { type GanttTask } from '../types';
 
 // ─── Config ──────────────────────────────────────────────────
 

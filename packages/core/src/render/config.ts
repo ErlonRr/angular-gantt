@@ -27,14 +27,14 @@ import { calendarDays } from '../gantt-math';
 export interface ResolvedLine {
   color: string;
   width: number;
-  dash?: string;
+  dash?: string | undefined;
 }
 
 export interface ResolvedHoliday {
   from: number;
   to: number;
-  label?: string;
-  color?: string;
+  label?: string | undefined;
+  color?: string | undefined;
 }
 
 export interface ResolvedNonWorking {
@@ -43,7 +43,7 @@ export interface ResolvedNonWorking {
   holidays: ResolvedHoliday[];
   /** Working hours for a weekday (null = no hour shading) */
   workingHours: ((weekday: number) => GanttHourRange[]) | null;
-  intensive: (GanttHourRange & { color?: string; label?: string })[];
+  intensive: (GanttHourRange & { color?: string | undefined; label?: string | undefined })[];
   style: 'shade' | 'hatch' | 'disabled';
   showInHeader: boolean;
   minPxPerDay: number;
@@ -74,30 +74,30 @@ export interface ResolvedGanttConfig {
     minor: ResolvedLine | null;
     major: ResolvedLine | null;
     horizontal: ResolvedLine | null;
-    majorUnit?: TimeUnit;
+    majorUnit?: TimeUnit | undefined;
   };
   nonWorking: ResolvedNonWorking | null;
-  highlightTime?: (start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined;
+  highlightTime?: ((start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined) | undefined;
   endDateMode: 'exclusive' | 'inclusive';
   normalizeDateOnly: boolean;
   bar: {
     height: GanttLength;
     radius: number;
     minWidth: number;
-    progress: { show: boolean; color?: string; opacity: number };
+    progress: { show: boolean; color?: string | undefined; opacity: number };
     label: {
       position: 'inside' | 'left' | 'right' | 'auto' | 'none';
-      template?: (task: GanttTask) => string;
-      color?: string;
+      template?: ((task: GanttTask) => string) | undefined;
+      color?: string | undefined;
     };
   };
-  milestone: { size?: number; shape: 'diamond' | 'circle' | 'square' };
+  milestone: { size?: number | undefined; shape: 'diamond' | 'circle' | 'square' };
   groupBar: { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
-  arrows: { width: number; headSize: number; radius: number; color?: string; offset: number };
+  arrows: { width: number; headSize: number; radius: number; color?: string | undefined; offset: number };
   panel: {
     width: GanttLength;
     minWidth: number;
-    maxWidth?: GanttLength;
+    maxWidth?: GanttLength | undefined;
     resizable: boolean;
     collapsible: boolean;
     collapsed: boolean;
@@ -116,7 +116,13 @@ export interface ResolvedGanttConfig {
 }
 
 const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
-  style === false ? null : { ...fallback, ...style };
+  style === false
+    ? null
+    : {
+        color: style?.color ?? fallback.color,
+        width: style?.width ?? fallback.width,
+        dash: style?.dash ?? fallback.dash,
+      };
 
 /** Epoch day of a date (local calendar). */
 const epochDay = (d: Date) => Math.floor(calendarDays(d));
@@ -135,7 +141,7 @@ export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): Resolve
   if (wh) {
     if (Array.isArray(wh)) workingHours = () => wh;
     else if ('start' in wh && 'end' in wh && typeof wh.start === 'number') {
-      const r = wh as GanttHourRange;
+      const r = wh;
       workingHours = () => [r];
     } else {
       const map = wh as Partial<Record<number, GanttHourRange[]>>;

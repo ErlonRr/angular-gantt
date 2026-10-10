@@ -1,15 +1,7 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "react-jsx",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "customConditions": ["@gantry/source"],
-    "noEmit": true
+    "jsx": "react-jsx"
   },
   "include": ["src/**/*"]
 }

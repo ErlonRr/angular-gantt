@@ -17,7 +17,7 @@
 
 import { Injectable, signal, computed } from '@angular/core';
 
-import { GanttFlatRow, SelectionChangeEvent } from '../types';
+import { type GanttFlatRow, type SelectionChangeEvent } from '../types';
 
 @Injectable()
 export class GanttSelectionService {

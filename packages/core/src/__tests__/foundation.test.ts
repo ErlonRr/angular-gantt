@@ -16,7 +16,7 @@ import {
 } from '../gantt-math';
 import { flattenTree, filterVisible, reindexVisible } from '../gantt-data';
 import { computeCriticalPath } from '../gantt-cpm';
-import { ViewMode, DependencyType, TaskType, GanttTask } from '../types';
+import { ViewMode, DependencyType, type GanttTask } from '../types';
 
 // ─── gantt-math ───────────────────────────────────────────────
 

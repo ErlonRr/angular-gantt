@@ -16,7 +16,14 @@
 
 import { Injectable, signal, computed } from '@angular/core';
 
-import { GanttTask, GanttFlatRow, RowGeometry, GanttView, GanttI18n, ColumnDef } from '../types';
+import {
+  type GanttTask,
+  type GanttFlatRow,
+  type RowGeometry,
+  type GanttView,
+  type GanttI18n,
+  type ColumnDef,
+} from '../types';
 
 import {
   flattenTree,
@@ -24,7 +31,7 @@ import {
   reindexVisible,
   sortTree,
   columnComparator,
-  SortDirection,
+  type SortDirection,
   normalizeTasks,
 } from '../gantt-data';
 

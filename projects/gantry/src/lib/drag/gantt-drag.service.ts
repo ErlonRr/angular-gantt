@@ -15,7 +15,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, computed } from '@angular/core';
-import { RowGeometry, TaskDragEvent, TaskResizeEvent } from '../types';
+import { type RowGeometry, type TaskDragEvent, type TaskResizeEvent } from '../types';
 import { DragSession, type DragTiming, type DragPreview } from '@gantry/core';
 
 export type { DragPreview };

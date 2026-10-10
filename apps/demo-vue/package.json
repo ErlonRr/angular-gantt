@@ -10,14 +10,14 @@
     "typecheck": "vue-tsc -p tsconfig.json"
   },
   "dependencies": {
-    "vue": "^3.4.0",
+    "vue": "catalog:",
     "@gantry/vue": "workspace:^",
     "@gantry/core": "workspace:^"
   },
   "devDependencies": {
-    "@vitejs/plugin-vue": "^5.0.0",
-    "typescript": "^5.2.2",
-    "vite": "^6.0.0",
-    "vue-tsc": "^2.0.0"
+    "@vitejs/plugin-vue": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
   }
 }

@@ -13,7 +13,7 @@
   let gantt = $state<GantryElement>();
   // The demo plan is moved so today sits inside it
   const demo = createDemoData();
-  let tasks = $state<GanttTask[]>(demo.tasks);
+  const tasks = $state<GanttTask[]>(demo.tasks);
   let viewMode = $state<string>(ViewMode.Month);
   let baseline = $state(false);
   let criticalPath = $state(false);

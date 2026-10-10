@@ -4,8 +4,8 @@
 //  Pure functions — no Angular, no DOM.
 // ─────────────────────────────────────────────────────────────
 
-import { GanttTask, GanttFlatRow, TaskType, type ColumnContext } from './types';
-import { columnSortValue } from './render/columns';
+import { type GanttTask, type GanttFlatRow, TaskType, type ColumnContext } from './types';
+import { columnSortValue, valueToText } from './render/columns';
 
 // ─── Normalisation ────────────────────────────────────────────
 
@@ -39,7 +39,8 @@ export function normalizeTasks(tasks: GanttTask[]): GanttTask[] {
       path.push(cur);
       cur = parentOf.get(cur);
     }
-    if (cur !== undefined && state.get(cur) === VISITING) parentOf.set(path[path.length - 1], undefined);
+    const last = path.at(-1);
+    if (cur !== undefined && last !== undefined && state.get(cur) === VISITING) parentOf.set(last, undefined);
     for (const id of path) state.set(id, DONE);
   }
 
@@ -94,9 +95,7 @@ export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new 
   const roots = (childMap.get(undefined) ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime());
 
   // Push in reverse order so first task ends up on top
-  for (let i = roots.length - 1; i >= 0; i--) {
-    stack.push({ task: roots[i], level: 0, parentHidden: false });
-  }
+  for (const task of [...roots].reverse()) stack.push({ task, level: 0, parentHidden: false });
 
   let visibleIndex = 0;
 
@@ -132,9 +131,7 @@ export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new 
     // Push children in reverse so they come out in order
     if (hasChildren) {
       const childHidden = hidden || isCollapsed;
-      for (let i = children.length - 1; i >= 0; i--) {
-        stack.push({ task: children[i], level: level + 1, parentHidden: childHidden });
-      }
+      for (const task of [...children].reverse()) stack.push({ task, level: level + 1, parentHidden: childHidden });
     }
   }
 
@@ -179,10 +176,11 @@ export const SORT_BY_PROGRESS: SortComparator = (a, b) => (a.task.progress ?? 0)
  * is contiguous — O(N log R) for N rows and R roots. The sort is stable.
  */
 export function sortRoots(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatRow[] {
-  const groups: GanttFlatRow[][] = [];
+  const groups: [GanttFlatRow, ...GanttFlatRow[]][] = [];
   for (const row of rows) {
-    if (row.level === 0 || groups.length === 0) groups.push([row]);
-    else groups[groups.length - 1].push(row);
+    const group = groups.at(-1);
+    if (row.level === 0 || !group) groups.push([row]);
+    else group.push(row);
   }
   return groups.sort((a, b) => cmp(a[0], b[0])).flat();
 }
@@ -202,7 +200,7 @@ export function sortTree(rows: GanttFlatRow[], cmp: SortComparator): GanttFlatRo
     const node: Node = { row, children: [] };
     // Parent = the last node one level up (orphans of a filtered list attach to the root)
     path.length = Math.min(path.length, row.level + 1);
-    path[path.length - 1].children.push(node);
+    (path.at(-1) ?? root).children.push(node);
     path.push(node);
   }
   const out: GanttFlatRow[] = [];
@@ -228,7 +226,7 @@ export type SortDirection = 'asc' | 'desc';
 export function columnComparator(
   key: string,
   dir: SortDirection = 'asc',
-  opts: { column?: ColumnDef; ctx?: ColumnContext } = {},
+  opts: { column?: ColumnDef | undefined; ctx?: ColumnContext | undefined } = {},
 ): SortComparator {
   const sign = dir === 'asc' ? 1 : -1;
   const { column, ctx } = opts;
@@ -251,7 +249,7 @@ export function columnComparator(
     if (va instanceof Date && vb instanceof Date) return sign * (va.getTime() - vb.getTime());
     if (typeof va === 'number' && typeof vb === 'number') return sign * (va - vb);
     if (typeof va === 'boolean' && typeof vb === 'boolean') return sign * (Number(va) - Number(vb));
-    return sign * compareText(String(va), String(vb));
+    return sign * compareText(valueToText(va), valueToText(vb));
   };
 }
 
@@ -285,7 +283,7 @@ export function collectDescendants(id: string, rows: GanttFlatRow[]): string[] {
 
 // ─── Default column definitions ───────────────────────────────
 
-import { ColumnDef, GanttLabels } from './types';
+import { type ColumnDef, type GanttLabels } from './types';
 import { formatDate, durationLabel } from './gantt-math';
 
 /** @deprecated The legacy five columns. Use `buildBuiltinColumns()` and `resolveViewColumns()`. */

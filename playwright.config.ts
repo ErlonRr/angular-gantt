@@ -17,9 +17,9 @@ export default defineConfig({
   testDir: 'e2e',
   outputDir: 'test-results/e2e',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
+  forbidOnly: !!process.env['CI'],
+  retries: process.env['CI'] ? 1 : 0,
+  reporter: process.env['CI'] ? [['github'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   expect: { toHaveScreenshot: { maxDiffPixelRatio: 0.01, animations: 'disabled' } },
   use: {
@@ -36,7 +36,7 @@ export default defineConfig({
         : `npx vite preview --port ${t.port} --strictPort`,
     cwd: t.dir,
     url: `http://localhost:${t.port}/`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env['CI'],
     timeout: 60_000,
   })),
 });

@@ -8,7 +8,14 @@ import 'dayjs/locale/it';
 
 import { generateHeaderRows, formatDate, durationLabel } from '../gantt-math';
 import { buildDefaultColumns } from '../gantt-data';
-import { ViewMode, GanttI18n, GanttLabels, GanttFlatRow, DEFAULT_LABELS, DEFAULT_FORMATS } from '../types';
+import {
+  ViewMode,
+  type GanttI18n,
+  type GanttLabels,
+  type GanttFlatRow,
+  DEFAULT_LABELS,
+  DEFAULT_FORMATS,
+} from '../types';
 
 // Build a full i18n bundle from the defaults + a partial override.
 const bundle = (
@@ -19,7 +26,7 @@ const bundle = (
   } = {},
 ): GanttI18n => ({
   locale: over.locale,
-  labels: { ...DEFAULT_LABELS, ...over.labels } as GanttLabels,
+  labels: { ...DEFAULT_LABELS, ...over.labels },
   formats: { ...DEFAULT_FORMATS, ...over.formats },
 });
 
@@ -100,7 +107,7 @@ describe('buildDefaultColumns', () => {
   const row = { task: { start: new Date('2026-01-05'), end: new Date('2026-02-10'), progress: 40 } } as GanttFlatRow;
 
   it('localises the column headers', () => {
-    const cols = buildDefaultColumns({ ...DEFAULT_LABELS, colName: 'Attività', colStart: 'Inizio' } as GanttLabels);
+    const cols = buildDefaultColumns({ ...DEFAULT_LABELS, colName: 'Attività', colStart: 'Inizio' });
     expect(cols.find(c => c.key === 'name')!.label).toBe('Attività');
     expect(cols.find(c => c.key === 'start')!.label).toBe('Inizio');
   });

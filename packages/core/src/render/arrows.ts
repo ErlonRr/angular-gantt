@@ -24,12 +24,13 @@ type Pt = [number, number];
 
 /** Polyline → path with rounded corners of radius `r`. */
 export function roundedPolyline(points: Pt[], r: number): string {
-  if (points.length < 2) return '';
-  let d = `M${points[0][0]},${points[0][1]}`;
+  const [first] = points;
+  if (!first || points.length < 2) return '';
+  let d = `M${first[0]},${first[1]}`;
   for (let i = 1; i < points.length - 1; i++) {
-    const [px, py] = points[i - 1];
-    const [cx, cy] = points[i];
-    const [nx, ny] = points[i + 1];
+    const [px, py] = points[i - 1]!;
+    const [cx, cy] = points[i]!;
+    const [nx, ny] = points[i + 1]!;
     const inLen = Math.hypot(cx - px, cy - py);
     const outLen = Math.hypot(nx - cx, ny - cy);
     const rr = Math.min(r, inLen / 2, outLen / 2);
@@ -43,7 +44,7 @@ export function roundedPolyline(points: Pt[], r: number): string {
       by = cy + ((ny - cy) / outLen) * rr;
     d += `L${ax},${ay}Q${cx},${cy} ${bx},${by}`;
   }
-  const [lx, ly] = points[points.length - 1];
+  const [lx, ly] = points.at(-1)!;
   return d + `L${lx},${ly}`;
 }
 
@@ -53,7 +54,7 @@ const rightEdge = (b: BarVisual) => b.x + b.width;
 export function computeArrowVisual(
   from: BarVisual,
   to: BarVisual,
-  dep: { type?: DependencyType; lag?: number },
+  dep: { type?: DependencyType | undefined; lag?: number | undefined },
   cfg: ResolvedGanttConfig,
   rowBoundary: { fromTop: number; fromBottom: number },
   isCritical = false,
@@ -127,6 +128,6 @@ export function computeArrowVisual(
     width: isCritical ? width + 0.5 : width,
     dashed: lag !== 0,
     critical: isCritical,
-    lagLabel: lag ? { text: lag > 0 ? `+${lag}d` : `${lag}d`, x: vertical[0] + 4, y: (ey + ty) / 2 } : null,
+    lagLabel: lag && vertical ? { text: lag > 0 ? `+${lag}d` : `${lag}d`, x: vertical[0] + 4, y: (ey + ty) / 2 } : null,
   };
 }

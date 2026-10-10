@@ -1,5 +1,12 @@
 import { ChangeDetectionStrategy, Component, computed, input, inject } from '@angular/core';
-import { GantryComponent, GanttTask, GanttBarBase, GanttBarContext, GanttBarRegistry, TaskType } from 'ngx-gantry';
+import {
+  GantryComponent,
+  type GanttTask,
+  GanttBarBase,
+  type GanttBarContext,
+  GanttBarRegistry,
+  TaskType,
+} from 'ngx-gantry';
 import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 
@@ -209,8 +216,8 @@ export class GanttCustomComponent {
   /** The template plan moved so today sits inside it */
   readonly tasks = anchorToToday(TASKS).tasks;
 
-  constructor(registry: GanttBarRegistry) {
+  constructor() {
     // Register the custom bar type at component init
-    registry.register({ type: 'epic', component: EpicBarComponent });
+    inject(GanttBarRegistry).register({ type: 'epic', component: EpicBarComponent });
   }
 }

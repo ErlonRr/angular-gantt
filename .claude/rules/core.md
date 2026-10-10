@@ -6,7 +6,9 @@ paths:
 # @gantry/core rules
 
 - Framework-free and DOM-free: no imports from `@angular/*`, `react`, `vue`, `svelte`; no
-  `document` / `window`. It must run in Node, workers and SSR.
+  `document` / `window`. It must run in Node, workers and SSR. `pnpm lint` enforces this (and no
+  argless `new Date()` outside default parameters, no `86400000`); core compiles with `lib: ES2022`
+  only, `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` (optional fields are `?: T | undefined`).
 - Pure and deterministic: anything time-dependent takes `now` as input (see `buildTimeline`).
 - A new option needs three things here: its type in `src/types.ts` (with a JSDoc default),
   its default in `src/render/config.ts` → `resolveConfig()` (and the `ResolvedGanttConfig`

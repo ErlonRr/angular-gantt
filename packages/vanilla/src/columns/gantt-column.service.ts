@@ -15,7 +15,7 @@ import {
   type ResolvedGanttConfig,
 } from '@gantry/core';
 import type { VanillaColumnDef as ColumnDef } from '../types';
-import { GanttI18nService } from '../services/gantt-i18n.service';
+import { type GanttI18nService } from '../services/gantt-i18n.service';
 import { createState } from '../core/state';
 
 type ViewKey = 'split' | 'table';
@@ -33,9 +33,12 @@ export class GanttColumnService {
   private _builtins: ColumnDef[] = [];
 
   /** Called after any change (width, visibility, definitions). */
-  onChange?: () => void;
+  onChange?: (() => void) | undefined;
 
-  constructor(private readonly i18nService: GanttI18nService) {
+  private readonly i18nService: GanttI18nService;
+
+  constructor(i18nService: GanttI18nService) {
+    this.i18nService = i18nService;
     this.resetColumns();
   }
 

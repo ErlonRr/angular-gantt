@@ -25,10 +25,10 @@ import {
   Injector,
   runInInjectionContext,
   InjectionToken,
-  EnvironmentProviders,
+  type EnvironmentProviders,
   makeEnvironmentProviders,
 } from '@angular/core';
-import { GanttTheme, GanttLabels, GanttFormats } from '../types';
+import { type GanttTheme, type GanttThemeOverrides, type GanttLabels, type GanttFormats } from '../types';
 import { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
 
 // ─── Built-in themes (shared with the Web Component via @gantry/core) ──
@@ -38,7 +38,7 @@ export { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme };
 // ─── Config token ─────────────────────────────────────────────
 
 export interface GanttGlobalConfig {
-  theme?: Partial<GanttTheme>;
+  theme?: GanttThemeOverrides;
   darkMode?: boolean | 'auto';
   /** Default dayjs locale id (e.g. 'it') — load it first: import 'dayjs/locale/it' */
   locale?: string;
@@ -71,9 +71,9 @@ export class GanttThemeService {
   private readonly _darkMode = signal<boolean | 'auto'>(this.cfg.darkMode ?? false);
   private readonly _prefersDark = signal<boolean>(false);
   /** From `[options].theme` — replaced whenever the options change */
-  private readonly _optionsTheme = signal<Partial<GanttTheme>>({});
+  private readonly _optionsTheme = signal<GanttThemeOverrides>({});
   /** From `setTheme()` / `patchTheme()` — survives options changes */
-  private readonly _customOverride = signal<Partial<GanttTheme>>({});
+  private readonly _customOverride = signal<GanttThemeOverrides>({});
 
   // ── Computed resolved theme ───────────────────────────────
   /** Light/dark base ← global config ← `options.theme` ← API overrides */
@@ -117,15 +117,15 @@ export class GanttThemeService {
     else this._teardownMQL();
   }
 
-  setOptionsTheme(theme: Partial<GanttTheme> | undefined): void {
+  setOptionsTheme(theme: GanttThemeOverrides | undefined): void {
     this._optionsTheme.set(theme ?? {});
   }
 
-  patchTheme(patch: Partial<GanttTheme>): void {
+  patchTheme(patch: GanttThemeOverrides): void {
     this._customOverride.update(cur => ({ ...cur, ...patch }));
   }
 
-  setCustomTheme(override: Partial<GanttTheme>): void {
+  setCustomTheme(override: GanttThemeOverrides): void {
     this._customOverride.set(override);
   }
 

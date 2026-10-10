@@ -3,7 +3,7 @@
 import { test, expect } from './fixtures';
 import { TARGETS } from '../playwright.config';
 
-test.skip(!process.env.GANTRY_E2E_VISUAL, 'screenshot baselines run in the Playwright container: pnpm e2e:visual');
+test.skip(!process.env['GANTRY_E2E_VISUAL'], 'screenshot baselines run in the Playwright container: pnpm e2e:visual');
 
 const VIEW_MODES = ['Hour', 'Day', 'Week', 'Month', 'Quarter', 'Year'] as const;
 

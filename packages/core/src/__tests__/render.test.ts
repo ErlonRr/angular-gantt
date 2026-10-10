@@ -3,8 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   ViewMode,
   DependencyType,
-  GanttTask,
-  GanttFlatRow,
+  type GanttTask,
+  type GanttFlatRow,
   DEFAULT_LABELS,
   resolveConfig,
   resolveTheme,

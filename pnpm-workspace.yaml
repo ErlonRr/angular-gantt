@@ -2,3 +2,20 @@ packages:
   - 'projects/*'
   - 'packages/*'
   - 'apps/*'
+
+# One version of each shared tool for every package and demo (`"catalog:"` in package.json)
+catalog:
+  '@sveltejs/package': '^2.3.0'
+  '@sveltejs/vite-plugin-svelte': '^5.0.0'
+  '@types/react': '^19.0.0'
+  '@types/react-dom': '^19.0.0'
+  '@vitejs/plugin-react': '^4.3.1'
+  '@vitejs/plugin-vue': '^5.0.0'
+  'react': '^19.0.0'
+  'svelte': '^5.1.0'
+  'svelte-check': '^4.0.0'
+  'typescript': '~5.8.0'
+  'vite': '^6.0.0'
+  'vite-plugin-dts': '^4.0.0'
+  'vue': '^3.5.0'
+  'vue-tsc': '^2.0.0'

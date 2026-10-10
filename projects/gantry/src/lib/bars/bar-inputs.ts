@@ -4,8 +4,8 @@
 //  Every bar component receives a GanttBarContext via input().
 // ─────────────────────────────────────────────────────────────
 
-import { input, InputSignal } from '@angular/core';
-import { GanttBarContext } from '../types';
+import { input, type InputSignal } from '@angular/core';
+import { type GanttBarContext } from '../types';
 
 /**
  * Mixin-style base that declares the shared signal inputs.

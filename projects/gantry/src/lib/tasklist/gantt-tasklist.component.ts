@@ -26,10 +26,20 @@
 //  This component only renders rows — it does NOT own scroll state.
 // ─────────────────────────────────────────────────────────────
 
-import { ChangeDetectionStrategy, Component, computed, input, output, signal, inject } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  afterRenderEffect,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 
-import { GanttFlatRow, ColumnDef, GanttTheme } from '../types';
+import { type GanttFlatRow, type ColumnDef, type GanttTheme } from '../types';
 import { buildColumnContext, computeCellVisual, type CellVisual, type ColumnContext } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
@@ -127,7 +137,10 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
           [style.border-bottom]="'1px solid ' + theme().borderColor"
+          tabindex="-1"
           (click)="onRowClick($event, row)"
+          (keydown)="onRowKey($event, row)"
+          (focus)="focusedRowId = row.task.id"
           (dblclick)="rowDblClick.emit(row)"
         >
           @for (col of visibleColumns(); track col.key) {
@@ -311,6 +324,23 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
   ],
 })
 export class GanttTaskListComponent {
+  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    // A focused row that scrolls out of the window is destroyed: keep focus on the chart
+    // (its keyboard shortcuts keep working) instead of dropping it to <body>
+    afterRenderEffect(() => {
+      const rows = this.visibleRows();
+      const id = this.focusedRowId;
+      if (!id || rows.some(r => r.task.id === id)) return;
+      this.focusedRowId = null;
+      const active = document.activeElement;
+      if (!active || active === document.body) {
+        this.hostEl.nativeElement.closest<HTMLElement>('gantry')?.focus({ preventScroll: true });
+      }
+    });
+  }
+
   /** Matches .gantt-collapse-btn min width — leaf spacer alignment */
   protected readonly COLLAPSE_TARGET_PX = 24;
 
@@ -333,7 +363,7 @@ export class GanttTaskListComponent {
 
   // ── Outputs ───────────────────────────────────────────────
   readonly collapseToggle = output<string>(); // taskId
-  readonly rowClick = output<{ row: GanttFlatRow; event: MouseEvent }>();
+  readonly rowClick = output<{ row: GanttFlatRow; event: MouseEvent | KeyboardEvent }>();
   readonly rowDblClick = output<GanttFlatRow>();
   /** @deprecated The panel is resized with the splitter in GantryComponent */
   readonly panelWidthChange = output<number>();
@@ -422,6 +452,16 @@ export class GanttTaskListComponent {
   protected onRowClick(event: MouseEvent, row: GanttFlatRow): void {
     this.rowClick.emit({ row, event });
   }
+
+  /** Enter / Space on a focused row select it like a click (Ctrl / Shift modifiers included) */
+  protected onRowKey(event: KeyboardEvent, row: GanttFlatRow): void {
+    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
+    event.preventDefault();
+    this.rowClick.emit({ row, event });
+  }
+
+  /** Row that had keyboard focus — when it leaves the virtual window, focus returns to the chart */
+  protected focusedRowId: string | null = null;
 
   protected onHeaderClick(col: ColumnDef): void {
     if (col.sortable && !this.resizingCol()) this.sortColumn.emit(col.key);

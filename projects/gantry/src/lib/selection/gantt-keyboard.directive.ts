@@ -22,7 +22,7 @@ import { GanttSelectionService } from './gantt-selection.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttDragService } from '../drag/gantt-drag.service';
-import { GanttFlatRow } from '../types';
+import { type GanttFlatRow } from '../types';
 
 @Directive({
   selector: '[ganttKeyboard]',

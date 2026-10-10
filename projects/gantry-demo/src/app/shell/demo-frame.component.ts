@@ -253,7 +253,7 @@ export class DemoFrameComponent {
   protected readonly DOCS = DOCS_URL;
 
   protected copy(text: string, key: string): void {
-    navigator.clipboard?.writeText(text).then(() => {
+    void navigator.clipboard?.writeText(text).then(() => {
       this.copied.set(key);
       setTimeout(() => this.copied.set(null), 1500);
     });

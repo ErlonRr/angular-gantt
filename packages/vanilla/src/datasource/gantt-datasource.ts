@@ -5,12 +5,12 @@
  * Angular's `GanttDataSource` wraps the same loader and accepts the same config.
  */
 
-import { GanttTask, PagedLoader } from '@gantry/core';
+import { type GanttTask, PagedLoader } from '@gantry/core';
 import type { GanttDataSourceConfig } from '../types';
 
 export class GanttDataSource<T extends GanttTask = GanttTask> extends PagedLoader<T> {
   /** Called whenever items, loading, `hasMore` or error change. */
-  onChange?: () => void;
+  onChange?: (() => void) | undefined;
 
   constructor(config: GanttDataSourceConfig<T>) {
     super(config);

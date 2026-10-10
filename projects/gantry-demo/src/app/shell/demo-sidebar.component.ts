@@ -9,7 +9,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 import { AppThemeService } from './app-theme.service';
-import { DEMOS, DEMO_CATEGORY_ORDER, DemoEntry, DemoCategory } from './demo-registry';
+import { DEMOS, DEMO_CATEGORY_ORDER, type DemoEntry, type DemoCategory } from './demo-registry';
 
 interface DemoGroup {
   category: DemoCategory;

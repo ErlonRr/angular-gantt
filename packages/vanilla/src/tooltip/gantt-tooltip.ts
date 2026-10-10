@@ -4,10 +4,17 @@
  * living in the component's shadow root, positioned next to the pointer.
  */
 
-import { GanttTask, GanttTheme, TaskType, formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
+import {
+  type GanttTask,
+  type GanttTheme,
+  TaskType,
+  formatDate,
+  taskDurationLabel,
+  type ResolvedGanttConfig,
+} from '@gantry/core';
 
 type DateReading = Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
-import { GanttI18nService } from '../services/gantt-i18n.service';
+import { type GanttI18nService } from '../services/gantt-i18n.service';
 
 const SHOW_DELAY = 320;
 const HIDE_DELAY = 120;
@@ -25,10 +32,10 @@ export class GanttTooltip {
   private task: GanttTask | null = null;
   private visible = false;
 
-  constructor(
-    root: ShadowRoot | HTMLElement,
-    private readonly i18n: GanttI18nService,
-  ) {
+  private readonly i18n: GanttI18nService;
+
+  constructor(root: ShadowRoot | HTMLElement, i18n: GanttI18nService) {
+    this.i18n = i18n;
     this.popover = document.createElement('div');
     this.popover.setAttribute('popover', 'manual');
     this.popover.setAttribute('role', 'tooltip');
@@ -159,5 +166,5 @@ export class GanttTooltip {
 
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function esc(s: string): string {
-  return String(s).replace(/[&<>"']/g, c => ESCAPES[c]);
+  return String(s).replace(/[&<>"']/g, c => ESCAPES[c] ?? c);
 }

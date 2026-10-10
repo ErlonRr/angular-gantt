@@ -104,9 +104,9 @@ const TYPE_RANK: Record<string, number> = { [TaskType.Group]: 0, [TaskType.Task]
 /** Per-render values for time- and data-dependent cells. Pure: pass the binding's clock as `now`. */
 export function buildColumnContext(input: {
   tasks: readonly GanttTask[];
-  config?: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> | null;
+  config?: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> | null | undefined;
   now: Date;
-  locale?: string;
+  locale?: string | undefined;
 }): ColumnContext {
   let collator: Intl.Collator;
   try {
@@ -126,6 +126,8 @@ export function buildColumnContext(input: {
 
 /** Fallback context for callers that render without one (e.g. legacy one-argument renderers). */
 function contextOf(ctx: ColumnContext | undefined, task: GanttTask): ColumnContext {
+  // Legacy callers pass no context: read the clock once, like `buildTimeline({ now })` defaults
+  // eslint-disable-next-line no-restricted-syntax
   return ctx ?? buildColumnContext({ tasks: [task], now: new Date() });
 }
 
@@ -158,7 +160,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
   const variance = (t: GanttTask, ctx: ColumnContext): number | null => {
     if (!t.baseline) return null;
     const actual = calendarDays(span(t, ctx).end, false);
-    const planned = calendarDays(taskSpan(t.baseline as GanttTask, ctx).end, false);
+    const planned = calendarDays(taskSpan(t.baseline, ctx).end, false);
     return Math.round((actual - planned) * 10) / 10;
   };
 
@@ -308,7 +310,7 @@ export function mergeColumnDefs<T extends ColumnDef>(custom: readonly T[], built
       ...(ownCell ? {} : { render: b.render, sortValue: b.sortValue, sortable: b.sortable, builtin: b.builtin }),
     };
     for (const k of Object.keys(inherited) as (keyof ColumnDef)[]) if (inherited[k] === undefined) delete inherited[k];
-    return { ...inherited, ...def } as T;
+    return { ...inherited, ...def };
   });
 }
 
@@ -316,9 +318,9 @@ export function mergeColumnDefs<T extends ColumnDef>(custom: readonly T[], built
 
 export interface ColumnVisibility {
   /** Shown / hidden in both views (`setColumnVisible(key, visible)`) */
-  all?: ReadonlyMap<string, boolean>;
-  split?: ReadonlyMap<string, boolean>;
-  table?: ReadonlyMap<string, boolean>;
+  all?: ReadonlyMap<string, boolean> | undefined;
+  split?: ReadonlyMap<string, boolean> | undefined;
+  table?: ReadonlyMap<string, boolean> | undefined;
 }
 
 const warned = new Set<string>();
@@ -338,9 +340,9 @@ export function resolveViewColumns<T extends ColumnDef>(input: {
   custom: boolean;
   view: GanttView;
   config: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>;
-  visibility?: ColumnVisibility;
+  visibility?: ColumnVisibility | undefined;
   /** Runtime edits applied to the default lists when there are no consumer columns / key lists */
-  edits?: { added?: readonly ColumnDef[]; removed?: readonly string[]; order?: readonly string[] | null };
+  edits?: { added?: readonly ColumnDef[]; removed?: readonly string[]; order?: readonly string[] | null } | undefined;
 }): T[] {
   const { columns, builtins, custom, view, config, visibility, edits } = input;
   if (view === 'chart') return [];
@@ -401,6 +403,19 @@ export function resolveViewColumns<T extends ColumnDef>(input: {
 
 // ─── Cell values ──────────────────────────────────────────────
 
+/** Text of any cell or sort value: `String()` for scalars, dates and arrays; JSON for plain objects. */
+export function valueToText(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object' && v !== null && !(v instanceof Date) && !Array.isArray(v)) {
+    try {
+      return JSON.stringify(v) ?? '';
+    } catch {
+      return Object.prototype.toString.call(v);
+    }
+  }
+  return String(v as number | boolean | bigint | symbol | Date | unknown[] | undefined);
+}
+
 /** Duration label of the drawn span — the Duration column and the tooltips use the same rule. */
 export function taskDurationLabel(
   task: Pick<GanttTask, 'start' | 'end'>,
@@ -423,10 +438,10 @@ export function findColumn<T extends ColumnDef>(
 export interface CellVisual {
   text: string;
   /** Full text for a tooltip when the cell may be truncated (predecessors) */
-  title?: string;
+  title?: string | undefined;
   /** Built-in `status` column: the status and its dot colour */
-  status?: string;
-  dotColor?: string;
+  status?: string | undefined;
+  dotColor?: string | undefined;
 }
 
 /** What a (non-name, non-template) cell shows. */
@@ -437,7 +452,7 @@ export function computeCellVisual(
   theme: GanttTheme,
 ): CellVisual {
   const raw = col.render ? col.render(row, ctx) : (row.task as unknown as Record<string, unknown>)[col.key];
-  const text = raw == null ? '' : String(raw);
+  const text = raw == null ? '' : valueToText(raw);
   if (col.builtin && col.key === 'status') {
     const status = taskStatus(row.task, ctx.now, ctx);
     return { text, status, dotColor: statusColor(status, theme) };
@@ -454,9 +469,6 @@ export function columnSortValue(
 ): ColumnSortValue {
   if (col?.sortValue) return col.sortValue(row, ctx);
   const v = (row.task as unknown as Record<string, unknown>)[key];
-  return v instanceof Date || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
-    ? v
-    : v == null
-      ? v
-      : String(v);
+  if (v instanceof Date || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  return v == null ? v : valueToText(v);
 }

@@ -13,15 +13,14 @@ import {
   Component,
   input,
   output,
-  computed,
   ElementRef,
-  OnInit,
-  OnDestroy,
+  type OnInit,
+  type OnDestroy,
   inject,
   afterRenderEffect,
 } from '@angular/core';
 
-import { GanttTheme } from '../types';
+import { type GanttTheme } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
@@ -156,7 +155,7 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
   readonly retry = output<void>();
 
   protected readonly labels = inject(GanttI18nService).labels;
-  private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
   private _observer?: IntersectionObserver;
   /** Focus is inside the footer (kept while its focused button is swapped out) */
   protected hasFocus = false;
@@ -167,7 +166,7 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
       this.isLoading();
       this.error();
       this.hasMore();
-      const host = this.el.nativeElement as HTMLElement;
+      const host = this.el.nativeElement;
       if (!this.hasFocus || host.contains(document.activeElement)) return;
       (host.querySelector('button') ?? host).focus({ preventScroll: true });
     });
@@ -176,7 +175,7 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
   protected onFocusOut(event: FocusEvent): void {
     // relatedTarget is null when the focused button was removed: keep tracking then
     const next = event.relatedTarget as Node | null;
-    if (next && !(this.el.nativeElement as HTMLElement).contains(next)) this.hasFocus = false;
+    if (next && !this.el.nativeElement.contains(next)) this.hasFocus = false;
   }
 
   ngOnInit(): void {

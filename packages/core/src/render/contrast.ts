@@ -19,7 +19,7 @@ export function parseColor(color: string): [number, number, number] | null {
   const hex = /^#([0-9a-f]{3,8})$/.exec(c)?.[1];
   if (hex) {
     if (hex.length === 3 || hex.length === 4) {
-      return [0, 1, 2].map(i => parseInt(hex[i] + hex[i], 16)) as [number, number, number];
+      return [0, 1, 2].map(i => parseInt(hex.charAt(i).repeat(2), 16)) as [number, number, number];
     }
     if (hex.length === 6 || hex.length === 8) {
       return [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
@@ -28,7 +28,7 @@ export function parseColor(color: string): [number, number, number] | null {
   }
   const fn = /^rgba?\(\s*([\d.]+%?)[\s,]+([\d.]+%?)[\s,]+([\d.]+%?)/.exec(c);
   if (!fn) return null;
-  return [fn[1], fn[2], fn[3]].map(v =>
+  return [fn[1], fn[2], fn[3]].map((v = '0') =>
     Math.min(255, Math.max(0, v.endsWith('%') ? parseFloat(v) * 2.55 : parseFloat(v))),
   ) as [number, number, number];
 }

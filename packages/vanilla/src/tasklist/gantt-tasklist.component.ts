@@ -4,7 +4,13 @@
  * sortable custom columns, virtual rows and an optional load-more footer.
  */
 
-import { GanttFlatRow, GanttTheme, GanttLabels, computeCellVisual, type ColumnContext } from '@gantry/core';
+import {
+  type GanttFlatRow,
+  type GanttTheme,
+  type GanttLabels,
+  computeCellVisual,
+  type ColumnContext,
+} from '@gantry/core';
 import { BaseComponent } from '../core/base-component';
 import { EventEmitter } from '../core/event-emitter';
 import type { SortState } from '../layout/gantt-layout.service';
@@ -15,7 +21,7 @@ export interface GanttLoadMoreState {
   hasMore: boolean;
   loadedCount: number;
   /** The last page failed: show the error and a Retry button */
-  error?: boolean;
+  error?: boolean | undefined;
 }
 
 export interface GanttTaskListProps {
@@ -42,7 +48,7 @@ export interface GanttTaskListProps {
 
 export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
   readonly collapseToggle$ = new EventEmitter<string>();
-  readonly rowClick$ = new EventEmitter<{ row: GanttFlatRow; event: MouseEvent }>();
+  readonly rowClick$ = new EventEmitter<{ row: GanttFlatRow; event: MouseEvent | KeyboardEvent }>();
   readonly rowDblClick$ = new EventEmitter<GanttFlatRow>();
   readonly sortColumn$ = new EventEmitter<string>();
   readonly loadMore$ = new EventEmitter<void>();
@@ -193,7 +199,15 @@ export class GanttTaskListComponent extends BaseComponent<GanttTaskListProps> {
         cursor: pointer;
       `;
 
+      rowEl.tabIndex = -1;
+      rowEl.dataset['focusKey'] = `row:${row.task.id}`;
       rowEl.addEventListener('click', e => this.rowClick$.emit({ row, event: e }));
+      // Enter / Space on a focused row select it like a click (modifiers included)
+      rowEl.addEventListener('keydown', e => {
+        if (e.target !== rowEl || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        this.rowClick$.emit({ row, event: e });
+      });
       rowEl.addEventListener('dblclick', () => this.rowDblClick$.emit(row));
 
       for (const col of visibleColumns) {

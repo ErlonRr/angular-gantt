@@ -1,4 +1,4 @@
-import { GanttTask, GanttAnnotation, TaskType, DependencyType } from './types';
+import { type GanttTask, type GanttAnnotation, TaskType, DependencyType } from './types';
 import { addDays, calendarDays, clamp, taskExtent } from './gantt-math';
 
 const d = (iso: string) => new Date(iso);
@@ -146,9 +146,9 @@ export const DEMO_ANNOTATIONS: GanttAnnotation[] = [
 
 export interface DemoAnchorOptions {
   /** Reference "today" (default: the current date). Pass a fixed date for deterministic output. */
-  now?: Date;
+  now?: Date | undefined;
   /** Where today falls inside the plan, 0 (start) … 1 (end). Default 0.4. */
-  at?: number;
+  at?: number | undefined;
 }
 
 /**

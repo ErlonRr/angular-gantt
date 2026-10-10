@@ -71,6 +71,8 @@ export class Chart {
     return this.host().evaluate(
       (host, [src, a]) => {
         const root = (host as HTMLElement).shadowRoot ?? host;
+        // The callback crosses into the page as source text: rebuild it there
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
         return new Function('root', 'arg', `return (${src})(root, arg)`)(root, a);
       },
       [fn.toString(), arg] as const,

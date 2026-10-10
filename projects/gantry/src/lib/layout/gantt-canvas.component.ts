@@ -16,21 +16,21 @@ import {
   output,
   inject,
   signal,
-  ElementRef,
+  type ElementRef,
   viewChild,
 } from '@angular/core';
 import { GanttBarHostComponent } from './gantt-bar-host.component';
 
 import {
-  RowGeometry,
-  GanttAnnotation,
-  GanttBarContext,
-  GanttDependency,
-  GanttFlatRow,
+  type RowGeometry,
+  type GanttAnnotation,
+  type GanttBarContext,
+  type GanttDependency,
+  type GanttFlatRow,
   DependencyType,
-  SelectionChangeEvent,
-  TaskDragEvent,
-  TaskResizeEvent,
+  type SelectionChangeEvent,
+  type TaskDragEvent,
+  type TaskResizeEvent,
 } from '../types';
 import {
   computeBarVisual,
@@ -65,6 +65,8 @@ let nextCanvasId = 0;
   },
   template: `
     <div [style.width.px]="timeline().totalWidth" [style.height.px]="totalHeight()" [style.position]="'relative'">
+      <!-- Pointer selection; the keyboard path to bars is the roving-focus model (Gantry 2 phase 9) -->
+      <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
       <svg
         #svgEl
         [attr.width]="timeline().totalWidth"

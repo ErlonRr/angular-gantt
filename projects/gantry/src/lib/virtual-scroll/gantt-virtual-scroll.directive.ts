@@ -37,8 +37,8 @@ import {
   inject,
   Injector,
   runInInjectionContext,
-  OnInit,
-  OnDestroy,
+  type OnInit,
+  type OnDestroy,
   NgZone,
 } from '@angular/core';
 
@@ -71,7 +71,7 @@ export class GanttVirtualScrollDirective<T> implements OnInit, OnDestroy {
   private readonly _scrollTop = signal<number>(0);
   private readonly _hostHeight = signal<number>(0);
 
-  private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly zone = inject(NgZone);
   private readonly injector = inject(Injector);
 

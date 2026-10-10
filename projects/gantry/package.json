@@ -1,7 +1,8 @@
 {
   "name": "ngx-gantry",
   "version": "1.0.1",
-  "description": "Gantry — a free, zoneless, signal-based Gantt chart for Angular 20+ (zero @angular/animations, zero CDK, only dayjs).",
+  "type": "module",
+  "description": "Gantry \u2014 a free, zoneless, signal-based Gantt chart for Angular 20+ (zero @angular/animations, zero CDK, only dayjs).",
   "keywords": [
     "angular",
     "gantt",

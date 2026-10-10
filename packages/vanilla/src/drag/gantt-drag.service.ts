@@ -5,9 +5,9 @@
  */
 
 import {
-  RowGeometry,
-  TaskDragEvent,
-  TaskResizeEvent,
+  type RowGeometry,
+  type TaskDragEvent,
+  type TaskResizeEvent,
   DragSession,
   type DragTiming,
   type DragPreview,
@@ -25,8 +25,8 @@ export class GanttDragService {
   private timing: DragTiming = { pxPerDay: 8, toX: () => 0, span: (start, end) => ({ start, end }), snap: 'day' };
   private session: DragSession | null = null;
 
-  onTaskDragged?: (e: TaskDragEvent) => void;
-  onTaskResized?: (e: TaskResizeEvent) => void;
+  onTaskDragged?: ((e: TaskDragEvent) => void) | undefined;
+  onTaskResized?: ((e: TaskResizeEvent) => void) | undefined;
 
   /** Whether the last finished drag actually moved the bar (used to suppress the trailing click). */
   lastDragMoved = false;

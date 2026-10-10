@@ -1,7 +1,7 @@
 {
   "name": "@gantry/svelte",
   "version": "1.0.0",
-  "description": "Gantry Gantt chart for Svelte 5 — a free, full-featured interactive Gantt component.",
+  "description": "Gantry Gantt chart for Svelte 5 \u2014 a free, full-featured interactive Gantt component.",
   "keywords": [
     "svelte",
     "svelte5",
@@ -56,11 +56,11 @@
     "svelte": "^5.0.0"
   },
   "devDependencies": {
-    "@sveltejs/package": "^2.3.0",
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "svelte": "^5.1.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "~5.8.0"
+    "@sveltejs/package": "catalog:",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "svelte": "catalog:",
+    "svelte-check": "catalog:",
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public",

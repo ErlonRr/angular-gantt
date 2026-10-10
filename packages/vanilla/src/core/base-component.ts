@@ -6,7 +6,7 @@
 /**
  * Base abstract class providing mounting, rendering, and cleanup lifecycles.
  */
-export abstract class BaseComponent<TProps = Record<string, any>> {
+export abstract class BaseComponent<TProps = Record<string, unknown>> {
   protected element: HTMLElement;
   protected props: TProps;
   protected unmountFns: Array<() => void> = [];

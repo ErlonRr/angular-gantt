@@ -8,11 +8,11 @@
  */
 
 export class GanttScrollService {
-  private panelEl?: HTMLElement;
-  private canvasEl?: HTMLElement;
+  private panelEl?: HTMLElement | undefined;
+  private canvasEl?: HTMLElement | undefined;
 
   /** Called (at most once per frame) after any scroll of either pane. */
-  onScroll?: () => void;
+  onScroll?: (() => void) | undefined;
   private frame = 0;
 
   bindViewports(panel: HTMLElement, canvas: HTMLElement): void {

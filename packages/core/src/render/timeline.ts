@@ -6,7 +6,7 @@
 
 import type { GanttTask, GanttFlatRow, RowGeometry, GanttI18n, TimeUnit } from '../types';
 import { calendarDays, fromCalendarDays, snapRange, toLocalDay, addDays } from '../gantt-math';
-import { buildTiers, unitAdd, unitBoundaries, unitStart, type ScaleTier } from './scales';
+import { bottomScale, buildTiers, unitAdd, unitBoundaries, unitStart, type ScaleTier } from './scales';
 import type { ResolvedGanttConfig } from './config';
 
 export type TimeBandKind = 'weekend' | 'holiday' | 'off-hours' | 'intensive' | 'custom';
@@ -16,8 +16,8 @@ export interface TimeBand {
   width: number;
   kind: TimeBandKind;
   color: string;
-  className?: string;
-  label?: string;
+  className?: string | undefined;
+  label?: string | undefined;
 }
 
 export interface TimelineModel {
@@ -36,17 +36,18 @@ export interface TimelineModel {
   todayX: number;
   /** Earliest start and latest end of the tasks as drawn (null without tasks) */
   extent: { start: Date; end: Date } | null;
-  toX(date: Date): number;
-  toDate(x: number): Date;
+  /** Calendar date → timeline x (closures: safe to pass around unbound) */
+  toX: (date: Date) => number;
+  toDate: (x: number) => Date;
 }
 
 export interface TimelineInput {
   tasks: GanttTask[];
   config: ResolvedGanttConfig;
   /** Visible width of the timeline viewport (for `fitToWidth`) */
-  viewportWidth?: number;
-  i18n?: GanttI18n;
-  now?: Date;
+  viewportWidth?: number | undefined;
+  i18n?: GanttI18n | undefined;
+  now?: Date | undefined;
 }
 
 // ─── Task dates as drawn ──────────────────────────────────────
@@ -78,7 +79,7 @@ const isMidnight = (d: Date) =>
 
 export function buildTimeline(input: TimelineInput): TimelineModel {
   const { config: cfg, i18n, now = new Date() } = input;
-  const bottom = cfg.scales[cfg.scales.length - 1];
+  const bottom = bottomScale(cfg.scales);
   const step = bottom.step ?? 1;
 
   const spans = input.tasks.map(t => {
@@ -93,7 +94,9 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
       if (s.end > extent.end) extent.end = s.end;
     }
   }
-  let { start, end } = snapRange(spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now);
+  const range = snapRange(spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now);
+  const start = range.start;
+  let end = range.end;
 
   const pxPerDay = cfg.pxPerDay;
   const startDays = calendarDays(start, cfg.normalizeDateOnly);
@@ -130,8 +133,8 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
         .filter(x => x > 0 && x < totalWidth)
     : [];
   const majorSet = new Set(majorLines);
-  const bottomTier = tiers[tiers.length - 1];
-  const minorLines = bottomTier.cells.map(c => c.x).filter(x => x > 0 && !majorSet.has(x));
+  const bottomTier = tiers.at(-1);
+  const minorLines = (bottomTier?.cells ?? []).map(c => c.x).filter(x => x > 0 && !majorSet.has(x));
 
   const todayX = cfg.showToday ? toX(now) : -1;
 
@@ -178,7 +181,7 @@ export function computeTimeBands(
     to: Date,
     kind: TimeBandKind,
     color: string,
-    extra?: { className?: string; label?: string },
+    extra?: { className?: string | undefined; label?: string | undefined },
   ) => {
     const x = toX(from);
     const width = toX(to) - x;

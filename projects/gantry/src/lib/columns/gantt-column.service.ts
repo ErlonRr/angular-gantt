@@ -22,7 +22,7 @@ import {
   type GanttView,
   type ResolvedGanttConfig,
 } from '@gantry/core';
-import { ColumnDef } from '../types';
+import { type ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 type ViewKey = 'split' | 'table';

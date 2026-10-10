@@ -4,7 +4,14 @@
  * @gantry/core) and mirrors the result as CSS custom properties on the host.
  */
 
-import { GanttTheme, LightTheme, DarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
+import {
+  type GanttTheme,
+  type GanttThemeOverrides,
+  LightTheme,
+  DarkTheme,
+  THEME_CSS_VARS,
+  resolveTheme,
+} from '@gantry/core';
 import { createState } from '../core/state';
 
 export { LightTheme, DarkTheme };
@@ -13,13 +20,13 @@ export class GanttThemeService {
   private readonly _darkMode = createState<boolean | 'auto'>(false);
   private readonly _prefersDark = createState<boolean>(false);
   /** From `options.theme` — replaced on every options assignment */
-  private readonly _optionsTheme = createState<Partial<GanttTheme>>({});
+  private readonly _optionsTheme = createState<GanttThemeOverrides>({});
   /** From `setTheme()` / `patchTheme()` — survives options changes */
-  private readonly _apiTheme = createState<Partial<GanttTheme>>({});
+  private readonly _apiTheme = createState<GanttThemeOverrides>({});
 
-  private _hostEl?: HTMLElement;
-  private _mql?: MediaQueryList;
-  private _mqlCb?: (e: MediaQueryListEvent) => void;
+  private _hostEl?: HTMLElement | undefined;
+  private _mql?: MediaQueryList | undefined;
+  private _mqlCb?: ((e: MediaQueryListEvent) => void) | undefined;
   private _unsubscribe: Array<() => void> = [];
 
   get resolvedTheme(): Required<GanttTheme> {
@@ -47,16 +54,16 @@ export class GanttThemeService {
     else this._teardownMQL();
   }
 
-  setOptionsTheme(theme: Partial<GanttTheme> | undefined): void {
+  setOptionsTheme(theme: GanttThemeOverrides | undefined): void {
     this._optionsTheme.set(theme ?? {});
   }
 
-  patchTheme(patch: Partial<GanttTheme>): void {
+  patchTheme(patch: GanttThemeOverrides): void {
     this._apiTheme.update(cur => ({ ...cur, ...patch }));
   }
 
   /** Replace the API overrides (`setTheme`). */
-  setTheme(theme: Partial<GanttTheme>): void {
+  setTheme(theme: GanttThemeOverrides): void {
     this._apiTheme.set({ ...theme });
   }
 

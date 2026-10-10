@@ -117,7 +117,11 @@ function toOptions(s: State): GanttOptions {
 function apply(): void {
   const opts = toOptions(state);
   gantt.options = opts;
-  code.textContent = JSON.stringify(opts, (_k, v) => (typeof v === 'function' ? `ƒ ${v.name || 'format'}` : v), 2);
+  code.textContent = JSON.stringify(
+    opts,
+    (_k, v: unknown) => (typeof v === 'function' ? `ƒ ${v.name || 'format'}` : v),
+    2,
+  );
 }
 
 // ── Controls ───────────────────────────────────────────────

@@ -3,14 +3,14 @@
  * Vanilla JS selection manager supporting single, ctrl toggle, and shift range selection.
  */
 
-import { GanttFlatRow, SelectionChangeEvent } from '@gantry/core';
+import { type GanttFlatRow, type SelectionChangeEvent } from '@gantry/core';
 import { createState } from '../core/state';
 
 export class GanttSelectionService {
   private readonly _selectedIds = createState<Set<string>>(new Set());
   private readonly _lastSelected = createState<string | null>(null);
 
-  onChange?: (e: SelectionChangeEvent) => void;
+  onChange?: ((e: SelectionChangeEvent) => void) | undefined;
 
   get selectedIds(): Set<string> {
     return this._selectedIds();

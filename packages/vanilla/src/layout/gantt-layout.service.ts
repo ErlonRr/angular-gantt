@@ -6,17 +6,17 @@
  */
 
 import {
-  GanttTask,
-  GanttFlatRow,
-  RowGeometry,
-  GanttI18n,
-  GanttView,
+  type GanttTask,
+  type GanttFlatRow,
+  type RowGeometry,
+  type GanttI18n,
+  type GanttView,
   flattenTree,
   filterVisible,
   reindexVisible,
   sortTree,
   columnComparator,
-  SortDirection,
+  type SortDirection,
   normalizeTasks,
   buildColumnContext,
   findColumn,
@@ -28,7 +28,7 @@ import {
   type ResolvedGanttConfig,
   type TimelineModel,
 } from '@gantry/core';
-import { createState, WritableState } from '../core/state';
+import { createState, type WritableState } from '../core/state';
 
 export interface SortState {
   key: string;

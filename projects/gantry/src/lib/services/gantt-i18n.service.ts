@@ -10,7 +10,14 @@
 
 import { Injectable, signal, computed, inject } from '@angular/core';
 
-import { GanttLabels, GanttFormats, GanttOptions, GanttI18n, DEFAULT_LABELS, DEFAULT_FORMATS } from '../types';
+import {
+  type GanttLabels,
+  type GanttFormats,
+  type GanttOptions,
+  type GanttI18n,
+  DEFAULT_LABELS,
+  DEFAULT_FORMATS,
+} from '../types';
 import { GANTT_GLOBAL_CONFIG } from './gantt-theme.service';
 
 @Injectable()

@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, signal, viewChild, inject } from '@angular/core';
 import {
   GantryComponent,
-  GanttTask,
-  GanttAnnotation,
+  type GanttTask,
+  type GanttAnnotation,
   ViewMode,
-  GanttOptions,
-  TaskDragEvent,
-  TaskResizeEvent,
-  SelectionChangeEvent,
+  type GanttOptions,
+  type TaskDragEvent,
+  type TaskResizeEvent,
+  type SelectionChangeEvent,
 } from 'ngx-gantry';
 import { createDemoData } from '@gantry/core/demo';
 import { addDays, snapToDay } from '@gantry/core';
@@ -169,7 +169,7 @@ export class GanttDemoComponent {
   readonly opts = this._opts.asReadonly();
 
   toggle(key: keyof GanttOptions) {
-    this._opts.update(o => ({ ...o, [key]: !o[key as keyof typeof o] }));
+    this._opts.update(o => ({ ...o, [key]: !o[key] }));
   }
 
   addTask() {

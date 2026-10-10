@@ -102,7 +102,7 @@ export class GanttScrollService {
   }
 
   private _scrollSource: 'panel' | 'canvas' | null = null;
-  private _scrollTimeout: any;
+  private _scrollTimeout?: ReturnType<typeof setTimeout>;
 
   private _onPanelScroll(): void {
     if (this._scrollSource === 'canvas') return;
