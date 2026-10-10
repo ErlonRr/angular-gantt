@@ -12,9 +12,6 @@ export default defineConfig({
       formats: ['es'],
       fileName: (_format, name) => `${name}.js`,
     },
-    rolldownOptions: {
-      external: [/^dayjs/],
-    },
     sourcemap: true,
   },
   plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], bundleTypes: true })],

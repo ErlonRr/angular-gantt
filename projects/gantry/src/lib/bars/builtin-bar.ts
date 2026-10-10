@@ -5,10 +5,11 @@
 //  render model in `ctx.visual` — identical to the Web Component.
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, computed, input } from '@angular/core';
-import { cssPx } from '@gantry/core';
+import { Directive, computed, inject, input } from '@angular/core';
+import { cssPx, taskAccessibleName } from '@gantry/core';
 import { type GanttBarContext } from '../types';
 import { GanttBarBase } from '../bar-registry';
+import { GanttI18nService } from '../services/gantt-i18n.service';
 
 /** Template shared by the built-in task / group / milestone bars. */
 export const BUILTIN_BAR_TEMPLATE = `
@@ -57,11 +58,18 @@ export abstract class GanttBuiltinBar extends GanttBarBase {
 
   protected readonly fontPx = computed(() => cssPx(this.ctx().theme.fontSize, 13) - 1);
 
+  /** Optional: a bar rendered outside `<gantry>` falls back to the English labels */
+  private readonly i18n = inject(GanttI18nService, { optional: true });
+
+  /** Name, type, dates, progress, critical and baseline state (shared with the Web Component) */
   protected readonly ariaLabel = computed(() => {
-    const { row, showBaseline } = this.ctx();
-    const t = row.task;
-    if (row.barType === 'milestone') return `${t.name}, milestone`;
-    return `${t.name}, ${t.progress ?? 0}% complete${showBaseline && t.baseline ? ', planned baseline shown' : ''}`;
+    const { row, isCritical, showBaseline } = this.ctx();
+    return taskAccessibleName(row, {
+      labels: this.i18n?.labels(),
+      locale: this.i18n?.locale(),
+      critical: isCritical,
+      baseline: showBaseline && !!row.task.baseline,
+    });
   });
 }
 

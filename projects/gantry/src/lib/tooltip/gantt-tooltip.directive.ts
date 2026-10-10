@@ -21,9 +21,24 @@
 
 import { Directive, ElementRef, inject, input, type OnDestroy, type OnInit, DOCUMENT } from '@angular/core';
 
-import { TaskType, type RowGeometry, type GanttTheme } from '../types';
-import { formatDate, taskDurationLabel, type ResolvedGanttConfig } from '@gantry/core';
+import { type RowGeometry, type GanttTask, type GanttTheme } from '../types';
+import { buildTooltipModel, resolveTheme, type ResolvedGanttConfig, type TooltipModel } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
+
+/** What the tooltip reads besides the row: the clock, the critical path, float and the task index. */
+export interface GanttTooltipContext {
+  /** Clock for the status (the timeline's `now`); default: when the tooltip opens */
+  now?: Date | undefined;
+  /** Critical task ids — adds the critical-path row */
+  criticalIds?: ReadonlySet<string> | undefined;
+  /** Total float per task id in days (CPM `floatMap`) — adds the float row */
+  floatDays?: ReadonlyMap<string, number> | undefined;
+  /** Every task by id — names predecessors and finds successors */
+  tasksById?: ReadonlyMap<string, GanttTask> | undefined;
+}
+
+/** Colours when no `tooltipTheme` is bound */
+const FALLBACK_THEME = resolveTheme(false);
 
 // ─── Tooltip directive ────────────────────────────────────────
 
@@ -49,11 +64,18 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
   readonly ganttTooltip = input.required<RowGeometry>();
   readonly tooltipTheme = input<GanttTheme | null>(null);
   readonly tooltipEnabled = input<boolean>(true);
-  /** How task dates are read, so the duration matches the bar and the Duration column */
-  readonly tooltipDates = input<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>({
+  /**
+   * How task dates are read, so the duration matches the bar and the Duration column, and
+   * whether baseline rows are shown (`baseline`, like the bars; default off)
+   */
+  readonly tooltipDates = input<
+    Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> & { baseline?: boolean | undefined }
+  >({
     endDateMode: 'exclusive',
     normalizeDateOnly: true,
   });
+  /** Critical path, float and task index for the extra rows */
+  readonly tooltipContext = input<GanttTooltipContext>({});
 
   private readonly doc = inject(DOCUMENT);
   private readonly el = inject(ElementRef);
@@ -104,13 +126,11 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
   private _createPopover(): void {
     const pop = this.doc.createElement('div');
     pop.setAttribute('popover', 'manual');
-    pop.className = 'gantt-tooltip-popover';
+    pop.className = 'gantt-tooltip gantt-tooltip-popover';
+    pop.setAttribute('role', 'tooltip');
 
-    const theme = this.tooltipTheme();
-    this._applyPopoverStyles(pop, theme);
-
-    // Render tooltip content as HTML (lightweight, no Angular component)
-    pop.innerHTML = this._buildHTML();
+    // Content and colours are rendered as HTML when shown (lightweight, no Angular component)
+    pop.style.display = 'none';
 
     this.doc.body.appendChild(pop);
     this._popover = pop;
@@ -120,14 +140,20 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     const pop = this._popover;
     if (!pop) return;
 
-    // Update content in case task changed
-    pop.innerHTML = this._buildHTML();
+    // Update content and colours in case the task or theme changed
+    const model = this._model();
+    this._applyPopoverStyles(pop, model);
+    pop.innerHTML = this._buildHTML(model);
+    // Colours go through the CSSOM, never into markup (a task colour can't inject CSS)
+    const fill = pop.querySelector<HTMLElement>('.gantt-tooltip-fill');
+    if (fill) fill.style.background = this._progressFill(model);
 
+    // An inline `display: none` would hide an open popover too: show it explicitly first
+    pop.style.display = 'block';
     try {
       pop.showPopover();
     } catch {
-      // Popover API not supported — fallback to display:block
-      pop.style.display = 'block';
+      /* Popover API not supported — still shown via display */
     }
 
     this._position(this._lastX, this._lastY);
@@ -139,8 +165,9 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     try {
       pop.hidePopover();
     } catch {
-      pop.style.display = 'none';
+      /* not open / unsupported */
     }
+    pop.style.display = 'none';
   }
 
   private _position(clientX: number, clientY: number): void {
@@ -167,82 +194,92 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     pop.style.top = `${Math.max(8, top)}px`;
   }
 
-  private _applyPopoverStyles(pop: HTMLElement, theme: GanttTheme | null): void {
-    const bg = theme?.tooltipBg ?? '#FFFFFF';
-    const bdr = theme?.tooltipBorder ?? '#E2E8F0';
-    const txt = theme?.tooltipText ?? '#1E293B';
-
+  private _applyPopoverStyles(pop: HTMLElement, m: TooltipModel): void {
     Object.assign(pop.style, {
       position: 'fixed',
+      inset: 'auto',
+      margin: '0',
       zIndex: '9999',
       pointerEvents: 'none',
       padding: '8px 12px',
       borderRadius: '6px',
-      background: bg,
-      border: `1px solid ${bdr}`,
-      color: txt,
-      fontFamily: theme?.fontFamily ?? 'system-ui, sans-serif',
+      background: m.colors.background,
+      border: `1px solid ${m.colors.border}`,
+      color: m.colors.text,
+      fontFamily: m.colors.fontFamily,
       fontSize: '12px',
       boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
       maxWidth: '280px',
       minWidth: '160px',
       // CSS animation — no @angular/animations
       transition: 'opacity 0.12s ease',
-      display: 'none', // overridden by popover API
     });
   }
 
   // ── HTML builder ─────────────────────────────────────────
 
-  private _buildHTML(): string {
-    const task = this.ganttTooltip().row.task;
-    const labels = this.i18n.labels();
-    const locale = this.i18n.locale();
-    const fmt = this.i18n.formats().dateFormat;
-    const start = formatDate(task.start, fmt, locale);
-    const end = formatDate(task.end, fmt, locale);
-    const dur = taskDurationLabel(task, this.tooltipDates(), labels);
-    const prog = task.progress ?? 0;
+  /** Tooltip content from the shared @gantry/core model (same rows as the Web Component). */
+  private _model(): TooltipModel {
+    const { row } = this.ganttTooltip();
+    const dates = this.tooltipDates();
+    const ctx = this.tooltipContext();
+    return buildTooltipModel({
+      task: row.task,
+      hasChildren: row.hasChildren,
+      barType: row.barType,
+      config: {
+        endDateMode: dates.endDateMode,
+        normalizeDateOnly: dates.normalizeDateOnly,
+        baseline: dates.baseline ?? false,
+        theme: this.tooltipTheme() ?? FALLBACK_THEME,
+      },
+      labels: this.i18n.labels(),
+      locale: this.i18n.locale(),
+      dateFormat: this.i18n.formats().dateFormat,
+      now: ctx.now ?? new Date(),
+      criticalIds: ctx.criticalIds,
+      floatDays: ctx.floatDays,
+      tasksById: ctx.tasksById,
+    });
+  }
 
-    const progressBar =
-      task.progress != null
-        ? `
+  /** Progress fill: keeps `--gantt-*` CSS-variable theming for the default colours; an explicit bar colour wins. */
+  private _progressFill(m: TooltipModel): string {
+    if (m.critical) return `var(--gantt-critical, ${m.colors.progress})`;
+    return this.ganttTooltip().row.task.barColor ? m.colors.progress : `var(--gantt-bar, ${m.colors.progress})`;
+  }
+
+  private _buildHTML(m: TooltipModel): string {
+    const esc = (v: string) => this._esc(v);
+    const row = (label: string, value: string) => `
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
+        <span style="opacity:0.6">${esc(label)}</span><span>${esc(value)}</span>
+      </div>`;
+    const progress = (label: string, value: string) => `
       <div style="margin-top:6px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-          <span style="opacity:0.6">${this._esc(labels.ttProgress)}</span>
-          <span>${prog}%</span>
+          <span style="opacity:0.6">${esc(label)}</span><span>${esc(value)}</span>
         </div>
-        <div style="height:3px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden;">
-          <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
+        <div style="height:3px;background:rgba(127,127,127,0.25);border-radius:2px;overflow:hidden;">
+          <div class="gantt-tooltip-fill" style="height:100%;width:${m.progress ?? 0}%;border-radius:2px;"></div>
         </div>
-      </div>`
-        : '';
-
-    const milestone =
-      task.type === TaskType.Milestone
-        ? `<div style="margin-top:4px;font-size:11px;opacity:0.7;">◆ ${this._esc(labels.ttMilestone)}</div>`
-        : '';
+      </div>`;
 
     return `
       <div style="font-weight:600;font-size:13px;margin-bottom:6px;
                   max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        ${this._esc(task.name)}
+        ${esc(m.title)}
       </div>
-      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
-        <span style="opacity:0.6">${this._esc(labels.ttStart)}</span><span>${start}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
-        <span style="opacity:0.6">${this._esc(labels.ttEnd)}</span><span>${end}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;gap:12px;">
-        <span style="opacity:0.6">${this._esc(labels.ttDuration)}</span><span>${dur}</span>
-      </div>
-      ${progressBar}
-      ${milestone}
+      ${m.rows.map(r => (r.kind === 'progress' ? progress(r.label, r.value) : row(r.label, r.value))).join('')}
     `;
   }
 
   private _esc(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 }

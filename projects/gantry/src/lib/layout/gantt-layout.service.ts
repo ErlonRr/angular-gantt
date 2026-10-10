@@ -44,7 +44,6 @@ import {
   type ColumnContext,
   type ResolvedGanttConfig,
   type TimelineModel,
-  type GridLine,
 } from '@gantry/core';
 
 /** Active column sort (null = original task order) */
@@ -176,14 +175,6 @@ export class GanttLayoutService {
   readonly showCriticalPath = computed(() => this.cfg().criticalPath);
   readonly showToday = computed(() => this.cfg().showToday);
   readonly panelVisible = computed(() => this.view() === 'split');
-
-  /** Vertical grid lines (major = period delimiters) */
-  readonly gridLines = computed<GridLine[]>(() => {
-    const tl = this.timeline();
-    return [...tl.minorLines.map(x => ({ x, isMajor: false })), ...tl.majorLines.map(x => ({ x, isMajor: true }))].sort(
-      (a, b) => a.x - b.x,
-    );
-  });
 
   readonly layoutParams = computed(() => ({
     origin: this.startDate(),

@@ -1,7 +1,7 @@
 # Gantry — `ngx-gantry`
 
 > A free, **zoneless**, **signal-based** Gantt chart for **Angular 22+**.
-> Zero `@angular/animations`, zero CDK, zero RxJS — only `dayjs`.
+> Zero `@angular/animations`, zero CDK, zero RxJS — no runtime dependency besides `@gantry/core`.
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
 
@@ -66,12 +66,11 @@ export class AppComponent {
 - Views: Day / Week / Month / Quarter / Year with zoom
 - Annotations, today marker, optional legend
 - Light / dark / auto theming via CSS custom properties
-- **i18n** — localisable UI strings + dayjs `locale` + custom date/header formats
+- **i18n** — localisable UI strings + any BCP 47 `locale` (via `Intl`) + custom date/header formats
 
 ## i18n
 
 ```ts
-import 'dayjs/locale/it';
 <gantry [options]="{ locale: 'it', labels: { todayButton: 'Oggi' } }" />
 ```
 

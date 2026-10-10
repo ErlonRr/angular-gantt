@@ -162,23 +162,6 @@ export interface RowGeometry {
   progressWidth: number;
 }
 
-// ─── Header cells ─────────────────────────────────────────────
-
-export interface HeaderCell {
-  label: string;
-  /** SVG x start */
-  x: number;
-  width: number;
-  /** ISO date string of the period start */
-  dateKey: string;
-}
-
-export interface HeaderRow {
-  cells: HeaderCell[];
-  /** Row height in px */
-  height: number;
-}
-
 // ─── Columns ─────────────────────────────────────────────────
 
 /** Keys of the built-in columns, usable in `panel.columns` / `table.columns` without a ColumnDef. */
@@ -349,6 +332,9 @@ export interface GanttTheme {
 
 // ─── i18n: UI labels ─────────────────────────────────────────
 
+/** Unit of a date change in announcements: whole days, or hours on hour scales. */
+export type AnnounceUnit = 'day' | 'hour';
+
 /**
  * Every user-facing string in the chart. Override any subset via
  * `GanttOptions.labels` (per instance) or `provideGanttLib({ labels })` (global).
@@ -428,7 +414,62 @@ export interface GanttLabels {
   ariaTaskList: string;
   ariaExpand: (name: string) => string;
   ariaCollapse: (name: string) => string;
+  // Accessible names of bars (`taskAccessibleName`)
+  /** "65% complete" */
+  ariaProgress: (progress: number) => string;
+  /** The task is on the critical path */
+  ariaCritical: string;
+  /** A baseline bar is drawn for the task */
+  ariaBaseline: string;
+  /** Joins the formatted start and end ("10 Feb – 20 Mar 2026") */
+  ariaDateRange: (start: string, end: string) => string;
+  /** Format of the start when both dates are in the same year ("10 Feb") */
+  ariaDateFormatShort: string;
+  /** Format of a full date ("20 Mar 2026") */
+  ariaDateFormatLong: string;
+  /** Format appended to both dates when either is not at local midnight ("09:00") */
+  ariaTimeFormat: string;
+  /** Joins the parts of the name */
+  ariaListSeparator: string;
+  // Screen-reader announcements (aria-live)
+  /** Selection changed; `0` means it was cleared */
+  announceSelection: (count: number) => string;
+  /** Bar moved by `amount` (> 0 later, < 0 earlier) */
+  announceMoved: (name: string, amount: number, unit: AnnounceUnit) => string;
+  /** Bar start (`edge: 'start'`) or end moved by `amount` */
+  announceResized: (name: string, edge: 'start' | 'end', amount: number, unit: AnnounceUnit) => string;
+  announceProgress: (name: string, progress: number) => string;
+  /** Zoom changed; `level` is the toolbar label of the new level */
+  announceZoom: (level: string) => string;
+  /** Keyboard edit mode entered: name plus the key help */
+  announceEditStart: (name: string) => string;
+  announceEditCancel: (name: string) => string;
+  /** Committed without any change */
+  announceEditNoChange: (name: string) => string;
+  announceExpanded: (name: string) => string;
+  announceCollapsed: (name: string) => string;
+  /** Link mode: pick the successor of `name` */
+  announceLinkStart: (name: string) => string;
+  announceLinkCreated: (from: string, to: string) => string;
+  announceLinkCancel: string;
+  // Tooltip rows
+  /** Label of the critical-path row */
+  ttCritical: string;
+  /** Value of the critical-path row */
+  ttCriticalValue: string;
+  /** Label of the total-float row */
+  ttFloat: string;
+  /** Total float in days, e.g. "2d" */
+  ttFloatDays: (days: number) => string;
+  /** Label of the successors row */
+  ttSuccessors: string;
+  // Legend
+  legendCritical: string;
+  legendBaseline: string;
 }
+
+const unitCount = (n: number, unit: AnnounceUnit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+const later = (amount: number) => (amount > 0 ? 'later' : 'earlier');
 
 export const DEFAULT_LABELS: GanttLabels = {
   loading: 'Loading…',
@@ -497,6 +538,37 @@ export const DEFAULT_LABELS: GanttLabels = {
   ariaTaskList: 'Tasks',
   ariaExpand: name => `Expand ${name}`,
   ariaCollapse: name => `Collapse ${name}`,
+  ariaProgress: p => `${p}% complete`,
+  ariaCritical: 'critical',
+  ariaBaseline: 'planned baseline shown',
+  ariaDateRange: (start, end) => `${start} – ${end}`,
+  ariaDateFormatShort: 'D MMM',
+  ariaDateFormatLong: 'D MMM YYYY',
+  ariaTimeFormat: 'HH:mm',
+  ariaListSeparator: ', ',
+  announceSelection: n => (n === 0 ? 'Selection cleared' : n === 1 ? '1 task selected' : `${n} tasks selected`),
+  announceMoved: (name, amount, unit) => `${name} moved ${unitCount(Math.abs(amount), unit)} ${later(amount)}`,
+  announceResized: (name, edge, amount, unit) =>
+    `${name} ${edge} moved ${unitCount(Math.abs(amount), unit)} ${later(amount)}`,
+  announceProgress: (name, p) => `${name} ${p}% complete`,
+  announceZoom: level => `Zoom: ${level}`,
+  announceEditStart: name =>
+    `Editing ${name}. Arrow keys move, Shift+Arrow resizes the end, Alt+Arrow resizes the start, ` +
+    `Up and Down change progress, Enter saves, Escape cancels.`,
+  announceEditCancel: name => `Edit of ${name} cancelled`,
+  announceEditNoChange: name => `${name} unchanged`,
+  announceExpanded: name => `${name} expanded`,
+  announceCollapsed: name => `${name} collapsed`,
+  announceLinkStart: name => `Linking from ${name}. Move to another task and press Enter, or Escape to cancel.`,
+  announceLinkCreated: (from, to) => `Linked ${from} to ${to}`,
+  announceLinkCancel: 'Linking cancelled',
+  ttCritical: 'Critical path',
+  ttCriticalValue: 'Yes',
+  ttFloat: 'Float',
+  ttFloatDays: days => `${days}d`,
+  ttSuccessors: 'Successors',
+  legendCritical: 'Critical path',
+  legendBaseline: 'Baseline',
 };
 
 // ─── i18n: date & header formats ─────────────────────────────
@@ -510,7 +582,7 @@ export interface GanttHeaderFormats {
 }
 
 export interface GanttFormats {
-  /** dayjs format string for dates in columns & tooltip */
+  /** Format string (dayjs-compatible tokens) for dates in columns & tooltip */
   dateFormat: string;
   /** Per-view header label overrides — omitted rows use the built-in formatter */
   header?: Partial<Record<ViewMode, GanttHeaderFormats>> | undefined;
@@ -542,7 +614,7 @@ export interface ScaleFormatContext {
   weekStart: 0 | 1;
 }
 
-/** dayjs format string (e.g. `'MMM YYYY'`, `'[W]W'`) or a function of the cell's period. */
+/** Format string with dayjs-compatible tokens (e.g. `'MMM YYYY'`, `'[W]W'`) or a function of the cell's period. */
 export type ScaleFormat = string | ((start: Date, end: Date, ctx: ScaleFormatContext) => string);
 
 /** One header tier ("scale"), DHTMLX/SVAR style. Tiers are listed top → bottom. */
@@ -749,8 +821,8 @@ export interface GanttOptions {
 
   // ── i18n / formatting ──
   /**
-   * dayjs locale id (e.g. `'it'`). Month/day names in the header follow it.
-   * Load the locale first in your app: `import 'dayjs/locale/it';`
+   * BCP 47 locale (e.g. `'it'`, `'de-CH'`). Month/day names follow it, through `Intl`
+   * (nothing to import). Default `'en'`; unknown tags fall back to `'en'`.
    */
   locale?: string | undefined;
   /** Override any subset of the UI strings */
@@ -863,18 +935,18 @@ export interface GanttBarContext {
   theme: GanttTheme;
   layoutParams: GanttLayoutParams;
   /** Whether this task is on the critical path */
-  isCritical?: boolean | undefined;
+  isCritical: boolean;
   /** Whether this task row is currently selected */
-  isSelected?: boolean | undefined;
+  isSelected: boolean;
   /** Whether drag-resize handles should be shown */
-  enableResize?: boolean | undefined;
+  enableResize: boolean;
   /** Whether baseline bar should be rendered */
-  showBaseline?: boolean | undefined;
+  showBaseline: boolean;
   /**
    * Effective drag/resize for this row (`enableDrag` ∧ `task.draggable` ∧ resize option).
    * Drives cursor and interaction affordances on the bar.
    */
-  draggable?: boolean | undefined;
+  draggable: boolean;
   /** Geometry computed by the core render model (position, size, label…) */
-  visual?: BarVisual | undefined;
+  visual: BarVisual;
 }

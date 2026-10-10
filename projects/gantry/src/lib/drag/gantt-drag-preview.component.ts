@@ -67,8 +67,8 @@ export class GanttDragPreviewComponent {
 
   protected readonly deltaLabel = computed(() => {
     const p = this.preview();
-    if (!p || p.daysDelta === 0) return '';
-    const sign = p.daysDelta > 0 ? '+' : '';
-    return `${sign}${p.daysDelta}${this.unit() === 'hour' ? 'h' : 'd'}`;
+    if (!p || p.delta === 0) return '';
+    const sign = p.delta > 0 ? '+' : '';
+    return `${sign}${p.delta}${p.unit === 'hour' ? 'h' : 'd'}`;
   });
 }

@@ -5,59 +5,11 @@
 //  Fully testable with Vitest / Jest in Node.
 // ─────────────────────────────────────────────────────────────
 
-import dayjs from 'dayjs';
-import isoWeek from 'dayjs/plugin/isoWeek.js';
-import quarterOfYear from 'dayjs/plugin/quarterOfYear.js';
-import advancedFormat from 'dayjs/plugin/advancedFormat.js';
-
-dayjs.extend(isoWeek);
-dayjs.extend(quarterOfYear);
-dayjs.extend(advancedFormat);
-
-import {
-  ViewMode,
-  type HeaderCell,
-  type HeaderRow,
-  type GanttTask,
-  type GanttI18n,
-  type GanttLabels,
-  type TimeUnit,
-} from './types';
-import {
-  DEFAULT_ZOOM_LEVELS,
-  bottomScale,
-  findZoomLevel,
-  withLegacyHeaderFormats,
-  buildTiers,
-  unitStart,
-  unitAdd,
-  type ScaleTier,
-} from './render/scales';
-
-/** Re-exported for consumers of `generateHeaderRows` / public-api. */
-export type { HeaderCell, HeaderRow };
+import { type GanttTask, type GanttLabels, type TimeUnit } from './types';
+import { unitStart, unitAdd } from './render/scales';
+import { formatDate as formatPattern } from './format/format';
 
 // ─── Constants ───────────────────────────────────────────────
-
-/** Pixels per day for each ViewMode at 1× zoom */
-export const PX_PER_DAY: Record<ViewMode, number> = {
-  [ViewMode.Hour]: 960,
-  [ViewMode.Day]: 48,
-  [ViewMode.Week]: 20,
-  [ViewMode.Month]: 8,
-  [ViewMode.Quarter]: 4,
-  [ViewMode.Year]: 2,
-};
-
-/** Row header heights [top row px, bottom row px] */
-export const HEADER_HEIGHTS: Record<ViewMode, [number, number]> = {
-  [ViewMode.Hour]: [32, 28],
-  [ViewMode.Day]: [32, 28],
-  [ViewMode.Week]: [32, 28],
-  [ViewMode.Month]: [32, 28],
-  [ViewMode.Quarter]: [32, 28],
-  [ViewMode.Year]: [32, 28],
-};
 
 // ─── Calendar time ────────────────────────────────────────────
 //
@@ -207,23 +159,6 @@ export function taskExtent(tasks: GanttTask[], includeDate?: Date | null): Timel
   return isFinite(minTime) ? { start: new Date(minTime), end: new Date(maxTime) } : null;
 }
 
-/**
- * Compute the visible timeline range from an array of tasks: pad by
- * `paddingDays` on each side, then snap outwards to whole bottom-tier cells of
- * the view (so there are never partial "sliver" cells at the edges).
- */
-export function getTimelineRange(
-  tasks: GanttTask[],
-  viewMode: ViewMode,
-  paddingDays = 7,
-  /** Optional reference date always kept inside the range (e.g. the "today" marker) */
-  includeDate?: Date | null,
-  weekStart: 0 | 1 = 1,
-): TimelineRange {
-  const level = findZoomLevel(DEFAULT_ZOOM_LEVELS, viewMode);
-  return snapRange(tasks, bottomScale(level.scales), paddingDays, includeDate, weekStart);
-}
-
 /** Range snapped to whole cells of `scale` (shared by `getTimelineRange` and the timeline model). */
 export function snapRange(
   tasks: GanttTask[],
@@ -246,81 +181,9 @@ export function snapRange(
 
 // ─── Header cell generation (legacy two-row API) ──────────────
 
-/**
- * Generate the two-row header cells for one of the built-in view modes.
- * Returns [topRow, bottomRow]. Pass `i18n` to localise labels/formats.
- * (The configurable N-tier engine is `buildTiers` / `buildTimeline`.)
- */
-export function generateHeaderRows(
-  viewMode: ViewMode,
-  start: Date,
-  end: Date,
-  pxPerDay: number,
-  i18n?: GanttI18n,
-): [HeaderRow, HeaderRow] {
-  const level = findZoomLevel(DEFAULT_ZOOM_LEVELS, viewMode);
-  const tiers = buildTiers({
-    scales: withLegacyHeaderFormats(level, i18n),
-    start,
-    end,
-    pxPerDay,
-    heights: HEADER_HEIGHTS[viewMode] ?? [32, 28],
-    ...(i18n?.locale !== undefined && { locale: i18n.locale }),
-    ...(i18n?.labels && { labels: i18n.labels }),
-  });
-  const toRow = (t: ScaleTier): HeaderRow => ({
-    height: t.height,
-    cells: t.cells.map(c => ({ label: c.label, x: c.x, width: c.width, dateKey: c.start.toISOString() })),
-  });
-  return [toRow(tiers[0]!), toRow(tiers.at(-1)!)];
-}
-
 // ─── Grid line generation ─────────────────────────────────────
 
-export interface GridLine {
-  x: number;
-  isMajor: boolean;
-  label?: string | undefined;
-}
-
-/**
- * Returns vertical grid line positions (x coordinates).
- * Minor lines = bottom-row cell boundaries; major lines = real top-row period
- * boundaries (e.g. month starts in Week view, even mid-week).
- */
-export function generateGridLines(viewMode: ViewMode, start: Date, end: Date, pxPerDay: number): GridLine[] {
-  const [topRow, botRow] = generateHeaderRows(viewMode, start, end, pxPerDay);
-  const major = new Set(topRow.cells.map(c => c.x).filter(x => x > 0));
-  const lines: GridLine[] = [];
-  for (const cell of botRow.cells) {
-    if (cell.x > 0 && !major.has(cell.x)) lines.push({ x: cell.x, isMajor: false });
-  }
-  for (const x of major) lines.push({ x, isMajor: true });
-  const last = botRow.cells.at(-1);
-  if (last) lines.push({ x: last.x + last.width, isMajor: true });
-  return lines.sort((a, b) => a.x - b.x);
-}
-
 // ─── Zoom helpers ─────────────────────────────────────────────
-
-const VIEW_ORDER: ViewMode[] = [
-  ViewMode.Hour,
-  ViewMode.Day,
-  ViewMode.Week,
-  ViewMode.Month,
-  ViewMode.Quarter,
-  ViewMode.Year,
-];
-
-export function zoomIn(current: ViewMode): ViewMode {
-  const idx = VIEW_ORDER.indexOf(current);
-  return VIEW_ORDER[idx - 1] ?? current;
-}
-
-export function zoomOut(current: ViewMode): ViewMode {
-  const idx = VIEW_ORDER.indexOf(current);
-  return idx < 0 ? current : (VIEW_ORDER[idx + 1] ?? current);
-}
 
 // ─── Utility ─────────────────────────────────────────────────
 
@@ -329,8 +192,7 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export function formatDate(date: Date, fmt = 'MMM D, YYYY', locale?: string): string {
-  const d = toLocalDay(date);
-  return (locale ? dayjs(d).locale(locale) : dayjs(d)).format(fmt);
+  return formatPattern(toLocalDay(date), fmt, locale);
 }
 
 export function durationLabel(start: Date, end: Date, labels?: Partial<GanttLabels>): string {

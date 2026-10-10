@@ -1,7 +1,7 @@
 # Gantry
 
 > A free, full-featured, open-source Gantt chart for **every framework** — Angular, React, Vue, Svelte, or plain JavaScript.
-> Interactive drag & resize, dependencies, critical path, baselines, virtual scrolling, theming and i18n — MIT licensed, only dependency `dayjs`.
+> Interactive drag & resize, dependencies, critical path, baselines, virtual scrolling, theming and i18n — MIT licensed, zero runtime dependencies.
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
 
@@ -94,7 +94,7 @@ options = {
 ```
 
 - `unit`: `hour` · `day` · `week` · `month` · `quarter` · `year`; `step` groups cells (6 hours, 2 weeks…).
-- `format`: a dayjs format string (`'MMM YYYY'`, `'[W]W'`, `'ddd D'`) or `(start, end, ctx) => string`.
+- `format`: a dayjs-compatible format string (`'MMM YYYY'`, `'[W]W'`, `'ddd D'`, see [date formats](#internationalisation--date-formats)) or `(start, end, ctx) => string`.
 - Week presets: `WEEK_FORMATS.number` (`W52`), `.label` (`Week 52`), `.range` (`4–11`), `.rangeMonth` (`4–11 Mar`), `.numberRange` (`W52 · 4–11`).
 - `className: (start, end) => string` adds your own class to header cells.
 - Upper-tier labels stay pinned to the left while scrolling (`align: 'start'`).
@@ -164,6 +164,7 @@ options = {
   view: 'split', // 'split' | 'table' (every useful field, animated) | 'chart'
   toolbar: { zoom: true, viewModes: ['Day', 'Week', 'Month'], today: true, viewToggle: true }, // or false
   stateKey: 'project-42', // remember panel width, view, zoom, column widths, collapsed rows, sort
+  // (saved as versioned JSON in localStorage, validated on load; a snapshot from a newer version is ignored)
 };
 columns = [
   { key: 'name', label: 'Task', width: 220, flex: true }, // flex: fills spare panel width
@@ -214,7 +215,7 @@ light/dark/auto). They are also exposed as CSS custom properties on the chart ro
 
 ```bash
 npm i ngx-gantry
-# peer deps: @angular/core & @angular/common >= 20.2 (dayjs and @gantry/core are installed automatically)
+# peer deps: @angular/core & @angular/common ^22 (@gantry/core is installed automatically)
 ```
 
 ## Features
@@ -233,7 +234,7 @@ npm i ngx-gantry
 | **Tooltip**        | Native Popover API — zero CDK Overlay                                                                                 |
 | **Dark / light**   | Auto `prefers-color-scheme` + manual toggle                                                                           |
 | **Animations**     | `animate.enter` / `animate.leave` (Angular 20.2 native)                                                               |
-| **Dependencies**   | Only `dayjs` (MIT, 7KB)                                                                                               |
+| **Dependencies**   | None at runtime                                                                                                       |
 
 ---
 
@@ -429,9 +430,11 @@ The cell template context is `{ $implicit: row, row, ctx }` where `row: GanttFla
 <gantry [series]="tasks" [annotations]="annotations" [showLegend]="true" />
 ```
 
-A floating legend lists the **today** marker and every **annotation** (with its
-colour and label). Its strings are localisable (`labels.legend`, `labels.today`,
-`labels.annotation`).
+A floating legend lists the **today** marker (when `showToday` is on), every **annotation**
+(with its colour and label), and the **critical path** / **baseline** when those options are on.
+Each entry has a shape as well as a colour (line, dashed line, bar, strip). Its strings are
+localisable (`labels.legend`, `labels.today`, `labels.annotation`, `labels.legendCritical`,
+`labels.legendBaseline`).
 
 ---
 
@@ -482,12 +485,11 @@ are exported from `@gantry/core`. The 1.x colours are available as `LegacyLightT
 
 ## Internationalisation & date formats
 
-Everything user-facing is translatable, and dates follow a dayjs locale + format.
+Everything user-facing is translatable. Dates are formatted with the platform's `Intl` API from a
+BCP 47 locale and a dayjs-compatible pattern — no locale files to import, no runtime dependency.
 Set per instance via `options`, or globally via `provideGanttLib`.
 
 ```ts
-import 'dayjs/locale/it';           // load the dayjs locale you need, once
-
 <gantry
   [series]="tasks"
   [options]="{
@@ -501,7 +503,12 @@ import 'dayjs/locale/it';           // load the dayjs locale you need, once
   }" />
 ```
 
-- `locale` — a dayjs locale id; **import the locale first** (`import 'dayjs/locale/it'`).
+- `locale` — any BCP 47 tag (`'it'`, `'de-CH'`, `'pt-BR'`, `'ja'`); unknown or malformed tags fall
+  back to `'en'`. The default is `'en'` (deterministic output on every machine); the dayjs global
+  locale is no longer read, so set `locale` explicitly.
+- Format tokens (dayjs-compatible): `YYYY YY` · `M MM MMM MMMM` · `Q` · `D DD Do` · `d dd ddd dddd` ·
+  `H HH h hh` · `m mm` · `s ss` · `A a` · `W WW` (ISO week) · `[literal text]`. Names come from `Intl`
+  (CLDR), so a few abbreviations differ slightly from dayjs's locale files (e.g. German `Mär`).
 - `labels: Partial<GanttLabels>` — override any UI string (buttons, tooltip, legend,
   header prefixes `W`/`Q`/`H`, duration text, column headers, aria-labels).
 - `formats: { dateFormat, header }` — `dateFormat` for columns/tooltip; `header`
@@ -586,12 +593,15 @@ gantt.setTheme(partial) / patchTheme(patch)
 
 ## Keyboard shortcuts
 
-| Key       | Action          |
-| --------- | --------------- |
-| `Escape`  | Clear selection |
-| `Ctrl+A`  | Select all      |
-| `+` / `-` | Zoom in / out   |
-| `T`       | Scroll to today |
+| Key                          | Action                                   |
+| ---------------------------- | ---------------------------------------- |
+| `Escape`                     | Cancel a drag, otherwise clear selection |
+| `Ctrl/⌘+A` (also with Shift) | Select all visible rows                  |
+| `+` / `-`                    | Zoom in / out                            |
+| `T`                          | Scroll to today                          |
+
+Shortcuts don't fire while typing in an input, or with `Alt` / `AltGr` held (those combinations
+type characters on many keyboards); other keys keep their browser default.
 
 ---
 
@@ -705,9 +715,9 @@ webpack in the toolchain. The live showcase replaces a component workshop such a
 
 | Package        | License | Size                        |
 | -------------- | ------- | --------------------------- |
-| `dayjs`        | MIT     | 7KB                         |
 | `@gantry/core` | MIT     | shared logic from this repo |
 
+`@gantry/core` itself has no runtime dependencies (dates are formatted with `Intl`).
 Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses native Popover API).
 
 ---

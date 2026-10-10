@@ -10,17 +10,11 @@ export {
   snapToDay,
   addDays,
   diffDays,
-  getTimelineRange,
-  generateHeaderRows,
-  generateGridLines,
-  zoomIn,
-  zoomOut,
   clamp,
   formatDate,
   durationLabel,
-  PX_PER_DAY,
 } from './lib/gantt-math';
-export type { TimelineRange, GridLine, HeaderRow, HeaderCell } from './lib/gantt-math';
+export type { TimelineRange } from './lib/gantt-math';
 
 export {
   flattenTree,
@@ -78,6 +72,7 @@ export type { DragState, DragPreview } from './lib/drag/gantt-drag.service';
 export { GanttSelectionService } from './lib/selection/gantt-selection.service';
 export { GanttKeyboardDirective } from './lib/selection/gantt-keyboard.directive';
 export { GanttTooltipDirective } from './lib/tooltip/gantt-tooltip.directive';
+export type { GanttTooltipContext } from './lib/tooltip/gantt-tooltip.directive';
 
 export { GanttDataSource, createGanttDataSource } from './lib/datasource/gantt-datasource';
 export type { GanttDataSourceConfig } from './lib/datasource/gantt-datasource';

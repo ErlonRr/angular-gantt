@@ -27,6 +27,7 @@ import {
   type GanttBarContext,
   type GanttDependency,
   type GanttFlatRow,
+  type GanttTask,
   DependencyType,
   type SelectionChangeEvent,
   type TaskDragEvent,
@@ -49,7 +50,8 @@ import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttDragPreviewComponent } from '../drag/gantt-drag-preview.component';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
-import { GanttTooltipDirective } from '../tooltip/gantt-tooltip.directive';
+import { GanttLayoutService } from './gantt-layout.service';
+import { GanttTooltipDirective, type GanttTooltipContext } from '../tooltip/gantt-tooltip.directive';
 
 let nextCanvasId = 0;
 
@@ -238,6 +240,7 @@ let nextCanvasId = 0;
               [ganttTooltip]="geo"
               [tooltipTheme]="config().theme"
               [tooltipDates]="config()"
+              [tooltipContext]="tooltipContext()"
               [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
               [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? 0.35 : null"
             >
@@ -293,12 +296,16 @@ export class GanttCanvasComponent {
   readonly windowBottom = input<number>(0);
   readonly totalHeight = input.required<number>();
   readonly annotations = input<GanttAnnotation[]>([]);
-  readonly criticalIds = input<Set<string>>(new Set());
+  readonly criticalIds = input<ReadonlySet<string>>(new Set());
   readonly enableResize = input<boolean>(true);
   readonly enableDrag = input<boolean>(true);
   readonly enableSelection = input<boolean>(true);
   readonly multiSelect = input<boolean>(true);
   readonly tooltipEnabled = input<boolean>(true);
+  /** Total float per task id (CPM `floatMap`, when the critical path is on) — tooltip float row */
+  readonly floatDays = input<ReadonlyMap<string, number> | undefined>(undefined);
+  /** Every task by id — tooltip predecessor names and successors */
+  readonly tasksById = input<ReadonlyMap<string, GanttTask> | undefined>(undefined);
 
   readonly taskDragged = output<TaskDragEvent>();
   readonly taskResized = output<TaskResizeEvent>();
@@ -314,6 +321,8 @@ export class GanttCanvasComponent {
   protected readonly dragSvc = inject(GanttDragService);
   private readonly selSvc = inject(GanttSelectionService);
   protected readonly i18n = inject(GanttI18nService);
+  /** The chart's clock (absent when the canvas is used on its own) */
+  private readonly layout = inject(GanttLayoutService, { optional: true });
 
   protected readonly fontPx = computed(() => cssPx(this.config().theme.fontSize, 13) - 1);
   protected readonly windowHeight = computed(() => Math.max(0, this.windowBottom() - this.windowTop()));
@@ -326,6 +335,14 @@ export class GanttCanvasComponent {
   protected readonly cursor = computed(() =>
     this.dragSvc.isDragging() ? 'grabbing' : this.dragSvc.isResizing() ? 'ew-resize' : this.hoverCursor(),
   );
+
+  /** Extra tooltip rows: critical path, float, predecessors / successors */
+  protected readonly tooltipContext = computed<GanttTooltipContext>(() => ({
+    now: this.layout ? new Date(this.layout.now()) : undefined,
+    criticalIds: this.criticalIds(),
+    floatDays: this.floatDays(),
+    tasksById: this.tasksById(),
+  }));
 
   // ── Render model ──────────────────────────────────────────
 
@@ -473,14 +490,12 @@ export class GanttCanvasComponent {
     }
     const geo = this.rowAt(event);
     if (!geo) return;
-    if (this.enableSelection()) {
-      const e = this.multiSelect() ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
-      this.selSvc.handleClick(
-        geo.row.task.id,
-        e,
-        this.allGeometries().map(g => g.row),
-      );
-    }
+    this.selSvc.handleClick(
+      geo.row.task.id,
+      event,
+      this.allGeometries().map(g => g.row),
+      { enabled: this.enableSelection(), multi: this.multiSelect() },
+    );
     this.rowClick.emit(geo);
   }
 

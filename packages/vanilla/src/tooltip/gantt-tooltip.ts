@@ -5,16 +5,27 @@
  */
 
 import {
+  type GanttFlatRow,
   type GanttTask,
-  type GanttTheme,
-  TaskType,
-  formatDate,
-  taskDurationLabel,
-  type ResolvedGanttConfig,
+  type TooltipInput,
+  type TooltipModel,
+  buildTooltipModel,
 } from '@gantry/core';
-
-type DateReading = Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
 import { type GanttI18nService } from '../services/gantt-i18n.service';
+
+/** What the tooltip reads besides the row: the chart's state when the pointer entered the bar. */
+export interface GanttTooltipContext {
+  /** Resolved config: date reading, `baseline` flag and theme */
+  config: TooltipInput['config'];
+  /** Clock for the status (the timeline's `now`) */
+  now: Date;
+  /** Critical task ids (critical-path option on) */
+  criticalIds?: ReadonlySet<string> | undefined;
+  /** CPM total float per task id, in days */
+  floatDays?: ReadonlyMap<string, number> | undefined;
+  /** Every task by id: predecessor names and successors */
+  tasksById?: ReadonlyMap<string, GanttTask> | undefined;
+}
 
 const SHOW_DELAY = 320;
 const HIDE_DELAY = 120;
@@ -22,14 +33,13 @@ const OFFSET_X = 12;
 const OFFSET_Y = 8;
 
 export class GanttTooltip {
-  /** How task dates are read (the duration matches the bar and the Duration column) */
-  private dates: DateReading = { endDateMode: 'exclusive', normalizeDateOnly: true };
   private readonly popover: HTMLElement;
   private showTimer = 0;
   private hideTimer = 0;
   private lastX = 0;
   private lastY = 0;
-  private task: GanttTask | null = null;
+  private row: GanttFlatRow | null = null;
+  private ctx: GanttTooltipContext | null = null;
   private visible = false;
 
   private readonly i18n: GanttI18nService;
@@ -44,15 +54,15 @@ export class GanttTooltip {
   }
 
   /** Pointer entered a bar (or moved to a different one). */
-  enter(task: GanttTask, e: PointerEvent, theme: GanttTheme, dates?: DateReading): void {
-    if (dates) this.dates = dates;
+  enter(row: GanttFlatRow, e: PointerEvent, ctx: GanttTooltipContext): void {
+    this.ctx = ctx;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
     clearTimeout(this.hideTimer);
-    if (this.task?.id === task.id && this.visible) return;
-    this.task = task;
+    if (this.row?.task.id === row.task.id && this.visible) return;
+    this.row = row;
     clearTimeout(this.showTimer);
-    this.showTimer = window.setTimeout(() => this.show(theme), SHOW_DELAY);
+    this.showTimer = window.setTimeout(() => this.show(), SHOW_DELAY);
   }
 
   move(e: PointerEvent): void {
@@ -70,7 +80,7 @@ export class GanttTooltip {
   hide(): void {
     clearTimeout(this.showTimer);
     this.visible = false;
-    this.task = null;
+    this.row = null;
     try {
       this.popover.hidePopover();
     } catch {
@@ -79,10 +89,14 @@ export class GanttTooltip {
     this.popover.style.display = 'none';
   }
 
-  private show(theme: GanttTheme): void {
-    if (!this.task) return;
-    this.applyStyles(theme);
-    this.popover.innerHTML = this.buildHTML(this.task);
+  private show(): void {
+    if (!this.row || !this.ctx) return;
+    const m = this.model(this.row, this.ctx);
+    this.applyStyles(m);
+    this.popover.innerHTML = this.buildHTML(m);
+    // Colours go through the CSSOM, never into markup (a task colour can't inject CSS)
+    const fill = this.popover.querySelector<HTMLElement>('.gantt-tooltip-fill');
+    if (fill) fill.style.background = progressFill(m, this.row.task);
     this.popover.style.display = 'block';
     try {
       this.popover.showPopover();
@@ -91,6 +105,22 @@ export class GanttTooltip {
     }
     this.visible = true;
     this.position();
+  }
+
+  private model(row: GanttFlatRow, ctx: GanttTooltipContext): TooltipModel {
+    return buildTooltipModel({
+      task: row.task,
+      hasChildren: row.hasChildren,
+      barType: row.barType,
+      config: ctx.config,
+      labels: this.i18n.labels,
+      locale: this.i18n.locale,
+      dateFormat: this.i18n.formats.dateFormat,
+      now: ctx.now,
+      criticalIds: ctx.criticalIds,
+      floatDays: ctx.floatDays,
+      tasksById: ctx.tasksById,
+    });
   }
 
   private position(): void {
@@ -103,7 +133,7 @@ export class GanttTooltip {
     this.popover.style.top = `${Math.max(8, top)}px`;
   }
 
-  private applyStyles(theme: GanttTheme): void {
+  private applyStyles(m: TooltipModel): void {
     Object.assign(this.popover.style, {
       position: 'fixed',
       inset: 'auto',
@@ -112,10 +142,10 @@ export class GanttTooltip {
       pointerEvents: 'none',
       padding: '8px 12px',
       borderRadius: '6px',
-      background: theme.tooltipBg,
-      border: `1px solid ${theme.tooltipBorder}`,
-      color: theme.tooltipText,
-      fontFamily: theme.fontFamily,
+      background: m.colors.background,
+      border: `1px solid ${m.colors.border}`,
+      color: m.colors.text,
+      fontFamily: m.colors.fontFamily,
       fontSize: '12px',
       boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
       maxWidth: '280px',
@@ -123,37 +153,26 @@ export class GanttTooltip {
     });
   }
 
-  private buildHTML(task: GanttTask): string {
-    const labels = this.i18n.labels;
-    const locale = this.i18n.locale;
-    const fmt = this.i18n.formats.dateFormat;
-    const end = task.end ?? task.start;
-    const prog = Math.min(Math.max(task.progress ?? 0, 0), 100);
+  private buildHTML(m: TooltipModel): string {
     const row = (label: string, value: string) => `
       <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:2px;">
         <span style="opacity:0.6">${esc(label)}</span><span>${esc(value)}</span>
       </div>`;
+    const progress = (label: string, value: string) => `
+      <div style="margin-top:6px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+          <span style="opacity:0.6">${esc(label)}</span><span>${esc(value)}</span>
+        </div>
+        <div style="height:3px;background:rgba(127,127,127,0.25);border-radius:2px;overflow:hidden;">
+          <div class="gantt-tooltip-fill" style="height:100%;width:${m.progress ?? 0}%;border-radius:2px;"></div>
+        </div>
+      </div>`;
 
-    const isMilestone = task.type === TaskType.Milestone;
     return `
       <div style="font-weight:600;font-size:13px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-        ${esc(task.name)}
+        ${esc(m.title)}
       </div>
-      ${
-        isMilestone
-          ? row(labels.ttMilestone, formatDate(task.start, fmt, locale))
-          : row(labels.ttStart, formatDate(task.start, fmt, locale)) +
-            row(labels.ttEnd, formatDate(end, fmt, locale)) +
-            row(labels.ttDuration, taskDurationLabel(task, this.dates, labels)) +
-            `<div style="margin-top:6px;">
-              <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-                <span style="opacity:0.6">${esc(labels.ttProgress)}</span><span>${prog}%</span>
-              </div>
-              <div style="height:3px;background:rgba(127,127,127,0.25);border-radius:2px;overflow:hidden;">
-                <div style="height:100%;width:${prog}%;background:var(--gantt-bar,#2563EB);border-radius:2px;"></div>
-              </div>
-            </div>`
-      }
+      ${m.rows.map(r => (r.kind === 'progress' ? progress(r.label, r.value) : row(r.label, r.value))).join('')}
     `;
   }
 
@@ -167,4 +186,10 @@ export class GanttTooltip {
 const ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function esc(s: string): string {
   return String(s).replace(/[&<>"']/g, c => ESCAPES[c] ?? c);
+}
+
+/** Progress fill: keeps `--gantt-*` CSS-variable theming for the default colours; an explicit bar colour wins. */
+function progressFill(m: TooltipModel, task: GanttTask): string {
+  if (m.critical) return `var(--gantt-critical, ${m.colors.progress})`;
+  return task.barColor ? m.colors.progress : `var(--gantt-bar, ${m.colors.progress})`;
 }

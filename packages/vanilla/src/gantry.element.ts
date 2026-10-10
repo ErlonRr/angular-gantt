@@ -17,7 +17,6 @@ import {
   type GanttTask,
   type GanttOptions,
   type GanttAnnotation,
-  type GanttTheme,
   type GanttThemeOverrides,
   type GanttFlatRow,
   type GanttState,
@@ -25,8 +24,8 @@ import {
   type GanttI18n,
   type ViewMode,
   computeCriticalPath,
+  computeVirtualWindow,
   resolveConfig,
-  resolveLength,
   taskSpan,
   initialScrollLeft,
   initialScrollChanged,
@@ -35,6 +34,19 @@ import {
   type ResolvedGanttConfig,
   type BarVisual,
   type TimelineModel,
+  readStoredState,
+  writeStoredState,
+  normalizeState,
+  viewFromOptions,
+  viewFromState,
+  resolvePanelWidth,
+  clampPanelWidth,
+  availablePanelWidth,
+  buildLegend,
+  isLegendVisible,
+  resolveKey,
+  type LegendItem,
+  LEGEND_SWATCH_SIZE,
 } from '@gantry/core';
 import { GanttThemeService } from './services/gantt-theme.service';
 import { GanttI18nService } from './services/gantt-i18n.service';
@@ -49,10 +61,10 @@ import { GanttCanvasComponent, type GanttBarRenderer } from './layout/gantt-canv
 import { GanttToolbarComponent } from './annotations/gantt-toolbar.component';
 import { GanttTooltip } from './tooltip/gantt-tooltip';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { computeVirtualWindow } from './virtual-scroll/virtual-window';
 import type { VanillaColumnDef, GanttDataSourceConfig, GantryEventDetailMap, GantryEventMap } from './types';
 
-const STATE_PREFIX = 'gantry:';
+/** Persisted UI state lives in localStorage; unavailable (SSR, blocked storage) → not persisted. */
+const storage = () => (typeof window === 'undefined' ? null : window.localStorage);
 
 const template = typeof document === 'undefined' ? null : document.createElement('template');
 if (template)
@@ -208,6 +220,7 @@ if (template)
     }
     .gantt-legend-title { font-weight: 700; text-transform: uppercase; letter-spacing: .4px; font-size: 9.5px; color: var(--gantt-text-muted); }
     .gantt-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--gantt-text); }
+    .gantt-legend-swatch { flex: none; }
 
     @media (prefers-reduced-motion: reduce) {
       .gantry-panel, .gantry-canvas-viewport { transition: none; }
@@ -344,10 +357,11 @@ export class GantryElement extends BaseElement {
   private initialScrollDone = false;
   /** Timeline the canvas was last painted with — anchors the scroll when it changes */
   private paintedTimeline?: TimelineModel | undefined;
-  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string> } = {
+  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string>; float: Map<string, number> } = {
     tasks: null,
     key: '',
     ids: new Set(),
+    float: new Map(),
   };
   private lastViewMode: string;
   private restoredStateKey?: string | undefined;
@@ -406,10 +420,8 @@ export class GantryElement extends BaseElement {
     this.dragSvc.preview.subscribe(() => this.scheduleRender(false));
     this.dragSvc.state.subscribe(s => this.canvasContainerEl.classList.toggle('gantry-dragging', s.kind !== 'idle'));
 
-    this.selSvc.onChange = e => {
-      this.emit('selection-change', e);
-      this.scheduleRender(false);
-    };
+    this.selSvc.onChange = e => this.emit('selection-change', e);
+    this.selSvc.state.subscribe(() => this.scheduleRender(false));
     const mirrorColumns = () => {
       this.layout.columns.set(this.colSvc.columns);
       this.layout.builtins.set(this.colSvc.builtins);
@@ -524,15 +536,14 @@ export class GantryElement extends BaseElement {
     if (opts.enableResize != null) this._enableResize = opts.enableResize;
     // Only re-apply UI state the consumer actually changed — don't undo user interaction
     if (opts.viewMode && opts.viewMode !== prev.viewMode) this.layout.viewMode.set(opts.viewMode);
-    const view = opts.view ?? (opts.panel?.collapsed ? 'chart' : undefined);
-    const prevView = prev.view ?? (prev.panel?.collapsed ? 'chart' : undefined);
-    if (view && view !== prevView) this.layout.view.set(view);
+    const view = viewFromOptions(opts);
+    if (view && view !== viewFromOptions(prev)) this.layout.view.set(view);
     if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth)
       this.layout.panelWidthPx.set(null);
     if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this.initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this.restoredStateKey) {
       this.restoredStateKey = opts.stateKey;
-      const saved = readState(opts.stateKey);
+      const saved = readStoredState(storage, opts.stateKey);
       if (saved) this.setState(saved, false);
     }
     this.scheduleRender();
@@ -719,8 +730,8 @@ export class GantryElement extends BaseElement {
   }
   selectAll(): void {
     const selection = this.layout.config()?.selection;
-    if (!selection?.enabled || !selection.multi) return;
-    this.selSvc.selectAll(this.layout.visibleRows);
+    if (!selection) return;
+    this.selSvc.selectAll(this.visibleIds(), selection);
   }
 
   updateTask(id: string, patch: Partial<GanttTask>): void {
@@ -769,16 +780,22 @@ export class GantryElement extends BaseElement {
   }
 
   /** IDs of the tasks on the critical path (empty unless `options.criticalPath`). */
-  get criticalIds(): Set<string> {
-    if (!this._options.criticalPath) return new Set();
+  get criticalIds(): ReadonlySet<string> {
+    return this.criticalPath()?.ids ?? new Set();
+  }
+
+  /** CPM result (critical ids + total float), recomputed only when the tasks or the date reading change. */
+  private criticalPath(): { ids: ReadonlySet<string>; float: ReadonlyMap<string, number> } | null {
+    if (!this._options.criticalPath) return null;
     const tasks = this.layout.tasks();
     const cfg = this.layout.config();
     // Only the date reading matters — not the config object, which every full render replaces
     const key = `${cfg?.endDateMode}|${cfg?.normalizeDateOnly}`;
     if (this.critical.tasks !== tasks || this.critical.key !== key) {
-      this.critical = { tasks, key, ids: computeCriticalPath(tasks, cfg ?? {}).criticalIds };
+      const cpm = computeCriticalPath(tasks, cfg ?? {});
+      this.critical = { tasks, key, ids: cpm.criticalIds, float: cpm.floatMap };
     }
-    return this.critical.ids;
+    return this.critical;
   }
 
   /** Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). */
@@ -796,9 +813,10 @@ export class GantryElement extends BaseElement {
 
   /** Restore a state snapshot (e.g. from your backend). */
   setState(state: GanttState, emit = true): void {
+    state = normalizeState(state);
     if (state.panelWidth != null) this.layout.panelWidthPx.set(state.panelWidth);
-    if (state.view) this.layout.view.set(state.view);
-    else if (state.panelCollapsed != null) this.layout.view.set(state.panelCollapsed ? 'chart' : 'split');
+    const view = viewFromState(state);
+    if (view) this.layout.view.set(view);
     if (state.viewMode) this.layout.viewMode.set(state.viewMode);
     if (state.columnWidths) this.colSvc.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) this.layout.collapsedIds.set(new Set(state.collapsedIds));
@@ -822,13 +840,7 @@ export class GantryElement extends BaseElement {
     const state = this.getState();
     this.emit('state-change', state);
     const key = this._options.stateKey;
-    if (key) {
-      try {
-        window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state));
-      } catch {
-        /* storage unavailable */
-      }
-    }
+    if (key) writeStoredState(storage, key, state);
   }
 
   // ── Rendering ─────────────────────────────────────────────
@@ -891,7 +903,7 @@ export class GantryElement extends BaseElement {
 
     if (full) {
       this.renderToolbar(cfg);
-      this.renderLegend(theme);
+      this.renderLegend(cfg);
     }
     // The header only changes with the timeline model (not on vertical scroll)
     if (this.headerTimeline !== tl) {
@@ -970,6 +982,7 @@ export class GantryElement extends BaseElement {
         timeline: tl,
         config: cfg,
         labels,
+        locale: this.i18nSvc.locale,
         visibleGeometries: allGeometries.slice(vw.first, vw.last + 1),
         allGeometries,
         windowTop: vw.first * rowHeight,
@@ -1042,17 +1055,13 @@ export class GantryElement extends BaseElement {
 
   /** Panel width for the current view; split view honours the user's last width. */
   private applyPanelWidth(cfg: ResolvedGanttConfig, view: GanttView): void {
-    const hostW = this.mainEl.clientWidth || this.clientWidth || 1000;
-    const splitterW = this.splitterEl.offsetWidth || 6;
-    let width: number;
-    if (view === 'table') width = hostW;
-    else if (view === 'chart') width = 0;
-    else
-      width = this.clampPanel(
-        this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320),
-        cfg,
-        hostW - splitterW,
-      );
+    const width = resolvePanelWidth({
+      view,
+      panel: cfg.panel,
+      userWidth: this.layout.panelWidthPx(),
+      hostWidth: this.mainEl.clientWidth || this.clientWidth,
+      splitterWidth: this.splitterEl.offsetWidth,
+    });
     if (width !== this.panelPx) {
       this.panelPx = width;
       this.panelEl.style.width = `${width}px`;
@@ -1068,11 +1077,6 @@ export class GantryElement extends BaseElement {
     this.toggleEl.title = label;
     this.toggleEl.setAttribute('aria-label', label);
     this.toggleEl.setAttribute('aria-expanded', String(!collapsed));
-  }
-
-  private clampPanel(px: number, cfg: ResolvedGanttConfig, available: number): number {
-    const max = Math.min(available - 40, resolveLength(cfg.panel.maxWidth, available, available));
-    return Math.round(Math.max(cfg.panel.minWidth, Math.min(px, max)));
   }
 
   private renderToolbar(cfg: ResolvedGanttConfig): void {
@@ -1101,18 +1105,20 @@ export class GantryElement extends BaseElement {
     this.toolbarComp.viewChange$.subscribe(v => this.setView(v));
   }
 
-  private renderLegend(theme: Required<GanttTheme>): void {
+  private renderLegend(cfg: ResolvedGanttConfig): void {
     const labels = this.i18nSvc.labels;
-    const items: { color: string; label: string; dashed: boolean }[] = [];
-    if (this.layout.timeline.todayX >= 0) {
-      items.push({ color: theme.todayColor, label: labels.today, dashed: false });
-    }
-    for (const ann of this._annotations) {
-      items.push({ color: ann.color ?? theme.arrowColor, label: ann.label?.text ?? labels.annotation, dashed: true });
-    }
+    const items = buildLegend({
+      showToday: cfg.showToday,
+      todayVisible: this.layout.timeline.todayX >= 0,
+      annotations: this._annotations,
+      theme: cfg.theme,
+      labels,
+      criticalPath: cfg.criticalPath,
+      baseline: cfg.baseline,
+    });
 
     // The legend explains timeline markers: nothing to explain in the table view
-    this.legendEl.hidden = !this._showLegend || !items.length || this.layout.view() === 'table';
+    this.legendEl.hidden = !isLegendVisible(this._showLegend, this.layout.view(), items);
     this.legendEl.replaceChildren();
     if (this.legendEl.hidden) return;
 
@@ -1123,9 +1129,9 @@ export class GantryElement extends BaseElement {
     for (const item of items) {
       const el = document.createElement('span');
       el.className = 'gantt-legend-item';
-      el.innerHTML = `<svg width="18" height="12" aria-hidden="true"><line x1="9" y1="0" x2="9" y2="12" stroke-width="2"${item.dashed ? ' stroke-dasharray="3 2"' : ''}/></svg><span></span>`;
-      el.querySelector('line')!.setAttribute('stroke', item.color);
-      el.querySelector('span')!.textContent = item.label;
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      el.append(legendSwatchEl(item), label);
       this.legendEl.appendChild(el);
     }
   }
@@ -1137,12 +1143,13 @@ export class GantryElement extends BaseElement {
   }
 
   private onRowClick(row: GanttFlatRow, event: MouseEvent | KeyboardEvent): void {
-    const { enabled, multi } = this.layout.cfg.selection;
-    if (enabled) {
-      const e = multi ? event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
-      this.selSvc.handleClick(row.task.id, e, this.layout.visibleRows);
-    }
+    this.selSvc.handleClick(row.task.id, event, this.visibleIds(), this.layout.cfg.selection);
     this.emit('row-click', row);
+  }
+
+  /** Ids of the visible rows in display order (Shift ranges, select all). */
+  private visibleIds(): string[] {
+    return this.layout.visibleRows.map(r => r.task.id);
   }
 
   /** Splitter: drag to resize the task list, button / Enter to collapse. */
@@ -1157,7 +1164,7 @@ export class GantryElement extends BaseElement {
       e.preventDefault();
       const startX = e.clientX;
       const startW = this.panelPx;
-      const available = (this.mainEl.clientWidth || 1000) - splitter.offsetWidth;
+      const available = availablePanelWidth(this.mainEl.clientWidth, splitter.offsetWidth);
       this.mainEl.classList.add('is-resizing');
       try {
         splitter.setPointerCapture(e.pointerId);
@@ -1165,7 +1172,7 @@ export class GantryElement extends BaseElement {
         /* synthetic event */
       }
       const move = (ev: PointerEvent) => {
-        this.layout.panelWidthPx.set(this.clampPanel(startW + ev.clientX - startX, cfg, available));
+        this.layout.panelWidthPx.set(clampPanelWidth(startW + ev.clientX - startX, cfg.panel, available));
         this.scheduleRender(false);
       };
       const end = () => {
@@ -1192,9 +1199,9 @@ export class GantryElement extends BaseElement {
         cfg.panel.resizable
       ) {
         e.preventDefault();
-        const available = (this.mainEl.clientWidth || 1000) - splitter.offsetWidth;
+        const available = availablePanelWidth(this.mainEl.clientWidth, splitter.offsetWidth);
         this.layout.panelWidthPx.set(
-          this.clampPanel(this.panelPx + (e.key === 'ArrowLeft' ? -24 : 24), cfg, available),
+          clampPanelWidth(this.panelPx + (e.key === 'ArrowLeft' ? -24 : 24), cfg.panel, available),
         );
         this.saveState();
         this.scheduleRender(false);
@@ -1258,9 +1265,17 @@ export class GantryElement extends BaseElement {
       canvas.style.cursor =
         bar && bar.classList.contains('gantt-bar-draggable') && this.resizeHandleAt(bar, e.clientX) ? 'ew-resize' : '';
       if (!this._tooltipEnabled) return;
-      const task = bar && this.layout.geometryById.get(bar.getAttribute('data-task-id')!)?.row.task;
-      if (task) {
-        this.tooltip.enter(task, e, this.themeSvc.resolvedTheme, this.layout.config() ?? undefined);
+      const row = bar && this.layout.geometryById.get(bar.getAttribute('data-task-id')!)?.row;
+      const cfg = this.layout.config();
+      if (row && cfg) {
+        const cpm = this.criticalPath();
+        this.tooltip.enter(row, e, {
+          config: cfg,
+          now: this.layout.now(),
+          criticalIds: cpm?.ids,
+          floatDays: cpm?.float,
+          tasksById: this.layout.columnContext.taskById,
+        });
         this.tooltip.move(e);
       } else {
         this.tooltip.leave();
@@ -1277,51 +1292,59 @@ export class GantryElement extends BaseElement {
     if (origin && (/^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName) || origin.isContentEditable)) return;
     if (origin === this.splitterEl) return;
 
-    const ctrl = event.ctrlKey || event.metaKey;
-    switch (event.key) {
-      case 'Escape':
-        if (this.dragSvc.state().kind !== 'idle') this.dragSvc.cancel();
-        else this.selSvc.clear();
-        event.preventDefault();
+    // Only the commands the Web Component handles take the key; anything else keeps its default action
+    switch (resolveKey(event, 'any', { active: this.dragSvc.state().kind !== 'idle' })) {
+      case 'cancel':
+        this.dragSvc.cancel();
         break;
-      case 'a':
-      case 'A':
-        if (ctrl) {
-          this.selectAll();
-          event.preventDefault();
-        }
+      case 'clearSelection':
+        this.selSvc.clear();
         break;
-      case '+':
-      case '=':
-        if (!ctrl) {
-          this.zoomIn();
-          event.preventDefault();
-        }
+      case 'selectAll':
+        this.selectAll();
         break;
-      case '-':
-        if (!ctrl) {
-          this.zoomOut();
-          event.preventDefault();
-        }
+      case 'zoomIn':
+        this.zoomIn();
         break;
-      case 't':
-      case 'T':
-        if (!ctrl) {
-          this.scrollToToday();
-          event.preventDefault();
-        }
+      case 'zoomOut':
+        this.zoomOut();
         break;
+      case 'today':
+        this.scrollToToday();
+        break;
+      default:
+        return;
     }
+    event.preventDefault();
   }
 }
 
-function readState(key: string): GanttState | null {
-  try {
-    const raw = window.localStorage.getItem(STATE_PREFIX + key);
-    return raw ? (JSON.parse(raw) as GanttState) : null;
-  } catch {
-    return null;
-  }
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Legend swatch from the core geometry; the colour is set as an attribute, never interpolated. */
+function legendSwatchEl(item: LegendItem): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', `gantt-legend-swatch gantt-legend-swatch--${item.shape}`);
+  svg.setAttribute('width', String(LEGEND_SWATCH_SIZE.width));
+  svg.setAttribute('height', String(LEGEND_SWATCH_SIZE.height));
+  svg.setAttribute('aria-hidden', 'true');
+  const sw = item.swatch;
+  const shape = document.createElementNS(SVG_NS, sw.kind);
+  const attrs: Record<string, string | number | null> =
+    sw.kind === 'line'
+      ? {
+          x1: sw.x,
+          y1: sw.y1,
+          x2: sw.x,
+          y2: sw.y2,
+          stroke: item.color,
+          'stroke-width': sw.strokeWidth,
+          'stroke-dasharray': sw.dash,
+        }
+      : { x: sw.x, y: sw.y, width: sw.width, height: sw.height, rx: sw.rx, fill: item.color };
+  for (const [k, v] of Object.entries(attrs)) if (v !== null) shape.setAttribute(k, String(v));
+  svg.appendChild(shape);
+  return svg;
 }
 
 declare global {

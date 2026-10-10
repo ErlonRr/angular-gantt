@@ -42,7 +42,7 @@ import {
   NgZone,
 } from '@angular/core';
 
-import { computeVirtualWindow } from './virtual-window';
+import { computeVirtualWindow } from '@gantry/core';
 
 @Directive({
   selector: '[ganttVirtualScroll]',

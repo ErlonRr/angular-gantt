@@ -16,6 +16,7 @@ import {
   computeBarVisual,
   computeArrowVisual,
   cssPx,
+  taskAccessibleName,
   type BarVisual,
   type TimelineModel,
   type ResolvedGanttConfig,
@@ -35,6 +36,8 @@ export interface GanttCanvasProps {
   timeline: TimelineModel;
   config: ResolvedGanttConfig;
   labels: GanttLabels;
+  /** BCP 47 locale of the dates in the bars' accessible names */
+  locale?: string | undefined;
   visibleGeometries: RowGeometry[];
   allGeometries: RowGeometry[];
   /** Vertical pixel range currently rendered */
@@ -42,8 +45,8 @@ export interface GanttCanvasProps {
   windowBottom: number;
   totalHeight: number;
   annotations: GanttAnnotation[];
-  criticalIds: Set<string>;
-  selectedIds: Set<string>;
+  criticalIds: ReadonlySet<string>;
+  selectedIds: ReadonlySet<string>;
   enableDrag: boolean;
   enableResize: boolean;
   dragPreview: DragPreview | null;
@@ -249,7 +252,12 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
       bar.setAttribute('role', 'listitem');
       bar.setAttribute(
         'aria-label',
-        ariaLabel(geo.row.barType, task.name, task.progress ?? 0, cfg.baseline && !!task.baseline),
+        taskAccessibleName(geo.row, {
+          labels: p.labels,
+          locale: p.locale,
+          critical: ctx.isCritical,
+          baseline: cfg.baseline && !!task.baseline,
+        }),
       );
       if (draggable) bar.classList.add('gantt-bar-draggable');
       if (p.dragPreview?.taskId === task.id) bar.setAttribute('opacity', '0.35');
@@ -375,11 +383,6 @@ export class GanttCanvasComponent extends BaseComponent<GanttCanvasProps> {
     }
     return g;
   }
-}
-
-function ariaLabel(barType: string, name: string, progress: number, baseline: boolean): string {
-  if (barType === 'milestone') return `${name}, milestone`;
-  return `${name}, ${progress}% complete${baseline ? ', planned baseline shown' : ''}`;
 }
 
 function normalizeDeps(dep: string | GanttDependency | GanttDependency[] | undefined): GanttDependency[] {

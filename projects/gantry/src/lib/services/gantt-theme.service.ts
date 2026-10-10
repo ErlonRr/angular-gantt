@@ -40,7 +40,7 @@ export { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme };
 export interface GanttGlobalConfig {
   theme?: GanttThemeOverrides;
   darkMode?: boolean | 'auto';
-  /** Default dayjs locale id (e.g. 'it') — load it first: import 'dayjs/locale/it' */
+  /** Default BCP 47 locale (e.g. 'it'), formatted through Intl */
   locale?: string;
   /** Default UI string overrides (i18n) */
   labels?: Partial<GanttLabels>;

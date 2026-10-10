@@ -59,10 +59,22 @@ import {
 } from '../types';
 import {
   resolveConfig,
-  resolveLength,
   initialScrollLeft,
   initialScrollChanged,
   zoomAnchorScroll,
+  computeVirtualWindow,
+  readStoredState,
+  writeStoredState,
+  normalizeState,
+  viewFromOptions,
+  viewFromState,
+  resolvePanelWidth,
+  clampPanelWidth,
+  availablePanelWidth,
+  buildLegend,
+  LEGEND_SWATCH_SIZE,
+  isLegendVisible,
+  type LegendItem,
   type ResolvedGanttConfig,
   type TimelineModel,
 } from '@gantry/core';
@@ -81,11 +93,10 @@ import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttKeyboardDirective } from '../selection/gantt-keyboard.directive';
 import { GanttLoadMoreComponent } from '../datasource/gantt-load-more.component';
 import { type GanttDataSource } from '../datasource/gantt-datasource';
-import { computeCriticalPath } from '../gantt-cpm';
-import { computeVirtualWindow } from '../virtual-scroll/virtual-window';
+import { computeCriticalPath, type CPMResult } from '../gantt-cpm';
 
-const STATE_PREFIX = 'gantry:';
-const SPLITTER_PX = 6;
+/** `localStorage` without touching `window` on the server (the storage helpers also catch a throw) */
+const browserStorage = () => (typeof window === 'undefined' ? null : window.localStorage);
 
 @Component({
   selector: 'gantry',
@@ -240,6 +251,8 @@ const SPLITTER_PX = 6;
           [totalHeight]="layout.totalHeight()"
           [annotations]="annotations()"
           [criticalIds]="criticalIds()"
+          [floatDays]="cpm()?.floatMap"
+          [tasksById]="layout.columnContext().taskById"
           [enableResize]="dragEnabled() && resizeEnabled()"
           [enableDrag]="dragEnabled()"
           [enableSelection]="cfg().selection.enabled"
@@ -254,21 +267,38 @@ const SPLITTER_PX = 6;
     </div>
 
     <!-- ── Legend (optional) ─────────────────────────────────── -->
-    @if (showLegend() && legendItems().length && layout.view() !== 'table') {
+    @if (legendVisible()) {
       <div class="gantt-legend">
         <span class="gantt-legend-title">{{ i18n.labels().legend }}</span>
-        @for (item of legendItems(); track item.label) {
+        @for (item of legendItems(); track item.key) {
           <span class="gantt-legend-item">
-            <svg width="18" height="12" aria-hidden="true">
-              <line
-                x1="9"
-                y1="0"
-                x2="9"
-                y2="12"
-                [attr.stroke]="item.color"
-                stroke-width="2"
-                [attr.stroke-dasharray]="item.dashed ? '3 2' : null"
-              />
+            <svg
+              [attr.class]="'gantt-legend-swatch gantt-legend-swatch--' + item.shape"
+              [attr.width]="swatchSize.width"
+              [attr.height]="swatchSize.height"
+              aria-hidden="true"
+            >
+              @let sw = item.swatch;
+              @if (sw.kind === 'line') {
+                <svg:line
+                  [attr.x1]="sw.x"
+                  [attr.y1]="sw.y1"
+                  [attr.x2]="sw.x"
+                  [attr.y2]="sw.y2"
+                  [attr.stroke]="item.color"
+                  [attr.stroke-width]="sw.strokeWidth"
+                  [attr.stroke-dasharray]="sw.dash"
+                />
+              } @else {
+                <svg:rect
+                  [attr.x]="sw.x"
+                  [attr.y]="sw.y"
+                  [attr.width]="sw.width"
+                  [attr.height]="sw.height"
+                  [attr.rx]="sw.rx"
+                  [attr.fill]="item.color"
+                />
+              }
             </svg>
             <span>{{ item.label }}</span>
           </span>
@@ -411,6 +441,9 @@ const SPLITTER_PX = 6;
         white-space: nowrap;
         color: var(--gantt-text);
       }
+      .gantt-legend-swatch {
+        flex: none;
+      }
 
       .gantt-timeline-scroll,
       .gantt-panel-scroll {
@@ -508,18 +541,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   protected readonly splitterDragging = signal(false);
   /** Width transitions start after the first measured render (no 300px → 30% slide on load) */
   protected readonly panelAnimated = signal(false);
-  protected readonly panelPx = computed(() => {
-    const view = this.layout.view();
-    const hostW = this.mainWidth() || 1000;
-    if (view === 'table') return hostW;
-    if (view === 'chart') return 0;
-    const cfg = this.cfg();
-    return this.clampPanel(
-      this.layout.panelWidthPx() ?? resolveLength(cfg.panel.width, hostW, 320),
-      cfg,
-      hostW - SPLITTER_PX,
-    );
-  });
+  protected readonly panelPx = computed(() =>
+    resolvePanelWidth({
+      view: this.layout.view(),
+      panel: this.cfg().panel,
+      userWidth: this.layout.panelWidthPx(),
+      hostWidth: this.mainWidth(),
+    }),
+  );
 
   /** Keep both panes' bottoms level despite either one's horizontal scrollbar */
   private readonly panelSB = signal(0);
@@ -578,23 +607,30 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
         a.normalizeDateOnly === b.normalizeDateOnly,
     },
   );
-  readonly criticalIds = computed<Set<string>>(() => {
+  /** CPM result (critical ids, float), `null` when the critical path is off */
+  protected readonly cpm = computed<CPMResult | null>(() => {
     const cfg = this.cpmConfig();
-    if (!cfg.criticalPath) return new Set();
-    return computeCriticalPath(this.layout.tasks(), cfg).criticalIds;
+    return cfg.criticalPath ? computeCriticalPath(this.layout.tasks(), cfg) : null;
   });
+  readonly criticalIds = computed<ReadonlySet<string>>(() => this.cpm()?.criticalIds ?? new Set());
 
-  // ── Legend items (today marker + user annotations) ───────
-  protected readonly legendItems = computed<{ color: string; label: string; dashed: boolean }[]>(() => {
-    const t = this.theme();
-    const lbl = this.i18n.labels();
-    const items: { color: string; label: string; dashed: boolean }[] = [];
-    if (this.layout.todayX() >= 0) items.push({ color: t.todayColor, label: lbl.today, dashed: false });
-    for (const ann of this.annotations()) {
-      items.push({ color: ann.color ?? t.arrowColor, label: ann.label?.text ?? lbl.annotation, dashed: true });
-    }
-    return items;
+  // ── Legend items (today, annotations, critical path, baseline — @gantry/core) ──
+  protected readonly swatchSize = LEGEND_SWATCH_SIZE;
+  protected readonly legendItems = computed<LegendItem[]>(() => {
+    const cfg = this.cfg();
+    return buildLegend({
+      showToday: cfg.showToday,
+      todayVisible: this.layout.todayX() >= 0,
+      annotations: this.annotations(),
+      theme: cfg.theme,
+      labels: this.i18n.labels(),
+      criticalPath: cfg.criticalPath,
+      baseline: cfg.baseline,
+    });
   });
+  protected readonly legendVisible = computed(() =>
+    isLegendVisible(this.showLegend(), this.layout.view(), this.legendItems()),
+  );
 
   constructor() {
     this.layout.bindConfig(
@@ -713,15 +749,14 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.themeSvc.setOptionsTheme(opts.theme);
 
     if (opts.viewMode && opts.viewMode !== prev.viewMode) this.layout.viewMode.set(opts.viewMode);
-    const view = opts.view ?? (opts.panel?.collapsed || opts.panelVisible === false ? 'chart' : undefined);
-    const prevView = prev.view ?? (prev.panel?.collapsed || prev.panelVisible === false ? 'chart' : undefined);
-    if (view && view !== prevView) this.layout.view.set(view);
+    const view = viewFromOptions(opts);
+    if (view && view !== viewFromOptions(prev)) this.layout.view.set(view);
     if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth)
       this.layout.panelWidthPx.set(null);
     if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this._initialScrollDone = false;
     if (opts.stateKey && opts.stateKey !== this._restoredStateKey) {
       this._restoredStateKey = opts.stateKey;
-      const saved = readState(opts.stateKey);
+      const saved = readStoredState(browserStorage, opts.stateKey);
       if (saved) this.setState(saved, false);
     }
   }
@@ -729,11 +764,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   // ── Event handlers ────────────────────────────────────────
 
   protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent | KeyboardEvent }): void {
-    const { enabled, multi } = this.cfg().selection;
-    if (enabled) {
-      const ev = multi ? e.event : ({ ctrlKey: false, metaKey: false, shiftKey: false } as MouseEvent);
-      this.selSvc.handleClick(e.row.task.id, ev, this.layout.visibleRows());
-    }
+    this.selSvc.handleClick(e.row.task.id, e.event, this.layout.visibleRows(), this.cfg().selection);
     const geo = this.layout.geometryById().get(e.row.task.id);
     if (geo) this.rowClick.emit(geo);
   }
@@ -773,11 +804,6 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
 
   // ── Splitter ──────────────────────────────────────────────
 
-  private clampPanel(px: number, cfg: ResolvedGanttConfig, available: number): number {
-    const max = Math.min(available - 40, resolveLength(cfg.panel.maxWidth, available, available));
-    return Math.round(Math.max(cfg.panel.minWidth, Math.min(px, max)));
-  }
-
   protected onSplitterDown(e: PointerEvent): void {
     const cfg = this.cfg();
     if (e.button !== 0 || !cfg.panel.resizable || this.layout.view() !== 'split') return;
@@ -785,7 +811,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     const el = e.currentTarget as HTMLElement;
     const startX = e.clientX;
     const startW = this.panelPx();
-    const available = (this.mainWidth() || 1000) - SPLITTER_PX;
+    const available = availablePanelWidth(this.mainWidth());
     this.splitterDragging.set(true);
     try {
       el.setPointerCapture(e.pointerId);
@@ -793,7 +819,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       /* synthetic event */
     }
     const move = (ev: PointerEvent) =>
-      this.layout.panelWidthPx.set(this.clampPanel(startW + ev.clientX - startX, cfg, available));
+      this.layout.panelWidthPx.set(clampPanelWidth(startW + ev.clientX - startX, cfg.panel, available));
     const end = () => {
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', end);
@@ -817,9 +843,9 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       this.cfg().panel.resizable
     ) {
       e.preventDefault();
-      const available = (this.mainWidth() || 1000) - SPLITTER_PX;
+      const available = availablePanelWidth(this.mainWidth());
       this.layout.panelWidthPx.set(
-        this.clampPanel(this.panelPx() + (e.key === 'ArrowLeft' ? -24 : 24), this.cfg(), available),
+        clampPanelWidth(this.panelPx() + (e.key === 'ArrowLeft' ? -24 : 24), this.cfg().panel, available),
       );
       this.saveState();
     }
@@ -904,9 +930,8 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   getSelectedTasks(): GanttTask[] {
-    const ids = this.selSvc.getSelectedIds();
-    const tasks = this.layout.tasks();
-    return tasks.filter(t => ids.includes(t.id));
+    const ids = this.selSvc.selectedIds();
+    return this.layout.tasks().filter(t => ids.has(t.id));
   }
 
   setSelectedTasks(ids: string[]): void {
@@ -917,10 +942,9 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     this.selSvc.clear();
   }
 
+  /** Select every visible row (ignored unless selection and multi-select are on). */
   selectAll(): void {
-    const { enabled, multi } = this.cfg().selection;
-    if (!enabled || !multi) return;
-    this.selSvc.selectAll(this.layout.visibleRows());
+    this.selSvc.selectAll(this.layout.visibleRows(), this.cfg().selection);
   }
 
   updateTask(id: string, patch: Partial<GanttTask>): void {
@@ -971,11 +995,12 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
     };
   }
 
-  /** Restore a state snapshot (e.g. from your backend). */
-  setState(state: GanttState, emit = true): void {
+  /** Restore a state snapshot (e.g. from your backend); invalid fields are ignored. */
+  setState(snapshot: GanttState, emit = true): void {
+    const state = normalizeState(snapshot);
     if (state.panelWidth != null) this.layout.panelWidthPx.set(state.panelWidth);
-    if (state.view) this.layout.view.set(state.view);
-    else if (state.panelCollapsed != null) this.layout.view.set(state.panelCollapsed ? 'chart' : 'split');
+    const view = viewFromState(state);
+    if (view) this.layout.view.set(view);
     if (state.viewMode) this.layout.viewMode.set(state.viewMode);
     if (state.columnWidths) this.colSvc.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) this.layout.collapsedIds.set(new Set(state.collapsedIds));
@@ -990,22 +1015,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       const state = this.getState();
       this.stateChange.emit(state);
       const key = this.options().stateKey;
-      if (key) {
-        try {
-          window.localStorage.setItem(STATE_PREFIX + key, JSON.stringify(state));
-        } catch {
-          /* storage unavailable */
-        }
-      }
+      if (key) writeStoredState(browserStorage, key, state);
     }, 150);
-  }
-}
-
-function readState(key: string): GanttState | null {
-  try {
-    const raw = window.localStorage.getItem(STATE_PREFIX + key);
-    return raw ? (JSON.parse(raw) as GanttState) : null;
-  } catch {
-    return null;
   }
 }

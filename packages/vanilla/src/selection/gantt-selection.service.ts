@@ -1,111 +1,73 @@
 /**
  * @file gantt-selection.service.ts
- * Vanilla JS selection manager supporting single, ctrl toggle, and shift range selection.
+ * Vanilla JS selection state. The click / range / select-all rules and the
+ * emit rule come from the core reducer (`@gantry/core` state/selection), so
+ * the Web Component selects and fires `selection-change` exactly like Angular.
  */
 
-import { type GanttFlatRow, type SelectionChangeEvent } from '@gantry/core';
+import {
+  type SelectionAction,
+  type SelectionChangeEvent,
+  type SelectionModifierSource,
+  type SelectionPolicy,
+  type SelectionState,
+  emptySelection,
+  selectAllRows,
+  selectionClick,
+  selectionModifiers,
+  selectionOf,
+  shouldEmitSelection,
+} from '@gantry/core';
 import { createState } from '../core/state';
 
 export class GanttSelectionService {
-  private readonly _selectedIds = createState<Set<string>>(new Set());
-  private readonly _lastSelected = createState<string | null>(null);
+  /** Current selection (selected ids + range anchor) */
+  readonly state = createState<SelectionState>(emptySelection());
 
+  /** Fired per `shouldEmitSelection` (every action that changes the state, except clearing an empty selection) */
   onChange?: ((e: SelectionChangeEvent) => void) | undefined;
 
-  get selectedIds(): Set<string> {
-    return this._selectedIds();
+  get selectedIds(): ReadonlySet<string> {
+    return this.state().selected;
   }
 
   get selectedCount(): number {
-    return this._selectedIds().size;
+    return this.state().selected.size;
   }
 
   isSelected(id: string): boolean {
-    return this._selectedIds().has(id);
+    return this.state().selected.has(id);
   }
 
-  handleClick(id: string, event: MouseEvent | KeyboardEvent, allVisibleRows: GanttFlatRow[]): void {
-    const ctrl = event.ctrlKey || event.metaKey;
-    const shift = event.shiftKey;
-
-    if (shift && this._lastSelected()) {
-      this.rangeSelect(id, allVisibleRows);
-    } else if (ctrl) {
-      this.toggle(id);
-    } else {
-      this.selectSingle(id);
-    }
+  /** Row click: plain / Ctrl·Cmd toggle / Shift range over `orderedIds` (the visible rows in display order). */
+  handleClick(
+    id: string,
+    event: SelectionModifierSource,
+    orderedIds: readonly string[],
+    policy: SelectionPolicy,
+  ): void {
+    this.apply(selectionClick(this.state(), id, selectionModifiers(event), orderedIds, policy), 'click');
   }
 
-  selectSingle(id: string): void {
-    this._selectedIds.set(new Set([id]));
-    this._lastSelected.set(id);
-    this.emit([...this._selectedIds()]);
-  }
-
-  toggle(id: string): void {
-    this._selectedIds.update(ids => {
-      const next = new Set(ids);
-      if (next.has(id)) {
-        next.delete(id);
-        if (this._lastSelected() === id) this._lastSelected.set(null);
-      } else {
-        next.add(id);
-        this._lastSelected.set(id);
-      }
-      return next;
-    });
-    this.emit([...this._selectedIds()]);
-  }
-
-  rangeSelect(toId: string, allRows: GanttFlatRow[]): void {
-    const fromId = this._lastSelected();
-    if (!fromId) {
-      this.selectSingle(toId);
-      return;
-    }
-
-    const fromIdx = allRows.findIndex(r => r.task.id === fromId);
-    const toIdx = allRows.findIndex(r => r.task.id === toId);
-
-    if (fromIdx < 0 || toIdx < 0) {
-      this.selectSingle(toId);
-      return;
-    }
-
-    const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
-    const rangeIds = allRows.slice(lo, hi + 1).map(r => r.task.id);
-
-    this._selectedIds.update(ids => {
-      const next = new Set(ids);
-      for (const id of rangeIds) next.add(id);
-      return next;
-    });
-
-    this._lastSelected.set(toId);
-    this.emit([...this._selectedIds()]);
-  }
-
-  setSelected(ids: string[]): void {
-    this._selectedIds.set(new Set(ids));
-    this._lastSelected.set(ids.at(-1) ?? null);
-    this.emit([...ids]);
+  /** Replace the selection (programmatic API). */
+  setSelected(ids: readonly string[]): void {
+    this.apply(selectionOf(ids), 'set');
   }
 
   clear(): void {
-    this._selectedIds.set(new Set());
-    this._lastSelected.set(null);
-    this.emit([]);
+    this.apply(emptySelection(), 'clear');
   }
 
-  selectAll(rows: GanttFlatRow[]): void {
-    const ids = rows.map(r => r.task.id);
-    this._selectedIds.set(new Set(ids));
-    this._lastSelected.set(ids.at(-1) ?? null);
-    this.emit(ids);
+  /** Select every row of `orderedIds`; does nothing when the policy forbids it (disabled / single-select). */
+  selectAll(orderedIds: readonly string[], policy: SelectionPolicy): void {
+    const next = selectAllRows(orderedIds, policy);
+    if (next) this.apply(next, 'selectAll');
   }
 
-  private emit(ids: string[]): void {
-    this.onChange?.({ selectedIds: ids });
+  private apply(next: SelectionState, action: SelectionAction): void {
+    const prev = this.state();
+    if (next === prev) return;
+    this.state.set(next);
+    if (shouldEmitSelection(prev, next, action)) this.onChange?.({ selectedIds: [...next.selected] });
   }
 }

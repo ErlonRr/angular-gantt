@@ -4,7 +4,6 @@
 //  Pure — no DOM, no framework.
 // ─────────────────────────────────────────────────────────────
 
-import dayjs from 'dayjs';
 import type {
   TimeUnit,
   GanttScale,
@@ -15,7 +14,8 @@ import type {
   GanttI18n,
 } from '../types';
 import { ViewMode, DEFAULT_LABELS } from '../types';
-import { calendarDays, dateToPixel, toLocalDay } from '../gantt-math';
+import { calendarDays, toLocalDay } from '../gantt-math';
+import { formatDate, isoWeek } from '../format';
 
 // ─── Unit arithmetic ──────────────────────────────────────────
 
@@ -34,7 +34,15 @@ export const UNIT_DAYS: Record<TimeUnit, number> = {
  * calendar (6 hours → 00/06/12/18, 6 months → Jan/Jul, 2 days/weeks → epoch-aligned).
  */
 export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1 = 1): Date {
-  const d = toLocalDay(date);
+  return periodStart(toLocalDay(date), unit, step, weekStart);
+}
+
+/**
+ * `unitStart` for a date that is already local (scale boundaries, bands): no date-only
+ * normalisation, so an hour boundary that happens to fall on UTC midnight (16:00 in
+ * Los Angeles) is not mistaken for a date-only value.
+ */
+function periodStart(d: Date, unit: TimeUnit, step: number, weekStart: 0 | 1): Date {
   const y = d.getFullYear(),
     m = d.getMonth(),
     day = d.getDate();
@@ -87,7 +95,7 @@ export function unitAdd(date: Date, unit: TimeUnit, n: number): Date {
 
 /** Week number: ISO-8601 when the week starts on Monday, US-style (week 1 holds Jan 1) on Sunday. */
 export function weekNumber(date: Date, weekStart: 0 | 1 = 1): number {
-  if (weekStart === 1) return dayjs(date).isoWeek();
+  if (weekStart === 1) return isoWeek(date);
   const jan1 = new Date(date.getFullYear(), 0, 1);
   const dayOfYear = Math.round(calendarDays(date) - calendarDays(jan1));
   return Math.floor((dayOfYear + jan1.getDay()) / 7) + 1;
@@ -95,7 +103,6 @@ export function weekNumber(date: Date, weekStart: 0 | 1 = 1): number {
 
 // ─── Formats ──────────────────────────────────────────────────
 
-const dj = (d: Date, locale?: string) => (locale ? dayjs(d).locale(locale) : dayjs(d));
 /** Inclusive last day of a period whose exclusive end is `end`. */
 const lastDay = (end: Date) => new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
 
@@ -111,8 +118,8 @@ export const WEEK_FORMATS = {
   rangeMonth: ((s, e, ctx) => {
     const last = lastDay(e);
     return s.getMonth() === last.getMonth()
-      ? `${s.getDate()}–${dj(last, ctx.locale).format('D MMM')}`
-      : `${dj(s, ctx.locale).format('D MMM')} – ${dj(last, ctx.locale).format('D MMM')}`;
+      ? `${s.getDate()}–${formatDate(last, 'D MMM', ctx.locale)}`
+      : `${formatDate(s, 'D MMM', ctx.locale)} – ${formatDate(last, 'D MMM', ctx.locale)}`;
   }) as ScaleFormat,
   /** "W52 · 4–11" */
   numberRange: ((s, e, ctx) =>
@@ -138,7 +145,7 @@ const DEFAULT_UNIT_FORMAT: Record<TimeUnit, ScaleFormat> = {
 
 export function formatScaleLabel(scale: GanttScale, start: Date, end: Date, ctx: ScaleFormatContext): string {
   const fmt = scale.format ?? DEFAULT_UNIT_FORMAT[scale.unit];
-  return typeof fmt === 'function' ? fmt(start, end, ctx) : dj(start, ctx.locale).format(fmt);
+  return typeof fmt === 'function' ? fmt(start, end, ctx) : formatDate(start, fmt, ctx.locale);
 }
 
 // ─── Zoom presets ─────────────────────────────────────────────
@@ -268,12 +275,20 @@ export interface BuildTiersInput {
   locale?: string | undefined;
   labels?: GanttLabels | undefined;
   now?: Date | undefined;
+  /**
+   * Read date-only `start` / `end` (UTC midnight) as local days. Default `true`; `buildTimeline`
+   * passes `false` because its bounds are already local.
+   */
+  normalizeDateOnly?: boolean | undefined;
 }
 
-/** Period boundaries (start dates) of a unit inside [start, end), the first one possibly before `start`. */
+/**
+ * Period boundaries (start dates) of a unit inside [start, end), the first one possibly before
+ * `start`. `start` and `end` are local dates (already normalised), like every timeline bound.
+ */
 export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: number, weekStart: 0 | 1): Date[] {
   const out: Date[] = [];
-  let cur = unitStart(start, unit, step, weekStart);
+  let cur = periodStart(start, unit, step, weekStart);
   // Hard cap protects against runaway configs (e.g. hour scale over decades)
   for (let i = 0; cur < end && i < 50_000; i++) {
     out.push(cur);
@@ -283,10 +298,16 @@ export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: num
 }
 
 export function buildTiers(input: BuildTiersInput): ScaleTier[] {
-  const { scales, start, end, pxPerDay, weekStart = 1, locale, now = new Date() } = input;
+  const { scales, pxPerDay, weekStart = 1, locale, now = new Date() } = input;
+  const local = (d: Date) => (input.normalizeDateOnly === false ? d : toLocalDay(d));
+  const start = local(input.start);
+  const end = local(input.end);
   const labels = input.labels ?? DEFAULT_LABELS;
   const [upperH, bottomH] = input.heights ?? [32, 28];
-  const totalWidth = dateToPixel(end, start, pxPerDay);
+  // Bounds and cells are local dates: x without date-only normalisation (see `periodStart`)
+  const origin = calendarDays(start, false);
+  const xOf = (d: Date) => Math.round((calendarDays(d, false) - origin) * pxPerDay);
+  const totalWidth = xOf(end);
   let y = 0;
 
   return scales.map((scale, i) => {
@@ -304,8 +325,8 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
 
     for (const cellStart of unitBoundaries(start, end, scale.unit, step, weekStart)) {
       const cellEnd = unitAdd(cellStart, scale.unit, step);
-      const x0 = Math.max(0, dateToPixel(cellStart, start, pxPerDay));
-      const x1 = Math.min(totalWidth, dateToPixel(cellEnd, start, pxPerDay));
+      const x0 = Math.max(0, xOf(cellStart));
+      const x1 = Math.min(totalWidth, xOf(cellEnd));
       if (x1 <= x0) continue;
       cells.push({
         start: cellStart,

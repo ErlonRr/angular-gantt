@@ -28,7 +28,7 @@ export class GanttI18nService {
   private readonly _labels = signal<Partial<GanttLabels>>({});
   private readonly _formats = signal<Partial<GanttFormats>>({});
 
-  /** Effective dayjs locale id (undefined → dayjs default, English). */
+  /** Effective BCP 47 locale (undefined → 'en'). */
   readonly locale = computed<string | undefined>(() => this._locale() ?? this.globalConfig.locale);
 
   /** Effective, fully-populated UI labels. */

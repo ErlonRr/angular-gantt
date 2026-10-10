@@ -28,7 +28,6 @@ import {
   ViewMode,
   type GanttOptions,
 } from 'ngx-gantry';
-import 'dayjs/locale/it';
 import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 

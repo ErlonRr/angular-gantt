@@ -99,15 +99,19 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
   let end = range.end;
 
   const pxPerDay = cfg.pxPerDay;
-  const startDays = calendarDays(start, cfg.normalizeDateOnly);
+  // The range, scale cells, bands and `now` are local dates: they are placed without date-only
+  // normalisation (an hour boundary on UTC midnight is not a date-only value). `toX` is for
+  // user dates and normalises them per `normalizeDateOnly`.
+  const startDays = calendarDays(start, false);
+  const localX = (d: Date) => Math.round((calendarDays(d, false) - startDays) * pxPerDay);
   const toX = (d: Date) => Math.round((calendarDays(d, cfg.normalizeDateOnly) - startDays) * pxPerDay);
   const toDate = (x: number) => fromCalendarDays(startDays + x / pxPerDay);
 
   // Fill the viewport: extend by whole bottom cells
   if (cfg.fitToWidth && input.viewportWidth) {
-    for (let i = 0; toX(end) < input.viewportWidth && i < 10_000; i++) end = unitAdd(end, bottom.unit, step);
+    for (let i = 0; localX(end) < input.viewportWidth && i < 10_000; i++) end = unitAdd(end, bottom.unit, step);
   }
-  const totalWidth = toX(end);
+  const totalWidth = localX(end);
 
   const tiers = buildTiers({
     scales: cfg.scales,
@@ -119,6 +123,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     locale: i18n?.locale,
     labels: i18n?.labels,
     now,
+    normalizeDateOnly: false,
   });
 
   // Delimiters: major = boundaries of `majorUnit` (default: the tier above the bottom one)
@@ -129,14 +134,14 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
       : null;
   const majorLines = majorScale
     ? unitBoundaries(start, end, majorScale.unit, majorScale.step ?? 1, cfg.weekStart)
-        .map(toX)
+        .map(localX)
         .filter(x => x > 0 && x < totalWidth)
     : [];
   const majorSet = new Set(majorLines);
   const bottomTier = tiers.at(-1);
   const minorLines = (bottomTier?.cells ?? []).map(c => c.x).filter(x => x > 0 && !majorSet.has(x));
 
-  const todayX = cfg.showToday ? toX(now) : -1;
+  const todayX = cfg.showToday ? localX(now) : -1;
 
   return {
     start,
@@ -147,7 +152,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     tiers,
     minorLines,
     majorLines,
-    bands: computeTimeBands(start, end, pxPerDay, cfg, toX),
+    bands: computeTimeBands(start, end, pxPerDay, cfg, localX),
     todayX: todayX >= 0 && todayX <= totalWidth ? todayX : -1,
     extent,
     toX,
@@ -207,7 +212,7 @@ export function computeTimeBands(
   for (const day of days) {
     const next = unitAdd(day, 'day', 1);
     const epoch = Math.floor(calendarDays(day));
-    const holiday = nw?.holidays.find(h => epoch >= h.from && epoch <= h.to);
+    const holiday = nw?.holidayByDay.get(epoch);
     const custom = cfg.highlightTime?.(day, 'day');
 
     if (holiday) {
@@ -224,7 +229,7 @@ export function computeTimeBands(
     if (!hourScale || !nw) continue;
     // Off-hours = complement of the working ranges for this weekday
     if (nw.workingHours) {
-      const ranges = [...nw.workingHours(day.getDay())].sort((a, b) => a.start - b.start);
+      const ranges = nw.workingHours(day.getDay());
       let cursor = 0;
       for (const r of ranges) {
         if (r.start > cursor) push(at(day, cursor), at(day, r.start), 'off-hours', theme.offHoursBg);

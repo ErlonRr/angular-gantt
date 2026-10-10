@@ -1,12 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  ViewMode,
-  TaskType,
-  type GanttTask,
-  PX_PER_DAY,
-  type TaskDragEvent,
-  type SelectionChangeEvent,
-} from '@gantry/core';
+import { ViewMode, TaskType, type GanttTask, type TaskDragEvent, type SelectionChangeEvent } from '@gantry/core';
 import { DEMO_TASKS } from '@gantry/core/demo';
 import { GantryElement } from '../gantry.element';
 import '../index';
@@ -114,7 +107,7 @@ describe('<gantry-element>', () => {
 
     const bar = $(el, '.gantt-bars-layer [data-task-id="a"]')!;
     const canvas = $(el, '.gantry-canvas-container')!;
-    const px = PX_PER_DAY[ViewMode.Month];
+    const px = el.layout.timeline.pxPerDay;
     bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
     canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 3 * px, pointerId: 1 }));
     canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 3 * px, pointerId: 1 }));
@@ -158,6 +151,42 @@ describe('<gantry-element>', () => {
     expect(el.getSelectedTasks()).toHaveLength(2);
     el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(el.getSelectedTasks()).toHaveLength(0);
+  });
+
+  it('leaves keys it does not handle (and Alt combinations) to the browser', async () => {
+    el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
+    const zoom = el.viewMode;
+    const fit = new KeyboardEvent('keydown', { key: 'f', cancelable: true });
+    el.dispatchEvent(fit);
+    expect(fit.defaultPrevented).toBe(false);
+    const altPlus = new KeyboardEvent('keydown', { key: '+', altKey: true, cancelable: true });
+    el.dispatchEvent(altPlus);
+    expect(altPlus.defaultPrevented).toBe(false);
+    expect(el.viewMode).toBe(zoom);
+    const selectAll = new KeyboardEvent('keydown', { key: 'A', ctrlKey: true, shiftKey: true, cancelable: true });
+    el.dispatchEvent(selectAll);
+    expect(selectAll.defaultPrevented).toBe(true);
+    expect(el.getSelectedTasks()).toHaveLength(1);
+  });
+
+  it('selects through the core reducer: single-select ignores modifiers, clearing nothing emits nothing', async () => {
+    el = await mount({
+      tasks: [task('a', '2026-01-01', '2026-01-10'), task('b', '2026-01-01', '2026-01-10')],
+      options: { multiSelect: false },
+    });
+    const onSel = vi.fn<(e: CustomEvent<SelectionChangeEvent>) => void>();
+    el.addEventListener('selection-change', onSel);
+    const rows = () => $$(el, '.gantt-tl-row') as HTMLElement[];
+    rows()[0].click();
+    rows()[1].dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+    expect(el.getSelectedTasks().map(t => t.id)).toEqual(['b']);
+    el.selectAll();
+    expect(el.getSelectedTasks().map(t => t.id)).toEqual(['b']);
+    el.clearSelection();
+    el.clearSelection();
+    expect(onSel.mock.calls.map(c => c[0].detail.selectedIds)).toEqual([['a'], ['b'], []]);
+    await frame();
+    expect($$(el, '.gantt-tl-row--selected')).toHaveLength(0);
   });
 
   it('sorts root rows by a column header click (asc → desc → original)', async () => {
@@ -493,6 +522,89 @@ describe('<gantry-element>', () => {
     await frame();
     expect($$(el, '.g-tier')).toHaveLength(3);
     expect($$(el, '.g-tier--week .g-cell-label').map(c => c.textContent)).toContain('2-8');
+  });
+
+  describe('core models', () => {
+    const planned = () => [
+      task('a', '2026-03-01', '2026-03-10', {
+        baseline: { start: new Date('2026-03-01'), end: new Date('2026-03-08') },
+      }),
+      task('b', '2026-03-10', '2026-03-20', { dependency: 'a' }),
+      task('m', '2026-03-20', '2026-03-20', {
+        type: TaskType.Milestone,
+        baseline: { start: new Date('2026-03-18'), end: new Date('2026-03-18') },
+      }),
+    ];
+    const label = (id: string) => $(el, `.gantt-bars-layer [data-task-id="${id}"]`)?.getAttribute('aria-label');
+
+    it('names bars with taskAccessibleName: type, dates, progress, critical, baseline', async () => {
+      el = await mount({ tasks: planned(), options: { criticalPath: true, baseline: true } });
+      expect(label('a')).toBe(
+        'Task a, Task, 1 Mar – 10 Mar 2026, 50% complete, critical, planned baseline shown',
+      );
+      expect(label('b')).toBe('Task b, Task, 10 Mar – 20 Mar 2026, 50% complete, critical');
+      // Milestones have no progress and never mention the baseline
+      expect(label('m')).toBe('Task m, Milestone, 20 Mar 2026');
+    });
+
+    it('lists critical-path and baseline entries in the legend, each with its swatch shape', async () => {
+      el = await mount({ tasks: planned(), options: { criticalPath: true, baseline: true, showToday: false } });
+      el.annotations = [{ x1: new Date('2026-03-05'), label: { text: 'Freeze' } }];
+      el.showLegend = true;
+      await frame();
+      const legend = $(el, '.gantt-legend') as HTMLElement;
+      expect(legend.hidden).toBe(false);
+      const items = [...legend.querySelectorAll('.gantt-legend-item')];
+      expect(items.map(i => i.textContent)).toEqual(['Freeze', 'Critical path', 'Baseline']);
+      expect(items.map(i => i.querySelector('svg')?.getAttribute('class'))).toEqual([
+        'gantt-legend-swatch gantt-legend-swatch--dashed',
+        'gantt-legend-swatch gantt-legend-swatch--bar',
+        'gantt-legend-swatch gantt-legend-swatch--strip',
+      ]);
+      expect(items[2].querySelector('rect')?.getAttribute('height')).toBe('3');
+    });
+
+    it('fills the tooltip from buildTooltipModel (critical, baseline, successors)', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        el = await mount({ tasks: planned(), options: { criticalPath: true, baseline: true } });
+        const hover = (id: string) => {
+          const bar = $(el, `.gantt-bars-layer [data-task-id="${id}"]`)!;
+          bar.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 10, clientY: 10 }));
+          vi.advanceTimersByTime(500);
+          return $(el, '.gantt-tooltip')!.textContent.replace(/\s+/g, ' ');
+        };
+        const a = hover('a');
+        expect(a).toContain('Critical pathYes');
+        expect(a).toContain('Baseline start');
+        expect(a).toContain('SuccessorsTask b');
+        const tip = $(el, '.gantt-tooltip') as HTMLElement;
+        expect(tip.getAttribute('role')).toBe('tooltip');
+        el.tooltipEnabled = false;
+        el.tooltipEnabled = true;
+        const m = hover('m');
+        expect(m).toContain('Milestone');
+        expect(m).not.toContain('Progress');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('stores a versioned snapshot and validates restored state', async () => {
+      window.localStorage.clear();
+      el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')], options: { stateKey: 'v2-test' } });
+      el.setState({ panelWidth: 0, view: 'table' });
+      await vi.waitFor(() => expect(window.localStorage.getItem('gantry:v2-test')).not.toBeNull());
+      const saved = JSON.parse(window.localStorage.getItem('gantry:v2-test')!) as Record<string, unknown>;
+      expect(saved).toMatchObject({ v: 2, view: 'table' });
+      // panelWidth 0 is invalid: dropped instead of applied
+      expect(el.layout.panelWidthPx()).toBeNull();
+    });
+
+    it('opens in the chart view for the legacy panelVisible: false', async () => {
+      el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')], options: { panelVisible: false } });
+      expect(el.view).toBe('chart');
+    });
   });
 
   describe('re-render robustness', () => {

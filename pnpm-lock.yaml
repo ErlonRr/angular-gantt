@@ -104,9 +104,6 @@ importers:
       '@angular/router':
         specifier: 'catalog:'
         version: 22.2.2(@angular/common@22.2.2(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@22.2.2(@angular/common@22.2.2(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)
-      dayjs:
-        specifier: ^1.11.13
-        version: 1.11.20
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
@@ -138,6 +135,9 @@ importers:
       angular-eslint:
         specifier: 22.5.0
         version: 22.5.0(chokidar@5.0.0)(eslint@10.12.0(jiti@1.21.7))(typescript-eslint@8.71.1(eslint@10.12.0(jiti@1.21.7))(typescript@6.0.3))(typescript@6.0.3)
+      dayjs:
+        specifier: ^1.11.13
+        version: 1.11.20
       eslint:
         specifier: ^10.12.0
         version: 10.12.0(jiti@1.21.7)
@@ -285,10 +285,6 @@ importers:
         version: 3.3.12(typescript@6.0.3)
 
   packages/core:
-    dependencies:
-      dayjs:
-        specifier: ^1.11.13
-        version: 1.11.20
     devDependencies:
       vite:
         specifier: 'catalog:'

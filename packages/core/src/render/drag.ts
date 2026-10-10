@@ -25,7 +25,10 @@ export interface DragPreview {
   width: number;
   y: number;
   height: number;
-  /** Movement in snap units (days, or hours on hour scales) */
+  /** Movement in snap units (`unit`): days, or hours on hour scales */
+  delta: number;
+  unit: 'day' | 'hour';
+  /** @deprecated Use `delta` (with `unit`) — it counts hours on hour scales. */
   daysDelta: number;
 }
 
@@ -103,6 +106,8 @@ export class DragSession {
       width: Math.max(this.timing.toX(span.end) - x, 4),
       y: this.row.y,
       height: this.row.height,
+      delta: units,
+      unit: this.timing.snap,
       daysDelta: units,
     };
   }

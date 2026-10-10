@@ -33,7 +33,7 @@ export interface GanttTaskListProps {
   /** "Now", date reading and task index for status / predecessor cells */
   cellContext: ColumnContext;
   rowHeight: number;
-  selectedIds: Set<string>;
+  selectedIds: ReadonlySet<string>;
   theme: GanttTheme;
   labels: GanttLabels;
   colHeaderHeight: number;

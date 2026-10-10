@@ -4,9 +4,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import 'dayjs/locale/it';
 
-import { generateHeaderRows, formatDate, durationLabel } from '../gantt-math';
+import { formatDate, durationLabel } from '../gantt-math';
+import { headerTiers } from './helpers';
 import { buildDefaultColumns } from '../gantt-data';
 import {
   ViewMode,
@@ -40,7 +40,7 @@ describe('formatDate', () => {
     expect(formatDate(new Date('2026-01-15'), 'MMMM')).toBe('January');
   });
 
-  it('honours a dayjs locale', () => {
+  it('honours a locale (any Intl locale, no import needed)', () => {
     expect(formatDate(new Date('2026-01-15'), 'MMMM', 'it')).toBe('gennaio');
   });
 
@@ -64,22 +64,22 @@ describe('durationLabel', () => {
   });
 });
 
-// ─── generateHeaderRows (i18n) ────────────────────────────────
+// ─── header tiers (i18n) ────────────────────────────────
 
-describe('generateHeaderRows · i18n', () => {
+describe('header tiers · i18n', () => {
   it('localises month names via locale (Month view, bottom row)', () => {
-    const [, bottom] = generateHeaderRows(ViewMode.Month, JAN1, JUN30, 8, bundle({ locale: 'it' }));
+    const [, bottom] = headerTiers(ViewMode.Month, JAN1, JUN30, 8, bundle({ locale: 'it' }));
     // First bottom cell is January → "gen" in Italian
     expect(bottom.cells[0].label.toLowerCase()).toContain('gen');
   });
 
   it('applies the quarter prefix from labels (Month view, top row)', () => {
-    const [top] = generateHeaderRows(ViewMode.Month, JAN1, JUN30, 8, bundle({ labels: { quarterPrefix: 'T' } }));
+    const [top] = headerTiers(ViewMode.Month, JAN1, JUN30, 8, bundle({ labels: { quarterPrefix: 'T' } }));
     expect(top.cells[0].label.startsWith('T1')).toBe(true);
   });
 
   it('applies the half-year prefix (Year view, bottom row)', () => {
-    const [, bottom] = generateHeaderRows(
+    const [, bottom] = headerTiers(
       ViewMode.Year,
       JAN1,
       new Date('2026-12-31'),
@@ -91,12 +91,12 @@ describe('generateHeaderRows · i18n', () => {
 
   it('uses a custom per-view header formatter when provided', () => {
     const b = bundle({ formats: { header: { [ViewMode.Year]: { top: () => 'ANNO' } } } });
-    const [top] = generateHeaderRows(ViewMode.Year, JAN1, new Date('2026-12-31'), 2, b);
+    const [top] = headerTiers(ViewMode.Year, JAN1, new Date('2026-12-31'), 2, b);
     expect(top.cells[0].label).toBe('ANNO');
   });
 
   it('falls back to English defaults when no i18n is passed', () => {
-    const [top] = generateHeaderRows(ViewMode.Month, JAN1, JUN30, 8);
+    const [top] = headerTiers(ViewMode.Month, JAN1, JUN30, 8);
     expect(top.cells[0].label.startsWith('Q1')).toBe(true);
   });
 });

@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Demo data around today**: `createDemoData()` and `anchorToToday(template, { now, at })` in `@gantry/core/demo` move a plan by whole weeks so today sits inside it (about 40% in by default). Every demo (playground, React, Vue, Svelte, Angular showcase) now uses them, so the today marker is always inside the plan.
 - **`initialScroll`**: `'auto'` (default) centres today only when it is near the tasks, otherwise shows the earliest task, so the first view is no longer empty for past or future projects; also `'today'`, `'start'`, a `Date` or `false`. `TimelineModel.extent` and the `initialScrollLeft()` / `zoomAnchorScroll()` helpers are exported from `@gantry/core`.
 
+- **Shared interaction and state logic in `@gantry/core`** (both renderers use it instead of their own copies): virtual rows with pinned rows, horizontal windowing helpers, the selection reducer, view / panel-width resolution, versioned state persistence, tooltip and legend models, the keyboard map, grid navigation, keyboard move/resize sessions, accessible task names and screen-reader announcements — all translatable through `GanttLabels`.
+- Date formats support `Do` (`'MMM Do'` → `Mar 1st`) and every `Intl` locale; new `dateNames()`, `isoWeek()`, `quarterOf()` helpers.
+
 ### Changed
 - `ViewMode`, `DependencyType` and `TaskType` are `as const` objects with a same-name union type instead of TypeScript enums: `ViewMode.Week` reads the same and plain strings such as `'Week'` are accepted. Optional properties of the public types accept `undefined` explicitly (friendly to `exactOptionalPropertyTypes`).
 - `ngx-gantry`'s package declares `"type": "module"` (types were ambiguous for ESM resolvers).
@@ -36,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development: ESLint (type-checked TypeScript, Angular templates with accessibility rules, Svelte, Vue, React hooks, and the core purity rules) and Prettier on the whole repository; one strict `tsconfig.base.json` for every package (`verbatimModuleSyntax`, `erasableSyntaxOnly`, and in the libraries `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes`); `@gantry/core` compiles without DOM types; Angular builds with `strictTemplates`, `typeCheckHostBindings` and extended diagnostics as errors; pnpm catalogs for shared tool versions; Renovate; CI lint, format, time-zone tests and publint for `ngx-gantry`.
 - Development: Storybook removed (the showcase and the playground are the live demos); the Angular library and showcase build with `@angular/build` (no webpack left in the toolchain); browser QA is a Playwright suite (`pnpm e2e`, frozen clock, every binding) that also runs in CI.
 - **Accessible default palette** (WCAG 2.2 AA): bars, arrows and selection `#2563EB`, critical `#DC2626`, today marker `#B45309`, darker muted text and baselines. The 1.x colours remain available as `LegacyLightTheme` / `LegacyDarkTheme`. Labels inside bars switch to a readable colour on custom `barColor`s (new `contrastRatio()` / `readableOn()` in `@gantry/core`).
+- **Zero runtime dependencies**: `dayjs` is gone. Dates use a built-in `Intl` formatter with dayjs-compatible tokens; `locale` is any BCP 47 tag (no locale import), default `'en'` (the dayjs global locale is no longer read). A few CLDR abbreviations differ from dayjs's locale files (German `Mär`, Spanish `sept`).
+- State saved with `stateKey` is versioned (`{"v":2,…}`), validated on load, and v1 snapshots are migrated.
+- Bars' accessible names include the type, the dates (with times on hour scales) and the critical state; the tooltip and the legend come from shared core models (the legend can list critical path and baseline).
+- Keyboard: `Ctrl/⌘+Shift+A` also selects all, shortcuts no longer fire with `Alt` / `AltGr`, and keys the chart doesn't handle keep their browser default; clearing an empty selection no longer emits `selectionChange`.
+- Removed legacy helpers `PX_PER_DAY`, `HEADER_HEIGHTS`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`; `DragPreview` is `{ delta, unit }`; `GanttBarContext` fields are required; `criticalIds` is read-only.
 
 ### Fixed
 - Bars misaligned with day cells outside UTC (`new Date('YYYY-MM-DD')` is now read as a local day) and after daylight-saving changes; `diffDays` off by one across DST.
@@ -54,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Keyboard shortcuts no longer fire while typing in inputs, `contenteditable` cells or on the splitter (Angular and Web Component).
 - **Data sources** (Angular and Web Component share one loader in `@gantry/core`, `PagedLoader`): a failed page is retried automatically (`retries`, `retryDelay`), then shows an error with a **Retry** button (announced once to screen readers; focus stays in the footer) and emits `loadError` / `load-error` instead of re-requesting on every scroll frame; `reset()` replaces the loaded pages instead of appending page 1 again; `initialPage: 0` waits for `loadNext()` (it used to block loading for good); Angular's data source no longer throws when a fetch fails or when created outside an injection context. New labels `loadError` and `retry`.
 - Zooming keeps the date at the centre of the viewport in place (it used to keep the pixel offset, jumping to another period); extending the range to earlier dates no longer shifts the view. Smooth scrolling honours `prefers-reduced-motion`.
+- Hour view: header cells overlapped or went out of order in time zones away from UTC (an hour boundary on UTC midnight was read as a date-only value).
 
 ## [1.0.1] — 2026-08-08
 

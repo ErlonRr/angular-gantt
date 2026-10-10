@@ -1,6 +1,6 @@
 {
   "$schema": "../../node_modules/ng-packagr/ng-package.schema.json",
-  "allowedNonPeerDependencies": ["@gantry/core", "dayjs"],
+  "allowedNonPeerDependencies": ["@gantry/core"],
   "lib": {
     "entryFile": "src/public-api.ts",
     "cssUrl": "inline"

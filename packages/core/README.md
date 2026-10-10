@@ -2,7 +2,7 @@
 
 Framework-free core of the [Gantry](https://github.com/ErlonRr/angular-gantt/tree/main#readme) Gantt chart: domain types,
 timeline math, tree helpers and critical-path computation. No DOM, no framework —
-runs in browsers, Node, workers and SSR. Only dependency: `dayjs`.
+runs in browsers, Node, workers and SSR. No runtime dependencies.
 
 You usually don't install this directly: it powers [`ngx-gantry`](https://github.com/ErlonRr/angular-gantt/tree/main/projects/gantry)
 (Angular) and [`@gantry/vanilla`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) (Web Component, used by the React, Vue and

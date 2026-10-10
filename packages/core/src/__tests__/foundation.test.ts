@@ -4,16 +4,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import {
-  dateToPixel,
-  pixelToDate,
-  addDays,
-  diffDays,
-  generateHeaderRows,
-  zoomIn,
-  zoomOut,
-  getTimelineRange,
-} from '../gantt-math';
+import { dateToPixel, pixelToDate, addDays, diffDays } from '../gantt-math';
+import { headerTiers, levelRange } from './helpers';
+import { DEFAULT_ZOOM_LEVELS, zoomStep } from '../render/scales';
 import { flattenTree, filterVisible, reindexVisible } from '../gantt-data';
 import { computeCriticalPath } from '../gantt-cpm';
 import { ViewMode, DependencyType, type GanttTask } from '../types';
@@ -59,36 +52,38 @@ describe('diffDays', () => {
   });
 });
 
-describe('generateHeaderRows — Month view', () => {
+describe('header tiers — Month view', () => {
   const start = new Date('2026-01-01');
   const end = new Date('2026-06-30');
   const pxPerDay = 8;
 
   it('top row has Q1 and Q2', () => {
-    const [top] = generateHeaderRows(ViewMode.Month, start, end, pxPerDay);
+    const [top] = headerTiers(ViewMode.Month, start, end, pxPerDay);
     const labels = top.cells.map(c => c.label);
     expect(labels.some(l => l.startsWith('Q1'))).toBe(true);
     expect(labels.some(l => l.startsWith('Q2'))).toBe(true);
   });
 
   it('bottom row has 6 months', () => {
-    const [, bot] = generateHeaderRows(ViewMode.Month, start, end, pxPerDay);
+    const [, bot] = headerTiers(ViewMode.Month, start, end, pxPerDay);
     expect(bot.cells.length).toBe(6);
   });
 
   it('cell x coordinates are non-decreasing', () => {
-    const [, bot] = generateHeaderRows(ViewMode.Month, start, end, pxPerDay);
+    const [, bot] = headerTiers(ViewMode.Month, start, end, pxPerDay);
     for (let i = 1; i < bot.cells.length; i++) {
       expect(bot.cells[i].x).toBeGreaterThan(bot.cells[i - 1].x);
     }
   });
 });
 
-describe('zoomIn / zoomOut', () => {
-  it('Month → Week on zoomIn', () => {
+describe('zoomStep over the built-in levels', () => {
+  const zoomIn = (vm: string) => zoomStep(DEFAULT_ZOOM_LEVELS, vm, -1);
+  const zoomOut = (vm: string) => zoomStep(DEFAULT_ZOOM_LEVELS, vm, 1);
+  it('Month → Week on zoom in', () => {
     expect(zoomIn(ViewMode.Month)).toBe(ViewMode.Week);
   });
-  it('Month → Quarter on zoomOut', () => {
+  it('Month → Quarter on zoom out', () => {
     expect(zoomOut(ViewMode.Month)).toBe(ViewMode.Quarter);
   });
   it('Hour cannot zoom in further', () => {
@@ -152,10 +147,10 @@ describe('flattenTree', () => {
   });
 });
 
-describe('getTimelineRange', () => {
+describe('timeline range per zoom level', () => {
   it('encompasses tasks in Month mode (snapped to period, no sub-period padding)', () => {
     const tasks = makeTasks();
-    const range = getTimelineRange(tasks, ViewMode.Month, 7);
+    const range = levelRange(tasks, ViewMode.Month, 7);
     // Month/Quarter/Year snap to the period boundary and do NOT add sub-period
     // padding (it would create unreadable "sliver" cells in the header).
     expect(range.start.getTime()).toBeLessThanOrEqual(tasks[0].start.getTime());
@@ -164,7 +159,7 @@ describe('getTimelineRange', () => {
 
   it('adds day padding in Day mode', () => {
     const tasks = makeTasks();
-    const range = getTimelineRange(tasks, ViewMode.Day, 7);
+    const range = levelRange(tasks, ViewMode.Day, 7);
     expect(range.start.getTime()).toBeLessThan(tasks[0].start.getTime());
     expect(range.end.getTime()).toBeGreaterThan(tasks[tasks.length - 1].end.getTime());
   });

@@ -1,43 +1,12 @@
 /**
  * @file virtual-window.ts
- * Virtual scrolling window calculation math and engine for Vanilla JS.
+ * DOM engine for a virtual-scroll list; the window math is `computeVirtualWindow` from @gantry/core.
  */
 
-export interface VirtualWindow {
-  /** First rendered item index (inclusive) */
-  first: number;
-  /** Last rendered item index (inclusive) */
-  last: number;
-  /** Top spacer height in pixels */
-  paddingTop: number;
-  /** Bottom spacer height in pixels */
-  paddingBottom: number;
-}
+import { computeVirtualWindow, type VirtualWindow } from '@gantry/core';
 
-/**
- * Computes visible item range and padding for virtual scroll list.
- */
-export function computeVirtualWindow(
-  scrollTop: number,
-  itemHeight: number,
-  viewportHeight: number,
-  itemCount: number,
-  overscan = 4,
-): VirtualWindow {
-  if (itemHeight <= 0 || itemCount <= 0) {
-    return { first: 0, last: Math.max(0, itemCount - 1), paddingTop: 0, paddingBottom: 0 };
-  }
-
-  const first = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
-  const last = Math.min(itemCount - 1, Math.ceil((scrollTop + viewportHeight) / itemHeight) + overscan);
-
-  return {
-    first,
-    last,
-    paddingTop: first * itemHeight,
-    paddingBottom: Math.max(0, (itemCount - last - 1) * itemHeight),
-  };
-}
+// The window math lives in @gantry/core (shared with Angular); the type stays importable from here
+export type { VirtualWindow };
 
 export class GanttVirtualScrollEngine {
   private viewportEl: HTMLElement;

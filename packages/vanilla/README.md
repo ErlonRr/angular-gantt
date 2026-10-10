@@ -62,7 +62,7 @@ table view and saved state. See the full guide:
 | `showToolbar`                 | `boolean`                                                                     | `true`   | Zoom, view-mode pills and _Today_ button                                                                                  |
 | `enableDrag` / `enableResize` | `boolean`                                                                     | `true`   | Per task: `task.draggable = false`                                                                                        |
 | `tooltipEnabled`              | `boolean`                                                                     | `true`   | Hover tooltip                                                                                                             |
-| `showLegend`                  | `boolean`                                                                     | `false`  | Legend for the today marker and annotations                                                                               |
+| `showLegend`                  | `boolean`                                                                     | `false`  | Legend: today marker, annotations, critical path and baseline                                                             |
 | `dataSource`                  | `{ fetcher(page, pageSize), pageSize?, initialPage?, retries?, retryDelay? }` | `null`   | Lazy paging; replaces `tasks` while set. A failed page shows Retry and pauses loading until `dataSource.retry()`          |
 | `renderBar`                   | `(ctx, renderDefault) => SVGElement \| null`                                  | —        | Replace or decorate a bar's SVG                                                                                           |
 
@@ -97,7 +97,7 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 ## Keyboard
 
 Focus the chart, then: `Escape` clears the selection (or cancels a drag), `Ctrl/⌘ + A`
-selects all, `+` / `-` zoom, `T` scrolls to today. Sortable column headers respond to
+selects all, `+` / `-` zoom, `T` scrolls to today (not while typing, nor with `Alt` / `AltGr`). Sortable column headers respond to
 `Enter` / `Space`.
 
 ## Theming

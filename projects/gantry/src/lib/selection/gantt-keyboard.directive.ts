@@ -5,18 +5,22 @@
 //  Applied as a host directive on GantryComponent; mirrors the
 //  Web Component's `onKeyDown`.
 //
-//  Shortcuts:
-//    Escape      → cancel a drag, else clear selection
-//    Ctrl/Cmd+A  → select all visible rows (when selection + multiSelect are on)
-//    +  / =      → zoom in
-//    -           → zoom out
-//    T           → scroll to today
+//  Keys resolve through the @gantry/core keymap (`resolveKey`).
+//  Handled commands:
+//    Escape          → cancel a drag, else clear selection
+//    Ctrl/Cmd(+Shift)+A → select all visible rows (when selection + multiSelect are on)
+//    +  / =          → zoom in
+//    -               → zoom out
+//    T               → scroll to today
+//  Alt / AltGr disable the shortcuts (except Escape); other commands
+//  (fit, undo, redo, …) are not handled yet and keep their default action.
 //
 //  Keys typed into inputs, selects, text areas, contenteditable
 //  cells and the splitter are left alone.
 // ─────────────────────────────────────────────────────────────
 
 import { Directive, inject, input } from '@angular/core';
+import { resolveKey } from '@gantry/core';
 
 import { GanttSelectionService } from './gantt-selection.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
@@ -40,48 +44,33 @@ export class GanttKeyboardDirective {
 
   onKeyDown(event: KeyboardEvent): void {
     if (event.defaultPrevented || isTextEntry(event)) return;
-    const ctrl = event.ctrlKey || event.metaKey;
 
-    switch (event.key) {
-      case 'Escape':
-        if (this.drag.isActive()) this.drag.cancel();
-        else this.selection.clear();
-        event.preventDefault();
+    // Shared key → command table (@gantry/core); only the commands handled here swallow the key
+    switch (resolveKey(event, 'any', { active: this.drag.isActive() })) {
+      case 'cancel':
+        this.drag.cancel();
         break;
-
-      case 'a':
-      case 'A':
-        if (ctrl) {
-          const { enabled, multi } = this.layout.cfg().selection;
-          if (enabled && multi) this.selection.selectAll(this.layout.visibleRows());
-          event.preventDefault();
-        }
+      case 'clearSelection':
+        this.selection.clear();
         break;
-
-      case '+':
-      case '=':
-        if (!ctrl) {
-          this.layout.zoomIn();
-          event.preventDefault();
-        }
+      case 'selectAll':
+        this.selection.selectAll(this.layout.visibleRows(), this.layout.cfg().selection);
         break;
-
-      case '-':
-        if (!ctrl) {
-          this.layout.zoomOut();
-          event.preventDefault();
-        }
+      case 'zoomIn':
+        this.layout.zoomIn();
         break;
-
-      case 't':
-      case 'T':
-        if (!ctrl) {
-          const x = this.layout.timeline().toX(new Date());
-          this.scroll.scrollToX(x - this.scroll.viewportWidth / 2);
-          event.preventDefault();
-        }
+      case 'zoomOut':
+        this.layout.zoomOut();
         break;
+      case 'today': {
+        const x = this.layout.timeline().toX(new Date());
+        this.scroll.scrollToX(x - this.scroll.viewportWidth / 2);
+        break;
+      }
+      default:
+        return;
     }
+    event.preventDefault();
   }
 }
 

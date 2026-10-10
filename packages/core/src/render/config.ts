@@ -41,8 +41,10 @@ export interface ResolvedNonWorking {
   weekends: Set<number>;
   /** Epoch-day ranges, inclusive */
   holidays: ResolvedHoliday[];
-  /** Working hours for a weekday (null = no hour shading) */
-  workingHours: ((weekday: number) => GanttHourRange[]) | null;
+  /** Holiday by epoch day — O(1) lookup while painting bands */
+  holidayByDay: ReadonlyMap<number, ResolvedHoliday>;
+  /** Working hours for a weekday, sorted by start (null = no hour shading) */
+  workingHours: ((weekday: number) => readonly GanttHourRange[]) | null;
   intensive: (GanttHourRange & { color?: string | undefined; label?: string | undefined })[];
   style: 'shade' | 'hatch' | 'disabled';
   showInHeader: boolean;
@@ -136,22 +138,33 @@ export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): Resolve
     return { from: epochDay(hol.start), to: epochDay(hol.end ?? hol.start), label: hol.label, color: hol.color };
   });
 
+  // One entry per holiday day (ranges are capped at 10 years so a typo can't explode the map)
+  const holidayByDay = new Map<number, ResolvedHoliday>();
+  for (const h of holidays) {
+    for (let d = h.from; d <= Math.min(h.to, h.from + 3660); d++) if (!holidayByDay.has(d)) holidayByDay.set(d, h);
+  }
+
   let workingHours: ResolvedNonWorking['workingHours'] = null;
   const wh = o.workingHours;
   if (wh) {
-    if (Array.isArray(wh)) workingHours = () => wh;
+    // Sorted once per weekday, not on every painted day
+    const sorted = (ranges: readonly GanttHourRange[]) => [...ranges].sort((a, b) => a.start - b.start);
+    let byWeekday: (readonly GanttHourRange[])[];
+    if (Array.isArray(wh)) byWeekday = Array.from({ length: 7 }, () => sorted(wh));
     else if ('start' in wh && 'end' in wh && typeof wh.start === 'number') {
       const r = wh;
-      workingHours = () => [r];
+      byWeekday = Array.from({ length: 7 }, () => [r]);
     } else {
       const map = wh as Partial<Record<number, GanttHourRange[]>>;
-      workingHours = day => map[day] ?? [];
+      byWeekday = Array.from({ length: 7 }, (_, day) => sorted(map[day] ?? []));
     }
+    workingHours = day => byWeekday[day] ?? [];
   }
 
   return {
     weekends,
     holidays,
+    holidayByDay,
     workingHours,
     intensive: o.intensiveHours ?? [],
     style: o.style ?? 'shade',

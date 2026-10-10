@@ -349,7 +349,7 @@ export class GanttTaskListComponent {
   readonly columns = input.required<ColumnDef[]>();
   readonly rowCount = input<number>(0);
   readonly rowHeight = input<number>(32);
-  readonly selectedIds = input<Set<string>>(new Set());
+  readonly selectedIds = input<ReadonlySet<string>>(new Set());
   readonly theme = input.required<GanttTheme>();
   readonly colHeaderHeight = input<number>(32);
   readonly indentSize = input<number>(16);

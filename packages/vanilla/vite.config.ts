@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: () => 'index.js',
     },
     rolldownOptions: {
-      external: [/^@gantry\//, /^dayjs/],
+      external: [/^@gantry\//],
     },
     sourcemap: true,
   },
