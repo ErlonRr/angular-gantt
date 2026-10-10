@@ -2,7 +2,7 @@
   "name": "ngx-gantry",
   "version": "1.0.1",
   "type": "module",
-  "description": "Gantry \u2014 a free, zoneless, signal-based Gantt chart for Angular 20+ (zero @angular/animations, zero CDK, only dayjs).",
+  "description": "Gantry — a free, zoneless, signal-based Gantt chart for Angular (no @angular/animations, no CDK, no zone.js).",
   "keywords": [
     "angular",
     "gantt",
@@ -28,16 +28,22 @@
   "author": "Erlon Rrustemaj",
   "sideEffects": false,
   "peerDependencies": {
-    "@angular/core": ">=20.2.0",
-    "@angular/common": ">=20.2.0"
+    "@angular/core": "^22.0.0",
+    "@angular/common": "^22.0.0"
   },
   "dependencies": {
-    "@gantry/core": "workspace:^",
-    "dayjs": "^1.11.0"
+    "@gantry/core": "workspace:^"
   },
   "publishConfig": {
     "directory": "../../dist/ngx-gantry",
     "access": "public",
     "provenance": true
+  },
+  "devDependencies": {
+    "@angular/core": "catalog:",
+    "@angular/common": "catalog:"
+  },
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
   }
 }

@@ -5,7 +5,7 @@ paths:
 
 # ngx-gantry (Angular) rules
 
-- Angular 20 style: standalone components, `ChangeDetectionStrategy.OnPush`, signal APIs
+- Angular 22 style: standalone components, `ChangeDetectionStrategy.OnPush`, signal APIs
   (`input()`, `output()`, `computed()`, `viewChild()`), `@if` / `@for` with `track`. Must work
   zoneless — never rely on zone.js to trigger change detection.
 - `GantryComponent` resolves options with `resolveConfig()` and binds them through
@@ -20,3 +20,6 @@ paths:
 - Match the Web Component: same option names, same CSS classes, same behaviour. When you
   change one painter, change the other (the `gantry-reviewer` agent checks this).
 - Verify with `pnpm --filter @gantry/core build && pnpm build:lib`, then `pnpm build:app`.
+- Unit tests: `projects/gantry/src/**/*.spec.ts`, run with `pnpm test:angular` (`@angular/build:unit-test`,
+  Vitest + jsdom; `src/test/dom-shims.ts` stubs ResizeObserver / IntersectionObserver / scrollTo).
+  Provide `provideZonelessChangeDetection()`; await `fixture.whenStable()` instead of `detectChanges()`.

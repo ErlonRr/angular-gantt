@@ -46,7 +46,6 @@ import {
   type GanttTask,
   type GanttOptions,
   type GanttAnnotation,
-  type GanttTheme,
   type GanttThemeOverrides,
   type GanttState,
   type GanttView,

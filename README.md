@@ -11,7 +11,7 @@
 
 | Framework            | Package           | Install                 | Docs                                           |
 | -------------------- | ----------------- | ----------------------- | ---------------------------------------------- |
-| **Angular 20+**      | `ngx-gantry`      | `npm i ngx-gantry`      | [below](#angular-ngx-gantry)                   |
+| **Angular 22+**      | `ngx-gantry`      | `npm i ngx-gantry`      | [below](#angular-ngx-gantry)                   |
 | **React 18 / 19**    | `@gantry/react`   | `npm i @gantry/react`   | [packages/react](packages/react/README.md)     |
 | **Vue 3.5+**         | `@gantry/vue`     | `npm i @gantry/vue`     | [packages/vue](packages/vue/README.md)         |
 | **Svelte 5**         | `@gantry/svelte`  | `npm i @gantry/svelte`  | [packages/svelte](packages/svelte/README.md)   |
@@ -207,7 +207,7 @@ light/dark/auto). They are also exposed as CSS custom properties on the chart ro
 
 ## Angular (`ngx-gantry`)
 
-> Angular 20+ — zoneless, signal-based, zero `@angular/animations`, zero `@angular/cdk`.
+> Angular 22+ — zoneless, signal-based, zero `@angular/animations`, zero `@angular/cdk`.
 > npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
 
 ## Install

@@ -1,18 +1,18 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   build: {
     lib: {
-      entry: resolve(__dirname, 'src/index.tsx'),
+      entry: resolve(import.meta.dirname, 'src/index.tsx'),
       formats: ['es'],
       fileName: () => 'index.js',
     },
-    rollupOptions: {
+    rolldownOptions: {
       external: [/^react(\/|$)/, /^react-dom/, /^@gantry\//],
     },
     sourcemap: true,
   },
-  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], rollupTypes: true })],
+  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], bundleTypes: true })],
 });

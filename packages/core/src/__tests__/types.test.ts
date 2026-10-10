@@ -3,7 +3,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { ViewMode, TaskType, DependencyType, type GanttOptions, type GanttTask } from '../types';
+import { ViewMode, TaskType, type DependencyType, type GanttOptions, type GanttTask } from '../types';
 
 describe('as-const objects', () => {
   it('members work as values and as types, like the former enums', () => {

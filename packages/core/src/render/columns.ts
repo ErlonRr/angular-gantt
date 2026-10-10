@@ -413,7 +413,7 @@ export function valueToText(v: unknown): string {
       return Object.prototype.toString.call(v);
     }
   }
-  return String(v as number | boolean | bigint | symbol | Date | unknown[] | undefined);
+  return String(v);
 }
 
 /** Duration label of the drawn span — the Duration column and the tooltips use the same rule. */

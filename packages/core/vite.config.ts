@@ -1,21 +1,21 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { resolve } from 'path';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   build: {
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/index.ts'),
-        demo: resolve(__dirname, 'src/demo.ts'),
+        index: resolve(import.meta.dirname, 'src/index.ts'),
+        demo: resolve(import.meta.dirname, 'src/demo.ts'),
       },
       formats: ['es'],
       fileName: (_format, name) => `${name}.js`,
     },
-    rollupOptions: {
+    rolldownOptions: {
       external: [/^dayjs/],
     },
     sourcemap: true,
   },
-  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], rollupTypes: true })],
+  plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], bundleTypes: true })],
 });

@@ -9,7 +9,10 @@
       "esbuild",
       "lmdb",
       "msgpackr-extract"
-    ]
+    ],
+    "overrides": {
+      "@jridgewell/sourcemap-codec": "^1.6.0"
+    }
   },
   "scripts": {
     "ng": "ng",
@@ -18,7 +21,7 @@
     "build:app": "ng build gantry-demo --configuration production",
     "build:demo": "ng build gantry-demo --configuration production --base-href ./",
     "watch:lib": "ng build gantry --watch",
-    "test": "vitest run",
+    "test": "vitest run && ng test gantry --watch=false",
     "test:watch": "vitest",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
@@ -40,43 +43,46 @@
     "e2e": "playwright test",
     "e2e:full": "pnpm build && playwright test",
     "e2e:visual": "bash scripts/e2e-container.sh e2e/visual.spec.ts",
-    "e2e:update": "bash scripts/e2e-container.sh e2e/visual.spec.ts --update-snapshots=all"
+    "e2e:update": "bash scripts/e2e-container.sh e2e/visual.spec.ts --update-snapshots=all",
+    "test:angular": "ng test gantry --watch=false"
   },
   "dependencies": {
-    "@angular/animations": "^20.0.0",
-    "@angular/common": "^20.0.0",
-    "@angular/compiler": "^20.0.0",
-    "@angular/core": "^20.0.0",
-    "@angular/forms": "^20.0.0",
-    "@angular/platform-browser": "^20.0.0",
-    "@angular/router": "^20.0.0",
+    "@angular/common": "catalog:",
+    "@angular/compiler": "catalog:",
+    "@angular/core": "catalog:",
+    "@angular/platform-browser": "catalog:",
+    "@angular/router": "catalog:",
     "dayjs": "^1.11.13",
     "rxjs": "^7.8.2",
-    "tslib": "^2.8.1",
-    "zone.js": "~0.15.0"
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
-    "@angular/build": "^20.0.0",
-    "@angular/cli": "^20.0.0",
-    "@angular/compiler-cli": "^20.0.0",
-    "@changesets/cli": "^2.31.1",
-    "@eslint/js": "^9.39.5",
+    "@angular/build": "catalog:",
+    "@angular/cli": "catalog:",
+    "@angular/compiler-cli": "catalog:",
+    "@changesets/cli": "^3.0.3",
+    "@eslint/js": "^10.0.1",
+    "@microsoft/api-extractor": "catalog:",
     "@playwright/test": "^1.64.0",
-    "angular-eslint": "20.7.0",
-    "eslint": "^9.39.5",
+    "angular-eslint": "22.5.0",
+    "eslint": "^10.12.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-svelte": "3.23.1",
     "eslint-plugin-vue": "10.11.1",
     "globals": "17.13.0",
     "happy-dom": "^20.14.5",
-    "ng-packagr": "^20.0.0",
+    "jsdom": "^30.1.2",
+    "ng-packagr": "catalog:",
     "prettier": "3.9.10",
     "prettier-plugin-svelte": "4.1.1",
     "svelte-eslint-parser": "^1.9.0",
     "typescript": "catalog:",
     "typescript-eslint": "8.71.1",
-    "vitest": "^4.1.10",
+    "vitest": "catalog:",
     "vue-eslint-parser": "^10.4.1"
+  },
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
   }
 }

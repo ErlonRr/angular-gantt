@@ -68,7 +68,7 @@ export default tseslint.config(
   },
   {
     // Tests and tooling: assertions and fixtures work with loose values
-    files: ['**/__tests__/**', 'e2e/**', '**/*.config.*', 'scripts/**'],
+    files: ['**/__tests__/**', '**/*.spec.ts', 'projects/*/src/test/**', 'e2e/**', '**/*.config.*', 'scripts/**'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
