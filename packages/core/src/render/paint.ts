@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { GanttAnnotation, GanttTheme, RowGeometry } from '../types';
-import { CONTRAST_CSS_VARS, THEME_CSS_VARS } from './theme';
+import { CONTRAST_CSS_VARS, THEME_CSS_VARS, todayLabelColor } from './theme';
 import { readableOn } from './contrast';
 
 /** A CSS `<color>` value, or `var(--gantt-*)` for a theme default. */
@@ -41,8 +41,8 @@ const CONTRAST_FILL: Readonly<Record<string, 'barColor' | 'milestoneColor' | 'cr
 /**
  * The concrete colour a paint stands for under `theme` (for custom renderers that need a hex
  * value): theme tokens resolve to the theme value, contrast tokens to `readableOn(fill,
- * barTextColor)`, a `var()` fallback is used when the token is unknown, and an explicit
- * colour is returned unchanged.
+ * barTextColor)` (the today-label token to `todayLabelColor(theme)`), a `var()` fallback is used
+ * when the token is unknown, and an explicit colour is returned unchanged.
  */
 export function resolvePaint(p: Paint, theme: GanttTheme): string {
   const m = /^var\(\s*(--[\w-]+)\s*(?:,(.*))?\)$/s.exec(p.trim());
@@ -51,6 +51,7 @@ export function resolvePaint(p: Paint, theme: GanttTheme): string {
   const fallback = m[2]?.trim();
   const contrastFill = CONTRAST_FILL[name];
   if (contrastFill) return readableOn(theme[contrastFill], theme.barTextColor);
+  if (name === CONTRAST_CSS_VARS.todayLabel) return todayLabelColor(theme);
   const key = KEY_BY_CSS_VAR.get(name);
   const value = key ? theme[key] : undefined;
   if (value != null && value !== '') return value;
@@ -67,6 +68,7 @@ export const PAINTS: Readonly<{
   rowBg: Paint;
   rowBgAlt: Paint;
   rowSelected: Paint;
+  progressOverlay: Paint;
 }> = Object.freeze({
   /** Today line / header pointer */
   today: themeVar('todayColor'),
@@ -83,6 +85,8 @@ export const PAINTS: Readonly<{
   rowBgAlt: themeVar('rowBgAlt'),
   /** Background of a selected row */
   rowSelected: themeVar('selectionBg'),
+  /** Progress fill of a bar without `task.progressColor` / `bar.progress.color` (at `bar.progress.opacity`) */
+  progressOverlay: themeVar('progressOverlay'),
 });
 
 /** Background of a row (timeline and task list): selection > `task.rowColor` > zebra. */

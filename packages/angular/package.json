@@ -41,7 +41,8 @@
   },
   "devDependencies": {
     "@angular/core": "catalog:",
-    "@angular/common": "catalog:"
+    "@angular/common": "catalog:",
+    "@angular/platform-server": "catalog:"
   },
   "engines": {
     "node": "^22.12.0 || >=24.0.0"

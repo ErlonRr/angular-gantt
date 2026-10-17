@@ -24,6 +24,13 @@ export interface LinesWindow {
   minor: number[];
 }
 
+/**
+ * Scroll distance (px) both painters snap the horizontal window to (`quantum` of
+ * {@link computeHorizontalWindow}): a scroll inside one 256 px chunk mounts the same header
+ * cells, bands and grid lines, and the same ones in every binding.
+ */
+export const HORIZONTAL_WINDOW_QUANTUM = 256;
+
 /** A horizontal pixel range `[x0, x1]` of the timeline. */
 export interface HorizontalWindow {
   x0: number;

@@ -42,14 +42,59 @@ export function relativeLuminance([r, g, b]: [number, number, number]): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
+type Rgb = [number, number, number];
+
+/** WCAG contrast ratio between two parsed colours (1–21). */
+function ratioOf(a: Rgb, b: Rgb): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
 /** Contrast ratio between two colours (1–21), or null when either cannot be parsed. */
 export function contrastRatio(a: string, b: string): number | null {
   const ca = parseColor(a);
   const cb = parseColor(b);
   if (!ca || !cb) return null;
-  const la = relativeLuminance(ca);
-  const lb = relativeLuminance(cb);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  return ratioOf(ca, cb);
+}
+
+/** A 0–255 integer channel as two hex digits. */
+const hex2 = (v: number) => v.toString(16).padStart(2, '0');
+
+/**
+ * Text colour for a label in `fg` drawn on a tint of `fg` itself: `fg` at `alpha` (0–1) over
+ * `bg`, as `color-mix(in srgb, fg <alpha·100>%, transparent)` paints it on `bg` (the
+ * current-period header cell). Returns `fg` unchanged when it reaches `min` contrast on that tint
+ * (or a colour can't be parsed); otherwise `fg` mixed towards `toward` in 10 % sRGB steps
+ * (90/10, 80/20, …) until a step does, as `#RRGGBB`. The tint stays the one of `fg`: only the
+ * label colour moves. When no step reaches `min`, the most readable step is returned.
+ *
+ * Light theme: `readableOnTint('#B45309', '#F8FAFC', 0.14, '#1E293B')` → `'#964B13'` (5.01:1,
+ * the original is 3.97:1); dark theme: `'#FBBF24'` already reaches 6.47:1 and is kept.
+ */
+export function readableOnTint(fg: string, bg: string, alpha: number, toward: string, min = MIN_TEXT_CONTRAST): string {
+  const f = parseColor(fg);
+  const b = parseColor(bg);
+  const t = parseColor(toward);
+  if (!f || !b || !t) return fg;
+  const a = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 0;
+  const tint: Rgb = [0, 1, 2].map(i => (f[i] ?? 0) * a + (b[i] ?? 0) * (1 - a)) as Rgb;
+  let bestRatio = ratioOf(f, tint);
+  if (bestRatio >= min) return fg;
+  let best = fg;
+  for (let step = 1; step <= 10; step++) {
+    // Integer weights (out of 10): exact for integer channels; rounded, so each step is a hex colour
+    const mixed = [0, 1, 2].map(i => Math.round(((f[i] ?? 0) * (10 - step) + (t[i] ?? 0) * step) / 10)) as Rgb;
+    const r = ratioOf(mixed, tint);
+    const css = `#${mixed.map(hex2).join('')}`.toUpperCase();
+    if (r >= min) return css;
+    if (r > bestRatio) {
+      best = css;
+      bestRatio = r;
+    }
+  }
+  return best;
 }
 
 /**

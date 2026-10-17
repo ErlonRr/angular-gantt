@@ -143,3 +143,51 @@ export function announceKeyboardEdit(
   if (progress) parts.push(l.announceProgress(name, Math.round(progress.event.newProgress)));
   return parts.join('. ');
 }
+
+// ─── Data-source load state ───────────────────────────────────
+
+/** What a binding knows about its data source's paging when the load state changes. */
+export interface LoadStateSnapshot {
+  /** A page is being fetched */
+  readonly isLoading: boolean;
+  /** More pages remain after the loaded ones */
+  readonly hasMore: boolean;
+  /**
+   * The last page failed: any value but `undefined`, `null` and `false` (the Web Component's
+   * `error: true`, a `PagedLoader.error`). A failure is announced once by the binding's assertive
+   * alert region, so the polite live region says nothing for it.
+   */
+  readonly error?: unknown;
+  /** Tasks loaded so far */
+  readonly loadedCount: number;
+}
+
+/** Labels `announceLoadState` reads (part of `GanttLabels`). */
+export type LoadStateLabels = Pick<GanttLabels, 'loading' | 'announceLoaded' | 'allLoaded'>;
+
+const DEFAULT_LOAD_STATE_LABELS: LoadStateLabels = {
+  loading: DEFAULT_LABELS.loading,
+  announceLoaded: DEFAULT_LABELS.announceLoaded,
+  allLoaded: DEFAULT_LABELS.allLoaded,
+};
+
+/**
+ * The polite live-region sentence for a change of the data source's load state, or `null` when
+ * there is nothing to say: `labels.loading` when a page starts loading, then
+ * `labels.announceLoaded(n)` when it loaded and more remain or `labels.allLoaded(n)` after the
+ * last one. Nothing while the loading flag is unchanged, for a failed page, or when the data
+ * source goes away (`next` null). `prev` is the previous snapshot (`null` without a data source);
+ * a binding keeps the state found at its first render as the baseline and does not announce it.
+ */
+export function announceLoadState(
+  prev: LoadStateSnapshot | null,
+  next: LoadStateSnapshot | null,
+  labels?: Partial<LoadStateLabels>,
+): string | null {
+  const wasLoading = prev?.isLoading ?? false;
+  if (!next || next.isLoading === wasLoading) return null;
+  const l: LoadStateLabels = labels ? { ...DEFAULT_LOAD_STATE_LABELS, ...labels } : DEFAULT_LOAD_STATE_LABELS;
+  if (next.isLoading) return l.loading;
+  if (next.error !== undefined && next.error !== null && next.error !== false) return null;
+  return next.hasMore ? l.announceLoaded(next.loadedCount) : l.allLoaded(next.loadedCount);
+}

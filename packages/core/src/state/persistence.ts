@@ -14,6 +14,12 @@ export const GANTT_STATE_VERSION = 2;
 /** Prefix of the storage key used for `options.stateKey`. */
 export const STATE_STORAGE_PREFIX = 'gantry:';
 
+/**
+ * Debounce (ms) between a UI-state change and its report (`stateChange` / `state-change`) and
+ * write under `options.stateKey`: a burst of changes (a splitter drag, a column resize) saves once.
+ */
+export const STATE_SAVE_DELAY = 150;
+
 /** Minimal `Storage` subset the persistence helpers need (`localStorage` satisfies it). */
 export interface GanttStateStorage {
   getItem(key: string): string | null;

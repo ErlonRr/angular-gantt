@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, signal, viewChild, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal, viewChild, inject } from '@angular/core';
 import {
   GantryComponent,
   type GanttTask,
@@ -28,7 +28,6 @@ function optionsFromUrl(): GanttOptions {
 
 @Component({
   selector: 'app-gantt-demo',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent],
   template: `
@@ -45,6 +44,19 @@ function optionsFromUrl(): GanttOptions {
         <button (click)="gantt().expandAll()">Expand all</button>
       </div>
       <div class="demo-group">
+        <span class="demo-label">Zoom</span>
+        @for (level of zoomLevels; track level) {
+          <button
+            type="button"
+            [class.on]="shownZoom() === level"
+            [attr.aria-pressed]="shownZoom() === level"
+            (click)="zoom.set(level)"
+          >
+            {{ level }}
+          </button>
+        }
+      </div>
+      <div class="demo-group">
         <span class="demo-label">Selection</span>
         <button (click)="gantt().selectAll()">Select all</button>
         <button (click)="gantt().clearSelection()">Clear</button>
@@ -59,11 +71,13 @@ function optionsFromUrl(): GanttOptions {
       [options]="opts()"
       [annotations]="annotations"
       [darkMode]="theme.mode()"
-      [showToolbar]="true"
-      [enableDrag]="true"
-      [enableResize]="true"
-      [tooltipEnabled]="true"
-      [showLegend]="true"
+      [(viewMode)]="zoom"
+      showToolbar
+      enableDrag
+      enableResize
+      tooltipEnabled
+      showLegend
+      (viewModeChange)="lastEvent.set('Zoom: ' + $event)"
       (taskDragged)="onDrag($event)"
       (taskResized)="onResize($event)"
       (selectionChange)="onSel($event)"
@@ -167,6 +181,15 @@ export class GanttDemoComponent {
     ...optionsFromUrl(),
   });
   readonly opts = this._opts.asReadonly();
+
+  /**
+   * Two-way zoom level (`[(viewMode)]`): the buttons above set it, and the chart writes back the
+   * level its toolbar, `+` / `-` keys or API choose. Unset, `options.viewMode` decides (the e2e
+   * parity test passes it through `?options=`).
+   */
+  readonly zoom = signal<string | undefined>(undefined);
+  readonly zoomLevels = [ViewMode.Day, ViewMode.Week, ViewMode.Month, ViewMode.Quarter];
+  protected readonly shownZoom = computed(() => this.zoom() ?? this.opts().viewMode ?? ViewMode.Month);
 
   toggle(key: keyof GanttOptions) {
     this._opts.update(o => ({ ...o, [key]: !o[key] }));

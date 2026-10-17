@@ -28,7 +28,6 @@ async function fakeFetch(page: number, pageSize: number): Promise<GanttTask[]> {
 
 @Component({
   selector: 'app-gantt-lazy',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent],
   template: `

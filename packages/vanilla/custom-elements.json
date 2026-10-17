@@ -87,7 +87,7 @@
               "default": "#CBD5E1"
             },
             {
-              "description": "Today marker and current-period highlight (`todayColor`).",
+              "description": "Today marker and current-period highlight (`todayColor`); set `--gantt-today-label` with it.",
               "name": "--gantt-today",
               "default": "#B45309"
             },
@@ -197,6 +197,11 @@
               "default": "#15803D"
             },
             {
+              "description": "Progress fill inside theme-coloured bars, drawn at `bar.progress.opacity` (`progressOverlay`).",
+              "name": "--gantt-progress-overlay",
+              "default": "#000000"
+            },
+            {
               "description": "Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).",
               "name": "--gantt-bar-text-on-bar",
               "default": "#FFFFFF"
@@ -210,6 +215,11 @@
               "description": "Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).",
               "name": "--gantt-bar-text-on-critical",
               "default": "#FFFFFF"
+            },
+            {
+              "description": "Current-period header label, readable on its 14 % today tint (derived: `todayLabelColor(theme)`).",
+              "name": "--gantt-today-label",
+              "default": "#964B13"
             }
           ],
           "cssParts": [

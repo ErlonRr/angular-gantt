@@ -6,8 +6,10 @@ import { describe, it, expect } from 'vitest';
 import {
   availablePanelWidth,
   clampPanelWidth,
+  panelWidthRange,
   resolveInitialView,
   resolvePanelWidth,
+  splitterValue,
   viewFromOptions,
   viewFromState,
   type PanelWidthConfig,
@@ -40,6 +42,67 @@ describe('clampPanelWidth', () => {
   it('honours maxWidth in px or % of the available width', () => {
     expect(clampPanelWidth(800, { minWidth: 120, maxWidth: 400 }, 994)).toBe(400);
     expect(clampPanelWidth(800, { minWidth: 120, maxWidth: '50%' }, 1000)).toBe(500);
+  });
+});
+
+describe('panelWidthRange', () => {
+  it('is the range clampPanelWidth clamps to', () => {
+    expect(panelWidthRange({ minWidth: 120 }, 994)).toEqual({ min: 120, max: 954 });
+    expect(panelWidthRange({ minWidth: 120, maxWidth: 400 }, 994)).toEqual({ min: 120, max: 400 });
+    expect(panelWidthRange({ minWidth: 120, maxWidth: '50%' }, 1000)).toEqual({ min: 120, max: 500 });
+    // minWidth wins over a crossing max
+    expect(panelWidthRange({ minWidth: 120 }, 100)).toEqual({ min: 120, max: 120 });
+    for (const px of [-10, 0, 119.6, 120, 300.4, 954, 2000]) {
+      const { min, max } = panelWidthRange({ minWidth: 120 }, 994);
+      expect(clampPanelWidth(px, { minWidth: 120 }, 994)).toBe(Math.round(Math.min(max, Math.max(min, px))));
+    }
+  });
+});
+
+describe('splitterValue', () => {
+  const panel = { width: '30%' as const, minWidth: 120, collapsible: true };
+
+  it('reports the panel width in px between the widths the splitter allows', () => {
+    expect(splitterValue({ view: 'split', panel, hostWidth: 1000 })).toEqual({ now: 300, min: 0, max: 954 });
+    expect(splitterValue({ view: 'split', panel, hostWidth: 1000, userWidth: 5000 })).toEqual({
+      now: 954,
+      min: 0,
+      max: 954,
+    });
+    // Not collapsible: the minimum is minWidth
+    expect(splitterValue({ view: 'split', panel: { ...panel, collapsible: false }, hostWidth: 1000 })).toEqual({
+      now: 300,
+      min: 120,
+      max: 954,
+    });
+    // maxWidth and the splitter's measured width narrow the range; values are whole px
+    expect(
+      splitterValue({
+        view: 'split',
+        panel: { ...panel, maxWidth: '50%', collapsible: false },
+        hostWidth: 1201,
+        splitterWidth: 0.5,
+      }),
+    ).toEqual({ now: 360, min: 120, max: 600 });
+  });
+
+  it('keeps now inside the range in the chart and table views', () => {
+    const notCollapsible = { ...panel, collapsible: false };
+    expect(splitterValue({ view: 'chart', panel: notCollapsible, hostWidth: 1000 })).toEqual({
+      now: 0,
+      min: 0,
+      max: 954,
+    });
+    expect(splitterValue({ view: 'table', panel: notCollapsible, hostWidth: 1000 })).toEqual({
+      now: 1000,
+      min: 120,
+      max: 1000,
+    });
+  });
+
+  it('reads the resolved config (panel.collapsible defaults to true)', () => {
+    const { panel: cfgPanel } = resolveConfig({ panel: { width: 250, minWidth: 200 } });
+    expect(splitterValue({ view: 'split', panel: cfgPanel, hostWidth: 0 })).toEqual({ now: 250, min: 0, max: 954 });
   });
 });
 

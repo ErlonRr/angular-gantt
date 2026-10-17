@@ -5,33 +5,21 @@
  *
  * - a change of the number of selected tasks (`announceSelection`: "3 tasks selected",
  *   "Selection cleared");
- * - the data source's load state: `labels.loading` when a page starts loading, then
- *   `labels.announceLoaded(n)` when more pages remain or `labels.allLoaded(n)` after the last one.
+ * - the data source's load state (core `announceLoadState`): `labels.loading` when a page starts
+ *   loading, then `labels.announceLoaded(n)` when more pages remain or `labels.allLoaded(n)` after
+ *   the last one.
  *
  * A failed page is not announced here: it goes once to the assertive `.gantt-sr-alert` (see
  * `engine.ts`). The state found when the element connects is the baseline and is not announced.
  */
 
-import { announceSelection, type GanttLabels } from '@gantry/core';
+import { announceLoadState, announceSelection, type GanttLabels } from '@gantry/core';
 import { effect, untracked, type ReadonlySignal } from '../reactive';
 import type { GanttLoadMoreState, Inputs } from './inputs';
 
 /** Puts `text` into `region`; the same sentence twice is still a change (a trailing no-break space). */
 export function announce(region: HTMLElement, text: string): void {
   region.textContent = region.textContent === text ? `${text}\u00A0` : text;
-}
-
-/** The sentence for a load-state change, or `null` when there is nothing to say. */
-function loadSentence(
-  prev: GanttLoadMoreState | null,
-  next: GanttLoadMoreState | null,
-  labels: GanttLabels,
-): string | null {
-  const wasLoading = prev?.isLoading ?? false;
-  if (!next || next.isLoading === wasLoading) return null;
-  if (next.isLoading) return labels.loading;
-  if (next.error) return null;
-  return next.hasMore ? labels.announceLoaded(next.loadedCount) : labels.allLoaded(next.loadedCount);
 }
 
 /** Creates the announcement effects (call inside the connection's owner: disconnecting disposes them). */
@@ -52,7 +40,7 @@ export function announceEffects(I: Inputs, i18n: ReadonlySignal<{ labels: GanttL
     const prev = load;
     load = next;
     if (prev === undefined) return;
-    const text = loadSentence(prev, next, labels());
+    const text = announceLoadState(prev, next, labels());
     if (text !== null) announce(region, text);
   });
 }

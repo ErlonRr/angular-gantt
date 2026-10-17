@@ -43,7 +43,8 @@ export const DEMOS: DemoEntry[] = [
     category: 'Showcase',
     blurb:
       'Groups (squads), release milestones, dependencies and baselines, plus rich custom panel columns (owner avatar + status badge) and a live EN/IT locale switch.',
-    usage: `import { GantryComponent, ColumnDef, ColumnCellContext } from 'ngx-gantry';
+    usage: `import { Component, computed, viewChild, type TemplateRef } from '@angular/core';
+import { GantryComponent, type ColumnDef, type ColumnCellContext } from 'ngx-gantry';
 
 @Component({
   imports: [GantryComponent],
@@ -53,7 +54,7 @@ export const DEMOS: DemoEntry[] = [
     </ng-template>
 
     <gantry [series]="tasks" [columns]="columns()"
-            [options]="{ locale: 'it' }" [showLegend]="true" />
+            [options]="{ locale: 'it' }" showLegend />
   \`,
 })
 export class Roadmap {
@@ -62,7 +63,12 @@ export class Roadmap {
     { key: 'name',   label: 'Initiative', width: 210 },
     { key: 'status', label: 'Status', width: 100, cellTemplate: this.statusTpl() },
   ]);
-}`,
+}
+
+// Or declare a column inside <gantry> (GanttColumnDefDirective):
+// <ng-template ganttColumn="owner" label="Owner" [width]="120">
+//   <ng-template let-row>{{ row.task.data?.['owner'] }}</ng-template>
+// </ng-template>`,
   },
   {
     path: 'demo',
@@ -71,8 +77,11 @@ export class Roadmap {
     icon: '▦',
     category: 'Core',
     blurb:
-      'The everyday board: task tree with groups & milestones, FS/FF/SS/SF dependencies with lag, baselines, the critical path, annotations, drag & resize, and selection.',
-    usage: `import { GantryComponent, GanttTask, DependencyType } from 'ngx-gantry';
+      'The everyday board: task tree with groups & milestones, FS/FF/SS/SF dependencies with lag, baselines, the critical path, annotations, drag & resize, selection, and a two-way [(viewMode)] zoom level.',
+    usage: `import { GantryComponent, type GanttTask, DependencyType, provideGantt } from 'ngx-gantry';
+
+// main.ts (optional: built-in bars need no provider) — defaults for every chart
+bootstrapApplication(App, { providers: [provideZonelessChangeDetection(), provideGantt({ darkMode: 'auto' })] });
 
 tasks: GanttTask[] = [
   { id: 'a', name: 'Discovery', start: new Date('2026-01-05'), end: new Date('2026-01-31'), progress: 100 },
@@ -80,11 +89,13 @@ tasks: GanttTask[] = [
     dependency: { taskId: 'a', type: DependencyType.FS, lag: 2 },
     baseline: { start: new Date('2026-02-01'), end: new Date('2026-03-01') } },
 ];
+// two-way zoom level: the toolbar, + / - and setViewMode() write it back
+zoom = signal<string | undefined>('Month');
 
-// template
-<gantry [series]="tasks"
+// template — boolean inputs accept attributes (showLegend = [showLegend]="true")
+<gantry [series]="tasks" [(viewMode)]="zoom"
         [options]="{ baseline: true, criticalPath: true }"
-        [showLegend]="true" />`,
+        showLegend />`,
   },
   {
     path: 'lazy',
@@ -96,24 +107,25 @@ tasks: GanttTask[] = [
       'A paginated data source (the shared core PagedLoader, exposed as signals) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
     usage: `import { createGanttDataSource } from 'ngx-gantry';
 
-ds = createGanttDataSource({
+ds = createGanttDataSource({  // same as new GanttDataSource({ … })
   fetcher: (page, size) =>
     fetch('/api/tasks?page=' + page + '&size=' + size).then(r => r.json()),
-  pageSize: 25,
+  pageSize: 25,  // a shorter page is the last one
+  retries: 2,    // then ds.error() is set until ds.retry()
 });
 
-// template
-<gantry [dataSource]="ds" />`,
+// template — the next page loads as the last rows scroll into view
+<gantry [dataSource]="ds" (loadError)="report($event.error)" />`,
   },
   {
     path: 'custom-bar',
     label: 'Custom bars',
-    description: 'Bar registry · custom epic bars',
+    description: 'provideGanttBar · custom epic bars',
     icon: '◆',
     category: 'Extensibility',
     blurb:
-      'Plug any Angular component in as a bar type via the bar registry — here an "epic" bar drawn with your own SVG, selected per task with barType.',
-    usage: `import { GanttBarBase, GanttBarContext, provideGanttBar } from 'ngx-gantry';
+      'Plug any Angular component in as a bar type with provideGanttBar — here an "epic" bar drawn with your own SVG, provided for this page only and selected per task with barType.',
+    usage: `import { GanttBarBase, provideGanttBar } from 'ngx-gantry';
 
 @Component({
   selector: 'g[epicBar]',
@@ -121,13 +133,18 @@ ds = createGanttDataSource({
     [attr.width]="geo().barWidth" [attr.height]="geo().height - 10" rx="6" fill="#6366F1" />\`,
 })
 export class EpicBar extends GanttBarBase {
-  ctx = input.required<GanttBarContext>();
+  // GanttBarBase declares the ctx input: row, geometry, core visual, theme, state
   geo = computed(() => this.ctx().geometry);
-  override get context() { return this.ctx(); }
 }
 
-// providers:  provideGanttBar({ type: 'epic', component: EpicBar })
-// task data:  { id: 'e1', barType: 'epic', /* … */ }`,
+@Component({
+  // this page only (also: a route's providers or bootstrapApplication); the nearest level wins
+  providers: [provideGanttBar({ type: 'epic', component: EpicBar })],
+  template: \`<gantry [series]="tasks" />\`,
+})
+export class PlanPage {
+  tasks = [{ id: 'e1', name: 'Payments', barType: 'epic', start, end }];
+}`,
   },
 ];
 

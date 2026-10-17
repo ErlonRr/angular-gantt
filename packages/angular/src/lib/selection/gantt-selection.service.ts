@@ -12,10 +12,11 @@
 //    Ctrl/Cmd + A     → select all visible
 //
 //  `selectionChange` fires per core `shouldEmitSelection()`, so both
-//  bindings emit on exactly the same actions.
+//  bindings emit on exactly the same actions. A change of the number of
+//  selected tasks is read out by the chart's live region (`GanttAnnouncer`).
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 
 import {
   emptySelection,
@@ -30,12 +31,16 @@ import {
   type SelectionState,
 } from '@gantry/core';
 import { type GanttFlatRow, type SelectionChangeEvent } from '../types';
+import { GanttAnnouncer } from '../a11y/announcer';
 
 /** Policy of the programmatic API when the caller passes none: selection on, multi-select on */
 const OPEN_POLICY: SelectionPolicy = { enabled: true, multi: true };
 
 @Injectable()
 export class GanttSelectionService {
+  /** The chart's live region (absent outside a chart) */
+  private readonly announcer = inject(GanttAnnouncer, { optional: true });
+
   // ── State ────────────────────────────────────────────────
   private readonly _state = signal<SelectionState>(emptySelection());
 
@@ -43,8 +48,6 @@ export class GanttSelectionService {
   /** Selection and range anchor (core `SelectionState`) */
   readonly state = this._state.asReadonly();
   readonly selectedIds = computed<ReadonlySet<string>>(() => this._state().selected);
-  readonly selectedCount = computed(() => this._state().selected.size);
-  readonly hasSelection = computed(() => this._state().selected.size > 0);
 
   /** Callback wired by GantryComponent to emit output event */
   onChange?: (e: SelectionChangeEvent) => void;
@@ -53,12 +56,6 @@ export class GanttSelectionService {
 
   isSelected(id: string): boolean {
     return this._state().selected.has(id);
-  }
-
-  /** Returns a computed that tracks whether a specific id is selected.
-   *  Use this in templates for fine-grained reactivity. */
-  isSelectedSignal(id: string) {
-    return computed(() => this._state().selected.has(id));
   }
 
   // ── Interaction handlers ──────────────────────────────────
@@ -78,21 +75,10 @@ export class GanttSelectionService {
   }
 
   /**
-   * Programmatic single select (replaces current selection).
-   */
-  select(id: string): void {
-    this.apply(selectionOf([id]), 'set');
-  }
-
-  /**
    * Programmatic multi-select (replaces current selection with given ids).
    */
   setSelected(ids: readonly string[]): void {
     this.apply(selectionOf(ids), 'set');
-  }
-
-  toggle(id: string): void {
-    this.apply(selectionClick(this._state(), id, { ctrl: true, shift: false }, [], OPEN_POLICY), 'click');
   }
 
   clear(): void {
@@ -108,20 +94,15 @@ export class GanttSelectionService {
     if (next) this.apply(next, 'selectAll');
   }
 
-  getSelectedIds(): string[] {
-    return [...this._state().selected];
-  }
-
-  getSelectedRows(rows: GanttFlatRow[]): GanttFlatRow[] {
-    const ids = this._state().selected;
-    return rows.filter(r => ids.has(r.task.id));
-  }
-
-  /** Store a reducer result and emit per `shouldEmitSelection` (the same rule as the Web Component). */
+  /**
+   * Store a reducer result and emit per `shouldEmitSelection` (the same rule as the Web Component);
+   * a new number of selected tasks is announced ("3 tasks selected", "Selection cleared").
+   */
   apply(next: SelectionState, action: SelectionAction): void {
     const prev = this._state();
     if (next === prev) return;
     this._state.set(next);
+    if (next.selected.size !== prev.selected.size) this.announcer?.selection(next.selected.size);
     if (shouldEmitSelection(prev, next, action)) this.onChange?.({ selectedIds: [...next.selected] });
   }
 }

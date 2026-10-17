@@ -6,7 +6,7 @@
  * re-runs nothing that reads them.
  */
 
-import { resolvePanelWidth, virtualIndexes, type RowGeometry } from '@gantry/core';
+import { resolvePanelWidth, splitterValue, virtualIndexes, type RowGeometry, type SplitterValue } from '@gantry/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ConfigGraph } from './config';
@@ -24,6 +24,8 @@ export interface WindowSpan {
 export interface LayoutGraph {
   /** Task-list panel width for the current view (px): the whole host in table view, 0 in chart view */
   readonly panelPx: ReadonlySignal<number>;
+  /** The splitter separator's `aria-valuenow` / `aria-valuemin` / `aria-valuemax`: the panel width (px) and its range */
+  readonly splitter: ReadonlySignal<SplitterValue>;
   /** Height of the timeline header (the task-list column header matches it) */
   readonly headerHeight: ReadonlySignal<number>;
   /** Height of every visible row together: the canvas height */
@@ -41,6 +43,12 @@ export function layoutGraph(
   const panelPx = node('panelPx', () =>
     // The splitter is 6px wide (styles/splitter.css.ts): the core default
     resolvePanelWidth({ view: I.viewOverride(), panel: g.config().panel, userWidth: I.panelW(), hostWidth: I.mainW() }),
+  );
+  const splitter = node(
+    'splitter',
+    () =>
+      splitterValue({ view: I.viewOverride(), panel: g.config().panel, userWidth: I.panelW(), hostWidth: I.mainW() }),
+    { equals: (a, b) => a.now === b.now && a.min === b.min && a.max === b.max },
   );
   const headerHeight = node('headerHeight', () => g.timeline().headerHeight);
   const totalHeight = node('totalHeight', () => g.visibleRows().length * g.config().rowHeight);
@@ -62,5 +70,5 @@ export function layoutGraph(
     },
     { equals: (a, b) => a.top === b.top && a.bottom === b.bottom },
   );
-  return { panelPx, headerHeight, totalHeight, mountedGeometries, windowSpan };
+  return { panelPx, splitter, headerHeight, totalHeight, mountedGeometries, windowSpan };
 }

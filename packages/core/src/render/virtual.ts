@@ -5,6 +5,9 @@
 //  Component so every painter mounts exactly the same rows.
 // ─────────────────────────────────────────────────────────────
 
+/** Rows a virtual window mounts above and below the viewport (every binding's default) */
+export const VIRTUAL_OVERSCAN_ROWS = 4;
+
 export interface VirtualWindow {
   /** First rendered item index (inclusive), overscan already applied */
   first: number;
@@ -32,7 +35,7 @@ export interface VirtualWindow {
  * @param itemHeight      Fixed height of every item (px)
  * @param viewportHeight  Height of the visible viewport (px)
  * @param itemCount       Total number of items
- * @param overscan        Extra items rendered above & below the window
+ * @param overscan        Extra items rendered above & below the window (`VIRTUAL_OVERSCAN_ROWS`)
  * @param pinned          Item indexes that must stay mounted even when scrolled out of
  *                        the window (focused / edited / dragged rows). Out-of-range,
  *                        non-integer and duplicate indexes are ignored.
@@ -42,7 +45,7 @@ export function computeVirtualWindow(
   itemHeight: number,
   viewportHeight: number,
   itemCount: number,
-  overscan = 4,
+  overscan = VIRTUAL_OVERSCAN_ROWS,
   pinned?: Iterable<number>,
 ): VirtualWindow {
   if (itemHeight <= 0 || itemCount <= 0) {
@@ -82,6 +85,26 @@ export function computeVirtualWindow(
     pinnedBefore,
     pinnedAfter,
   };
+}
+
+const sameIndexes = (a: readonly number[], b: readonly number[]) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * Whether two virtual windows mount the same rows with the same spacers (an equality function for
+ * memoization): `first`, `last`, both paddings and both pinned lists compared by value, so a
+ * scroll inside the overscan changes nothing downstream (Angular:
+ * `computed(() => computeVirtualWindow(…), { equal: sameVirtualWindow })`).
+ */
+export function sameVirtualWindow(a: VirtualWindow, b: VirtualWindow): boolean {
+  return (
+    a.first === b.first &&
+    a.last === b.last &&
+    a.paddingTop === b.paddingTop &&
+    a.paddingBottom === b.paddingBottom &&
+    sameIndexes(a.pinnedBefore, b.pinnedBefore) &&
+    sameIndexes(a.pinnedAfter, b.pinnedAfter)
+  );
 }
 
 /**

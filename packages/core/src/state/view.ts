@@ -16,6 +16,10 @@ export const DEFAULT_SPLITTER_WIDTH = 6;
 export const FALLBACK_PANEL_WIDTH = 320;
 /** Room always left to the timeline next to the panel in split view (px) */
 export const MIN_TIMELINE_WIDTH = 40;
+/** Panel width an Arrow key on the splitter adds or removes (px) */
+export const SPLITTER_KEY_STEP = 24;
+/** Distance from the header's bottom edge to the centre of the splitter's collapse toggle (px) */
+export const SPLITTER_TOGGLE_OFFSET = 24;
 
 /** Panel size limits from the resolved config (`cfg.panel`). */
 export interface PanelWidthBounds {
@@ -46,13 +50,28 @@ export function availablePanelWidth(hostWidth: number, splitterWidth?: number): 
   return (hostWidth || DEFAULT_HOST_WIDTH) - (splitterWidth || DEFAULT_SPLITTER_WIDTH);
 }
 
+/** Narrowest and widest split-view panel (px). */
+export interface PanelWidthRange {
+  readonly min: number;
+  readonly max: number;
+}
+
 /**
- * Clamp a split-view panel width to `[minWidth, min(available - 40, maxWidth)]`, rounded to whole px.
- * `maxWidth` may be a % of `available`; `minWidth` wins when the two cross.
+ * The split-view panel widths `clampPanelWidth` allows: `[minWidth, min(available - 40, maxWidth)]`.
+ * `maxWidth` may be a % of `available`; `minWidth` wins when the two cross (then `max` is `min`).
+ */
+export function panelWidthRange(bounds: PanelWidthBounds, available: number): PanelWidthRange {
+  const max = Math.min(available - MIN_TIMELINE_WIDTH, resolveLength(bounds.maxWidth, available, available));
+  return { min: bounds.minWidth, max: Math.max(bounds.minWidth, max) };
+}
+
+/**
+ * Clamp a split-view panel width to `panelWidthRange` (`[minWidth, min(available - 40, maxWidth)]`),
+ * rounded to whole px. `maxWidth` may be a % of `available`; `minWidth` wins when the two cross.
  */
 export function clampPanelWidth(px: number, bounds: PanelWidthBounds, available: number): number {
-  const max = Math.min(available - MIN_TIMELINE_WIDTH, resolveLength(bounds.maxWidth, available, available));
-  return Math.round(Math.max(bounds.minWidth, Math.min(px, max)));
+  const { min, max } = panelWidthRange(bounds, available);
+  return Math.round(Math.min(max, Math.max(min, px)));
 }
 
 /**
@@ -65,6 +84,27 @@ export function resolvePanelWidth(input: PanelWidthInput): number {
   if (input.view === 'chart') return 0;
   const width = input.userWidth ?? resolveLength(input.panel.width, hostWidth, FALLBACK_PANEL_WIDTH);
   return clampPanelWidth(width, input.panel, availablePanelWidth(hostWidth, input.splitterWidth));
+}
+
+/** `aria-valuenow`, `aria-valuemin` and `aria-valuemax` of the splitter's separator (px). */
+export interface SplitterValue {
+  /** The panel width (`resolvePanelWidth`), rounded */
+  readonly now: number;
+  readonly min: number;
+  readonly max: number;
+}
+
+/**
+ * The splitter's separator value: the panel width in px (`resolvePanelWidth`) within the widths
+ * the splitter gives the panel — `panelWidthRange`, from 0 when the panel can be collapsed
+ * (`panel.collapsible`: Enter collapses it), all rounded. The range always contains `now` (0 in
+ * the chart view, the host width in the table view).
+ */
+export function splitterValue(input: PanelWidthInput & { panel: { collapsible: boolean } }): SplitterValue {
+  const now = Math.round(resolvePanelWidth(input));
+  const range = panelWidthRange(input.panel, availablePanelWidth(input.hostWidth, input.splitterWidth));
+  const min = input.panel.collapsible ? 0 : Math.round(range.min);
+  return { now, min: Math.min(min, now), max: Math.max(Math.round(range.max), now) };
 }
 
 /**

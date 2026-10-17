@@ -1,0 +1,39 @@
+/**
+ * API report of ngx-gantry: `etc/ngx-gantry.api.md`, read from the d.ts bundle of `pnpm build:lib`.
+ *   pnpm api:angular         regenerate the report after a deliberate public change
+ *   pnpm api:angular:check   fail when the built d.ts no longer matches the report (CI)
+ * Generated file: never hand-merge it, rebuild and regenerate.
+ */
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "projectFolder": ".",
+  "mainEntryPointFilePath": "<projectFolder>/../../dist/ngx-gantry/types/ngx-gantry.d.ts",
+  "bundledPackages": [],
+  "compiler": {
+    "tsconfigFilePath": "<projectFolder>/tsconfig.api.json"
+  },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "<unscopedPackageName>",
+    "reportFolder": "<projectFolder>/etc/",
+    "reportTempFolder": "<projectFolder>/../../node_modules/.cache/api-extractor/ngx-gantry/"
+  },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "compilerMessageReporting": {
+      "default": { "logLevel": "warning" }
+    },
+    "extractorMessageReporting": {
+      "default": { "logLevel": "warning" },
+      "ae-missing-release-tag": { "logLevel": "none" },
+      // Internal types reached from the API (protected template members typed with internal services,
+      // the built-in bars' base class): listed in the report for review instead of failing
+      "ae-forgotten-export": { "logLevel": "none", "addToApiReportFile": true }
+    },
+    "tsdocMessageReporting": {
+      "default": { "logLevel": "none" }
+    }
+  }
+}

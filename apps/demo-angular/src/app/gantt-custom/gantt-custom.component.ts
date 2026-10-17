@@ -1,19 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, input, inject } from '@angular/core';
-import {
-  GantryComponent,
-  type GanttTask,
-  GanttBarBase,
-  type GanttBarContext,
-  GanttBarRegistry,
-  TaskType,
-} from 'ngx-gantry';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { GantryComponent, type GanttTask, GanttBarBase, provideGanttBar, TaskType } from 'ngx-gantry';
 import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 
 // ─── Custom "Epic" bar component ─────────────────────────────
+// Extends GanttBarBase, which declares the `ctx` input (row, geometry, core visual, theme, state).
 @Component({
   selector: 'g[epicBar]',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { style: 'cursor: pointer;' },
   template: `
@@ -67,13 +60,9 @@ import { AppThemeService } from '../shell/app-theme.service';
   `,
 })
 export class EpicBarComponent extends GanttBarBase {
-  readonly ctx = input.required<GanttBarContext>();
   protected readonly geo = computed(() => this.ctx().geometry);
   protected readonly task = computed(() => this.ctx().row.task);
   protected readonly progress = computed(() => this.task().progress ?? 0);
-  override get context() {
-    return this.ctx();
-  }
 }
 
 // ─── Demo tasks that use barType: 'epic' ─────────────────────
@@ -152,13 +141,14 @@ const TASKS: GanttTask[] = [
 
 @Component({
   selector: 'app-gantt-custom',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent],
+  // Charts inside this page resolve barType 'epic' to EpicBarComponent; other pages don't see it
+  providers: [provideGanttBar({ type: 'epic', component: EpicBarComponent })],
   template: `
     <div class="custom-bar">
       <span class="custom-title">Custom bar type: <code>barType: 'epic'</code></span>
-      <span class="custom-desc"> EpicBarComponent registered at runtime via GanttBarRegistry.register() </span>
+      <span class="custom-desc"> EpicBarComponent provided for this page with provideGanttBar() </span>
     </div>
 
     <gantry
@@ -215,9 +205,4 @@ export class GanttCustomComponent {
 
   /** The template plan moved so today sits inside it */
   readonly tasks = anchorToToday(TASKS).tasks;
-
-  constructor() {
-    // Register the custom bar type at component init
-    inject(GanttBarRegistry).register({ type: 'epic', component: EpicBarComponent });
-  }
 }

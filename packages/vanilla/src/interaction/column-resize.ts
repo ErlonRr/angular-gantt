@@ -9,6 +9,7 @@
  * listeners go, the width reached so far is kept and the end is reported like a release.
  */
 
+import { clampColumnWidth } from '@gantry/core';
 import type { VanillaColumnDef } from '../types';
 
 /** What a resize reports. */
@@ -30,9 +31,6 @@ export interface ColumnResize {
   /** Ends the gesture in progress, if any, and forgets the pending click guard. */
   abort(): void;
 }
-
-const MIN_WIDTH = 40;
-const MAX_WIDTH = 800;
 
 export function createColumnResize(hooks: ColumnResizeHooks): ColumnResize {
   /** The gesture in progress: its handle and how to end it */
@@ -62,9 +60,7 @@ export function createColumnResize(hooks: ColumnResizeHooks): ColumnResize {
 
       const move = (e: PointerEvent): void => {
         if (e.pointerId !== pointerId) return;
-        const width = Math.round(
-          Math.min(col.maxWidth ?? MAX_WIDTH, Math.max(col.minWidth ?? MIN_WIDTH, startWidth + e.clientX - startX)),
-        );
+        const width = clampColumnWidth(startWidth + e.clientX - startX, col);
         if (width === last) return;
         last = width;
         hooks.onWidth(col.key, width);

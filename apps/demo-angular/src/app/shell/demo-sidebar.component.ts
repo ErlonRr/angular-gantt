@@ -18,7 +18,6 @@ interface DemoGroup {
 
 @Component({
   selector: 'app-demo-sidebar',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, RouterLinkActive],
   template: `

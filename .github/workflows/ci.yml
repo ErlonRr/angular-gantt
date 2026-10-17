@@ -53,6 +53,9 @@ jobs:
         run: node scripts/size.mjs --max 50
       - name: Build packages, Angular library, showcase and demos
         run: pnpm build
+      - name: API report is up to date (ngx-gantry)
+        # packages/angular/etc/ngx-gantry.api.md vs the built d.ts; after a deliberate change run `pnpm api:angular`
+        run: pnpm api:angular:check
       - name: Lint published packages
         run: |
           for dir in packages/*; do

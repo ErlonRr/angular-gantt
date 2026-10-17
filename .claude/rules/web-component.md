@@ -15,7 +15,7 @@ paths:
   - `engine/graph/*.ts`: computeds, one concern per file (chrome, config, rows, timeline,
     windows, layout, visuals, arrows, horizontal, tasklist), built with `node(name, fn, {equals})`
     (`graph/node.ts`) so runs are counted per name. Use equality cut-offs (`structuralEqual`,
-    `sameWindow`, …) so unchanged results stop propagating. A new module adds its nodes to its
+    `sameVirtualWindow` (core), …) so unchanged results stop propagating. A new module adds its nodes to its
     own interface; `Graph` in `engine/engine.ts` merges them.
   - `engine/render.ts`: one effect per region on the per-element rAF scheduler, flushed in the
     fixed `REGIONS` order (host → toolbar → legend → header → static → rows → bars → arrows →

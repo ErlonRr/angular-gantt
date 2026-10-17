@@ -22,14 +22,13 @@ import {
 
 import { type DragPreview } from './gantt-drag.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
-import { DEFAULT_FORMATS, DEFAULT_LABELS, type GanttI18n, type GanttTheme, type RowGeometry } from '../types';
+import { DEFAULT_FORMATS, DEFAULT_LABELS, type GanttI18n, type RowGeometry } from '../types';
 
 /** i18n of a preview used outside a chart */
 const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMATS };
 
 @Component({
   selector: 'g[ganttDragPreview]',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (ghost(); as g) {
@@ -51,6 +50,7 @@ const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMA
       <!-- Movement label above the ghost bar (none while the snapped movement is zero) -->
       @if (g.label; as label) {
         <svg:text
+          class="gantt-drag-preview-label"
           [attr.x]="label.x"
           [attr.y]="label.y"
           [style.fill]="label.paint"
@@ -87,14 +87,6 @@ export class GanttDragPreviewComponent {
   readonly timeline = input<TimelineModel | null>(null);
   /** Bar label font size in px (`themeMetrics(theme).fontPx`) */
   readonly fontPx = input<number>(themeMetrics(LightTheme).fontPx);
-  /** @deprecated Ignored: the ghost is painted with the chart's `--gantt-*` tokens. */
-  readonly theme = input<GanttTheme | undefined>(undefined);
-  /** @deprecated Ignored: the ghost height comes from `geometry` and `config`. */
-  readonly barHeight = input<number | null>(null);
-  /** @deprecated Ignored: the corner radius comes from `config` (`bar.radius`). */
-  readonly radius = input<number>(4);
-  /** @deprecated Ignored: the label unit comes from `preview` (`unit`). */
-  readonly unit = input<'day' | 'hour'>('day');
 
   private readonly i18n = inject(GanttI18nService, { optional: true });
 

@@ -115,7 +115,7 @@ for (const p of PAGES) {
       const vp = chart.viewport();
       // Bring the first task bar into view
       await chart.evalRoot(root => {
-        const v = root.querySelector<HTMLElement>('.gantry-canvas-viewport, .gantt-timeline-scroll');
+        const v = root.querySelector<HTMLElement>('.gantry-canvas-viewport');
         const bar = root.querySelector('.gantt-bars-layer [data-bar-type="task"] .gantt-bar-body');
         if (v && bar) v.scrollLeft += bar.getBoundingClientRect().left - v.getBoundingClientRect().left - 160;
       });

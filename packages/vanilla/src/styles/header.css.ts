@@ -1,7 +1,8 @@
 /**
  * @file header.css.ts
  * Timeline header tiers (`.g-*`): cells, sticky labels, the current period, non-working tint
- * and the today pointer. Class names are shared with Angular.
+ * and the today pointer. Class names are shared with Angular. The current-period label uses the
+ * derived `--gantt-today-label` (core `todayLabelColor`: readable on the 14 % today tint).
  *
  * Cells, bands and the pointer are positioned by the custom properties the header layer writes
  * through the CSSOM (`--x`, `--w`), so a cell's geometry is two custom properties and never
@@ -23,7 +24,7 @@ export const HEADER_CSS = `
     .g-tier--start .g-cell { justify-content: flex-start; }
     .g-cell-label { position: sticky; left: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-box; }
     .g-cell--current { background: color-mix(in srgb, var(--gantt-today) 14%, transparent); }
-    .g-cell--current .g-cell-label { color: var(--gantt-today); font-weight: 600; }
+    .g-cell--current .g-cell-label { color: var(--gantt-today-label); font-weight: 600; }
     .g-band { position: absolute; top: 0; bottom: 0; left: var(--x); width: var(--w); pointer-events: none; }
     .g-today-pointer {
       position: absolute; bottom: 0; left: var(--x); width: 0; height: 0; margin-left: -5px;

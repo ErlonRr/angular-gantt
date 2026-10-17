@@ -8,6 +8,7 @@
 
 import {
   buildBuiltinColumns,
+  clampColumnWidth,
   mergeColumnDefs,
   resolveViewColumns,
   type GanttI18n,
@@ -51,10 +52,6 @@ export interface Columns {
   toggleVisible(key: string, view?: ViewKey, config?: ColumnConfig): void;
 }
 
-function clampWidth(c: ColumnDef, width: number): number {
-  return Math.round(Math.max(c.minWidth ?? 40, Math.min(c.maxWidth ?? 800, width)));
-}
-
 export function createColumns(
   options: ReadonlySignal<GanttOptions>,
   columnsProp: ReadonlySignal<ColumnDef[] | null>,
@@ -79,7 +76,7 @@ export function createColumns(
     const shown = visibility().all;
     const apply = (c: ColumnDef): ColumnDef => ({
       ...c,
-      width: clampWidth(c, widths.get(c.key) ?? c.width),
+      width: clampColumnWidth(widths.get(c.key) ?? c.width, c),
       visible: shown.get(c.key) ?? c.visible ?? true,
     });
     return { columns: base.map(apply), builtins: builtins.map(apply) };

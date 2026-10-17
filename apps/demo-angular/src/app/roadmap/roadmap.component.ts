@@ -286,7 +286,6 @@ const TASKS: GanttTask[] = [
 
 @Component({
   selector: 'app-roadmap',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent],
   template: `

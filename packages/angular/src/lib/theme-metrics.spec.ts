@@ -1,14 +1,11 @@
 // Theme metrics (Gantry 2 phase 6, step 0.4): the resolved config carries no theme. Only the
 // metrics (`themeMetrics(theme)`: bar radius, label font size, label colour on explicit bar
 // colours) enter the model, so a colour-only theme change keeps the config.
-import '../test/dom-shims';
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { LightTheme, type ResolvedGanttConfig } from '@gantry/core';
+import { LightTheme, type ResolvedGanttConfig, type GanttOptions, type GanttTask } from '@gantry/core';
 import { GantryComponent } from './gantt-component/gantry.component';
-import { provideGanttLib } from './module/gantt.module';
-import { type GanttOptions, type GanttTask } from './types';
 
 const day = (d: number) => new Date(2026, 0, d);
 const TASKS: GanttTask[] = [
@@ -27,7 +24,7 @@ class Host {
 }
 
 async function mount(): Promise<ComponentFixture<Host>> {
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideGanttLib()] });
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const fixture = TestBed.createComponent(Host);
   await fixture.whenStable();
   return fixture;
@@ -58,7 +55,7 @@ describe('Angular theme metrics', () => {
 
   it('labels an explicit bar colour with the theme barTextColor when it is readable', async () => {
     const f = await mount();
-    // jsdom normalises colours; a browser keeps the hex value in the declaration
+    // the test DOM normalises colours; a browser keeps the hex value in the declaration
     expect(['#FFFFFF', 'rgb(255, 255, 255)']).toContain(part(f, 'navy', '.gantt-bar-label').style.fill);
     f.componentInstance.gantt().setTheme({ barTextColor: '#FDE047' });
     await f.whenStable();

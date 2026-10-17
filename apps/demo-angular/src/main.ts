@@ -3,13 +3,14 @@ import { provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } fr
 import { provideRouter } from '@angular/router';
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
-import { provideGanttLib } from 'ngx-gantry';
+import { provideGantt } from 'ngx-gantry';
 
 bootstrapApplication(AppComponent, {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideZonelessChangeDetection(),
     provideRouter(routes),
-    provideGanttLib({ darkMode: 'auto' }),
+    // Optional: defaults for every chart (built-in bars need no provider)
+    provideGantt({ darkMode: 'auto' }),
   ],
 }).catch(err => console.error(err));

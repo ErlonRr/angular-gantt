@@ -58,6 +58,7 @@ import {
   viewFromOptions,
   viewFromState,
   initialScrollChanged,
+  STATE_SAVE_DELAY,
 } from '@gantry/core';
 import { createRoot, effect, runWithOwner, untracked, type WritableSignal } from './reactive';
 import { setAttr } from './dom/patch';
@@ -216,7 +217,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-border=#E2E8F0] - Borders between regions (`borderColor`).
  * @cssprop [--gantt-grid-line=#EEF2F6] - Grid lines (`gridLine`).
  * @cssprop [--gantt-grid-line-major=#CBD5E1] - Delimiters between periods (`gridLineMajor`).
- * @cssprop [--gantt-today=#B45309] - Today marker and current-period highlight (`todayColor`).
+ * @cssprop [--gantt-today=#B45309] - Today marker and current-period highlight (`todayColor`); set `--gantt-today-label` with it.
  * @cssprop [--gantt-text=#1E293B] - Primary text (`textPrimary`).
  * @cssprop [--gantt-text-sec=#475569] - Secondary text (`textSecondary`).
  * @cssprop [--gantt-text-muted=#64748B] - Muted text (`textMuted`).
@@ -238,9 +239,11 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-status-in-progress=#2563EB] - Status dot: in progress (`statusInProgress`).
  * @cssprop [--gantt-status-overdue=#DC2626] - Status dot: overdue (`statusOverdue`).
  * @cssprop [--gantt-status-done=#15803D] - Status dot: done (`statusDone`).
+ * @cssprop [--gantt-progress-overlay=#000000] - Progress fill inside theme-coloured bars, drawn at `bar.progress.opacity` (`progressOverlay`).
  * @cssprop [--gantt-bar-text-on-bar=#FFFFFF] - Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-milestone=#FFFFFF] - Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-critical=#FFFFFF] - Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).
+ * @cssprop [--gantt-today-label=#964B13] - Current-period header label, readable on its 14 % today tint (derived: `todayLabelColor(theme)`).
  */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class GantryElement extends BaseElement {
@@ -743,7 +746,7 @@ export class GantryElement extends BaseElement {
     this.#stateTimer = setTimeout(() => {
       this.#stateTimer = undefined;
       this.#writeState();
-    }, 150);
+    }, STATE_SAVE_DELAY);
   }
 
   #writeState(): void {

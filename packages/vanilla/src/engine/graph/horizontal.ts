@@ -9,6 +9,7 @@
  */
 
 import {
+  HORIZONTAL_WINDOW_QUANTUM,
   bandsInRange,
   computeHorizontalWindow,
   linesInRange,
@@ -35,8 +36,8 @@ export interface HorizontalGraph {
   readonly lineWindow: ReadonlySignal<LinesWindow>;
 }
 
-/** Scroll distance (px) the window snaps to. */
-export const HORIZONTAL_QUANTUM = 256;
+/** Scroll distance (px) the window snaps to: core's `HORIZONTAL_WINDOW_QUANTUM` (alias kept for the tests). */
+export const HORIZONTAL_QUANTUM = HORIZONTAL_WINDOW_QUANTUM;
 
 export function horizontalGraph(I: Inputs, g: CoreGraph, node: NodeFactory): HorizontalGraph {
   const hWindow = node(
@@ -46,7 +47,7 @@ export function horizontalGraph(I: Inputs, g: CoreGraph, node: NodeFactory): Hor
         scrollLeft: I.scrollLeft(),
         viewportWidth: I.canvasW(),
         totalWidth: g.timeline().totalWidth,
-        quantum: HORIZONTAL_QUANTUM,
+        quantum: HORIZONTAL_WINDOW_QUANTUM,
       }),
     { equals: sameHorizontalWindow },
   );

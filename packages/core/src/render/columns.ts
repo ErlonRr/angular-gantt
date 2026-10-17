@@ -269,6 +269,22 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
   ];
 }
 
+// ─── Column widths ────────────────────────────────────────────
+
+/** Narrowest a task-list column gets when its definition sets no `minWidth` (px) */
+export const COLUMN_MIN_WIDTH = 40;
+/** Widest a task-list column gets when its definition sets no `maxWidth` (px) */
+export const COLUMN_MAX_WIDTH = 800;
+
+/**
+ * A column width clamped to the column's `minWidth` / `maxWidth` (`COLUMN_MIN_WIDTH` /
+ * `COLUMN_MAX_WIDTH` when unset) and rounded to whole px; `minWidth` wins when the two cross.
+ * The width a resize gesture reports and the width a column is drawn with.
+ */
+export function clampColumnWidth(width: number, col: Pick<ColumnDef, 'minWidth' | 'maxWidth'>): number {
+  return Math.round(Math.max(col.minWidth ?? COLUMN_MIN_WIDTH, Math.min(col.maxWidth ?? COLUMN_MAX_WIDTH, width)));
+}
+
 // ─── Merging consumer columns with the built-ins ──────────────
 
 /**
@@ -408,6 +424,17 @@ export function taskDurationLabel(
 ): string {
   const s = taskSpan(task, dates);
   return durationLabel(s.start, s.end, labels);
+}
+
+/**
+ * `grid-template-columns` of the task-list header row and of every row, from the columns a view
+ * shows: each column is `<width>px`, except one that grows to fill a panel wider than the columns
+ * (`minmax(<width>px, 1fr)`) — the first `flex` column, else the last. An empty list gives `''`.
+ */
+export function columnsGridTemplate(cols: readonly Pick<ColumnDef, 'width' | 'flex'>[]): string {
+  const flex = cols.findIndex(c => c.flex);
+  const grow = flex >= 0 ? flex : cols.length - 1;
+  return cols.map((c, i) => (i === grow ? `minmax(${c.width}px, 1fr)` : `${c.width}px`)).join(' ');
 }
 
 /** The column for `key` as a view resolves it: the consumer catalogue first, then the built-ins. */

@@ -19,24 +19,19 @@
 //  cells and the splitter are left alone.
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, inject, input } from '@angular/core';
+import { Directive, inject } from '@angular/core';
 import { resolveKey } from '@gantry/core';
 
 import { GanttSelectionService } from './gantt-selection.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttDragService } from '../drag/gantt-drag.service';
-import { type GanttFlatRow } from '../types';
 
 @Directive({
   selector: '[ganttKeyboard]',
-  standalone: true,
   host: { '(keydown)': 'onKeyDown($event)' },
 })
 export class GanttKeyboardDirective {
-  /** @deprecated Ignored — the visible rows come from the layout service. */
-  readonly visibleRows = input<GanttFlatRow[]>([]);
-
   private readonly selection = inject(GanttSelectionService);
   private readonly layout = inject(GanttLayoutService);
   private readonly scroll = inject(GanttScrollService);

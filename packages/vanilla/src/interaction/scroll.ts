@@ -76,7 +76,7 @@ function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
     : behavior;
 }
 
-// `scrollTo` is missing on some non-browser DOMs (jsdom); fall back to assignment.
+// `scrollTo` is missing on some non-browser DOMs; fall back to assignment.
 function scrollTo(el: HTMLElement, opts: ScrollToOptions): void {
   if (typeof el.scrollTo === 'function') el.scrollTo(opts);
   else {

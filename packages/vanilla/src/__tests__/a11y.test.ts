@@ -207,6 +207,22 @@ describe('<gantry-element> accessibility', () => {
       expect($(el, '.gantry-splitter > .gantry-splitter-toggle')).not.toBeNull();
     });
 
+    it("states the separator's range: from 0 (collapsible) or minWidth to the widest panel, in px", () => {
+      el = mount({ tasks: plan(3) });
+      const handle = $(el, '.gantry-splitter-handle');
+      const value = () => ['aria-valuenow', 'aria-valuemin', 'aria-valuemax'].map(a => Number(handle.getAttribute(a)));
+      // Nothing is measured: a 1000 px host, a 6 px splitter, 40 px kept for the timeline
+      expect(value()).toEqual([300, 0, 954]);
+
+      el.options = { panel: { collapsible: false, minWidth: 150, maxWidth: 400 } };
+      flush(el);
+      expect(value()).toEqual([300, 150, 400]);
+      // Collapsed (chart view): 0 stays inside the range
+      el.setView('chart');
+      flush(el);
+      expect(value()).toEqual([0, 0, 400]);
+    });
+
     it('gives the task list one tab stop: the first row in view, then the focused row', () => {
       el = mount({ tasks: plan(60) });
       expect(tabStops(el)).toEqual(['t0']);

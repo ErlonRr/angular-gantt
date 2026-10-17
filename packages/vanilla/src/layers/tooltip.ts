@@ -14,7 +14,14 @@
  * critical path is the `gantt-tooltip--critical` class, and the position is a CSSOM `translate`.
  */
 
-import { buildTooltipModel, type GanttFlatRow, type TooltipModel, type TooltipRow } from '@gantry/core';
+import {
+  TOOLTIP_HIDE_DELAY,
+  TOOLTIP_SHOW_DELAY,
+  buildTooltipModel,
+  type GanttFlatRow,
+  type TooltipModel,
+  type TooltipRow,
+} from '@gantry/core';
 import { h } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
@@ -33,10 +40,8 @@ export interface TooltipLayer {
   destroy(): void;
 }
 
-/** How long the pointer rests on a bar before the tooltip opens (ms). */
-export const TOOLTIP_SHOW_DELAY = 320;
-/** How long the tooltip stays open after the pointer left the bars (ms). */
-export const TOOLTIP_HIDE_DELAY = 120;
+// The open / close delays are core's (`TOOLTIP_SHOW_DELAY`, `TOOLTIP_HIDE_DELAY`), re-exported for the tests
+export { TOOLTIP_HIDE_DELAY, TOOLTIP_SHOW_DELAY };
 /** Distance from the pointer (px). */
 const OFFSET_X = 12;
 const OFFSET_Y = 8;

@@ -183,6 +183,38 @@ export default tseslint.config(
     files: ['packages/angular/**/*.html', 'apps/demo-angular/**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },
+  {
+    // ngx-gantry renders on the server too: no browser globals. Inject DOCUMENT and use
+    // `doc.defaultView` / Renderer2, inside afterNextRender (released through DestroyRef) or an
+    // event handler. The test DOM defines these globals, so only a lint rule catches a stray access.
+    files: ['packages/angular/src/lib/**/*.ts'],
+    ignores: ['**/*.spec.ts'],
+    rules: {
+      'no-restricted-globals': [
+        'error',
+        ...[
+          'window',
+          'document',
+          'localStorage',
+          'sessionStorage',
+          'navigator',
+          'matchMedia',
+          'requestAnimationFrame',
+          'cancelAnimationFrame',
+          'ResizeObserver',
+          'IntersectionObserver',
+          'MutationObserver',
+          'getComputedStyle',
+          'innerWidth',
+          'innerHeight',
+        ].map(name => ({
+          name,
+          message:
+            'SSR: no browser globals in ngx-gantry. Use inject(DOCUMENT) / doc.defaultView / Renderer2 inside afterNextRender or an event handler.',
+        })),
+      ],
+    },
+  },
 
   // ── Svelte (scoped: some of its configs have no `files`) ──────
   ...scope(svelte.configs['flat/recommended'], SVELTE_FILES),

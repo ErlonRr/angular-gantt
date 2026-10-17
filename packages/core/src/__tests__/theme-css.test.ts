@@ -12,6 +12,7 @@ import {
   sameThemeMetrics,
   themeMetrics,
   themeToCss,
+  todayLabelColor,
   type GanttTheme,
 } from '../index';
 
@@ -35,18 +36,19 @@ const PALETTES: [string, Required<GanttTheme>][] = [
 ];
 
 describe('themeToCss', () => {
-  it.each(PALETTES)('%s: the 37 theme tokens then the 3 contrast tokens, 40 unique vars', (_, theme) => {
+  it.each(PALETTES)('%s: the 38 theme tokens then the 4 contrast tokens, 42 unique vars', (_, theme) => {
     const css = themeToCss(theme);
-    expect(css).toHaveLength(40);
-    expect(THEME_CSS_VARS).toHaveLength(37);
-    expect(new Set(css.map(([name]) => name)).size).toBe(40);
+    expect(css).toHaveLength(42);
+    expect(THEME_CSS_VARS).toHaveLength(38);
+    expect(new Set(css.map(([name]) => name)).size).toBe(42);
     THEME_CSS_VARS.forEach(([key, cssVar], i) => {
       expect(css[i]).toEqual([cssVar, theme[key]]);
     });
-    expect(css.slice(37).map(([name]) => name)).toEqual([
+    expect(css.slice(38).map(([name]) => name)).toEqual([
       CONTRAST_CSS_VARS.bar,
       CONTRAST_CSS_VARS.milestone,
       CONTRAST_CSS_VARS.critical,
+      CONTRAST_CSS_VARS.todayLabel,
     ]);
     for (const [name, value] of css) {
       expect(name).toMatch(/^--gantt-[a-z-]+$/);
@@ -60,6 +62,7 @@ describe('themeToCss', () => {
     expect(css.get(CONTRAST_CSS_VARS.bar)).toBe(readableOn(theme.barColor, theme.barTextColor));
     expect(css.get(CONTRAST_CSS_VARS.milestone)).toBe(readableOn(theme.milestoneColor, theme.barTextColor));
     expect(css.get(CONTRAST_CSS_VARS.critical)).toBe(readableOn(theme.criticalColor, theme.barTextColor));
+    expect(css.get(CONTRAST_CSS_VARS.todayLabel)).toBe(todayLabelColor(theme));
   });
 
   it('switches the contrast token when the preferred text is unreadable', () => {

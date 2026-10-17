@@ -15,7 +15,6 @@ import { demoForUrl, INSTALL_CMD, REPO_URL, NPM_URL, DOCS_URL } from './demo-reg
 
 @Component({
   selector: 'app-demo-frame',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterOutlet],
   template: `

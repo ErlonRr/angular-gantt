@@ -157,7 +157,7 @@ describe('custom-elements.json', () => {
 
   it('lists every themeToCss() token as a CSS property, in order, with the light theme as default', () => {
     const tokens = themeToCss(LightTheme);
-    expect(element.cssProperties).toHaveLength(40);
+    expect(element.cssProperties).toHaveLength(42);
     expect(element.cssProperties.map(p => [p.name, p.default])).toEqual(tokens.map(([name, value]) => [name, value]));
     for (const prop of element.cssProperties) expect(prop.description, prop.name).toBeTruthy();
   });

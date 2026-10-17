@@ -1,52 +1,35 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · columns/gantt-column.directive.ts
 //
-//  Structural directive for declarative column definition.
+//  Declarative column definition.
 //
 //  Usage in consumer template:
 //
 //  <gantry [series]="tasks">
-//    <ng-template ganttColumn key="name"   label="Task" [width]="200">
-//    </ng-template>
-//    <ng-template ganttColumn key="status" label="Status" [width]="100"
-//                 [render]="statusRenderer">
-//    </ng-template>
-//    <ng-template ganttColumn key="owner"  label="Owner"  [width]="120">
+//    <ng-template ganttColumn="name" label="Task" [width]="200" />
+//    <ng-template ganttColumn="status" label="Status" [width]="100"
+//                 [render]="statusRenderer" />
+//    <ng-template ganttColumn="owner" label="Owner" [width]="120">
 //      <ng-template let-row>
 //        <span>{{ row.task.data?.owner }}</span>
 //      </ng-template>
 //    </ng-template>
 //  </gantry>
 //
-//  The directive registers itself with GanttColumnService on init
-//  and deregisters on destroy — reactive, no manual cleanup needed.
+//  GantryComponent reads every `ganttColumn` of its content through a
+//  content query (inside `@if` / `<ng-container>` too) and binds their
+//  `def`s into its column service: adding, removing or changing one
+//  updates the columns, with no registration step.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  Directive,
-  input,
-  effect,
-  inject,
-  Injector,
-  runInInjectionContext,
-  untracked,
-  type OnInit,
-  type OnDestroy,
-  TemplateRef,
-  ContentChild,
-} from '@angular/core';
+import { Directive, computed, input, TemplateRef, contentChild } from '@angular/core';
 
-import { GanttColumnService } from './gantt-column.service';
 import { type ColumnDef, type ColumnRenderer, type ColumnCellContext } from '../types';
-
-// Re-exported for backward compatibility — the canonical definition lives in types.ts
-export type { ColumnCellContext } from '../types';
 
 @Directive({
   selector: '[ganttColumn]',
-  standalone: true,
 })
-export class GanttColumnDefDirective implements OnInit, OnDestroy {
+export class GanttColumnDefDirective {
   // ── Required input ───────────────────────────────────────
   readonly key = input.required<string>({ alias: 'ganttColumn' });
 
@@ -62,46 +45,27 @@ export class GanttColumnDefDirective implements OnInit, OnDestroy {
   readonly render = input<ColumnRenderer | undefined>(undefined);
 
   /** Optional ng-template for the cell content */
-  @ContentChild(TemplateRef)
-  cellTemplate?: TemplateRef<ColumnCellContext>;
+  readonly cellTemplate = contentChild<TemplateRef<ColumnCellContext>>(TemplateRef);
 
-  private readonly columnService = inject(GanttColumnService);
-  private readonly tpl = inject(TemplateRef, { optional: true });
-  private readonly injector = inject(Injector);
-
-  ngOnInit(): void {
-    // Register, and keep this one definition in sync when the inputs change
-    // (ngOnInit is not an injection context)
-    runInInjectionContext(this.injector, () => {
-      effect(() => {
-        const def = this.buildDef();
-        untracked(() => this.columnService.registerColumn(def));
-      });
-    });
-  }
-
-  ngOnDestroy(): void {
-    this.columnService.unregisterColumn(this.key());
-  }
-
-  private buildDef(): ColumnDef {
+  /** The column definition: only what was given, so a built-in column with this key fills in the rest */
+  readonly def = computed<ColumnDef>(() => {
     const render = this.render();
-    const cellTemplate = render ? undefined : this.cellTemplate;
-    // Only set what was given, so a built-in column with this key fills in the rest
+    const cellTemplate = render ? undefined : this.cellTemplate();
     const def: Partial<ColumnDef> & { key: string } = { key: this.key() };
-    if (this.label() !== undefined) def.label = this.label();
-    if (this.width() !== undefined) def.width = this.width();
-    if (this.minWidth() !== undefined) def.minWidth = this.minWidth();
-    if (this.maxWidth() !== undefined) def.maxWidth = this.maxWidth();
-    if (this.visible() !== undefined) def.visible = this.visible();
-    if (this.sortable() !== undefined) def.sortable = this.sortable();
+    const label = this.label();
+    const width = this.width();
+    const minWidth = this.minWidth();
+    const maxWidth = this.maxWidth();
+    const visible = this.visible();
+    const sortable = this.sortable();
+    if (label !== undefined) def.label = label;
+    if (width !== undefined) def.width = width;
+    if (minWidth !== undefined) def.minWidth = minWidth;
+    if (maxWidth !== undefined) def.maxWidth = maxWidth;
+    if (visible !== undefined) def.visible = visible;
+    if (sortable !== undefined) def.sortable = sortable;
     if (render) def.render = render;
     if (cellTemplate) def.cellTemplate = cellTemplate;
     return def as ColumnDef;
-  }
-
-  /** Exposed for the task list to use as a TemplateRef per-cell */
-  getTemplate(): TemplateRef<ColumnCellContext> | undefined {
-    return this.cellTemplate ?? this.tpl ?? undefined;
-  }
+  });
 }

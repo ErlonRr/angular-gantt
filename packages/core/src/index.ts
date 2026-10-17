@@ -21,9 +21,11 @@ export * from './state/selection';
 export * from './state/view';
 export * from './state/tooltip';
 export * from './state/legend';
+export * from './state/collapse';
 export {
   GANTT_STATE_VERSION,
   STATE_STORAGE_PREFIX,
+  STATE_SAVE_DELAY,
   stateStorageKey,
   normalizeState,
   serializeState,
@@ -54,4 +56,4 @@ export * from './a11y/describe';
 // Engine helpers: arrow window index, drag ghost, quantised clock
 export { buildArrowIndex, type ArrowIndex, type ArrowLink } from './render/arrow-index';
 export { computeDragGhostVisual, DRAG_SOURCE_OPACITY, type GhostVisual, type GhostLabel } from './render/ghost';
-export { quantizeNow, todayX } from './render/today';
+export { quantizeNow, todayX, CLOCK_INTERVAL } from './render/today';

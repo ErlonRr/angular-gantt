@@ -3,9 +3,10 @@
 //
 //  Per-instance i18n / formatting config. Resolves the effective
 //  locale, UI labels and date/header formats by merging, in order:
-//    DEFAULT_*  ←  provideGanttLib({ ... }) (global)  ←  [options] (instance)
+//    DEFAULT_*  ←  provideGantt({ ... }) (merged along the injector levels)  ←  [options] (instance)
+//  Pure signals: GantryComponent binds its `options` once (`bind()`).
 //  Presentational components inject this; the pure functions in
-//  gantt-math.ts receive `{ locale, labels, formats }` as params.
+//  @gantry/core receive `{ locale, labels, formats }` as params.
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, computed, inject } from '@angular/core';
@@ -18,42 +19,53 @@ import {
   DEFAULT_LABELS,
   DEFAULT_FORMATS,
 } from '../types';
-import { GANTT_GLOBAL_CONFIG } from './gantt-theme.service';
+import { GANTT_GLOBAL_CONFIG } from '../global-config';
+
+type I18nOptions = Pick<GanttOptions, 'locale' | 'labels' | 'formats'>;
 
 @Injectable()
 export class GanttI18nService {
   private readonly globalConfig = inject(GANTT_GLOBAL_CONFIG);
+  private readonly options = signal<(() => I18nOptions) | null>(null);
 
-  private readonly _locale = signal<string | undefined>(undefined);
-  private readonly _labels = signal<Partial<GanttLabels>>({});
-  private readonly _formats = signal<Partial<GanttFormats>>({});
+  // The per-instance overrides, compared by reference: re-assigning `options` with the same
+  // locale / labels / formats objects recomputes nothing downstream
+  private readonly ownLocale = computed(() => this.options()?.().locale);
+  private readonly ownLabels = computed(() => this.options()?.().labels);
+  private readonly ownFormats = computed(() => this.options()?.().formats);
 
   /** Effective BCP 47 locale (undefined → 'en'). */
-  readonly locale = computed<string | undefined>(() => this._locale() ?? this.globalConfig.locale);
+  readonly locale = computed<string | undefined>(() => this.ownLocale() ?? this.globalConfig.locale);
 
   /** Effective, fully-populated UI labels. */
-  readonly labels = computed<GanttLabels>(() => ({
-    ...DEFAULT_LABELS,
-    ...this.globalConfig.labels,
-    ...this._labels(),
-    // nested record — merge instead of replace
-    viewModes: {
-      ...DEFAULT_LABELS.viewModes,
-      ...this.globalConfig.labels?.viewModes,
-      ...this._labels().viewModes,
-    },
-  }));
+  readonly labels = computed<GanttLabels>(() => {
+    const own = this.ownLabels();
+    return {
+      ...DEFAULT_LABELS,
+      ...this.globalConfig.labels,
+      ...own,
+      // nested record — merge instead of replace
+      viewModes: {
+        ...DEFAULT_LABELS.viewModes,
+        ...this.globalConfig.labels?.viewModes,
+        ...own?.viewModes,
+      },
+    };
+  });
 
   /** Effective date / header formats. */
-  readonly formats = computed<GanttFormats>(() => ({
-    ...DEFAULT_FORMATS,
-    ...this.globalConfig.formats,
-    ...this._formats(),
-    header: {
-      ...this.globalConfig.formats?.header,
-      ...this._formats().header,
-    },
-  }));
+  readonly formats = computed<GanttFormats>(() => {
+    const own = this.ownFormats();
+    return {
+      ...DEFAULT_FORMATS,
+      ...this.globalConfig.formats,
+      ...own,
+      header: {
+        ...this.globalConfig.formats?.header,
+        ...own?.header,
+      },
+    };
+  });
 
   /** Convenience bundle for the pure formatters. */
   readonly bundle = computed<GanttI18n>(() => ({
@@ -62,10 +74,8 @@ export class GanttI18nService {
     formats: this.formats(),
   }));
 
-  /** Apply the per-instance overrides coming from `[options]`. */
-  apply(opts: GanttOptions): void {
-    this._locale.set(opts.locale);
-    this._labels.set(opts.labels ?? {});
-    this._formats.set(opts.formats ?? {});
+  /** Bind the chart's `options` (once, from GantryComponent's constructor). */
+  bind(options: () => I18nOptions): void {
+    this.options.set(options);
   }
 }

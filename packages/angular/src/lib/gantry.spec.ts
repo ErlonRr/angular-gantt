@@ -1,12 +1,10 @@
 // Regression tests for the Angular renderer (Gantry 2 phase 1 P0 bugs) and the data source.
-import '../test/dom-shims';
 import { describe, it, expect, vi } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { provideGanttLib } from './module/gantt.module';
-import { TaskType, type GanttOptions, type GanttTask, type SelectionChangeEvent } from './types';
+import { TaskType, type GanttOptions, type GanttTask, type SelectionChangeEvent } from '@gantry/core';
 
 const day = (d: number) => new Date(2026, 0, d);
 const TASKS: GanttTask[] = [
@@ -34,8 +32,8 @@ class Host {
 }
 
 async function mount(setup?: (host: Host) => void): Promise<ComponentFixture<Host>> {
-  // Built-in bars are registered by provideGanttLib() (phase 7 makes them the default)
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideGanttLib()] });
+  // Built-in bars need no provider
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const fixture = TestBed.createComponent(Host);
   setup?.(fixture.componentInstance);
   await fixture.whenStable();
@@ -124,14 +122,12 @@ describe('GantryComponent', () => {
       ]),
     );
     const tooltipOf = async (id: string, name: string) => {
-      const bar = $$(f, '.gantt-bars-layer > g').find(g => g.querySelector(`[data-task-id="${id}"]`));
-      bar?.dispatchEvent(new MouseEvent('pointerenter', { clientX: 10, clientY: 10 }));
+      const bar = $$(f, `.gantt-bars-layer [data-task-id="${id}"]`)[0];
+      bar?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 10, clientY: 10 }));
       await new Promise(r => setTimeout(r, 400));
-      bar?.dispatchEvent(new MouseEvent('pointerleave'));
-      // The title is the first line of the popover
-      const pop = [...document.querySelectorAll<HTMLElement>('.gantt-tooltip-popover')].find(
-        p => p.firstElementChild?.textContent?.trim() === name,
-      );
+      await f.whenStable();
+      // One popover per chart; its title is the first line
+      const pop = $$(f, '.gantt-tooltip').find(p => p.firstElementChild?.textContent?.trim() === name);
       return (pop?.textContent ?? '').replace(/\s+/g, '');
     };
     const a = await tooltipOf('a', 'Design');

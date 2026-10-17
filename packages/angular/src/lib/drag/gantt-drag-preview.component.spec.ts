@@ -1,7 +1,6 @@
 // Drag ghost (Gantry 2 phase 6, step 2.5): the preview paints `computeDragGhostVisual` from
 // @gantry/core and draws exactly what it drew before (rect, dash, opacity, delta label), with
 // its paints as CSS properties; the canvas feeds it the dragged row, the config and the timeline.
-import '../../test/dom-shims';
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
@@ -23,13 +22,6 @@ import {
   type DragPreview,
   type ResolvedGanttConfig,
   type TimelineModel,
-} from '@gantry/core';
-import { GanttDragPreviewComponent } from './gantt-drag-preview.component';
-import { GanttDragService } from './gantt-drag.service';
-import { GantryComponent } from '../gantt-component/gantry.component';
-import { GanttCanvasComponent } from '../layout/gantt-canvas.component';
-import { provideGanttLib } from '../module/gantt.module';
-import {
   DEFAULT_FORMATS,
   DEFAULT_LABELS,
   TaskType,
@@ -37,7 +29,12 @@ import {
   type GanttOptions,
   type GanttTask,
   type RowGeometry,
-} from '../types';
+} from '@gantry/core';
+import { GanttDragPreviewComponent } from './gantt-drag-preview.component';
+import { GanttDragService } from './gantt-drag.service';
+import { GantryComponent } from '../gantt-component/gantry.component';
+import { GanttCanvasComponent } from '../layout/gantt-canvas.component';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
 
 const i18n: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMATS };
 const FONT_PX = themeMetrics(LightTheme).fontPx;
@@ -253,7 +250,7 @@ describe('GanttDragPreviewComponent', () => {
     if (!rect || !text || !host) throw new Error('no ghost');
     expect(getComputedStyle(host).pointerEvents).toBe('none');
     expect(getComputedStyle(text).userSelect).toBe('none');
-    // jsdom resolves an undefined var() to its default font: read the matching component rule
+    // the test DOM resolves an undefined var() to its default font: read the matching component rule
     const fonts = [...document.styleSheets]
       .flatMap(sheet => [...sheet.cssRules])
       .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && text.matches(r.selectorText))
@@ -280,7 +277,7 @@ class ChartHost {
 }
 
 async function mountChart(): Promise<ComponentFixture<ChartHost>> {
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideGanttLib()] });
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const fixture = TestBed.createComponent(ChartHost);
   await fixture.whenStable();
   return fixture;
@@ -289,8 +286,9 @@ async function mountChart(): Promise<ComponentFixture<ChartHost>> {
 /** Starts a drag of `id` by `units` through the chart's drag service and returns its preview. */
 async function dragInChart(f: ComponentFixture<ChartHost>, id: string, units: number) {
   const canvasDe = f.debugElement.query(By.directive(GanttCanvasComponent));
-  const canvas = canvasDe.componentInstance as GanttCanvasComponent;
-  const c: Chart = { cfg: canvas.config(), tl: canvas.timeline(), geos: canvas.allGeometries() };
+  // The canvas paints the chart's layout graph: read the model there
+  const layout = canvasDe.injector.get(GanttLayoutService);
+  const c: Chart = { cfg: layout.cfg(), tl: layout.timeline(), geos: layout.rowGeometries() };
   const p = drag(c, id, 'bar', units);
   const dragSvc = canvasDe.injector.get(GanttDragService);
   dragSvc.state.set({ kind: 'dragging', taskId: id });

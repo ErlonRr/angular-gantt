@@ -14,6 +14,9 @@ import {
   taskDependencies,
   taskDurationLabel,
   findColumn,
+  clampColumnWidth,
+  COLUMN_MIN_WIDTH,
+  COLUMN_MAX_WIDTH,
   DEFAULT_PANEL_COLUMNS,
 } from '../render/columns';
 import { resolveConfig } from '../render/config';
@@ -374,5 +377,21 @@ describe('column model edge cases', () => {
   it('the tooltip and the Duration column agree in inclusive mode', () => {
     const t = task('d', { start: day(0, 5), end: day(0, 5) });
     expect(taskDurationLabel(t, { endDateMode: 'inclusive', normalizeDateOnly: true }, DEFAULT_LABELS)).toBe('1 day');
+  });
+});
+
+describe('clampColumnWidth', () => {
+  it('clamps to the column limits, else 40–800 px, and rounds', () => {
+    expect([COLUMN_MIN_WIDTH, COLUMN_MAX_WIDTH]).toEqual([40, 800]);
+    expect(clampColumnWidth(10, {})).toBe(40);
+    expect(clampColumnWidth(5000, {})).toBe(800);
+    expect(clampColumnWidth(150.6, {})).toBe(151);
+    expect(clampColumnWidth(50, { minWidth: 88 })).toBe(88);
+    expect(clampColumnWidth(500, { maxWidth: 300 })).toBe(300);
+  });
+
+  it('lets minWidth win over a crossing maxWidth', () => {
+    expect(clampColumnWidth(10, { minWidth: 200, maxWidth: 100 })).toBe(200);
+    expect(clampColumnWidth(500, { minWidth: 200, maxWidth: 100 })).toBe(200);
   });
 });

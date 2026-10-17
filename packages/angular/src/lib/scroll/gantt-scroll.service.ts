@@ -16,13 +16,15 @@
 //  The rAF gate prevents the "ping-pong" scroll feedback loop
 //  (panel A sets scrollTop → fires scroll on A → would set B again).
 //
+//  Browser only: GantryComponent registers the panes after the first
+//  render (`afterNextRender`), so nothing here runs on the server. The
+//  window comes from `DOCUMENT` (no globals); listeners, the pending
+//  frame and the settle timeout are released with the chart.
+//
 //  Timeline header is inside the same scroll element as the chart (see GantryComponent).
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, DestroyRef, inject, NgZone } from '@angular/core';
-
-import { dateToPixel, snapToDay } from '../gantt-math';
-import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { Injectable, signal, DestroyRef, inject, DOCUMENT } from '@angular/core';
 
 @Injectable()
 export class GanttScrollService {
@@ -37,69 +39,67 @@ export class GanttScrollService {
   private _panel: HTMLElement | null = null;
   private _canvas: HTMLElement | null = null;
 
-  /** rAF id */
-  private _rafId = 0;
+  /** Pending frame (one per scroll burst) */
+  private _rafId: number | undefined;
 
+  private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly zone = inject(NgZone);
-  private readonly layout = inject(GanttLayoutService);
+
+  constructor() {
+    this.destroyRef.onDestroy(() => {
+      this._cancelFrame();
+      clearTimeout(this._scrollTimeout);
+    });
+  }
 
   // ── Registration ──────────────────────────────────────────
 
   /**
    * Register the left panel element (vertical scroll only).
-   * Call once from GantryComponent.ngAfterViewInit.
+   * Called once by GantryComponent after the first render (browser only).
    */
   registerPanel(el: HTMLElement): void {
     this._panel = el;
-    this._attachPanelListeners();
+    this._listen(el, () => this._onPanelScroll());
   }
 
   /**
    * Register the right canvas wrapper element (vertical + horizontal scroll).
-   * Call once from GantryComponent.ngAfterViewInit.
+   * Called once by GantryComponent after the first render (browser only).
    */
   registerCanvas(el: HTMLElement): void {
     this._canvas = el;
-    this._attachCanvasListeners();
+    this._listen(el, () => this._onCanvasScroll());
   }
 
   // ── Listener setup ────────────────────────────────────────
 
-  private _attachPanelListeners(): void {
-    const el = this._panel!;
-    const handler = () => this._onPanelScroll();
+  /** A passive `scroll` listener, removed when the chart is destroyed */
+  private _listen(el: HTMLElement, handler: () => void): void {
+    el.addEventListener('scroll', handler, { passive: true });
+    this.destroyRef.onDestroy(() => el.removeEventListener('scroll', handler));
+  }
 
-    // Run outside Angular zone — no CD triggered by scroll events
-    this.zone.runOutsideAngular(() => {
-      el.addEventListener('scroll', handler, { passive: true });
-    });
-
-    this.destroyRef.onDestroy(() => {
-      el.removeEventListener('scroll', handler);
-      cancelAnimationFrame(this._rafId);
+  /** Runs `write` on the next frame, replacing a frame still pending (no rAF: right away) */
+  private _frame(write: () => void): void {
+    this._cancelFrame();
+    const win = this.doc.defaultView;
+    if (typeof win?.requestAnimationFrame !== 'function') {
+      write();
+      return;
+    }
+    this._rafId = win.requestAnimationFrame(() => {
+      this._rafId = undefined;
+      write();
     });
   }
 
-  private _attachCanvasListeners(): void {
-    const el = this._canvas!;
-    const handler = () => this._onCanvasScroll();
-
-    this.zone.runOutsideAngular(() => {
-      el.addEventListener('scroll', handler, { passive: true });
-    });
-
-    this.destroyRef.onDestroy(() => {
-      el.removeEventListener('scroll', handler);
-    });
+  private _cancelFrame(): void {
+    if (this._rafId !== undefined) this.doc.defaultView?.cancelAnimationFrame(this._rafId);
+    this._rafId = undefined;
   }
 
   // ── Scroll handlers ───────────────────────────────────────
-
-  /** Right column scroll includes sticky timeline header above the bar SVG. */
-  private _timelineHeaderOffset(): number {
-    return this.layout.totalHeaderHeight();
-  }
 
   private _scrollSource: 'panel' | 'canvas' | null = null;
   private _scrollTimeout?: ReturnType<typeof setTimeout>;
@@ -110,16 +110,12 @@ export class GanttScrollService {
 
     const top = this._panel!.scrollTop;
 
-    this._rafId = requestAnimationFrame(() => {
+    this._frame(() => {
       if (this._canvas && this._canvas.scrollTop !== top) {
         this._canvas.scrollTop = top;
       }
-      this.zone.run(() => this.scrollTop.set(top));
-
-      clearTimeout(this._scrollTimeout);
-      this._scrollTimeout = setTimeout(() => {
-        this._scrollSource = null;
-      }, 60);
+      this.scrollTop.set(top);
+      this._settle();
     });
   }
 
@@ -131,20 +127,22 @@ export class GanttScrollService {
     const top = el.scrollTop;
     const left = el.scrollLeft;
 
-    this._rafId = requestAnimationFrame(() => {
+    this._frame(() => {
       if (this._panel && this._panel.scrollTop !== top) {
         this._panel.scrollTop = top;
       }
-      this.zone.run(() => {
-        this.scrollTop.set(top);
-        this.scrollLeft.set(left);
-      });
-
-      clearTimeout(this._scrollTimeout);
-      this._scrollTimeout = setTimeout(() => {
-        this._scrollSource = null;
-      }, 60);
+      this.scrollTop.set(top);
+      this.scrollLeft.set(left);
+      this._settle();
     });
+  }
+
+  /** The mirrored write's own scroll event is ignored until the source settles */
+  private _settle(): void {
+    clearTimeout(this._scrollTimeout);
+    this._scrollTimeout = setTimeout(() => {
+      this._scrollSource = null;
+    }, 60);
   }
 
   // ── Programmatic scroll ───────────────────────────────────
@@ -152,7 +150,7 @@ export class GanttScrollService {
   /** Scroll the timeline horizontally to `x` (clamped at 0). */
   scrollToX(x: number, behavior: ScrollBehavior = 'smooth'): void {
     if (!this._canvas) return;
-    const b = motionSafe(behavior);
+    const b = this._motionSafe(behavior);
     this._canvas.scrollTo({ left: Math.max(0, x), behavior: b });
     // An instant scroll is applied synchronously: keep the offset current for anchoring
     if (b !== 'smooth') this.scrollLeft.set(this._canvas.scrollLeft);
@@ -164,27 +162,6 @@ export class GanttScrollService {
   }
 
   /**
-   * Scroll the canvas to put `date` in view.
-   * @param date       Target date
-   * @param origin     Timeline start date (from GanttLayoutService)
-   * @param pxPerDay   Pixels per day (from GanttLayoutService)
-   * @param behavior   'smooth' | 'instant' (default: 'smooth')
-   */
-  scrollToDate(date: Date, origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
-    if (!this._canvas) return;
-    const x = dateToPixel(date, origin, pxPerDay);
-    const canvasWidth = this._canvas.clientWidth;
-    // Centre the date in the viewport
-    const target = Math.max(0, x - canvasWidth / 2);
-    this._canvas.scrollTo({ left: target, behavior: motionSafe(behavior) });
-  }
-
-  /** Scroll to today */
-  scrollToToday(origin: Date, pxPerDay: number, behavior: ScrollBehavior = 'smooth'): void {
-    this.scrollToDate(snapToDay(new Date()), origin, pxPerDay, behavior);
-  }
-
-  /**
    * Scroll to a specific row by its visible index.
    * @param rowIndex      visibleIndex of the target row
    * @param rowHeight     row height in px
@@ -192,36 +169,18 @@ export class GanttScrollService {
    */
   scrollToRow(rowIndex: number, rowHeight: number, behavior: ScrollBehavior = 'smooth'): void {
     const y = rowIndex * rowHeight;
-    const b = motionSafe(behavior);
+    const b = this._motionSafe(behavior);
     this._panel?.scrollTo({ top: y, behavior: b });
     this._canvas?.scrollTo({ top: y, behavior: b });
   }
 
-  /** Scroll both panels back to top-left */
-  scrollToOrigin(behavior: ScrollBehavior = 'instant'): void {
-    this._panel?.scrollTo({ top: 0, behavior });
-    this._canvas?.scrollTo({ top: 0, left: 0, behavior });
+  /** `smooth` becomes `instant` when the user prefers reduced motion. */
+  private _motionSafe(behavior: ScrollBehavior): ScrollBehavior {
+    const win = this.doc.defaultView;
+    return behavior === 'smooth' &&
+      typeof win?.matchMedia === 'function' &&
+      win.matchMedia('(prefers-reduced-motion: reduce)').matches
+      ? 'instant'
+      : behavior;
   }
-
-  // ── Query ─────────────────────────────────────────────────
-
-  /** Returns the currently visible row range [firstIdx, lastIdx] */
-  visibleRowRange(rowHeight: number): [number, number] {
-    if (!this._canvas) return [0, 0];
-    const hh = this._timelineHeaderOffset();
-    const top = Math.max(0, this._canvas.scrollTop - hh);
-    const height = Math.max(rowHeight, this._canvas.clientHeight - hh);
-    const first = Math.floor(top / rowHeight);
-    const last = Math.ceil((top + height) / rowHeight);
-    return [first, last];
-  }
-}
-
-/** `smooth` becomes `instant` when the user prefers reduced motion. */
-function motionSafe(behavior: ScrollBehavior): ScrollBehavior {
-  return behavior === 'smooth' &&
-    typeof matchMedia === 'function' &&
-    matchMedia('(prefers-reduced-motion: reduce)').matches
-    ? 'instant'
-    : behavior;
 }

@@ -47,11 +47,8 @@ Renderers (`<gantry-element>` and `<gantry>` behave the same):
   (`F`, `Ctrl+Z`, `Ctrl+Y`) keep their browser default.
 - `selection-change` / `selectionChange` is no longer emitted when clearing an already empty selection.
 - `setState()` drops invalid fields (e.g. `panelWidth: 0`); an explicit `panel.collapsed: false` beats `panelVisible: false`.
-- `@gantry/vanilla` API: `GanttSelectionService` wraps the core reducer — `handleClick(id, event, orderedIds, policy)`,
-  `selectAll(orderedIds, policy)`, `setSelected(readonly ids)`, `selectedIds: ReadonlySet`, new `state`; `selectSingle`,
-  `toggle` and `rangeSelect` are removed. `GanttTooltip.enter(row, event, ctx: GanttTooltipContext)`. The
-  `virtual-scroll` entry no longer has its own `computeVirtualWindow` (use the core one).
-- `ngx-gantry` API: `GanttSelectionService.selectedIds` is `Signal<ReadonlySet<string>>` (new `state`, `apply()`, optional
-  policy on `handleClick()` / `selectAll()`); `GanttTaskListComponent.selectedIds` is a `ReadonlySet`; new
-  `GanttTooltipDirective.tooltipContext` input and `GanttTooltipContext` type; `GanttCanvasComponent` gains `floatDays`
-  and `tasksById` inputs.
+- `@gantry/vanilla`: the element's selection and tooltip internals that implement this are private in 2.0 (see the
+  `wc-engine` changeset); the `virtual-scroll` entry no longer has its own `computeVirtualWindow` (use the core one).
+- `ngx-gantry`: the selection service, task list, tooltip and canvas these changes touched are internal in
+  `ngx-gantry` 2.0 (see its changeset); use `<gantry>`'s `selectionChange`, `getSelectedTasks()` and
+  `setSelectedTasks()`.

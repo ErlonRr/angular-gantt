@@ -22,9 +22,10 @@ through the controls inside it.
   labels change) without adding attributes; a `role` or `aria-label` the page sets on the element still wins. Engines
   without ARIA on `ElementInternals` get `role="region"` and `aria-label` host attributes when the element connects.
 - **The splitter's separator is a child of `.gantry-splitter`.** `role="separator"`, `tabindex="0"` and the new
-  `aria-valuenow` (the panel width in px) moved to `.gantry-splitter-handle`, which covers the splitter box; the collapse
-  toggle is its sibling, no longer nested inside the separator (whose children are presentational). `::part(splitter)` is
-  still the box. Keyboard handling is unchanged.
+  `aria-valuenow` (the panel width in px), `aria-valuemin` (0 when the panel is collapsible, else `panel.minWidth`) and
+  `aria-valuemax` (the widest panel the splitter allows; core `splitterValue()`) moved to `.gantry-splitter-handle`,
+  which covers the splitter box; the collapse toggle is its sibling, no longer nested inside the separator (whose
+  children are presentational). `::part(splitter)` is still the box. Keyboard handling is unchanged.
 - **Live region.** A polite `.gantt-sr-live` (`role="status"`) announces changes of the number of selected tasks
   (`labels.announceSelection`) and the data source's load state (`labels.loading`, then `labels.announceLoaded(n)` or
   `labels.allLoaded(n)`); a failed page is still announced once in `.gantt-sr-alert`.

@@ -31,7 +31,8 @@
           "builder": "@angular/build:unit-test",
           "options": {
             "tsConfig": "packages/angular/tsconfig.spec.json",
-            "runner": "vitest"
+            "runner": "vitest",
+            "setupFiles": ["packages/angular/src/test/dom-shims.ts"]
           }
         }
       }

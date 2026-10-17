@@ -1,15 +1,23 @@
 // Paints (Gantry 2 phase 6, step 0.3): every colour of the Angular painters is a `Paint` from
 // @gantry/core — a theme token (`var(--gantt-*)`) or an explicit task colour — bound as a CSS
 // property, never as a presentation attribute; the theme service writes every token, the
-// bar-label contrast tokens included.
-import '../test/dom-shims';
+// bar-label contrast tokens included. Task-list text colours are stylesheet rules (phase 7 step 1.2);
+// the tooltip lives inside the chart and inherits the tokens (phase 7 step 4.1).
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { LightTheme, readableOn, resolveTheme, themeToCss } from '@gantry/core';
+import {
+  LightTheme,
+  TOOLTIP_SHOW_DELAY,
+  readableOn,
+  resolveTheme,
+  themeToCss,
+  TaskType,
+  type GanttAnnotation,
+  type GanttOptions,
+  type GanttTask,
+} from '@gantry/core';
 import { GantryComponent } from './gantt-component/gantry.component';
-import { provideGanttLib } from './module/gantt.module';
-import { TaskType, type GanttAnnotation, type GanttOptions, type GanttTask } from './types';
 
 const day = (d: number) => new Date(2026, 0, d);
 const TASKS: GanttTask[] = [
@@ -40,7 +48,7 @@ class Host {
 }
 
 async function mount(setup?: (host: Host) => void): Promise<ComponentFixture<Host>> {
-  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection(), provideGanttLib()] });
+  TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const fixture = TestBed.createComponent(Host);
   setup?.(fixture.componentInstance);
   await fixture.whenStable();
@@ -64,7 +72,7 @@ describe('Angular paints', () => {
     const f = await mount();
     const label = bar(f, 'light', '.gantt-bar-label');
     expect(label.getAttribute('class')).toBe('gantt-bar-label');
-    // jsdom normalises the colour; a browser keeps '#0F172A' in the declaration
+    // the test DOM normalises the colour; a browser keeps '#0F172A' in the declaration
     expect(['#0F172A', 'rgb(15, 23, 42)']).toContain(label.style.fill);
     expect(label.hasAttribute('fill')).toBe(false);
     expect(label.hasAttribute('font-family')).toBe(false);
@@ -152,11 +160,23 @@ describe('Angular paints', () => {
     expect(dot.style.backgroundColor).toBe('var(--gantt-status-done, var(--gantt-text-muted))');
   });
 
+  it("takes the task-list text colours from the stylesheet: a task's barColor is the only inline one", async () => {
+    const f = await mount();
+    // Text colours of labels, names, cells and icons are stylesheet rules on the --gantt-* tokens
+    const inline = $$(f, '.gantt-tasklist *')
+      .filter(el => el.style.color !== '')
+      .map(el => `${el.closest('[data-task-id]')?.getAttribute('data-task-id') ?? ''} ${el.className}`);
+    expect(inline).toEqual(['light gantt-tl-icon']);
+    const icon = $(f, '.gantt-tl-row[data-task-id="light"] .gantt-tl-icon');
+    expect(['#FDE68A', 'rgb(253, 230, 138)']).toContain(icon.style.color);
+    expect($(f, '.gantt-tl-row[data-task-id="plain"] .gantt-tl-icon').style.color).toBe('');
+  });
+
   it('draws header borders from core and header bands with their paints', async () => {
     const f = await mount(h =>
       h.options.update(o => ({ ...o, nonWorkingTime: { ...o.nonWorkingTime, showInHeader: true } })),
     );
-    // jsdom expands a `var()` inside the `border-left` shorthand oddly: check the declaration text.
+    // the test DOM expands a `var()` inside the `border-left` shorthand oddly: check the declaration text.
     // Upper tiers are period delimiters (major paint); the first cell has no border.
     const upper = [...$$(f, '.g-tier')[0].querySelectorAll<HTMLElement>('.g-cell')];
     expect(upper.length).toBeGreaterThan(1);
@@ -178,27 +198,32 @@ describe('Angular paints', () => {
     expect(['#8B5CF6', 'rgb(139, 92, 246)']).toContain(strokes.at(-1));
   });
 
-  it('gives the tooltip popover the theme tokens and paints its progress with paint.progress', async () => {
+  it('paints the tooltip with the chart tokens (inherited, not copied) and its progress with paint.progress', async () => {
     const f = await mount();
-    const show = async (id: string) => {
-      const g = $$(f, '.gantt-bars-layer > g').find(el => el.querySelector(`[data-task-id="${id}"]`));
-      g?.dispatchEvent(new MouseEvent('pointerenter', { clientX: 10, clientY: 10 }));
-      await new Promise(r => setTimeout(r, 400));
-      g?.dispatchEvent(new MouseEvent('pointerleave'));
-      const pop = [...document.querySelectorAll<HTMLElement>('.gantt-tooltip-popover')].find(p =>
-        p.firstElementChild?.textContent?.includes(id === 'light' ? 'Light' : 'Plain'),
+    const host = $(f, 'gantry');
+    const show = async (id: string, name: string) => {
+      bar(f, id, '.gantt-bar-body').dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, clientX: 10, clientY: 10 }),
       );
-      if (!pop) throw new Error(`no tooltip for ${id}`);
-      return pop;
+      await new Promise(r => setTimeout(r, TOOLTIP_SHOW_DELAY + 80));
+      await f.whenStable();
+      const tip = $(f, '.gantt-tooltip');
+      expect(tip.querySelector('.gantt-tooltip-title')?.textContent).toBe(name);
+      return tip;
     };
-    const light = await show('light');
-    expect(light.style.getPropertyValue('--gantt-tooltip-bg')).toBe(LightTheme.tooltipBg);
-    expect(light.style.getPropertyValue('--gantt-bar')).toBe(LightTheme.barColor);
-    expect(light.style.background).toBe('var(--gantt-tooltip-bg)');
-    expect(light.style.color).toBe('var(--gantt-tooltip-txt)');
+    const light = await show('light', 'Light');
+    // Inside the chart: the chrome reads the host's tokens through the stylesheet
+    expect(light.closest('gantry')).toBe(host);
+    expect(host.style.getPropertyValue('--gantt-tooltip-bg')).toBe(LightTheme.tooltipBg);
+    expect(light.style.getPropertyValue('--gantt-tooltip-bg')).toBe('');
+    expect(light.style.getPropertyValue('--gantt-bar')).toBe('');
+    expect(light.style.background).toBe('');
+    expect(light.style.color).toBe('');
     const fill = light.querySelector<HTMLElement>('.gantt-tooltip-fill');
-    expect(['#FDE68A', 'rgb(253, 230, 138)']).toContain(fill?.style.background);
-    const plain = await show('plain');
-    expect(plain.querySelector<HTMLElement>('.gantt-tooltip-fill')?.style.background).toBe('var(--gantt-bar)');
+    expect(['#FDE68A', 'rgb(253, 230, 138)']).toContain(fill?.style.backgroundColor);
+    // The same popover shows the next bar
+    const plain = await show('plain', 'Plain');
+    expect(plain).toBe(light);
+    expect(plain.querySelector<HTMLElement>('.gantt-tooltip-fill')?.style.backgroundColor).toBe('var(--gantt-bar)');
   });
 });

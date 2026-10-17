@@ -9,7 +9,6 @@ import { BUILTIN_BAR_HOST, BUILTIN_BAR_STYLES, BUILTIN_BAR_TEMPLATE, GanttBuilti
 
 @Component({
   selector: 'g[ganttMilestone]',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: BUILTIN_BAR_HOST,
   template: BUILTIN_BAR_TEMPLATE,

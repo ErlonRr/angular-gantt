@@ -67,7 +67,6 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
 
 @Component({
   selector: 'app-fixture',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent],
   template: `

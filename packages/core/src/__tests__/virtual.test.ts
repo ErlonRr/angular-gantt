@@ -3,9 +3,16 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { computeVirtualWindow, isIndexMounted, virtualIndexes } from '../render/virtual';
+import { computeVirtualWindow, isIndexMounted, virtualIndexes, VIRTUAL_OVERSCAN_ROWS } from '../render/virtual';
 
 describe('computeVirtualWindow', () => {
+  it('mounts VIRTUAL_OVERSCAN_ROWS (4) rows on each side by default', () => {
+    expect(VIRTUAL_OVERSCAN_ROWS).toBe(4);
+    expect(computeVirtualWindow(400, 40, 200, 100)).toEqual(
+      computeVirtualWindow(400, 40, 200, 100, VIRTUAL_OVERSCAN_ROWS),
+    );
+  });
+
   it('mounts the viewport plus overscan and sizes the spacers', () => {
     // rows 10..15 visible (scrollTop 400 / 40 = 10, (400 + 200) / 40 = 15), overscan 4
     expect(computeVirtualWindow(400, 40, 200, 100, 4)).toEqual({

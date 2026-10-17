@@ -38,8 +38,8 @@ export const SEL = {
   colHeaders: '.gantt-tl-col-headers',
   timelineHeader: '.g-header',
   rowRect: '.gantt-rows rect',
-  panel: '.gantry-panel, .gantt-panel-scroll',
-  viewport: '.gantry-canvas-viewport, .gantt-timeline-scroll',
+  panel: '.gantry-panel',
+  viewport: '.gantry-canvas-viewport',
   main: '.gantry-main',
   toggle: '.gantry-splitter-toggle',
   viewPills: '.gantt-tb-views .gantt-tb-pill',
@@ -94,8 +94,8 @@ export type PaintRecords = Record<string, string>;
  * Computed colours of every element of the chart, keyed by a stable structural path and
  * sorted. The path restarts at "anchor" layers (`bars`, `arrows`, `bands`, `header`…) and at
  * any element with a `data-task-id` (`bars[api]/path.gantt-bar-body`), so a key names the same
- * thing in both bindings wherever their markup agrees. The visible tooltip is collected under
- * `tooltip/…` whether it lives in the chart (Web Component) or in `<body>` (Angular).
+ * thing in both bindings wherever their markup agrees. The visible tooltip (a popover inside the
+ * chart in both bindings) is collected under `tooltip/…`.
  * SVG elements record fill / stroke / opacities; HTML elements and SVG text record color,
  * background, border colours, opacity and font family. Runs CSS animations to their end first.
  */
@@ -188,9 +188,8 @@ export function collectPaints(chart: Chart): Promise<PaintRecords> {
 
     record(host, 'host');
     walk(root, 'host', false);
-    // The open tooltip: in the shadow root (Web Component) or a popover in <body> (Angular)
-    const tips = [...root.querySelectorAll('.gantt-tooltip'), ...document.querySelectorAll('body > .gantt-tooltip')];
-    const tip = tips.find(t => getComputedStyle(t).display !== 'none');
+    // The open tooltip: a popover in the shadow root (Web Component) or in <gantry> (Angular)
+    const tip = [...root.querySelectorAll('.gantt-tooltip')].find(t => getComputedStyle(t).display !== 'none');
     if (tip) {
       record(tip, 'tooltip');
       walk(tip, 'tooltip', true);

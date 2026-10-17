@@ -4,8 +4,13 @@
  *
  *   div.gantt-tasklist.gantry-tasklist-container   role=treegrid (the skeleton's container)
  *     div.gantt-tl-col-headers                     role=row: header cells keyed by column key
+ *       div.gantt-tl-col-header                    span.gantt-tl-ellipsis (label) ·
+ *                                                  span.gantt-tl-sort-icon(--active) · div.gantt-col-resize
  *     div.gantt-tl-rows                            role=rowgroup
  *       div (spacer) · rows keyed by task id · div (spacer)
+ *         div.gantt-tl-cell (name)                 span.gantt-tl-name > button.gantt-collapse-btn |
+ *                                                  span.gantt-tl-indent · span.gantt-tl-icon · span.gantt-tl-ellipsis
+ *         div.gantt-tl-cell (other columns)        span.gantt-tl-status-dot? · span.gantt-tl-ellipsis
  *     div.gantt-tl-load-more                       attached while a data source is set
  *
  * Rows are keyed by task id, so a row keeps its node (and keyboard focus) across scrolls,
@@ -23,22 +28,16 @@
  * / pointerdown on the header row, one click on the footer. Column resizing captures the pointer
  * on the handle (`interaction/column-resize.ts`) and is aborted when the element disconnects.
  *
- * Class names, element order and the class-less inner spans are the paint-snapshot keys and the
- * e2e contract: keep them. Styles shared by every row live in `styles/tasklist.css.ts`; geometry
- * and paints go through the CSSOM.
+ * Class names and element order are the paint-snapshot keys and the e2e contract, shared with
+ * Angular's task list: keep them. Styles and text colours live in `styles/tasklist.css.ts`; what
+ * varies per column or row (grid template, heights, alignment, indent, row and status paints, the
+ * icon colour of a task with `barColor`) goes through the CSSOM.
  */
 
-import {
-  computeCellVisual,
-  rowPaint,
-  themeVar,
-  type ColumnContext,
-  type GanttFlatRow,
-  type GanttLabels,
-} from '@gantry/core';
+import { computeCellVisual, rowPaint, type ColumnContext, type GanttFlatRow, type GanttLabels } from '@gantry/core';
 import { h } from '../dom/h';
 import { createPool, reconcile } from '../dom/keyed';
-import { setAttr, setStyleProp, setText, toggleClass, type StylableElement } from '../dom/patch';
+import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { MountedRow } from '../engine/graph/tasklist';
 import type { GanttLoadMoreState, SortState } from '../engine/inputs';
 import { createColumnResize } from '../interaction/column-resize';
@@ -88,11 +87,6 @@ interface HeadParts {
 }
 
 type FooterKind = 'loading' | 'error' | 'more' | 'done';
-
-/** Sets several inline style properties through the CSSOM. */
-function styles(el: StylableElement, props: Readonly<Record<string, string>>): void {
-  for (const [prop, value] of Object.entries(props)) setStyleProp(el, prop, value);
-}
 
 function justify(align: VanillaColumnDef['align']): string {
   return align === 'center' ? 'center' : align === 'end' ? 'flex-end' : 'flex-start';
@@ -247,8 +241,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
 
   // ── Header cells ─────────────────────────────────────────
   const createHead = (): HTMLElement => {
-    const label = h('span');
-    styles(label, { overflow: 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' });
+    const label = h('span', { class: 'gantt-tl-ellipsis' });
     const el = h('div', { class: 'gantt-tl-col-header', attrs: { role: 'columnheader' } }, label);
     headParts.set(el, { col: null, label, arrow: null, handle: null });
     return el;
@@ -267,10 +260,9 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     setAttr(el, 'tabindex', sortable ? 0 : null);
     setAttr(el, 'data-focus-key', sortable ? `sort:${col.key}` : null);
     if (sortable) {
-      const arrow = (p.arrow ??= h('span', { attrs: { 'aria-hidden': 'true' } }));
-      setStyleProp(arrow, 'font-size', '9px');
+      const arrow = (p.arrow ??= h('span', { class: 'gantt-tl-sort-icon', attrs: { 'aria-hidden': 'true' } }));
       if (arrow.parentNode !== el) p.label.after(arrow);
-      setStyleProp(arrow, 'color', themeVar(dir ? 'textPrimary' : 'textMuted'));
+      toggleClass(arrow, 'gantt-tl-sort-icon--active', dir !== null);
       setText(arrow, dir === 'desc' ? '▼' : dir === 'asc' ? '▲' : '⇅');
     } else p.arrow?.remove();
 
@@ -284,14 +276,10 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   const createCell = (): HTMLElement => h('div', { class: 'gantt-tl-cell', attrs: { role: 'gridcell' } });
 
   const nameParts = (): CellParts => {
-    const pad = h('span');
-    styles(pad, { width: '20px', 'flex-shrink': '0' });
-    const icon = h('span', { attrs: { 'aria-hidden': 'true' } });
-    styles(icon, { 'flex-shrink': '0', 'font-size': '10px' });
-    const text = h('span');
-    styles(text, { overflow: 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' });
-    const wrap = h('span', null, pad, icon, text);
-    styles(wrap, { display: 'flex', 'align-items': 'center', gap: '4px', overflow: 'hidden', width: '100%' });
+    const pad = h('span', { class: 'gantt-tl-indent' });
+    const icon = h('span', { class: 'gantt-tl-icon', attrs: { 'aria-hidden': 'true' } });
+    const text = h('span', { class: 'gantt-tl-ellipsis' });
+    const wrap = h('span', { class: 'gantt-tl-name' }, pad, icon, text);
     return { kind: 'name', wrap, pad, toggle: null, icon, text };
   };
 
@@ -337,10 +325,9 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         setAttr(lead, 'aria-label', row.isCollapsed ? env.labels.ariaExpand(name) : env.labels.ariaCollapse(name));
         setText(lead, row.isCollapsed ? '▶' : '▼');
       }
-      setStyleProp(p.icon, 'color', row.task.barColor ?? themeVar('textMuted'));
+      // The icon takes the task's own colour; the stylesheet gives every other one the muted text
+      setStyleProp(p.icon, 'color', row.task.barColor ?? null);
       setText(p.icon, row.hasChildren ? '▤' : row.barType === 'milestone' ? '◆' : '▬');
-      setStyleProp(p.text, 'font-weight', row.hasChildren ? '600' : '400');
-      setStyleProp(p.text, 'color', themeVar(row.hasChildren ? 'textPrimary' : 'textSecondary'));
       setText(p.text, text);
     } else {
       const v = computeCellVisual(col, row, env.ctx);
@@ -376,6 +363,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     setAttr(el, 'aria-selected', String(isSelected));
     setAttr(el, 'aria-expanded', row.hasChildren ? String(!row.isCollapsed) : null);
     toggleClass(el, 'gantt-tl-row--selected', isSelected);
+    toggleClass(el, 'gantt-tl-row--group', row.hasChildren);
     toggleClass(el, 'gantt-tl-row--pinned', pinnedTop !== null);
     setStyleProp(el, 'top', pinnedTop === null ? null : `${pinnedTop}px`);
     setStyleProp(el, 'grid-template-columns', grid);

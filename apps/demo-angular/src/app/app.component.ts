@@ -4,7 +4,6 @@ import { DemoFrameComponent } from './shell/demo-frame.component';
 
 @Component({
   selector: 'app-root',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DemoSidebarComponent, DemoFrameComponent],
   template: `

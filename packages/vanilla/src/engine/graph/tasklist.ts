@@ -6,7 +6,7 @@
  * option the task list does not show re-runs nothing that reads them.
  */
 
-import { virtualIndexes, type GanttFlatRow } from '@gantry/core';
+import { columnsGridTemplate, virtualIndexes, type GanttFlatRow } from '@gantry/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Columns } from '../../interaction/columns';
 import type { VanillaColumnDef } from '../../types';
@@ -28,8 +28,8 @@ export interface TasklistGraph {
   /** Columns the task list shows in the current view (split panel or table view) */
   readonly tlColumns: ReadonlySignal<VanillaColumnDef[]>;
   /**
-   * `grid-template-columns` of the header row and of every row: one column grows to fill a
-   * panel wider than the columns, the `flex` one, else the last
+   * `grid-template-columns` of the header row and of every row (core `columnsGridTemplate`): one
+   * column grows to fill a panel wider than the columns, the `flex` one, else the last
    */
   readonly tlGridTemplate: ReadonlySignal<string>;
   /** Mounted rows in DOM order: pinned rows before the window, the window, pinned rows after it */
@@ -41,16 +41,9 @@ const sameItems = <T>(a: readonly T[], b: readonly T[]) => a.length === b.length
 const sameRows = (a: readonly MountedRow[], b: readonly MountedRow[]) =>
   a.length === b.length && a.every((m, i) => m.row === b[i]?.row && m.pinnedTop === b[i]?.pinnedTop);
 
-/** `grid-template-columns` for `cols` (see `TasklistGraph.tlGridTemplate`). */
-export function gridTemplate(cols: readonly VanillaColumnDef[]): string {
-  const flex = cols.findIndex(c => c.flex);
-  const grow = flex >= 0 ? flex : cols.length - 1;
-  return cols.map((c, i) => (i === grow ? `minmax(${c.width}px, 1fr)` : `${c.width}px`)).join(' ');
-}
-
 export function tasklistGraph(I: Inputs, g: CoreGraph, columns: Columns, node: NodeFactory): TasklistGraph {
   const tlColumns = node('tlColumns', () => columns.columnsFor(I.viewOverride(), g.config()), { equals: sameItems });
-  const tlGridTemplate = node('tlGridTemplate', () => gridTemplate(tlColumns()));
+  const tlGridTemplate = node('tlGridTemplate', () => columnsGridTemplate(tlColumns()));
   const tlRows = node(
     'tlRows',
     (): MountedRow[] => {

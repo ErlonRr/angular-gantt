@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { GanttTheme, GanttThemeOverrides } from '../types';
-import { readableOn } from './contrast';
+import { readableOn, readableOnTint } from './contrast';
 
 export const LightTheme: Readonly<Required<GanttTheme>> = {
   backgroundColor: '#FFFFFF',
@@ -46,6 +46,7 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   statusInProgress: '#2563EB',
   statusOverdue: '#DC2626',
   statusDone: '#15803D',
+  progressOverlay: '#000000',
 };
 
 export const DarkTheme: Readonly<Required<GanttTheme>> = {
@@ -86,6 +87,7 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   statusInProgress: '#60A5FA',
   statusOverdue: '#F87171',
   statusDone: '#4ADE80',
+  progressOverlay: '#000000',
 };
 
 /**
@@ -160,6 +162,7 @@ export const THEME_CSS_VARS: ReadonlyArray<readonly [keyof GanttTheme, string]> 
   ['statusInProgress', '--gantt-status-in-progress'],
   ['statusOverdue', '--gantt-status-overdue'],
   ['statusDone', '--gantt-status-done'],
+  ['progressOverlay', '--gantt-progress-overlay'],
 ];
 
 /** Parse a CSS length like `'4px'` / `'6'` to px (fallback when not numeric). */
@@ -172,18 +175,37 @@ export function cssPx(value: string | number | undefined, fallback: number): num
 // ─── CSS custom properties, contrast tokens and metrics ──────
 
 /**
- * Derived tokens: the bar-label colour readable on each bar fill (`readableOn(fill, barTextColor)`).
- * Painters reference them through `var()`, so a bar visual never depends on theme colours.
+ * Derived tokens: the bar-label colour readable on each bar fill (`readableOn(fill, barTextColor)`)
+ * and the current-period header label colour readable on its today tint ({@link todayLabelColor}).
+ * Painters reference them through `var()`, so a visual never depends on theme colours.
  */
 export const CONTRAST_CSS_VARS = {
   bar: '--gantt-bar-text-on-bar',
   milestone: '--gantt-bar-text-on-milestone',
   critical: '--gantt-bar-text-on-critical',
+  todayLabel: '--gantt-today-label',
 } as const;
 
 /**
+ * Share of `todayColor` in the tint of the current-period header cell: both header stylesheets
+ * paint it as `color-mix(in srgb, var(--gantt-today) 14%, transparent)` over the header background.
+ */
+const TODAY_TINT_ALPHA = 0.14;
+
+/**
+ * Colour of the current-period header label (`--gantt-today-label`): `todayColor` when it reaches
+ * 4.5:1 on the 14 % today tint over `headerBackground`, else `todayColor` mixed towards
+ * `textPrimary` in 10 % steps until it does (`readableOnTint`). Light theme: `#B45309` (3.97:1)
+ * → `#964B13` (5.01:1); dark theme: `#FBBF24` (6.47:1) is kept.
+ */
+export function todayLabelColor(theme: Pick<GanttTheme, 'todayColor' | 'headerBackground' | 'textPrimary'>): string {
+  return readableOnTint(theme.todayColor, theme.headerBackground, TODAY_TINT_ALPHA, theme.textPrimary);
+}
+
+/**
  * Every CSS custom property of a resolved theme: the `THEME_CSS_VARS` tokens in order, then the
- * three contrast tokens (`CONTRAST_CSS_VARS`). Both bindings write exactly these.
+ * four derived contrast tokens (`CONTRAST_CSS_VARS`: bar, milestone, critical, today label).
+ * Both bindings write exactly these.
  */
 export function themeToCss(theme: Required<GanttTheme>): ReadonlyArray<readonly [cssVar: string, value: string]> {
   const out: (readonly [string, string])[] = THEME_CSS_VARS.map(([key, cssVar]) => [cssVar, theme[key]] as const);
@@ -191,6 +213,7 @@ export function themeToCss(theme: Required<GanttTheme>): ReadonlyArray<readonly 
     [CONTRAST_CSS_VARS.bar, readableOn(theme.barColor, theme.barTextColor)],
     [CONTRAST_CSS_VARS.milestone, readableOn(theme.milestoneColor, theme.barTextColor)],
     [CONTRAST_CSS_VARS.critical, readableOn(theme.criticalColor, theme.barTextColor)],
+    [CONTRAST_CSS_VARS.todayLabel, todayLabelColor(theme)],
   );
   return out;
 }

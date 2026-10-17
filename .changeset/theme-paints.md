@@ -92,9 +92,7 @@ reading `TooltipModel.colors` migrates as described in the `@gantry/core` sectio
   `--gantt-*` tokens.
 - The theme service also writes the contrast tokens (`themeToCss`).
 - Header cell borders come from core (`headerCellBorder`).
-- The canvas reads the theme (label font, custom bars' `ctx.theme`, tooltip tokens) from
-  `GanttThemeService`, falling back to `LightTheme` when used outside `<gantry>`; the
-  `resolveConfig` call site passes the theme metrics, so a colour-only theme change re-renders no
-  geometry. `GanttAnnotationComponent` uses the shared paints (no visual change).
-- Deprecated and ignored: the `theme` inputs of `GanttTaskListComponent`, `GanttLoadMoreComponent`
-  and `GanttDragPreviewComponent` (they are painted with the chart's `--gantt-*` tokens).
+- The chart's resolved theme reaches custom bars as `ctx.theme`; the `resolveConfig` call site
+  passes the theme metrics, so a colour-only theme change re-renders no geometry.
+- The task list, load-more footer and drag preview are painted with the chart's `--gantt-*` tokens
+  (their `theme` inputs are gone in `ngx-gantry` 2.0, where these components are internal).

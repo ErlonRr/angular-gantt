@@ -9,7 +9,7 @@ import { resolveLength } from './config';
 import { taskSpan } from './timeline';
 import { readableOn } from './contrast';
 import { CONTRAST_CSS_VARS } from './theme';
-import { themeVar, type Paint } from './paint';
+import { PAINTS, themeVar, type Paint } from './paint';
 
 /** Pointer distance (px) from a bar edge that resizes instead of moving. */
 export const RESIZE_HANDLE_PX = 8;
@@ -179,7 +179,8 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
         ? cfg.bar.progress.show && cfg.groupBar.showProgress
         : false;
   const pct = Math.min(Math.max(task.progress ?? 0, 0), 100);
-  const progressPaint: Paint = task.progressColor ?? cfg.bar.progress.color ?? '#000000';
+  // Theme bars darken with the progress-overlay token (at `bar.progress.opacity`)
+  const progressPaint: Paint = task.progressColor ?? cfg.bar.progress.color ?? PAINTS.progressOverlay;
   if (showProgress && pct > 0) {
     const pw = (width * pct) / 100;
     progress = {

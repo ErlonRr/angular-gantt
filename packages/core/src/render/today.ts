@@ -11,6 +11,12 @@ import { calendarDays } from '../gantt-math';
 import type { TimelineModel } from './timeline';
 
 /**
+ * How often (ms) a chart reads the clock: the today line follows every tick, the timeline is
+ * rebuilt only when `quantizeNow` changes.
+ */
+export const CLOCK_INTERVAL = 60_000;
+
+/**
  * A stand-in for `now` that stays the same for the whole local day, or the whole local hour
  * when `unit` is `'hour'` (pass the finest scale unit). Build the timeline from it and place
  * the today line with `todayX(timeline, now)`: the timeline then changes only when the day or

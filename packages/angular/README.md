@@ -11,36 +11,32 @@
 npm i ngx-gantry
 ```
 
-Peer dependencies: `@angular/core` and `@angular/common` `>= 20.2`.
+Peer dependencies: `@angular/core` and `@angular/common` `^22.0.0`.
 
 ## Quick start (standalone)
 
 ```ts
-// main.ts
-import { bootstrapApplication } from '@angular/platform-browser';
-import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGanttLib } from 'ngx-gantry';
-import { AppComponent } from './app/app.component';
-
-bootstrapApplication(AppComponent, {
-  providers: [provideZonelessChangeDetection(), provideGanttLib({ darkMode: 'auto' })],
-});
-```
-
-```ts
 // app.component.ts
-import { Component } from '@angular/core';
-import { GantryComponent, GanttTask } from 'ngx-gantry';
+import { Component, signal } from '@angular/core';
+import { GantryComponent, ViewMode, type GanttTask } from 'ngx-gantry';
 
 @Component({
   selector: 'app-root',
   imports: [GantryComponent],
   template: `
-    <gantry [series]="tasks" [options]="{ viewMode: 'Month', rowHeight: 36, baseline: true }" [showLegend]="true" />
+    <gantry
+      style="height: 480px"
+      [series]="tasks"
+      [options]="{ rowHeight: 36, baseline: true }"
+      [(viewMode)]="zoom"
+      showLegend
+    />
   `,
 })
 export class AppComponent {
-  tasks: GanttTask[] = [
+  readonly zoom = signal<string | undefined>(ViewMode.Month);
+
+  readonly tasks: GanttTask[] = [
     { id: '1', name: 'Discovery', start: new Date('2026-01-05'), end: new Date('2026-01-31'), progress: 100 },
     {
       id: '2',
@@ -54,18 +50,38 @@ export class AppComponent {
 }
 ```
 
+No provider is needed. `provideGantt()` optionally sets defaults (theme, dark mode, locale, labels,
+formats, custom bars) for every chart below the application, route or component it is provided in:
+
+```ts
+// main.ts
+import { bootstrapApplication } from '@angular/platform-browser';
+import { provideZonelessChangeDetection } from '@angular/core';
+import { provideGantt } from 'ngx-gantry';
+import { AppComponent } from './app/app.component';
+
+bootstrapApplication(AppComponent, {
+  providers: [provideZonelessChangeDetection(), provideGantt({ darkMode: 'auto', locale: 'it' })],
+});
+```
+
 ## Features
 
 - Groups, milestones, collapse/expand, per-row styling
 - Dependencies (`FS` / `FF` / `SS` / `SF` + lag) and full **critical path**
-- Baselines, progress, native-Popover tooltips
+- Baselines, progress, one native-popover tooltip per chart
 - Drag & resize via Pointer Events (per-task opt-out)
 - Selection: single / Ctrl-click / Shift-range / keyboard
-- Custom bars (`provideGanttBar`) and custom panel columns (`<ng-template ganttColumn>`)
+- Custom bars (`GanttBarBase` + `provideGanttBar` at application, route or component level) and
+  custom panel columns (`<ng-template ganttColumn>`)
 - Lazy loading (`GanttDataSource`: paging, automatic retries, error state with Retry, `loadError` output)
-- Views: Day / Week / Month / Quarter / Year with zoom
+- Views: Hour / Day / Week / Month / Quarter / Year with zoom, two-way `[(viewMode)]`
+- Rows windowed vertically, header cells, bands and grid lines horizontally
 - Annotations, today marker, optional legend
 - Light / dark / auto theming via CSS custom properties
+- Accessible: a `region` landmark with internal tab stops, `treegrid` task list, live regions,
+  WCAG 2.2 AA palette
+- SSR-safe: no browser globals, browser work starts after the first render
 - **i18n** — localisable UI strings + any BCP 47 `locale` (via `Intl`) + custom date/header formats
 
 ## i18n
@@ -76,8 +92,23 @@ export class AppComponent {
 
 ## Documentation & source
 
-Full docs, demos and issues:
-**https://github.com/ErlonRr/angular-gantt**
+Every option is documented once, for every binding, in the
+[Configuration](https://github.com/ErlonRr/angular-gantt#configuration) section of the main README.
+The Angular API:
+
+- [Quick start](https://github.com/ErlonRr/angular-gantt#quick-start-standalone) and
+  [providers & setup](https://github.com/ErlonRr/angular-gantt#providers--setup)
+- [Custom bars](https://github.com/ErlonRr/angular-gantt#custom-bar-component) and
+  [custom columns](https://github.com/ErlonRr/angular-gantt#custom-columns-left-panel)
+- [Lazy loading](https://github.com/ErlonRr/angular-gantt#lazy-load-with-ganttdatasource)
+- [Inputs & Outputs](https://github.com/ErlonRr/angular-gantt#inputs--outputs) and the
+  [public API](https://github.com/ErlonRr/angular-gantt#public-api)
+- [Theming](https://github.com/ErlonRr/angular-gantt#theming-1),
+  [keyboard and focus](https://github.com/ErlonRr/angular-gantt#keyboard-and-focus) and
+  [server-side rendering](https://github.com/ErlonRr/angular-gantt#server-side-rendering)
+- [Upgrading from 1.x](https://github.com/ErlonRr/angular-gantt#upgrading-from-1x)
+
+Demos and issues: **https://github.com/ErlonRr/angular-gantt**
 
 ## License
 

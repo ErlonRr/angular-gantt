@@ -1,8 +1,9 @@
 // Computed-colour snapshots: every colour path of the chart (bars, labels, arrows, rows, bands,
 // grid, today, annotations, header, task list, status dots, legend, tooltip), per binding and
 // scenario, as sorted JSON. Exact (no tolerance) and font-independent, so it runs in local
-// Chromium; it proves that painter refactors keep every pixel colour. The last test checks that
-// the Web Component and Angular paint the canvas the same, up to the differences in KNOWN_DIFFS.
+// Chromium; it proves that painter refactors keep every pixel colour. The last tests check that
+// the Web Component and Angular paint the canvas, the header, the task list, the toolbar, the
+// legend and the tooltip the same, up to the differences in KNOWN_DIFFS.
 import { test, expect, collectPaints, type Chart, type PaintRecords } from './fixtures';
 import { TARGETS } from '../playwright.config';
 import { SCENARIOS, paintFixture, type PaintFixture, type Scenario } from './paint-fixture';
@@ -86,24 +87,84 @@ for (const target of TARGET_LIST) {
   });
 }
 
-/** Canvas layers compared between the bindings. */
-const CANVAS = /^(bars\[|arrows|rows|bands|grid|today|annotations|annotation-labels)/;
+/** Chrome compared between the bindings in every parity scenario: task list, toolbar, legend. */
+const CHROME = /^(tl-head|tl-rows|toolbar|legend)/;
+/** The timeline: canvas layers and the header (both bindings window the header, bands and grid alike). */
+const TIMELINE = /^(bars\[|arrows|rows|bands|grid|today|annotations|annotation-labels|header)/;
+/** The timeline and the chrome compared between the bindings. */
+const COMPARED = new RegExp(`${TIMELINE.source}|${CHROME.source}`);
+/** The open tooltip (one popover inside the chart, same markup in both bindings since Phase 7 step 4.1) */
+const TOOLTIP = /^tooltip(\/|$)/;
 
 /**
- * Differences between the Web Component and Angular canvas that exist at HEAD 1cedb3f.
+ * Parity scenarios and the records they compare. The table view has no canvas: only its chrome.
+ * The hour scenario mounts only part of its header, bands and grid lines (horizontal windowing,
+ * Phase 7 step 3.1): both bindings must mount the same ones and paint them the same. The tooltip
+ * scenario adds the open tooltip's title and `<dl>` rows.
+ */
+const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
+  { scenario: 'light-week', keys: COMPARED },
+  { scenario: 'dark-week', keys: COMPARED },
+  { scenario: 'selected', keys: COMPARED },
+  { scenario: 'table', keys: CHROME },
+  { scenario: 'hour', keys: TIMELINE },
+  { scenario: 'tooltip', keys: new RegExp(`${COMPARED.source}|${TOOLTIP.source}`) },
+];
+
+/**
+ * Differences between the Web Component and Angular in the compared records.
  * Recorded, not fixed: each entry matches keys whose colours (or presence) differ.
- * Empty: at 1cedb3f the canvas records of both bindings are identical in every compared scenario
- * (the task-list chrome does differ, but it is outside this comparison).
+ * Empty since Phase 7 step 1.2 (base 084be6a): the canvas, task-list, toolbar and legend records of
+ * both bindings are identical in every parity scenario (step 1.2 unified the task-list markup and
+ * colours and the toolbar slot's first class); the header and the hour scenario since step 3.1
+ * (Angular windows the header, bands and grid lines and paints the current-period label with
+ * `--gantt-today-label`); the tooltip since step 4.1 (Angular's popover moved into the chart with the
+ * Web Component's markup).
  */
 const KNOWN_DIFFS: readonly { key: RegExp; why: string }[] = [];
 
-for (const scenario of ['light-week', 'dark-week', 'selected'] as const) {
-  test(`vanilla and Angular paint the same canvas colours · ${scenario}`, async ({ chart }) => {
+/**
+ * Elements one binding keeps in the DOM without rendering them while the other leaves them out.
+ * Their key may be missing from the other binding, but only while the element is not rendered
+ * (`checkVisibility()` false): it paints no pixel, so there is no colour to compare. A rendered
+ * element present in one binding only is a difference like any other.
+ */
+const UNRENDERED_IN_ONE: readonly { key: RegExp; selector: string; why: string }[] = [
+  {
+    key: /^toolbar\/div\.gantt-tb-slot$/,
+    selector: '.gantt-tb-slot',
+    why: "Angular's toolbar group for `[ganttToolbar]` content, `display: none` while empty; the Web Component has no toolbar slot",
+  },
+  {
+    key: /^legend$/,
+    selector: '.gantt-legend',
+    why: 'the Web Component keeps its legend container, `hidden` in the table view; Angular removes it there',
+  },
+];
+
+/** For each `UNRENDERED_IN_ONE` entry: whether one of its elements is rendered in the chart on the page. */
+function renderedOneSided(chart: Chart): Promise<boolean[]> {
+  return chart.evalRoot(
+    (root, selectors: string[]) => selectors.map(s => [...root.querySelectorAll(s)].some(e => e.checkVisibility())),
+    UNRENDERED_IN_ONE.map(d => d.selector),
+  );
+}
+
+for (const { scenario, keys: compare } of PARITY) {
+  test(`vanilla and Angular paint the same colours · ${scenario}`, async ({ chart }) => {
     const vanilla = await paints(chart, 'vanilla', scenario);
+    const vanillaRendered = await renderedOneSided(chart);
     const angular = await paints(chart, 'angular', scenario);
-    const canvas = (r: PaintRecords) => Object.keys(r).filter(k => CANVAS.test(k));
-    const keys = new Set([...canvas(vanilla), ...canvas(angular)]);
+    const angularRendered = await renderedOneSided(chart);
+    const pick = (r: PaintRecords) => Object.keys(r).filter(k => compare.test(k));
+    const keys = new Set([...pick(vanilla), ...pick(angular)]);
     const known = (k: string) => KNOWN_DIFFS.some(d => d.key.test(k));
+    /** Present in one binding only, and that binding does not render it. */
+    const unrendered = (k: string, a: string | undefined, b: string | undefined) => {
+      const i = UNRENDERED_IN_ONE.findIndex(d => d.key.test(k));
+      if (i < 0 || (a === undefined) === (b === undefined)) return false;
+      return a !== undefined ? !vanillaRendered[i] : !angularRendered[i];
+    };
 
     const diffs: string[] = [];
     let compared = 0;
@@ -111,10 +172,10 @@ for (const scenario of ['light-week', 'dark-week', 'selected'] as const) {
       const a = vanilla[k],
         b = angular[k];
       if (a !== undefined && b !== undefined) compared++;
-      if (a === b || known(k)) continue;
+      if (a === b || known(k) || unrendered(k, a, b)) continue;
       diffs.push(`${k}\n  vanilla: ${a ?? '(missing)'}\n  angular: ${b ?? '(missing)'}`);
     }
-    expect(compared, 'canvas records present in both bindings').toBeGreaterThan(50);
-    expect(diffs, 'canvas colours that differ (add a HEAD difference to KNOWN_DIFFS)').toEqual([]);
+    expect(compared, 'records present in both bindings').toBeGreaterThan(50);
+    expect(diffs, 'colours that differ (add a HEAD difference to KNOWN_DIFFS)').toEqual([]);
   });
 }

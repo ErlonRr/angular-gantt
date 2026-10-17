@@ -4,9 +4,14 @@
 //  Renders a "Load more" trigger at the bottom of the task list.
 //  Uses IntersectionObserver to auto-trigger when visible
 //  (infinite scroll mode), or shows a button (manual mode).
+//  The observer is browser only: created after the first render
+//  (never on the server) and disconnected with the component.
 //
-//  Placed inside the [tlFooter] slot of GanttTaskListComponent.
+//  Placed by GantryComponent in the panel, below the task list (before the
+//  consumer's [tlFooter] content).
 //  Colours and fonts are stylesheet rules on the chart's `--gantt-*` tokens.
+//  It holds no live region: the chart announces the load state in its
+//  `.gantt-sr-live` and a failed page in its `.gantt-sr-alert`.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -15,18 +20,17 @@ import {
   input,
   output,
   ElementRef,
-  type OnInit,
-  type OnDestroy,
+  DestroyRef,
+  DOCUMENT,
   inject,
+  afterNextRender,
   afterRenderEffect,
 } from '@angular/core';
 
-import { type GanttTheme } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
   selector: 'gantt-load-more',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'gantt-tl-load-more',
@@ -35,58 +39,62 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     '(focusin)': 'hasFocus = true',
     '(focusout)': 'onFocusOut($event)',
     '[attr.aria-busy]': 'isLoading() || null',
-    '[style.display]': '"block"',
-    '[style.padding]': '"8px 12px"',
   },
   template: `
     @if (isLoading()) {
       <!-- Loading spinner -->
-      <div class="gantt-load-status" [style.display]="'flex'" [style.align-items]="'center'" [style.gap]="'8px'">
+      <div class="gantt-load-status">
         <div class="gantt-spinner"></div>
         <span>{{ labels().loading }}</span>
       </div>
     } @else if (error()) {
-      <!-- Failed page: message + retry -->
-      <div
-        role="alert"
-        class="gantt-load-error"
-        [style.display]="'flex'"
-        [style.align-items]="'center'"
-        [style.justify-content]="'center'"
-        [style.gap]="'8px'"
-      >
+      <!-- Failed page: message + retry (announced by the chart's .gantt-sr-alert) -->
+      <div class="gantt-load-error">
         <span>{{ labels().loadError }}</span>
-        <button type="button" class="gantt-load-more-btn" [style.padding]="'3px 10px'" (click)="retry.emit()">
+        <button type="button" class="gantt-load-more-btn" (click)="retry.emit()">
           {{ labels().retry }}
         </button>
       </div>
     } @else if (hasMore()) {
       @if (autoLoad()) {
         <!-- Invisible sentinel — IntersectionObserver triggers load -->
-        <div #sentinel style="height:1px;visibility:hidden"></div>
+        <div #sentinel class="gantt-load-sentinel"></div>
       } @else {
         <!-- Manual load button -->
-        <button
-          class="gantt-load-more-btn"
-          [style.width]="'100%'"
-          [style.padding]="'6px 12px'"
-          (click)="loadMore.emit()"
-        >
+        <button class="gantt-load-more-btn" (click)="loadMore.emit()">
           ↓ {{ labels().loadMore }} ({{ loadedCount() }} / {{ totalCount() > 0 ? totalCount() : '?' }})
         </button>
       }
     } @else {
       <!-- All loaded -->
-      <div class="gantt-load-done" [style.text-align]="'center'" [style.font-size]="'11px'" [style.padding]="'4px 0'">
-        ✓ {{ labels().allLoaded(loadedCount()) }}
-      </div>
+      <div class="gantt-load-done">✓ {{ labels().allLoaded(loadedCount()) }}</div>
     }
   `,
   styles: [
     `
       :host {
+        display: block;
+        padding: 8px 12px;
         border-top: 1px solid var(--gantt-border);
         background-color: var(--gantt-panel-bg);
+      }
+      .gantt-load-status,
+      .gantt-load-error {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .gantt-load-error {
+        justify-content: center;
+      }
+      .gantt-load-done {
+        text-align: center;
+        font-size: 11px;
+        padding: 4px 0;
+      }
+      .gantt-load-sentinel {
+        height: 1px;
+        visibility: hidden;
       }
       .gantt-load-status,
       .gantt-load-done {
@@ -110,6 +118,14 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         font-family: var(--gantt-font);
         cursor: pointer;
       }
+      /* Manual "Load more" (full width) and the error row's Retry */
+      :host > .gantt-load-more-btn {
+        width: 100%;
+        padding: 6px 12px;
+      }
+      .gantt-load-error > .gantt-load-more-btn {
+        padding: 3px 10px;
+      }
       @keyframes gantt-spin {
         to {
           transform: rotate(360deg);
@@ -127,12 +143,19 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       .gantt-load-more-btn:hover {
         background: var(--gantt-row-bg-alt, #f8fafc) !important;
       }
+      /* Keyboard focus only: an inset ring on the footer (the panel clips), an outer one on its buttons */
+      :host(:focus-visible) {
+        outline: 2px solid var(--gantt-sel-border);
+        outline-offset: -2px;
+      }
+      .gantt-load-more-btn:focus-visible {
+        outline: 2px solid var(--gantt-sel-border);
+        outline-offset: 1px;
+      }
     `,
   ],
 })
-export class GanttLoadMoreComponent implements OnInit, OnDestroy {
-  /** @deprecated Ignored: the footer is painted with the chart's `--gantt-*` tokens. */
-  readonly theme = input<GanttTheme | undefined>(undefined);
+export class GanttLoadMoreComponent {
   readonly isLoading = input<boolean>(false);
   readonly hasMore = input<boolean>(false);
   /** The last page failed: show the error and a Retry button (no auto-load) */
@@ -147,7 +170,8 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
 
   protected readonly labels = inject(GanttI18nService).labels;
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef);
-  private _observer?: IntersectionObserver;
+  private readonly doc = inject(DOCUMENT);
+  private readonly destroyRef = inject(DestroyRef);
   /** Focus is inside the footer (kept while its focused button is swapped out) */
   protected hasFocus = false;
 
@@ -158,8 +182,12 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
       this.error();
       this.hasMore();
       const host = this.el.nativeElement;
-      if (!this.hasFocus || host.contains(document.activeElement)) return;
+      if (!this.hasFocus || host.contains(this.doc.activeElement)) return;
       (host.querySelector('button') ?? host).focus({ preventScroll: true });
+    });
+    // Infinite scroll: observe the footer once it is in the page (browser only)
+    afterNextRender(() => {
+      if (this.autoLoad()) this.observe();
     });
   }
 
@@ -169,18 +197,10 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
     if (next && !this.el.nativeElement.contains(next)) this.hasFocus = false;
   }
 
-  ngOnInit(): void {
-    if (this.autoLoad()) {
-      this._setupObserver();
-    }
-  }
-
-  ngOnDestroy(): void {
-    this._observer?.disconnect();
-  }
-
-  private _setupObserver(): void {
-    this._observer = new IntersectionObserver(
+  private observe(): void {
+    const win = this.doc.defaultView;
+    if (typeof win?.IntersectionObserver !== 'function') return;
+    const observer = new win.IntersectionObserver(
       entries => {
         for (const entry of entries) {
           // Never before the first page: `initialPage: 0` waits for an explicit loadNext()
@@ -191,8 +211,8 @@ export class GanttLoadMoreComponent implements OnInit, OnDestroy {
       },
       { threshold: 0.1 },
     );
-
     // Observe the host element itself
-    this._observer.observe(this.el.nativeElement);
+    observer.observe(this.el.nativeElement);
+    this.destroyRef.onDestroy(() => observer.disconnect());
   }
 }

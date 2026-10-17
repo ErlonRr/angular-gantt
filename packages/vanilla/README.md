@@ -133,7 +133,8 @@ first control inside). The tab stops, in order:
    while it is mounted, else the first row in view; the others have `tabindex="-1"`). A focused row
    stays mounted while it is scrolled out of view, so focus survives scrolling;
 3. the splitter (`.gantry-splitter-handle`, `role="separator"`, `aria-valuenow` = panel width in
-   px), then its collapse toggle;
+   px, `aria-valuemin` = 0 when the panel is collapsible else `panel.minWidth`, `aria-valuemax` =
+   the widest panel it allows), then its collapse toggle;
 4. the timeline viewport (`role="group"`, named by `labels.ariaChart`); arrow keys scroll it.
 
 Every tab stop shows a focus ring in `--gantt-sel-border` on keyboard focus. When the focused
@@ -169,9 +170,13 @@ gantry-element {
 ```
 
 - Bar labels on theme fills use the contrast tokens `--gantt-bar-text-on-bar`,
-  `--gantt-bar-text-on-milestone` and `--gantt-bar-text-on-critical`. `setTheme()` recomputes
-  them; when you override `--gantt-bar`, `--gantt-milestone` or `--gantt-critical` in CSS, set the
-  matching token too.
+  `--gantt-bar-text-on-milestone` and `--gantt-bar-text-on-critical`, and the current-period
+  header label uses `--gantt-today-label` (`todayColor`, darkened or lightened towards
+  `textPrimary` until it reads 4.5:1 on its 14 % today tint). `setTheme()` recomputes them; when
+  you override `--gantt-bar`, `--gantt-milestone`, `--gantt-critical` or `--gantt-today` in CSS,
+  set the matching token too.
+- Progress parts of theme-coloured bars use `--gantt-progress-overlay` (`progressOverlay`,
+  `#000000`) at `bar.progress.opacity`; `task.progressColor` and `bar.progress.color` win.
 - `barRadius`, `fontSize` and `barTextColor` change the layout: set them with `setTheme()` /
   `options.theme`, not page CSS. With `darkMode: 'auto'` the chart re-renders when the OS colour
   scheme flips.
@@ -184,26 +189,27 @@ gantry-element {
 
 | Variable                  | Theme key          |     | Variable                        | Theme key                        |
 | ------------------------- | ------------------ | --- | ------------------------------- | -------------------------------- |
-| `--gantt-bg`              | `backgroundColor`  |     | `--gantt-font-size`             | `fontSize`                       |
-| `--gantt-header-bg`       | `headerBackground` |     | `--gantt-arrow`                 | `arrowColor`                     |
-| `--gantt-row-bg`          | `rowBg`            |     | `--gantt-tooltip-bg`            | `tooltipBg`                      |
-| `--gantt-row-bg-alt`      | `rowBgAlt`         |     | `--gantt-tooltip-bdr`           | `tooltipBorder`                  |
-| `--gantt-bar`             | `barColor`         |     | `--gantt-tooltip-txt`           | `tooltipText`                    |
-| `--gantt-bar-text`        | `barTextColor`     |     | `--gantt-sel-bg`                | `selectionBg`                    |
-| `--gantt-bar-radius`      | `barRadius`        |     | `--gantt-sel-border`            | `selectionBorder`                |
-| `--gantt-milestone`       | `milestoneColor`   |     | `--gantt-scrollbar-track`       | `scrollbarTrack`                 |
-| `--gantt-baseline`        | `baselineColor`    |     | `--gantt-scrollbar-thumb`       | `scrollbarThumb`                 |
-| `--gantt-critical`        | `criticalColor`    |     | `--gantt-weekend-bg`            | `weekendBg`                      |
-| `--gantt-panel-bg`        | `panelBg`          |     | `--gantt-holiday-bg`            | `holidayBg`                      |
-| `--gantt-panel-border`    | `panelBorder`      |     | `--gantt-off-hours-bg`          | `offHoursBg`                     |
-| `--gantt-border`          | `borderColor`      |     | `--gantt-intensive-bg`          | `intensiveBg`                    |
-| `--gantt-grid-line`       | `gridLine`         |     | `--gantt-status-not-started`    | `statusNotStarted`               |
-| `--gantt-grid-line-major` | `gridLineMajor`    |     | `--gantt-status-in-progress`    | `statusInProgress`               |
-| `--gantt-today`           | `todayColor`       |     | `--gantt-status-overdue`        | `statusOverdue`                  |
-| `--gantt-text`            | `textPrimary`      |     | `--gantt-status-done`           | `statusDone`                     |
+| `--gantt-bg`              | `backgroundColor`  |     | `--gantt-arrow`                 | `arrowColor`                     |
+| `--gantt-header-bg`       | `headerBackground` |     | `--gantt-tooltip-bg`            | `tooltipBg`                      |
+| `--gantt-row-bg`          | `rowBg`            |     | `--gantt-tooltip-bdr`           | `tooltipBorder`                  |
+| `--gantt-row-bg-alt`      | `rowBgAlt`         |     | `--gantt-tooltip-txt`           | `tooltipText`                    |
+| `--gantt-bar`             | `barColor`         |     | `--gantt-sel-bg`                | `selectionBg`                    |
+| `--gantt-bar-text`        | `barTextColor`     |     | `--gantt-sel-border`            | `selectionBorder`                |
+| `--gantt-bar-radius`      | `barRadius`        |     | `--gantt-scrollbar-track`       | `scrollbarTrack`                 |
+| `--gantt-milestone`       | `milestoneColor`   |     | `--gantt-scrollbar-thumb`       | `scrollbarThumb`                 |
+| `--gantt-baseline`        | `baselineColor`    |     | `--gantt-weekend-bg`            | `weekendBg`                      |
+| `--gantt-critical`        | `criticalColor`    |     | `--gantt-holiday-bg`            | `holidayBg`                      |
+| `--gantt-panel-bg`        | `panelBg`          |     | `--gantt-off-hours-bg`          | `offHoursBg`                     |
+| `--gantt-panel-border`    | `panelBorder`      |     | `--gantt-intensive-bg`          | `intensiveBg`                    |
+| `--gantt-border`          | `borderColor`      |     | `--gantt-status-not-started`    | `statusNotStarted`               |
+| `--gantt-grid-line`       | `gridLine`         |     | `--gantt-status-in-progress`    | `statusInProgress`               |
+| `--gantt-grid-line-major` | `gridLineMajor`    |     | `--gantt-status-overdue`        | `statusOverdue`                  |
+| `--gantt-today`           | `todayColor`       |     | `--gantt-status-done`           | `statusDone`                     |
+| `--gantt-text`            | `textPrimary`      |     | `--gantt-progress-overlay`      | `progressOverlay`                |
 | `--gantt-text-sec`        | `textSecondary`    |     | `--gantt-bar-text-on-bar`       | derived: label on a bar          |
 | `--gantt-text-muted`      | `textMuted`        |     | `--gantt-bar-text-on-milestone` | derived: label on a milestone    |
 | `--gantt-font`            | `fontFamily`       |     | `--gantt-bar-text-on-critical`  | derived: label on a critical bar |
+| `--gantt-font-size`       | `fontSize`         |     | `--gantt-today-label`           | derived: current-period label    |
 
 ### Parts
 

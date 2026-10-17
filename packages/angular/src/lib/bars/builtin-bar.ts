@@ -7,10 +7,9 @@
 //  bound as CSS properties, never as presentation attributes.
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, computed, inject, input } from '@angular/core';
+import { Directive, computed, inject } from '@angular/core';
 import { taskAccessibleName, themeMetrics, PAINTS } from '@gantry/core';
-import { type GanttBarContext } from '../types';
-import { GanttBarBase } from '../bar-registry';
+import { GanttBarBase } from './bar-base';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 /** Template shared by the built-in task / group / milestone bars. */
@@ -48,21 +47,17 @@ export const BUILTIN_BAR_STYLES = `
   .gantt-bar-label--outside { font-weight: 500; }
 `;
 
-/** Base for the built-in bars: the `ctx` input plus template helpers. */
+/** Base for the built-in bars: template helpers on top of `GanttBarBase`'s `ctx` input. */
 @Directive()
 export abstract class GanttBuiltinBar extends GanttBarBase {
-  readonly ctx = input.required<GanttBarContext>();
-
-  /** `GanttBarBase` contract */
-  get context(): GanttBarContext {
-    return this.ctx();
-  }
-
   /** Label font size: the theme metric the label fitting used (`themeMetrics`) */
   protected readonly fontPx = computed(() => themeMetrics(this.ctx().theme).fontPx);
 
-  /** Selection outline and baseline rail: theme paints (`var(--gantt-*)`) */
-  protected readonly paints = PAINTS;
+  /**
+   * Selection outline and baseline rail: theme paints (`var(--gantt-*)`). Typed explicitly so the
+   * published d.ts names `PAINTS` instead of inlining `import("ngx-gantry").Paint` self-references.
+   */
+  protected readonly paints: typeof PAINTS = PAINTS;
 
   /** Optional: a bar rendered outside `<gantry>` falls back to the English labels */
   private readonly i18n = inject(GanttI18nService, { optional: true });

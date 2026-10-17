@@ -6,7 +6,7 @@
  * chooses goes to the `panelW` input.
  */
 
-import { availablePanelWidth, clampPanelWidth } from '@gantry/core';
+import { availablePanelWidth, clampPanelWidth, SPLITTER_KEY_STEP } from '@gantry/core';
 import type { LayerContext } from '../layers/context';
 
 export interface SplitterOptions {
@@ -73,7 +73,8 @@ export function bindSplitter(ctx: LayerContext, opts: SplitterOptions): void {
       ) {
         e.preventDefault();
         const available = availablePanelWidth(I.mainW.peek());
-        I.panelW.set(clampPanelWidth(G.panelPx.peek() + (e.key === 'ArrowLeft' ? -24 : 24), cfg.panel, available));
+        const step = e.key === 'ArrowLeft' ? -SPLITTER_KEY_STEP : SPLITTER_KEY_STEP;
+        I.panelW.set(clampPanelWidth(G.panelPx.peek() + step, cfg.panel, available));
         ctx.saveState();
       }
     },

@@ -251,15 +251,10 @@ describe('style attributes', () => {
     const styled = styledNodes(el);
     // Sanity: paints really are inline (CSSOM) — the check below is not vacuous
     expect(Object.values(styled).some(s => s.includes('var(--gantt-'))).toBe(true);
-    // The one literal the core model hands out with theme-only data: the progress overlay, a
-    // theme-independent darkening (`#000000` at `bar.progress.opacity`), painted on the progress path
-    const overlay = el.getBarVisual('t1')!.paint.progress;
-    expect(overlay).toBe('#000000');
+    // No exception left: the progress overlay is the `--gantt-progress-overlay` token too
+    expect(el.getBarVisual('t1')!.paint.progress).toBe('var(--gantt-progress-overlay)');
     const withColour = Object.entries(styled)
-      .map(([node, style]) => [
-        node,
-        colouredDeclarations(style).filter(d => !(node.endsWith('.gantt-bar-progress') && d === `fill: ${overlay}`)),
-      ])
+      .map(([node, style]) => [node, colouredDeclarations(style)])
       .filter(([, decls]) => decls.length > 0);
     expect(withColour).toEqual([]);
     // Theme variables live in the theme sheet only, never inline in the tree

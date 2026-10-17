@@ -1,10 +1,16 @@
 /**
  * @file windows.ts
- * The vertical virtual window shared by the task list and the timeline. It compares by value, so
- * scrolling inside the overscan changes nothing downstream.
+ * The vertical virtual window shared by the task list and the timeline. It compares by value
+ * (core `sameVirtualWindow`), so scrolling inside the overscan changes nothing downstream.
  */
 
-import { computeVirtualWindow, VIEWPORT_FALLBACK_HEIGHT, type VirtualWindow } from '@gantry/core';
+import {
+  computeVirtualWindow,
+  sameVirtualWindow,
+  VIEWPORT_FALLBACK_HEIGHT,
+  VIRTUAL_OVERSCAN_ROWS,
+  type VirtualWindow,
+} from '@gantry/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ConfigGraph } from './config';
@@ -15,19 +21,6 @@ import type { TimelineGraph } from './timeline';
 export interface WindowsGraph {
   /** Rows mounted in both panes; the focused and the dragged row stay pinned */
   readonly vWindow: ReadonlySignal<VirtualWindow>;
-}
-
-const sameList = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((v, i) => v === b[i]);
-
-export function sameWindow(a: VirtualWindow, b: VirtualWindow): boolean {
-  return (
-    a.first === b.first &&
-    a.last === b.last &&
-    a.paddingTop === b.paddingTop &&
-    a.paddingBottom === b.paddingBottom &&
-    sameList(a.pinnedBefore, b.pinnedBefore) &&
-    sameList(a.pinnedAfter, b.pinnedAfter)
-  );
 }
 
 export function windowsGraph(
@@ -49,9 +42,9 @@ export function windowsGraph(
         if (geo) pinned.push(geo.row.visibleIndex);
       }
       const viewportH = Math.max(rh, (I.canvasH() || VIEWPORT_FALLBACK_HEIGHT) - I.headerH());
-      return computeVirtualWindow(I.scrollTop(), rh, viewportH, count, 4, pinned);
+      return computeVirtualWindow(I.scrollTop(), rh, viewportH, count, VIRTUAL_OVERSCAN_ROWS, pinned);
     },
-    { equals: sameWindow },
+    { equals: sameVirtualWindow },
   );
   return { vWindow };
 }

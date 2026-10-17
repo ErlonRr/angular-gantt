@@ -34,6 +34,8 @@ import {
 import {
   bottomScale,
   taskSpan,
+  seedCollapsed,
+  CLOCK_INTERVAL,
   type DragTiming,
   type GanttTask,
   type ResolvedGanttConfig,
@@ -187,12 +189,12 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   };
   const layers = createLayers(ctx);
 
-  /** Task ids seen so far: `task.collapsed` seeds the collapsed state of new ids only */
-  const seenIds = new Set<string>();
+  /** Task ids seen so far: `task.collapsed` seeds the collapsed state of new ids only (core `seedCollapsed`) */
+  let seenIds: ReadonlySet<string> | undefined;
   const setTasks = (tasks: GanttTask[]): void => {
-    const initiallyCollapsed = tasks.filter(t => t.collapsed && !seenIds.has(t.id)).map(t => t.id);
-    for (const t of tasks) seenIds.add(t.id);
-    if (initiallyCollapsed.length) inputs.collapsedIds.update(ids => new Set([...ids, ...initiallyCollapsed]));
+    const seed = seedCollapsed(tasks, seenIds);
+    seenIds = seed.seen;
+    if (seed.collapse.length) inputs.collapsedIds.update(ids => new Set([...ids, ...seed.collapse]));
     inputs.tasksIn.set(tasks);
   };
 
@@ -262,7 +264,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     onCleanup(() => observer.disconnect());
 
     // Keep "today" fresh in long-lived sessions
-    const clock = setInterval(() => inputs.nowTick.set(new Date()), 60_000);
+    const clock = setInterval(() => inputs.nowTick.set(new Date()), CLOCK_INTERVAL);
     onCleanup(() => clearInterval(clock));
 
     // Screen-reader announcements (selection count, load state) from the state found now on

@@ -1,122 +1,105 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · bar-registry.ts
 //
-//  The Bar Registry is the extension point that lets consumers
-//  plug in custom bar components without touching library code.
+//  Custom bar components, resolved per <gantry> through the injector
+//  hierarchy:
 //
-//  Usage:
-//    // Built-in (auto-registered in GanttModule.forRoot)
-//    provideGanttBar({ type: 'task',      component: GanttTaskBarComponent })
-//    provideGanttBar({ type: 'milestone', component: GanttMilestoneComponent })
+//    bootstrapApplication(App, { providers: [provideGanttBar({ type: 'epic', component: EpicBar })] });
+//    { path: 'plan', providers: [provideGanttBar(…)] }            // route
+//    @Component({ providers: [provideGanttBar(…)] })              // one page / one chart
 //
-//    // Custom — in bootstrapApplication providers or a Feature module
-//    provideGanttBar({ type: 'sprint', component: SprintBarComponent })
+//  Every level that calls `provideGanttBar` adds its defs (multi token
+//  GANTT_BAR_DEF, read with `self`) and a GANTT_BAR_SCOPE linked to the
+//  scope of the level above (`skipSelf`). A multi token alone can't do it:
+//  a level that provides it hides its parents' values.
 //
-//  The GanttCanvasComponent resolves the component to render per row via:
-//    registry.resolve(row.barType)   → Type<GanttBarBase>
+//  GanttBarRegistry is provided by the canvas, so every chart has its
+//  own: built-in bars first, then the scopes from the outermost to the
+//  innermost level (the nearest definition of a type wins).
 // ─────────────────────────────────────────────────────────────
 
-import {
-  inject,
-  InjectionToken,
-  type Type,
-  type EnvironmentProviders,
-  makeEnvironmentProviders,
-  Injectable,
-} from '@angular/core';
+import { inject, Injectable, InjectionToken, type Provider, type Type } from '@angular/core';
 
-import { type GanttBarContext } from './types';
+import { GanttBarBase } from './bars/bar-base';
+import { BUILTIN_BARS, FALLBACK_BAR } from './bars/builtin-defs';
 
-// ─── Bar component contract ───────────────────────────────────
-
-/**
- * Every bar component MUST extend this abstract class
- * so the registry can verify the contract at registration time.
- *
- * Inputs are declared in concrete subclasses with Angular 20+
- * signal-based input() API.
- */
-export abstract class GanttBarBase {
-  /** Implemented by concrete components */
-  abstract readonly context: GanttBarContext;
-}
+export { GanttBarBase };
 
 // ─── Registry entry ───────────────────────────────────────────
 
 export interface GanttBarDef {
-  /** Key used in GanttTask.barType — e.g. 'task', 'milestone', 'sprint' */
+  /** Key used in `GanttTask.barType` — e.g. 'task', 'milestone', 'group', 'sprint' */
   type: string;
+  /** A component extending `GanttBarBase` */
   component: Type<GanttBarBase>;
 }
 
-// ─── Multi-provider token ─────────────────────────────────────
+// ─── Tokens (one value per injector level) ────────────────────
 
-export const GANTT_BAR_DEF = new InjectionToken<GanttBarDef[]>('GANTT_BAR_DEF', {
-  providedIn: 'root',
-  factory: () => [],
-});
+/** The bar definitions provided at one injector level (multi; read with `self`). */
+export const GANTT_BAR_DEF = new InjectionToken<readonly GanttBarDef[]>('GANTT_BAR_DEF');
 
-// ─── Registry service ─────────────────────────────────────────
+/** One injector level's bar definitions, linked to the level above. */
+export interface GanttBarScope {
+  readonly defs: readonly GanttBarDef[];
+  readonly parent: GanttBarScope | null;
+}
 
-@Injectable({ providedIn: 'root' })
-export class GanttBarRegistry {
-  private readonly _map = new Map<string, Type<GanttBarBase>>();
+/** The nearest level that called `provideGanttBar` (its `parent` chain reaches the application). */
+export const GANTT_BAR_SCOPE = new InjectionToken<GanttBarScope>('GANTT_BAR_SCOPE');
 
-  constructor() {
-    // Auto-populate from multi-token at construction time
-    const defs = inject(GANTT_BAR_DEF, { optional: true }) ?? [];
-    for (const def of defs) {
-      this.register(def);
-    }
-  }
-
-  /** Register (or overwrite) a bar type at runtime */
-  register(def: GanttBarDef): void {
-    if (!def.type || !def.component) {
-      throw new Error(`[GanttBarRegistry] Invalid def: type and component are required.`);
-    }
-    this._map.set(def.type, def.component);
-  }
-
-  /**
-   * Resolve a component for the given bar type.
-   * Falls back to 'task' if the type is not registered.
-   * Throws only if 'task' itself is missing (broken setup).
-   */
-  resolve(type: string): Type<GanttBarBase> {
-    const cmp = this._map.get(type) ?? this._map.get('task');
-    if (!cmp) {
-      throw new Error(
-        `[GanttBarRegistry] No component for bar type '${type}' and no 'task' fallback registered. ` +
-          `Did you call GanttModule.forRoot() or provideGantt()?`,
-      );
-    }
-    return cmp;
-  }
-
-  has(type: string): boolean {
-    return this._map.has(type);
-  }
-
-  /** Returns all registered type keys (useful for debugging) */
-  registeredTypes(): string[] {
-    return [...this._map.keys()];
-  }
+function barScopeFactory(): GanttBarScope {
+  return {
+    defs: inject(GANTT_BAR_DEF, { self: true, optional: true }) ?? [],
+    parent: inject(GANTT_BAR_SCOPE, { skipSelf: true, optional: true }),
+  };
 }
 
 // ─── Public helper ────────────────────────────────────────────
 
 /**
- * Provide a custom (or override a built-in) bar component.
+ * Provide custom bar components (or override a built-in type) for every chart below this level:
+ * `bootstrapApplication` / route / component `providers`. The nearest level that defines a type wins.
  *
  * @example
- * bootstrapApplication(AppComponent, {
- *   providers: [
- *     provideGantt(),
- *     provideGanttBar({ type: 'sprint', component: SprintBarComponent }),
- *   ]
- * });
+ * @Component({ providers: [provideGanttBar({ type: 'epic', component: EpicBar })], … })
  */
-export function provideGanttBar(def: GanttBarDef): EnvironmentProviders {
-  return makeEnvironmentProviders([{ provide: GANTT_BAR_DEF, useValue: def, multi: true }]);
+export function provideGanttBar(...defs: GanttBarDef[]): Provider[] {
+  for (const def of defs) {
+    if (!def?.type || !def.component) {
+      throw new Error('[provideGanttBar] Invalid bar definition: `type` and `component` are required.');
+    }
+  }
+  return [
+    ...defs.map(def => ({ provide: GANTT_BAR_DEF, useValue: def, multi: true })),
+    { provide: GANTT_BAR_SCOPE, useFactory: barScopeFactory },
+  ];
+}
+
+// ─── Registry (one per <gantry>) ──────────────────────────────
+
+@Injectable()
+export class GanttBarRegistry {
+  private readonly map = new Map<string, Type<GanttBarBase>>();
+
+  constructor() {
+    const scopes: GanttBarScope[] = [];
+    for (let s = inject(GANTT_BAR_SCOPE, { optional: true }); s; s = s.parent) scopes.unshift(s);
+    for (const def of BUILTIN_BARS) this.map.set(def.type, def.component);
+    for (const scope of scopes) for (const def of scope.defs) this.map.set(def.type, def.component);
+  }
+
+  /** The component for a bar type; unknown types fall back to the 'task' bar. */
+  resolve(type: string): Type<GanttBarBase> {
+    return this.map.get(type) ?? this.map.get('task') ?? FALLBACK_BAR;
+  }
+
+  has(type: string): boolean {
+    return this.map.has(type);
+  }
+
+  /** Every type this chart resolves (debugging) */
+  registeredTypes(): string[] {
+    return [...this.map.keys()];
+  }
 }

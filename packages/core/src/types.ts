@@ -328,6 +328,11 @@ export interface GanttTheme {
   statusInProgress?: string;
   statusOverdue?: string;
   statusDone?: string;
+  /**
+   * Fill of the progress overlay inside theme-coloured bars, drawn at `bar.progress.opacity`
+   * (`task.progressColor` and `bar.progress.color` win, at full opacity). Default `'#000000'`.
+   */
+  progressOverlay?: string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -337,7 +342,7 @@ export type AnnounceUnit = 'day' | 'hour';
 
 /**
  * Every user-facing string in the chart. Override any subset via
- * `GanttOptions.labels` (per instance) or `provideGanttLib({ labels })` (global).
+ * `GanttOptions.labels` (per instance) or `provideGantt({ labels })` (global).
  * Interpolated strings are functions so translators keep full control.
  */
 export interface GanttLabels {

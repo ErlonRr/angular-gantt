@@ -210,7 +210,7 @@ test.describe('strict CSP + Trusted Types', () => {
     // The second column: the name column flexes to fill the table view
     const header = chart.get('.gantt-tl-col-header').nth(1);
     const before = await width(chart, header);
-    // The handle overhangs the header's right edge, which clips it: grab its visible part
+    // The 6 px handle sits inside the header's right edge: grab it near the edge
     const head = await chart.box(header);
     const grip = { x: head.x + head.width - 1.5, y: head.y + head.height / 2 };
     await page.mouse.move(grip.x, grip.y);

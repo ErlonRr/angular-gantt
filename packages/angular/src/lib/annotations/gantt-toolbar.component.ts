@@ -13,11 +13,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import type { GanttZoomLevel, GanttView, ResolvedToolbar } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
-import { type GanttTheme } from '../types';
 
 @Component({
   selector: 'gantt-toolbar',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { role: 'toolbar', '[attr.aria-label]': 'labels().ariaToolbar' },
   template: `
@@ -65,7 +63,8 @@ import { type GanttTheme } from '../types';
           </button>
         </div>
       }
-      <div class="gantt-tb-group gantt-tb-slot"><ng-content /></div>
+      <!-- gantt-tb-slot first (paint key): the other groups keep the Web Component's keys -->
+      <div class="gantt-tb-slot gantt-tb-group"><ng-content /></div>
       @if (toolbar().viewToggle) {
         <div class="gantt-tb-group gantt-tb-views">
           @for (v of views(); track v.view) {
@@ -143,8 +142,6 @@ import { type GanttTheme } from '../types';
   ],
 })
 export class GanttToolbarComponent {
-  /** @deprecated styling now comes from the `--gantt-*` CSS variables */
-  readonly theme = input<GanttTheme>();
   readonly toolbar = input<ResolvedToolbar>({ zoom: true, viewModes: false, today: true, viewToggle: false });
   readonly zoomLevels = input<GanttZoomLevel[]>([]);
   readonly currentView = input<string>('Month');

@@ -11,7 +11,6 @@ import type { ArrowVisual } from '@gantry/core';
 
 @Component({
   selector: 'g[ganttArrow]',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'gantt-arrow',

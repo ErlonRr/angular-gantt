@@ -50,7 +50,7 @@ so horizontal scrolling inside a chunk does no DOM work; `.g-header` keeps the f
 critical/baseline state, scale or theme changes. The drag ghost uses the shared core look (dashed outline at 35 %
 opacity with a "+2d" movement label) and the dragged bar is dimmed through a CSS style. The tooltip is one persistent
 popover (`role="tooltip"`) with `<dl>` rows written as text. Column resizing uses pointer capture (no `window` listeners).
-The Angular header gets the same windowing in Phase 7.0, which ships in the same release.
+`ngx-gantry` 2.0, in the same release, windows its header, bands and grid lines the same way.
 
 Strict Content-Security-Policy and Trusted Types: the element works under `style-src 'self'` (no `'unsafe-inline'`),
 `script-src 'self'` (no eval) and `require-trusted-types-for 'script'; trusted-types 'none'`. Its CSS is one shared
@@ -77,6 +77,6 @@ true`): `el.focus()` and a click on a non-focusable part of the chart focus the 
 
 Custom Elements Manifest: the package ships `custom-elements.json` (the `customElements` field of `package.json`, also
 exported as `@gantry/vanilla/custom-elements.json`) describing the element's attributes, properties, methods, events
-with their detail types, CSS parts, custom states and the 40 `--gantt-*` CSS custom properties with their light-theme
+with their detail types, CSS parts, custom states and the 42 `--gantt-*` CSS custom properties with their light-theme
 defaults, for IDEs, Storybook and linters. CI fails when it is stale and when `import '@gantry/vanilla'` grows past
 50 KB minified and gzipped (about 48 KB today, `@gantry/core` included).

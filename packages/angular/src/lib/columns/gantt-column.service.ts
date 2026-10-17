@@ -1,22 +1,25 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · columns/gantt-column.service.ts
 //
-//  Reactive column catalogue, widths and visibility.
+//  Reactive column catalogue, widths and visibility (signals only).
 //
 //  Which columns a view shows (lean split-view panel vs data-rich
 //  table view) is resolved by `@gantry/core` (`resolveViewColumns`),
 //  exactly like the Web Component.
 //
-//  Consumers interact via:
-//    - `columns` input / `options.columns` on GantryComponent
-//    - `options.panel.columns` / `options.table.columns` (keys)
-//    - service methods at runtime (addColumn, removeColumn, …) —
-//      kept as overrides, so they survive a locale change
+//  Sources (bound once by GantryComponent, `bind()`):
+//    - `options.columns`, else the `columns` input (consumer columns)
+//    - the `<ng-template ganttColumn>` definitions of its content
+//  Runtime edits (addColumn, removeColumn, reorderByKeys, moveColumn),
+//  widths and visibility are kept as overrides, so they survive a
+//  locale change; new consumer columns keep them too, removing the
+//  consumer columns resets the edits.
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, computed, effect, inject, untracked } from '@angular/core';
+import { Injectable, signal, computed, linkedSignal, inject } from '@angular/core';
 import {
   buildBuiltinColumns,
+  clampColumnWidth,
   mergeColumnDefs,
   resolveViewColumns,
   type GanttView,
@@ -26,70 +29,97 @@ import { type ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 type ViewKey = 'split' | 'table';
+type ColumnConfig = Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>;
+
+/** Runtime edits (`addColumn`, `removeColumn`, `reorderByKeys`, `moveColumn`) */
+interface ColumnEdits {
+  readonly added: readonly ColumnDef[];
+  readonly removed: readonly string[];
+  readonly order: readonly string[] | null;
+}
+
+interface ColumnVisibility {
+  readonly all: ReadonlyMap<string, boolean>;
+  readonly split: ReadonlyMap<string, boolean>;
+  readonly table: ReadonlyMap<string, boolean>;
+}
+
+/** What GantryComponent binds once: the consumer columns and the `ganttColumn` definitions. */
+interface ColumnSources {
+  readonly columns: () => readonly ColumnDef[];
+  readonly directives: () => readonly ColumnDef[];
+}
+
+const NONE: readonly ColumnDef[] = [];
+const NO_EDITS: ColumnEdits = { added: [], removed: [], order: null };
 
 @Injectable()
 export class GanttColumnService {
   private readonly i18n = inject(GanttI18nService);
+  private readonly sources = signal<ColumnSources | null>(null);
 
-  /** Localised built-in columns for the current i18n config. */
-  private builtinDefs(): ColumnDef[] {
-    return buildBuiltinColumns(this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat) as ColumnDef[];
-  }
-
-  /** Consumer-provided definitions (null = built-in columns). */
-  private _custom: ColumnDef[] | null = null;
-  /** Runtime edits (`addColumn`, `removeColumn`, `reorderByKeys`, `moveColumn`) */
-  private _added: ColumnDef[] = [];
+  /** Consumer columns (`options.columns`, else the `columns` input), compared by reference */
+  private readonly consumer = computed(() => this.sources()?.columns() ?? NONE);
   /** `<ng-template ganttColumn>` definitions: override a column with the same key, else add one */
-  private readonly _directives = new Map<string, ColumnDef>();
-  private readonly _removed = new Set<string>();
-  private _order: string[] | null = null;
+  private readonly directives = computed(() => this.sources()?.directives() ?? NONE);
+
+  /** Consumer definitions (`null` = built-in columns); `setColumns()` replaces them until the consumer columns change */
+  private readonly custom = linkedSignal<readonly ColumnDef[] | null>(() => {
+    const cols = this.consumer();
+    return cols.length ? cols : null;
+  });
+  /** Runtime edits: kept when the consumer columns change, dropped when they are removed */
+  private readonly edits = linkedSignal<readonly ColumnDef[], ColumnEdits>({
+    source: this.consumer,
+    computation: (cols, prev) => (cols.length && prev ? prev.value : NO_EDITS),
+  });
 
   /**
    * Widths the user dragged (or restored from saved state) and visibility
    * toggles — kept as overrides so they survive re-assigning `columns`
    * or a locale change.
    */
-  private readonly _widthOverrides = new Map<string, number>();
-  private readonly _visibility = {
-    all: new Map<string, boolean>(),
-    split: new Map<string, boolean>(),
-    table: new Map<string, boolean>(),
-  };
+  private readonly widthOverrides = signal<ReadonlyMap<string, number>>(new Map());
+  private readonly visibility = signal<ColumnVisibility>({ all: new Map(), split: new Map(), table: new Map() });
 
-  // ── State ────────────────────────────────────────────────
-  private readonly _columns = signal<ColumnDef[]>([]);
-  private readonly _builtins = signal<ColumnDef[]>([]);
-  /** Bumped when visibility changes (the maps are not signals) */
-  private readonly _visibilityVersion = signal(0);
+  /** Localised built-in columns for the current i18n config. */
+  private readonly builtinDefs = computed(
+    () => buildBuiltinColumns(this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat) as ColumnDef[],
+  );
 
-  constructor() {
-    this._publish();
-    // Re-resolve labels / date formats when the locale or labels change
-    effect(() => {
-      const builtins = this.builtinDefs();
-      untracked(() => this._publish(builtins));
-    });
-  }
-
-  private _publish(builtins = this.builtinDefs()): void {
-    const apply = (c: ColumnDef): ColumnDef => ({
+  /** Width overrides (clamped) and the all-views visibility, applied to a definition */
+  private readonly applyOverrides = computed(() => {
+    const widths = this.widthOverrides();
+    const shown = this.visibility().all;
+    return (c: ColumnDef): ColumnDef => ({
       ...c,
-      width: clampWidth(c, this._widthOverrides.get(c.key) ?? c.width),
-      visible: this._visibility.all.get(c.key) ?? c.visible ?? true,
+      width: clampColumnWidth(widths.get(c.key) ?? c.width, c),
+      visible: shown.get(c.key) ?? c.visible ?? true,
     });
-    let base: ColumnDef[] = this._custom ? mergeColumnDefs(this._custom, builtins) : builtins;
-    if (this._directives.size) {
+  });
+
+  // ── Public signals ────────────────────────────────────────
+  /** Every built-in column (localised), addressable by key in `panel.columns` / `table.columns` */
+  readonly builtins = computed<ColumnDef[]>(() => this.builtinDefs().map(this.applyOverrides()));
+
+  /** The catalogue: consumer columns merged over the built-ins, or the built-ins */
+  readonly columns = computed<ColumnDef[]>(() => {
+    const builtins = this.builtinDefs();
+    const custom = this.custom();
+    const directives = this.directives();
+    const { added, removed, order } = this.edits();
+    let base: ColumnDef[] = custom ? mergeColumnDefs(custom, builtins) : builtins;
+    if (directives.length) {
+      const byKey = new Map(directives.map(d => [d.key, d]));
       base = base.map(c => {
-        const d = this._directives.get(c.key);
+        const d = byKey.get(c.key);
         return d ? mergeColumnDefs([d], [c])[0] : c;
       });
     }
-    const extra = this._extraColumns(base);
-    if (extra.length || this._removed.size || this._order) {
-      base = [...base, ...extra].filter(c => !this._removed.has(c.key));
-      if (this._order) {
-        const order = this._order;
+    const extra = extraColumns(base, [...directives, ...added]);
+    if (extra.length || removed.length || order) {
+      base = [...base, ...extra].filter(c => !removed.includes(c.key));
+      if (order) {
         const rank = (k: string) => {
           const i = order.indexOf(k);
           return i < 0 ? order.length : i;
@@ -100,143 +130,107 @@ export class GanttColumnService {
           .map(x => x.c);
       }
     }
-    this._builtins.set(builtins.map(apply));
-    this._columns.set(base.map(apply));
+    return base.map(this.applyOverrides());
+  });
+
+  /** Current width of every column, by key (for state persistence) */
+  readonly widths = computed<Record<string, number>>(() =>
+    Object.fromEntries([...this.builtins(), ...this.columns()].map(c => [c.key, c.width])),
+  );
+
+  /** Bind the consumer columns and the `ganttColumn` definitions (once, from GantryComponent's constructor). */
+  bind(columns: () => readonly ColumnDef[], directives: () => readonly ColumnDef[] = () => NONE): void {
+    this.sources.set({ columns, directives });
   }
-
-  /** Columns added at runtime or by `ganttColumn` whose key isn't in the catalogue yet */
-  private _extraColumns(base: readonly ColumnDef[]): ColumnDef[] {
-    const extra: ColumnDef[] = [];
-    for (const c of [...this._directives.values(), ...this._added]) {
-      // A new key gets a label and a width when the definition leaves them out
-      if (!base.some(b => b.key === c.key) && !extra.some(e => e.key === c.key))
-        extra.push({ ...c, label: c.label ?? c.key, width: c.width ?? 120 });
-    }
-    return extra;
-  }
-
-  // ── Public signals ────────────────────────────────────────
-  /** The catalogue: consumer columns merged over the built-ins, or the built-ins */
-  readonly columns = this._columns.asReadonly();
-
-  /** Every built-in column (localised), addressable by key in `panel.columns` / `table.columns` */
-  readonly builtins = this._builtins.asReadonly();
 
   /** Columns shown by `view` (split panel, table view; none for the chart-only view) */
-  columnsFor(view: GanttView, config: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>): ColumnDef[] {
-    this._visibilityVersion();
-    const columns = this._columns();
+  columnsFor(view: GanttView, config: ColumnConfig): ColumnDef[] {
+    const columns = this.columns();
+    const builtins = this.builtins();
+    const { removed, order } = this.edits();
     // Without consumer columns, runtime edits change the default lists (4 panel columns + yours)
-    const builtinKeys = new Set(this._builtins().map(c => c.key));
+    const builtinKeys = new Set(builtins.map(c => c.key));
     return resolveViewColumns({
       columns,
-      builtins: this._builtins(),
-      custom: this._custom !== null,
+      builtins,
+      custom: this.custom() !== null,
       view,
       config,
-      visibility: this._visibility,
+      visibility: this.visibility(),
       edits: {
         added: columns.filter(c => !builtinKeys.has(c.key)),
-        removed: [...this._removed],
-        order: this._order,
+        removed,
+        order,
       },
     });
   }
 
-  /** @deprecated Use `columnsFor(view, config)` — visibility now depends on the view. */
-  readonly visibleColumns = computed(() => this._columns().filter(c => c.visible !== false));
-
-  /** @deprecated CSS grid-template-columns of `visibleColumns` */
-  readonly gridTemplate = computed(() =>
-    this.visibleColumns()
-      .map(c => `${c.width}px`)
-      .join(' '),
-  );
-
-  /** Current width of every column, by key (for state persistence) */
-  readonly widths = computed<Record<string, number>>(() =>
-    Object.fromEntries([...this._builtins(), ...this._columns()].map(c => [c.key, c.width])),
-  );
-
-  /** @deprecated Unused; the panel width comes from `panel.width` */
-  readonly totalPanelWidth = computed(() => this.visibleColumns().reduce((sum, c) => sum + c.width, 0));
-
-  // ── Init from consumer config ─────────────────────────────
+  // ── Consumer config ───────────────────────────────────────
   /**
-   * Replace columns with consumer-provided config.
+   * Replace columns with consumer-provided config (until the consumer columns change).
    * A key of a built-in column inherits its label, sizes and (without its own
    * renderer / template) its cells and sort rule.
    */
   setColumns(defs: ColumnDef[]): void {
-    this._custom = defs;
-    this._publish();
+    this.custom.set(defs);
   }
 
-  /** Reset to the built-in columns (also drops runtime edits) */
+  /** Reset to the built-in columns (also drops runtime edits; `ganttColumn` definitions stay) */
   resetColumns(): void {
-    this._custom = null;
-    this._added = [];
-    // `ganttColumn` definitions stay: they belong to the template, not to the reset
-    this._removed.clear();
-    this._order = null;
-    this._publish();
+    this.custom.set(null);
+    this.edits.set(NO_EDITS);
   }
 
   // ── Runtime mutation ──────────────────────────────────────
   addColumn(def: ColumnDef): void {
-    if (this._columns().some(c => c.key === def.key)) return; // dedupe
-    this._removed.delete(def.key);
-    this._added = [...this._added, { visible: true, ...def }];
-    this._publish();
+    if (this.columns().some(c => c.key === def.key)) return; // dedupe
+    this.edits.update(e => ({
+      ...e,
+      added: [...e.added, { visible: true, ...def }],
+      removed: e.removed.filter(k => k !== def.key),
+    }));
   }
 
   removeColumn(key: string): void {
-    this._added = this._added.filter(c => c.key !== key);
-    this._removed.add(key);
-    this._publish();
-  }
-
-  /** Register / update a `<ng-template ganttColumn>` definition (overrides a column with its key). */
-  registerColumn(def: ColumnDef): void {
-    this._directives.set(def.key, def);
-    this._publish();
-  }
-
-  /** Drop a `<ng-template ganttColumn>` definition (a built-in column with that key comes back). */
-  unregisterColumn(key: string): void {
-    if (this._directives.delete(key)) this._publish();
+    this.edits.update(e => ({
+      ...e,
+      added: e.added.filter(c => c.key !== key),
+      removed: e.removed.includes(key) ? e.removed : [...e.removed, key],
+    }));
   }
 
   /** Show / hide a column in both views, or only in `view` */
   setVisible(key: string, visible: boolean, view?: ViewKey): void {
-    (view ? this._visibility[view] : this._visibility.all).set(key, visible);
-    this._visibilityVersion.update(v => v + 1);
-    this._publish();
+    this.visibility.update(v => {
+      const which = view ?? 'all';
+      return { ...v, [which]: new Map(v[which]).set(key, visible) };
+    });
   }
 
   /** Flip a column's visibility. With `config`, "shown" means shown by that view right now. */
-  toggleVisible(key: string, view?: ViewKey, config?: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>): void {
+  toggleVisible(key: string, view?: ViewKey, config?: ColumnConfig): void {
+    const v = this.visibility();
     const current = config
-      ? (view ? [view] : (['split', 'table'] as const)).some(v => this.columnsFor(v, config).some(c => c.key === key))
-      : ((view && this._visibility[view].get(key)) ??
-        this._visibility.all.get(key) ??
-        this._columns().find(c => c.key === key)?.visible !== false);
+      ? (view ? [view] : (['split', 'table'] as const)).some(vk => this.columnsFor(vk, config).some(c => c.key === key))
+      : ((view && v[view].get(key)) ?? v.all.get(key) ?? this.columns().find(c => c.key === key)?.visible !== false);
     this.setVisible(key, !current, view);
   }
 
   /**
-   * Update a column's width (called after column drag-resize).
-   * Clamps to [minWidth, maxWidth].
+   * Update a column's width (called after column drag-resize). The catalogue clamps it to the
+   * column's [minWidth, maxWidth] (`clampColumnWidth`).
    */
   setColumnWidth(key: string, width: number): void {
-    this._widthOverrides.set(key, width);
-    this._publish();
+    this.widthOverrides.update(w => new Map(w).set(key, width));
   }
 
   /** Apply saved widths (e.g. from `stateKey`). */
   setColumnWidths(widths: Record<string, number>): void {
-    for (const [key, w] of Object.entries(widths)) this._widthOverrides.set(key, w);
-    this._publish();
+    this.widthOverrides.update(w => {
+      const next = new Map(w);
+      for (const [key, width] of Object.entries(widths)) next.set(key, width);
+      return next;
+    });
   }
 
   /**
@@ -244,13 +238,12 @@ export class GanttColumnService {
    * Keys not present in the array keep their order after them.
    */
   reorderByKeys(keys: string[]): void {
-    this._order = [...keys];
-    this._publish();
+    this.edits.update(e => ({ ...e, order: [...keys] }));
   }
 
   /** Move column left or right by one position */
   moveColumn(key: string, direction: 'left' | 'right'): void {
-    const keys = this._columns().map(c => c.key);
+    const keys = this.columns().map(c => c.key);
     const idx = keys.indexOf(key);
     const target = direction === 'left' ? idx - 1 : idx + 1;
     if (idx < 0 || target < 0 || target >= keys.length) return;
@@ -259,6 +252,13 @@ export class GanttColumnService {
   }
 }
 
-function clampWidth(c: ColumnDef, width: number): number {
-  return Math.round(Math.max(c.minWidth ?? 40, Math.min(c.maxWidth ?? 800, width)));
+/** Columns added at runtime or by `ganttColumn` whose key isn't in the catalogue yet */
+function extraColumns(base: readonly ColumnDef[], candidates: readonly ColumnDef[]): ColumnDef[] {
+  const extra: ColumnDef[] = [];
+  for (const c of candidates) {
+    // A new key gets a label and a width when the definition leaves them out
+    if (!base.some(b => b.key === c.key) && !extra.some(e => e.key === c.key))
+      extra.push({ ...c, label: c.label ?? c.key, width: c.width ?? 120 });
+  }
+  return extra;
 }

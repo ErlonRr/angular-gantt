@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · state/tooltip.ts
 //  Renderer-agnostic content of the task tooltip. Both painters
-//  (Angular directive, Web Component popover) only turn this model
+//  (one popover per chart in both renderers) only turn this model
 //  into markup, so they always show the same rows in the same order.
 // ─────────────────────────────────────────────────────────────
 
@@ -11,6 +11,13 @@ import { taskSpan } from '../render/timeline';
 import { taskDependencies, taskDurationLabel, taskStatus } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
 import { themeVar, type Paint } from '../render/paint';
+
+// ─── Timing ───────────────────────────────────────────────────
+
+/** How long the pointer rests on a bar before the tooltip opens (ms), in every binding. */
+export const TOOLTIP_SHOW_DELAY = 320;
+/** How long the tooltip stays open after the pointer left the bars (ms), in every binding. */
+export const TOOLTIP_HIDE_DELAY = 120;
 
 // ─── Labels ───────────────────────────────────────────────────
 

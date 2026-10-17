@@ -1,88 +1,87 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · tasklist/gantt-tasklist.component.ts
 //
-//  Left panel of the Gantt chart.
+//  Left panel of the Gantt chart (internal: only GantryComponent renders it,
+//  so it has no content slots; `<gantry>`'s `[tlFooter]` content goes below it).
 //
-//  Layout (three ng-content named slots):
+//  Layout:
 //
 //  ┌─────────────────────────────────┐
-//  │  <ng-content select="[tlHeader]">│  ← consumer custom header
-//  ├─────────────────────────────────┤
 //  │  Column headers row             │  ← built-in, from ColumnDef[]
 //  ├─────────────────────────────────┤
 //  │  Row 0 │ ▼  Project Alpha       │  ← task rows (virtual scrolled)
 //  │  Row 1 │    ├─ Task 1.1         │
 //  │  Row 2 │    └─ Task 1.2         │
 //  │  ...                            │
-//  ├─────────────────────────────────┤
-//  │  <ng-content select="[tlFooter]">│  ← consumer custom footer
 //  └─────────────────────────────────┘
-//
-//  The resize handle on the right border lets consumers drag
-//  to adjust the panel width. The new width is emitted via
-//  `panelWidthChange` output.
 //
 //  Scroll is handled externally by GanttScrollService (step 11).
 //  This component only renders rows — it does NOT own scroll state.
 //
-//  Chrome colours are stylesheet rules on the `--gantt-*` tokens; row
-//  backgrounds, status dots and task icons are `Paint`s bound as CSS
-//  properties (a theme token or the task's own colour).
+//  Markup and class names are the Web Component's (`layers/tasklist.ts`):
+//
+//    div.gantt-tl-col-header    span.gantt-tl-ellipsis (label) ·
+//                               span.gantt-tl-sort-icon(--active) · div.gantt-col-resize
+//    div.gantt-tl-cell (name)   span.gantt-tl-name > button.gantt-collapse-btn |
+//                               span.gantt-tl-indent · span.gantt-tl-icon · span.gantt-tl-ellipsis
+//    div.gantt-tl-cell (other)  span.gantt-tl-status-dot? · span.gantt-tl-ellipsis
+//
+//  Chrome and text colours are stylesheet rules on the `--gantt-*` tokens
+//  (the same rules as `styles/tasklist.css.ts`); row backgrounds, status
+//  dots and the icon of a task with `barColor` are `Paint`s bound as CSS
+//  properties.
+//
+//  Rows: the mounted rows of the chart's virtual window plus the pinned
+//  ones (the focused row kept mounted while it scrolls away), each pinned
+//  row taken out of the flow at its row offset (`.gantt-tl-row--pinned`),
+//  like the Web Component's `tlRows`. Rows are tracked by task id, so a row
+//  keeps its node (and keyboard focus) across scrolls, selections and
+//  collapses.
+//
+//  Keyboard: the list is one tab stop. One mounted row has `tabindex=0`
+//  (`tabStopId`: the focused row, else the row focused last while it is
+//  mounted, else the first row in view; see `tabStopRow`), the others
+//  `-1`. Rows, collapse toggles and sortable headers carry the Web
+//  Component's `data-focus-key` (`row:<id>`, `collapse:<id>`, `sort:<key>`)
+//  for the chart's focus restore.
+//
+//  Column resize is the Web Component's gesture (`interaction/column-resize.ts`):
+//  the handle captures the pointer and listens for one gesture, never on
+//  `window`; destroying the list mid-drag drops the listeners and keeps the
+//  width reached so far.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  ChangeDetectionStrategy,
-  Component,
-  ElementRef,
-  afterRenderEffect,
-  computed,
-  inject,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, output, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 
-import { type GanttFlatRow, type ColumnDef, type GanttTheme } from '../types';
+import { type GanttFlatRow, type ColumnDef } from '../types';
 import {
   buildColumnContext,
+  clampColumnWidth,
+  columnsGridTemplate,
   computeCellVisual,
   rowPaint,
-  themeVar,
+  virtualIndexes,
   type CellVisual,
   type ColumnContext,
+  type VirtualWindow,
 } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
   selector: 'gantt-tasklist',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [NgTemplateOutlet],
   host: {
     class: 'gantt-tasklist',
     role: 'treegrid',
-    'aria-multiselectable': 'true',
+    '[attr.aria-multiselectable]': 'multiselectable()',
     '[attr.aria-rowcount]': 'rowCount() + 1',
     '[attr.aria-colcount]': 'visibleColumns().length',
     '[attr.aria-label]': 'i18n.labels().ariaTaskList',
-    '[style.display]': '"flex"',
-    '[style.flex-direction]': '"column"',
-    // overflow:visible so the sticky column header anchors to the outer
-    // scrollport (the panel in GantryComponent), not to this host.
-    '[style.overflow]': '"visible"',
-    '[style.position]': '"relative"',
-    // As wide as the columns (the panel scrolls horizontally), at least the panel
-    '[style.width]': '"max-content"',
-    '[style.min-width]': '"100%"',
     '[style.user-select]': 'resizingCol() ? "none" : null',
   },
   template: `
-    <!-- ── Custom header slot ─────────────────────────────── -->
-    <div class="gantt-tl-header-slot">
-      <ng-content select="[tlHeader]" />
-    </div>
-
     <!-- ── Column header row ──────────────────────────────── -->
     <div
       class="gantt-tl-col-headers"
@@ -96,9 +95,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           class="gantt-tl-col-header"
           role="columnheader"
           [style.justify-content]="justify(col.align)"
-          [style.cursor]="col.sortable ? 'pointer' : 'default'"
           [attr.aria-sort]="col.sortable ? ariaSort(col.key) : null"
           [attr.tabindex]="col.sortable ? 0 : null"
+          [attr.data-focus-key]="col.sortable ? 'sort:' + col.key : null"
           (click)="onHeaderClick(col)"
           (keydown.enter)="col.sortable && sortColumn.emit(col.key)"
           (keydown.space)="$event.preventDefault(); col.sortable && sortColumn.emit(col.key)"
@@ -106,9 +105,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           <span class="gantt-tl-ellipsis" [attr.title]="col.label">{{ col.label }}</span>
           @if (col.sortable) {
             <span
+              class="gantt-tl-sort-icon"
               aria-hidden="true"
-              [style.font-size.px]="9"
-              [style.color]="sort()?.key === col.key ? paints.text : paints.muted"
+              [class.gantt-tl-sort-icon--active]="sort()?.key === col.key"
               >{{ sortIcon(col.key) }}</span
             >
           }
@@ -129,24 +128,28 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       <!-- Spacer top (virtual scroll) -->
       <div aria-hidden="true" [style.height.px]="paddingTop()"></div>
 
-      @for (row of visibleRows(); track row.task.id) {
+      <!-- The window's rows and the pinned ones (out of the flow, at their row offset) -->
+      @for (m of rows(); track m.row.task.id) {
+        @let row = m.row;
         <div
           class="gantt-tl-row"
           role="row"
           [class.gantt-tl-row--selected]="isSelected(row)"
           [class.gantt-tl-row--group]="row.hasChildren"
+          [class.gantt-tl-row--pinned]="m.pinnedTop !== null"
           [attr.data-task-id]="row.task.id"
+          [attr.data-focus-key]="'row:' + row.task.id"
+          [attr.tabindex]="row.task.id === tabStopId() ? 0 : -1"
           [attr.aria-rowindex]="row.visibleIndex + 2"
           [attr.aria-level]="row.level + 1"
           [attr.aria-selected]="isSelected(row)"
           [attr.aria-expanded]="row.hasChildren ? !row.isCollapsed : null"
+          [style.top.px]="m.pinnedTop"
           [style.grid-template-columns]="gridTemplate()"
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
-          tabindex="-1"
           (click)="onRowClick($event, row)"
           (keydown)="onRowKey($event, row)"
-          (focus)="focusedRowId = row.task.id"
           (dblclick)="rowDblClick.emit(row)"
         >
           @for (col of visibleColumns(); track col.key) {
@@ -168,6 +171,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                     <button
                       type="button"
                       class="gantt-collapse-btn"
+                      [attr.data-focus-key]="'collapse:' + row.task.id"
                       [attr.aria-expanded]="!row.isCollapsed"
                       [attr.aria-label]="collapseAriaLabel(row)"
                       (click)="onCollapseClick($event, row)"
@@ -175,19 +179,14 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                       {{ row.isCollapsed ? '▶' : '▼' }}
                     </button>
                   } @else {
-                    <!-- Leaf indent spacer (width matches the collapse control) -->
-                    <span [style.width.px]="COLLAPSE_TARGET_PX" [style.flex-shrink]="'0'"></span>
+                    <!-- Leaf indent (as wide as the collapse control) -->
+                    <span class="gantt-tl-indent"></span>
                   }
-                  <span
-                    aria-hidden="true"
-                    [style.flex-shrink]="'0'"
-                    [style.font-size]="'10px'"
-                    [style.color]="row.task.barColor ?? paints.muted"
-                    >{{ taskIcon(row) }}</span
-                  >
-                  <span class="gantt-tl-ellipsis" [style.font-weight]="row.hasChildren ? '600' : '400'">{{
-                    nameText(col, row)
+                  <!-- The task's own colour, else the stylesheet's muted text -->
+                  <span class="gantt-tl-icon" aria-hidden="true" [style.color]="row.task.barColor ?? null">{{
+                    taskIcon(row)
                   }}</span>
+                  <span class="gantt-tl-ellipsis">{{ nameText(col, row) }}</span>
                 </span>
               } @else {
                 <!-- Regular cell: ColumnDef.render(), else the task field -->
@@ -204,25 +203,21 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       <!-- Spacer bottom (virtual scroll) -->
       <div aria-hidden="true" [style.height.px]="paddingBottom()"></div>
     </div>
-
-    <!-- ── Custom footer slot ─────────────────────────────── -->
-    <div class="gantt-tl-footer-slot">
-      <ng-content select="[tlFooter]" />
-    </div>
   `,
   styles: [
     `
       :host {
+        display: flex;
+        flex-direction: column;
+        /* visible, so the sticky column header anchors to the outer scrollport
+           (the panel in GantryComponent), not to this host */
+        overflow: visible;
+        position: relative;
+        /* as wide as the columns (the panel scrolls horizontally), at least the panel */
+        width: max-content;
+        min-width: 100%;
         box-sizing: border-box;
       }
-      .gantt-tl-status-dot {
-        flex-shrink: 0;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        margin-inline-end: 6px;
-      }
-
       .gantt-tl-col-headers {
         display: grid;
         flex-shrink: 0;
@@ -241,9 +236,13 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         gap: 4px;
         overflow: hidden;
         font-weight: 600;
+        cursor: default;
         user-select: none;
         border-right: 1px solid var(--gantt-border);
         color: var(--gantt-text);
+      }
+      .gantt-tl-col-header[aria-sort] {
+        cursor: pointer;
       }
       .gantt-tl-rows {
         flex: 1;
@@ -262,6 +261,13 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       .gantt-tl-row--selected {
         box-shadow: inset 3px 0 0 var(--gantt-sel-border, #2563eb);
       }
+      /* The focused row kept mounted outside the virtual window, at its row offset (top) */
+      .gantt-tl-row--pinned {
+        position: absolute;
+        left: 0;
+        right: 0;
+        z-index: 1;
+      }
       .gantt-tl-cell {
         display: flex;
         align-items: center;
@@ -271,11 +277,25 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         border-right: 1px solid var(--gantt-border);
         color: var(--gantt-text);
       }
-      /* Cell text (name and regular cells); a group's name is primary text */
+      .gantt-tl-ellipsis {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      /* Text colours: header labels and group names primary, cell texts and leaf names
+         secondary, icons muted (an active sort icon primary) */
       .gantt-tl-cell .gantt-tl-ellipsis {
         color: var(--gantt-text-sec);
       }
       .gantt-tl-row--group .gantt-tl-name > .gantt-tl-ellipsis {
+        color: var(--gantt-text);
+        font-weight: 600;
+      }
+      .gantt-tl-sort-icon {
+        font-size: 9px;
+        color: var(--gantt-text-muted);
+      }
+      .gantt-tl-sort-icon--active {
         color: var(--gantt-text);
       }
       .gantt-tl-name {
@@ -285,15 +305,28 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         overflow: hidden;
         width: 100%;
       }
-      .gantt-tl-ellipsis {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+      /* Leaf indent: as wide as the collapse toggle */
+      .gantt-tl-indent {
+        flex-shrink: 0;
+        width: 24px;
       }
+      .gantt-tl-icon {
+        flex-shrink: 0;
+        font-size: 10px;
+        color: var(--gantt-text-muted);
+      }
+      .gantt-tl-status-dot {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-inline-end: 6px;
+      }
+      /* Inside its header cell (which clips): the whole 6 px handle can be grabbed */
       .gantt-col-resize {
         position: absolute;
         top: 0;
-        right: -3px;
+        right: 0;
         width: 6px;
         height: 100%;
         cursor: col-resize;
@@ -326,42 +359,33 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       .gantt-collapse-btn:hover {
         opacity: 0.75;
       }
+      /* Keyboard focus only: inset rings (cells and the panel clip anything outside them) */
+      .gantt-tl-row:focus-visible,
+      .gantt-tl-col-header:focus-visible,
       .gantt-collapse-btn:focus-visible {
-        outline: 2px solid var(--gantt-sel-border, #2563eb);
-        outline-offset: 2px;
+        outline: 2px solid var(--gantt-sel-border);
+        outline-offset: -2px;
       }
     `,
   ],
 })
 export class GanttTaskListComponent {
-  private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
-
   constructor() {
-    // A focused row that scrolls out of the window is destroyed: keep focus on the chart
-    // (its keyboard shortcuts keep working) instead of dropping it to <body>
-    afterRenderEffect(() => {
-      const rows = this.visibleRows();
-      const id = this.focusedRowId;
-      if (!id || rows.some(r => r.task.id === id)) return;
-      this.focusedRowId = null;
-      const active = document.activeElement;
-      if (!active || active === document.body) {
-        this.hostEl.nativeElement.closest<HTMLElement>('gantry')?.focus({ preventScroll: true });
-      }
-    });
+    // A resize still running when the list goes: drop its listeners, keep the width reached
+    inject(DestroyRef).onDestroy(() => this.colResize.abort());
   }
 
-  /** Matches .gantt-collapse-btn min width — leaf spacer alignment */
-  protected readonly COLLAPSE_TARGET_PX = 24;
-
   // ── Inputs ────────────────────────────────────────────────
-  readonly visibleRows = input.required<GanttFlatRow[]>();
+  /** Rows to mount, in DOM order: the virtual window plus the pinned rows (`mountedRows`) */
+  readonly rows = input.required<readonly MountedRow[]>();
+  /** Task id of the row that takes the list's tab stop (`tabStopRow`); `null` while no row is mounted */
+  readonly tabStopId = input<string | null>(null);
+  /** `aria-multiselectable`: selection and multi-select are both on */
+  readonly multiselectable = input<boolean>(true);
   readonly columns = input.required<ColumnDef[]>();
   readonly rowCount = input<number>(0);
   readonly rowHeight = input<number>(32);
   readonly selectedIds = input<ReadonlySet<string>>(new Set());
-  /** @deprecated Ignored: the task list is painted with the chart's `--gantt-*` tokens. */
-  readonly theme = input<GanttTheme | undefined>(undefined);
   readonly colHeaderHeight = input<number>(32);
   readonly indentSize = input<number>(16);
   readonly paddingTop = input<number>(0);
@@ -376,8 +400,6 @@ export class GanttTaskListComponent {
   readonly collapseToggle = output<string>(); // taskId
   readonly rowClick = output<{ row: GanttFlatRow; event: MouseEvent | KeyboardEvent }>();
   readonly rowDblClick = output<GanttFlatRow>();
-  /** @deprecated The panel is resized with the splitter in GantryComponent */
-  readonly panelWidthChange = output<number>();
   /** Live column resize (while dragging the header edge) */
   readonly columnWidthChange = output<{ key: string; width: number }>();
   /** Column resize finished */
@@ -385,8 +407,19 @@ export class GanttTaskListComponent {
   readonly sortColumn = output<string>();
 
   // ── Internal state ────────────────────────────────────────
-  /** Key of the column being resized (the trailing click must not sort) */
+  /** Key of the column being resized (no text selection meanwhile) */
   protected readonly resizingCol = signal<string | null>(null);
+
+  /** The column-resize gesture (pointer capture on the handle) */
+  private readonly colResize = createColumnResize({
+    onStart: key => this.resizingCol.set(key),
+    onWidth: (key, width) => this.columnWidthChange.emit({ key, width }),
+    onEnd: () => {
+      this.resizingCol.set(null);
+      this.columnResizeEnd.emit();
+    },
+    onAbort: () => this.resizingCol.set(null),
+  });
 
   protected readonly i18n = inject(GanttI18nService);
 
@@ -413,19 +446,12 @@ export class GanttTaskListComponent {
   );
 
   /** One column grows to fill a panel wider than the columns: the `flex` one, else the last */
-  protected readonly gridTemplate = computed(() => {
-    const cols = this.visibleColumns();
-    const flexIdx = cols.some(c => c.flex) ? cols.findIndex(c => c.flex) : cols.length - 1;
-    return cols.map((c, i) => (i === flexIdx ? `minmax(${c.width}px, 1fr)` : `${c.width}px`)).join(' ');
-  });
+  protected readonly gridTemplate = computed(() => columnsGridTemplate(this.visibleColumns()));
 
   // ── Row utilities ─────────────────────────────────────────
   protected isSelected(row: GanttFlatRow): boolean {
     return this.selectedIds().has(row.task.id);
   }
-
-  /** Text paints of the classless spans (sort icon, task icon) */
-  protected readonly paints = { text: themeVar('textPrimary'), muted: themeVar('textMuted') } as const;
 
   /** Same background as the timeline rows (`rowPaint`: selection > `task.rowColor` > zebra) */
   protected rowBg(row: GanttFlatRow): string {
@@ -472,39 +498,174 @@ export class GanttTaskListComponent {
     this.rowClick.emit({ row, event });
   }
 
-  /** Row that had keyboard focus — when it leaves the virtual window, focus returns to the chart */
-  protected focusedRowId: string | null = null;
-
   protected onHeaderClick(col: ColumnDef): void {
-    if (col.sortable && !this.resizingCol()) this.sortColumn.emit(col.key);
+    // The click that follows a resize's release is the drag's, not a sort
+    if (col.sortable && !this.colResize.active()) this.sortColumn.emit(col.key);
   }
 
   // ── Column resize ─────────────────────────────────────────
   protected onColResizeStart(event: PointerEvent, col: ColumnDef): void {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const startX = event.clientX;
-    const startWidth = col.width;
-    this.resizingCol.set(col.key);
-
-    // Listen on window: the header re-renders while resizing
-    const onMove = (e: PointerEvent) => {
-      const width = Math.round(
-        Math.min(col.maxWidth ?? 800, Math.max(col.minWidth ?? 40, startWidth + e.clientX - startX)),
-      );
-      this.columnWidthChange.emit({ key: col.key, width });
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-      this.columnResizeEnd.emit();
-      // Let the click that follows pointerup see `resizingCol`
-      setTimeout(() => this.resizingCol.set(null));
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    this.colResize.start(event.currentTarget as HTMLElement, event, col);
   }
+}
+
+// ── Mounted rows and the tab stop (ports of the Web Component's `graph/tasklist.ts` / `layers/tasklist.ts`) ──
+
+/** A row the task list mounts. */
+export interface MountedRow {
+  readonly row: GanttFlatRow;
+  /**
+   * Offset (px) of a row pinned outside the virtual window (the focused row): taken out of the
+   * flow, since the spacers already cover it. `null` for the rows of the window.
+   */
+  readonly pinnedTop: number | null;
+}
+
+/** The rows of `vw` (the pinned ones before the window, the window, the pinned ones after it) with their pin offsets. */
+export function mountedRows(rows: readonly GanttFlatRow[], vw: VirtualWindow, rowHeight: number): MountedRow[] {
+  const out: MountedRow[] = [];
+  for (const i of virtualIndexes(vw, rows.length)) {
+    const row = rows[i];
+    if (row) out.push({ row, pinnedTop: i < vw.first || i > vw.last ? row.visibleIndex * rowHeight : null });
+  }
+  return out;
+}
+
+/** Same rows (by object) at the same pin offsets: a scroll inside the overscan keeps the list. */
+export function sameMountedRows(a: readonly MountedRow[], b: readonly MountedRow[]): boolean {
+  return a.length === b.length && a.every((m, i) => m.row === b[i]?.row && m.pinnedTop === b[i]?.pinnedTop);
+}
+
+/**
+ * The row that takes the list's tab stop: the first of `preferred` (task ids) that is mounted,
+ * else the first row of the window at or below `firstInView` (a visible index), else the first
+ * row of the window, else the first mounted row.
+ */
+export function tabStopRow(
+  mounted: readonly MountedRow[],
+  preferred: readonly (string | null)[],
+  firstInView: number,
+): MountedRow | undefined {
+  for (const id of preferred) {
+    const m = id === null ? undefined : mounted.find(r => r.row.task.id === id);
+    if (m) return m;
+  }
+  const windowed = mounted.filter(m => m.pinnedTop === null);
+  return windowed.find(m => m.row.visibleIndex >= firstInView) ?? windowed[0] ?? mounted[0];
+}
+
+// ── Column-resize gesture (port of the Web Component's `interaction/column-resize.ts`) ──
+
+/** What a resize reports. */
+interface ColumnResizeHooks {
+  /** A gesture started on the column `key` */
+  readonly onStart: (key: string) => void;
+  /** Live width while dragging (clamped to the column's min / max, rounded); only actual changes */
+  readonly onWidth: (key: string, width: number) => void;
+  /** The gesture ended: released, cancelled or capture lost */
+  readonly onEnd: () => void;
+  /** The gesture was aborted (the list is destroyed): nothing is reported, the width stays */
+  readonly onAbort: () => void;
+}
+
+interface ColumnResize {
+  /** Starts resizing `col` from a primary-button `pointerdown` on its `handle`. */
+  start(
+    handle: HTMLElement,
+    event: PointerEvent,
+    col: Pick<ColumnDef, 'key' | 'width' | 'minWidth' | 'maxWidth'>,
+  ): void;
+  /**
+   * A resize is running, or has just ended and the click that follows its release is not
+   * dispatched yet (that click must not sort the column).
+   */
+  active(): boolean;
+  /** Ends the gesture in progress, if any, without reporting it, and forgets the click guard. */
+  abort(): void;
+}
+
+/**
+ * The handle captures the pointer (`setPointerCapture`), so every move and the release reach the
+ * handle itself: the listeners live on the handle for the length of one gesture, never on
+ * `window`. The handle is keyed with its column and survives the re-renders that the live width
+ * changes cause.
+ */
+function createColumnResize(hooks: ColumnResizeHooks): ColumnResize {
+  /** The gesture in progress: its handle and how to end it */
+  let gesture: { readonly handle: HTMLElement; readonly end: (report: boolean) => void } | null = null;
+  /** Set from a release until the next task: the trailing click is the drag's, not a sort */
+  let settling = false;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+
+  const stopSettling = (): void => {
+    clearTimeout(settle);
+    settle = undefined;
+    settling = false;
+  };
+
+  return {
+    start(handle, event, col) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      gesture?.end(true);
+      stopSettling();
+
+      const { pointerId } = event;
+      const startX = event.clientX;
+      const startWidth = col.width;
+      let last = startWidth;
+
+      const move = (e: PointerEvent): void => {
+        if (e.pointerId !== pointerId) return;
+        const width = clampColumnWidth(startWidth + e.clientX - startX, col);
+        if (width === last) return;
+        last = width;
+        hooks.onWidth(col.key, width);
+      };
+      const release = (e: PointerEvent): void => {
+        if (e.pointerId === pointerId) end(true);
+      };
+      const end = (report: boolean): void => {
+        if (gesture?.handle !== handle) return;
+        gesture = null;
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', release);
+        handle.removeEventListener('pointercancel', release);
+        handle.removeEventListener('lostpointercapture', release);
+        try {
+          if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+        } catch {
+          // the pointer is already gone
+        }
+        if (!report) {
+          hooks.onAbort();
+          return;
+        }
+        settling = true;
+        settle = setTimeout(stopSettling);
+        hooks.onEnd();
+      };
+
+      gesture = { handle, end };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', release);
+      handle.addEventListener('pointercancel', release);
+      handle.addEventListener('lostpointercapture', release);
+      try {
+        handle.setPointerCapture(pointerId);
+      } catch {
+        // no active pointer with this id (synthetic events): the handle still gets what it is sent
+      }
+      hooks.onStart(col.key);
+    },
+    active() {
+      // A handle taken out of the document mid-drag never hears its release: not active any more
+      return (gesture !== null && gesture.handle.isConnected) || settling;
+    },
+    abort() {
+      gesture?.end(false);
+      stopSettling();
+    },
+  };
 }

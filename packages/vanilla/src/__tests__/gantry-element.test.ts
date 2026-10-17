@@ -739,3 +739,57 @@ describe('<gantry-element>', () => {
     });
   });
 });
+
+// `task.collapsed` seeds the ids the element has never seen (core `seedCollapsed`, shared with Angular)
+describe('<gantry-element> task.collapsed seeding', () => {
+  let el: GantryElement;
+  const tree = (): GanttTask[] => [
+    task('g', '2026-01-01', '2026-02-01', { type: TaskType.Group, collapsed: true }),
+    task('c', '2026-01-02', '2026-01-10', { parentId: 'g' }),
+    task('x', '2026-01-05', '2026-01-20'),
+  ];
+  const rowIds = (e: GantryElement) => $$(e, '.gantt-tl-row').map(r => r.getAttribute('data-task-id'));
+  const expand = async (e: GantryElement) => {
+    ($(e, '[data-focus-key="collapse:g"]') as HTMLButtonElement).click();
+    await frame();
+  };
+
+  afterEach(() => el?.remove());
+
+  it('keeps the user expand state through an empty task list; a new id starts collapsed', async () => {
+    el = await mount({ tasks: tree() });
+    expect(rowIds(el)).toEqual(['g', 'x']);
+    await expand(el);
+    expect(rowIds(el)).toEqual(['g', 'c', 'x']);
+
+    el.tasks = [];
+    await frame();
+    el.tasks = tree();
+    await frame();
+    expect(rowIds(el)).toEqual(['g', 'c', 'x']);
+
+    el.tasks = [
+      ...tree(),
+      task('h', '2026-01-03', '2026-01-12', { type: TaskType.Group, collapsed: true }),
+      task('h1', '2026-01-03', '2026-01-06', { parentId: 'h' }),
+    ];
+    await frame();
+    expect(rowIds(el)).toContain('h');
+    expect(rowIds(el)).not.toContain('h1');
+    expect(rowIds(el)).toContain('c');
+  });
+
+  it('keeps the user expand state across a data-source reset', async () => {
+    const fetcher = vi.fn(async (page: number) => (page === 1 ? tree() : []));
+    el = await mount();
+    el.dataSource = { fetcher, pageSize: 50 };
+    await vi.waitFor(() => expect(rowIds(el)).toEqual(['g', 'x']));
+    await expand(el);
+    expect(rowIds(el)).toEqual(['g', 'c', 'x']);
+
+    await el.dataSource!.reset();
+    await frame();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(rowIds(el)).toEqual(['g', 'c', 'x']);
+  });
+});

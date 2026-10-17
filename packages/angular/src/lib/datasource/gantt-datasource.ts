@@ -21,7 +21,7 @@
 //  Component); this class only exposes its state as signals.
 // ─────────────────────────────────────────────────────────────
 
-import { signal, computed, type Signal, type Injector } from '@angular/core';
+import { signal, computed, type Signal } from '@angular/core';
 import { PagedLoader } from '@gantry/core';
 
 import { type GanttTask } from '../types';
@@ -53,9 +53,6 @@ export interface GanttDataSourceConfig<T extends GanttTask = GanttTask> {
 
   /** Delay before the first automatic retry in ms, doubled on each attempt (default 500) */
   retryDelay?: number;
-
-  /** @deprecated No longer needed: the data source works outside an injection context. */
-  injector?: Injector;
 }
 
 // ─── GanttDataSource ─────────────────────────────────────────
@@ -167,8 +164,6 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
  * Create a GanttDataSource. Equivalent to `new GanttDataSource(config)`;
  * kept for code written against earlier versions.
  */
-export function createGanttDataSource<T extends GanttTask>(
-  config: Omit<GanttDataSourceConfig<T>, 'injector'>,
-): GanttDataSource<T> {
+export function createGanttDataSource<T extends GanttTask>(config: GanttDataSourceConfig<T>): GanttDataSource<T> {
   return new GanttDataSource(config);
 }

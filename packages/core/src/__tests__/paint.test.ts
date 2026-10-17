@@ -205,6 +205,7 @@ describe('themeVar / isThemeVar / PAINTS', () => {
       rowBg: 'rowBg',
       rowBgAlt: 'rowBgAlt',
       rowSelected: 'selectionBg',
+      progressOverlay: 'progressOverlay',
     };
     for (const [name, key] of Object.entries(expected) as [keyof typeof PAINTS, ThemeColorKey][]) {
       expect(PAINTS[name].startsWith('var(--gantt-')).toBe(true);
@@ -246,7 +247,8 @@ describe('bar paints', () => {
     expect(v.paint.body).toBe('var(--gantt-bar)');
     expect(v.label?.inside).toBe(true);
     expect(v.paint.label).toBe('var(--gantt-bar-text-on-bar)');
-    expect(v.paint.progress).toBe('#000000');
+    expect(v.paint.progress).toBe('var(--gantt-progress-overlay)');
+    expect(v.paint.progress).toBe(PAINTS.progressOverlay);
   });
 
   it('a light custom barColor gets a concrete readable label colour', () => {

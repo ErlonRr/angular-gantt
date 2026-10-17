@@ -116,7 +116,7 @@ describe('<gantry-element> theme sheet and paints', () => {
   it('writes every theme variable and the contrast tokens into the sheet, none into the host style', async () => {
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
     const css = themeToCss(LightTheme);
-    expect(css).toHaveLength(40);
+    expect(css).toHaveLength(42);
     for (const [name, value] of css) expect(themeValue(el, name), name).toBe(value);
     expect(el.getAttribute('style') ?? '').not.toContain('--gantt-');
     // No theme attribute on the host: the dark theme is the `:state(dark)` custom state
