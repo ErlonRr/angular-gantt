@@ -29,7 +29,7 @@ import {
   makeEnvironmentProviders,
 } from '@angular/core';
 import { type GanttTheme, type GanttThemeOverrides, type GanttLabels, type GanttFormats } from '../types';
-import { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme, THEME_CSS_VARS, resolveTheme } from '@gantry/core';
+import { LightTheme, DarkTheme, LegacyLightTheme, LegacyDarkTheme, resolveTheme, themeToCss } from '@gantry/core';
 
 // ─── Built-in themes (shared with the Web Component via @gantry/core) ──
 
@@ -56,19 +56,20 @@ export function provideGantt(config: GanttGlobalConfig = {}): EnvironmentProvide
   return makeEnvironmentProviders([{ provide: GANTT_GLOBAL_CONFIG, useValue: config }]);
 }
 
+/** Every `--gantt-*` token of the theme, the bar-label contrast tokens included (`themeToCss`). */
 function applyThemeToDom(el: HTMLElement, theme: Required<GanttTheme>): void {
-  for (const [key, cssVar] of THEME_CSS_VARS) el.style.setProperty(cssVar, String(theme[key]));
+  for (const [cssVar, value] of themeToCss(theme)) el.style.setProperty(cssVar, String(value));
 }
 
 // ─── Service ─────────────────────────────────────────────────
 
 @Injectable()
 export class GanttThemeService {
-  private readonly cfg = inject(GANTT_GLOBAL_CONFIG, { optional: true }) ?? {};
+  private readonly globalConfig = inject(GANTT_GLOBAL_CONFIG, { optional: true }) ?? {};
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
 
-  private readonly _darkMode = signal<boolean | 'auto'>(this.cfg.darkMode ?? false);
+  private readonly _darkMode = signal<boolean | 'auto'>(this.globalConfig.darkMode ?? false);
   private readonly _prefersDark = signal<boolean>(false);
   /** From `[options].theme` — replaced whenever the options change */
   private readonly _optionsTheme = signal<GanttThemeOverrides>({});
@@ -78,7 +79,7 @@ export class GanttThemeService {
   // ── Computed resolved theme ───────────────────────────────
   /** Light/dark base ← global config ← `options.theme` ← API overrides */
   readonly resolvedTheme = computed<Required<GanttTheme>>(() =>
-    resolveTheme(this.isDark(), { ...this.cfg.theme, ...this._optionsTheme(), ...this._customOverride() }),
+    resolveTheme(this.isDark(), { ...this.globalConfig.theme, ...this._optionsTheme(), ...this._customOverride() }),
   );
 
   readonly isDark = computed(() => {

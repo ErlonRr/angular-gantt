@@ -5,19 +5,12 @@
 //  into markup, so they always show the same rows in the same order.
 // ─────────────────────────────────────────────────────────────
 
-import {
-  DEFAULT_LABELS,
-  DependencyType,
-  TaskType,
-  type GanttLabels,
-  type GanttTask,
-  type GanttTheme,
-  type TaskStatus,
-} from '../types';
+import { DEFAULT_LABELS, DependencyType, TaskType, type GanttLabels, type GanttTask, type TaskStatus } from '../types';
 import { calendarDays, clamp, formatDate } from '../gantt-math';
 import { taskSpan } from '../render/timeline';
 import { taskDependencies, taskDurationLabel, taskStatus } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
+import { themeVar, type Paint } from '../render/paint';
 
 // ─── Labels ───────────────────────────────────────────────────
 
@@ -49,17 +42,6 @@ export interface TooltipRow {
   kind?: TooltipRowKind | undefined;
 }
 
-export interface TooltipColors {
-  background: string;
-  border: string;
-  text: string;
-  fontFamily: string;
-  /** Fill of the progress bar, as the bar is filled: the critical colour on the critical path, else the task's bar colour, else the theme's */
-  progress: string;
-  /** Accent of the critical-path row */
-  critical: string;
-}
-
 export interface TooltipModel {
   /** Task name */
   title: string;
@@ -78,18 +60,19 @@ export interface TooltipModel {
   predecessors: string[];
   /** Tasks that depend on this one (needs `tasksById`) */
   successors: string[];
-  colors: TooltipColors;
+  /** Paints (theme tokens or the task's own colour); the chrome uses the `--gantt-tooltip-*` tokens */
+  paint: TooltipPaint;
+}
+
+export interface TooltipPaint {
+  /** Fill of the progress bar: `var(--gantt-critical)` on the critical path, else `task.barColor`, else `var(--gantt-bar)` */
+  progress: Paint;
 }
 
 export interface TooltipInput {
   task: GanttTask;
-  /** How dates are read, whether baseline rows are shown (`baseline`, like the bars), and the theme */
-  config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline'> & {
-    theme: Pick<
-      GanttTheme,
-      'tooltipBg' | 'tooltipBorder' | 'tooltipText' | 'fontFamily' | 'barColor' | 'criticalColor'
-    >;
-  };
+  /** How dates are read and whether baseline rows are shown (`baseline`, like the bars) */
+  config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline'>;
   labels: TooltipLabels;
   locale?: string | undefined;
   /** Format of the dates (`formats.dateFormat`) */
@@ -192,7 +175,6 @@ export function buildTooltipModel(input: TooltipInput): TooltipModel {
   if (predecessors.length) rows.push({ label: labels.colPredecessors, value: predecessors.join(', '), kind: 'deps' });
   if (successors.length) rows.push({ label: extra.ttSuccessors, value: successors.join(', '), kind: 'deps' });
 
-  const theme = config.theme;
   return {
     title: task.name,
     kind,
@@ -203,14 +185,7 @@ export function buildTooltipModel(input: TooltipInput): TooltipModel {
     baselineVariance,
     predecessors,
     successors,
-    colors: {
-      background: theme.tooltipBg,
-      border: theme.tooltipBorder,
-      text: theme.tooltipText,
-      fontFamily: theme.fontFamily,
-      progress: critical ? theme.criticalColor : (task.barColor ?? theme.barColor),
-      critical: theme.criticalColor,
-    },
+    paint: { progress: critical ? themeVar('criticalColor') : (task.barColor ?? themeVar('barColor')) },
   };
 }
 

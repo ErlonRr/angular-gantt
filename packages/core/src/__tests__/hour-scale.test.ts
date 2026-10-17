@@ -7,11 +7,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildTimeline } from '../render/timeline';
 import { resolveConfig } from '../render/config';
-import { LightTheme } from '../render/theme';
 import { calendarDays } from '../gantt-math';
 import type { GanttTask } from '../types';
 
-const config = resolveConfig({ viewMode: 'Hour' }, LightTheme);
+const config = resolveConfig({ viewMode: 'Hour' });
 
 function hourTimeline(tasks: GanttTask[]) {
   return buildTimeline({ tasks, config, now: new Date(2026, 2, 10, 12) });
@@ -63,5 +62,16 @@ describe('Hour view', () => {
       });
       expect(tl.todayX).toBe(Math.round((calendarDays(now, false) - calendarDays(tl.start, false)) * config.pxPerDay));
     }
+  });
+
+  it('ends every hour cell on a whole hour, even after a 30-minute DST jump (Lord Howe, 4 Oct 2026)', () => {
+    const tl = hourTimeline([
+      { id: 'a', name: 'A', start: new Date(2026, 9, 3, 20), end: new Date(2026, 9, 5, 6), progress: 0 },
+    ]);
+    const cells = tl.tiers.at(-1)!.cells;
+    // Only the boundary inside the skipped half hour (02:00 → 02:30) may fall off the hour; before
+    // the fix every later cell ran from hh:30 to hh+1:30
+    expect(cells.filter(c => c.start.getMinutes() !== 0).length).toBeLessThanOrEqual(1);
+    expect(cells.filter(c => c.end.getMinutes() !== 0).length).toBeLessThanOrEqual(1);
   });
 });

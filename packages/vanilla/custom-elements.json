@@ -1,0 +1,923 @@
+{
+  "schemaVersion": "1.0.0",
+  "readme": "",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "dist/index.js",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "`<gantry-element>`: an interactive Gantt chart (task list, timeline, dependencies, critical\npath, drag and resize, lazy paging, theming, i18n). Set `tasks` and `options` as properties;\nevery `GanttOptions` field behaves as in the other Gantry bindings.",
+          "name": "GantryElement",
+          "cssProperties": [
+            {
+              "description": "Chart background (theme `backgroundColor`). Defaults are the light theme's.",
+              "name": "--gantt-bg",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Header background (`headerBackground`).",
+              "name": "--gantt-header-bg",
+              "default": "#F8FAFC"
+            },
+            {
+              "description": "Row background (`rowBg`).",
+              "name": "--gantt-row-bg",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Alternate row background (`rowBgAlt`).",
+              "name": "--gantt-row-bg-alt",
+              "default": "#F8FAFC"
+            },
+            {
+              "description": "Bar fill (`barColor`); set `--gantt-bar-text-on-bar` with it.",
+              "name": "--gantt-bar",
+              "default": "#2563EB"
+            },
+            {
+              "description": "Preferred bar label colour (`barTextColor`).",
+              "name": "--gantt-bar-text",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Bar corner radius (`barRadius`; change it through the theme API, it shapes the layout).",
+              "name": "--gantt-bar-radius",
+              "default": "4px"
+            },
+            {
+              "description": "Milestone fill (`milestoneColor`); set `--gantt-bar-text-on-milestone` with it.",
+              "name": "--gantt-milestone",
+              "default": "#8B5CF6"
+            },
+            {
+              "description": "Baseline bars (`baselineColor`).",
+              "name": "--gantt-baseline",
+              "default": "#64748B"
+            },
+            {
+              "description": "Critical-path bars and arrows (`criticalColor`); set `--gantt-bar-text-on-critical` with it.",
+              "name": "--gantt-critical",
+              "default": "#DC2626"
+            },
+            {
+              "description": "Task-list background (`panelBg`).",
+              "name": "--gantt-panel-bg",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Task-list borders (`panelBorder`).",
+              "name": "--gantt-panel-border",
+              "default": "#E2E8F0"
+            },
+            {
+              "description": "Borders between regions (`borderColor`).",
+              "name": "--gantt-border",
+              "default": "#E2E8F0"
+            },
+            {
+              "description": "Grid lines (`gridLine`).",
+              "name": "--gantt-grid-line",
+              "default": "#EEF2F6"
+            },
+            {
+              "description": "Delimiters between periods (`gridLineMajor`).",
+              "name": "--gantt-grid-line-major",
+              "default": "#CBD5E1"
+            },
+            {
+              "description": "Today marker and current-period highlight (`todayColor`).",
+              "name": "--gantt-today",
+              "default": "#B45309"
+            },
+            {
+              "description": "Primary text (`textPrimary`).",
+              "name": "--gantt-text",
+              "default": "#1E293B"
+            },
+            {
+              "description": "Secondary text (`textSecondary`).",
+              "name": "--gantt-text-sec",
+              "default": "#475569"
+            },
+            {
+              "description": "Muted text (`textMuted`).",
+              "name": "--gantt-text-muted",
+              "default": "#64748B"
+            },
+            {
+              "description": "Font family (`fontFamily`).",
+              "name": "--gantt-font",
+              "default": "system-ui, -apple-system, sans-serif"
+            },
+            {
+              "description": "Base font size (`fontSize`; change it through the theme API, it shapes the layout).",
+              "name": "--gantt-font-size",
+              "default": "13px"
+            },
+            {
+              "description": "Dependency arrows (`arrowColor`).",
+              "name": "--gantt-arrow",
+              "default": "#2563EB"
+            },
+            {
+              "description": "Tooltip background (`tooltipBg`).",
+              "name": "--gantt-tooltip-bg",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Tooltip border (`tooltipBorder`).",
+              "name": "--gantt-tooltip-bdr",
+              "default": "#E2E8F0"
+            },
+            {
+              "description": "Tooltip text (`tooltipText`).",
+              "name": "--gantt-tooltip-txt",
+              "default": "#1E293B"
+            },
+            {
+              "description": "Selected row background (`selectionBg`).",
+              "name": "--gantt-sel-bg",
+              "default": "#EFF6FF"
+            },
+            {
+              "description": "Selection outline and focus rings (`selectionBorder`).",
+              "name": "--gantt-sel-border",
+              "default": "#2563EB"
+            },
+            {
+              "description": "Scrollbar track (`scrollbarTrack`).",
+              "name": "--gantt-scrollbar-track",
+              "default": "#F1F5F9"
+            },
+            {
+              "description": "Scrollbar thumb (`scrollbarThumb`).",
+              "name": "--gantt-scrollbar-thumb",
+              "default": "#CBD5E1"
+            },
+            {
+              "description": "Weekend bands (`weekendBg`).",
+              "name": "--gantt-weekend-bg",
+              "default": "rgba(100, 116, 139, 0.08)"
+            },
+            {
+              "description": "Holiday bands (`holidayBg`).",
+              "name": "--gantt-holiday-bg",
+              "default": "rgba(239, 68, 68, 0.08)"
+            },
+            {
+              "description": "Off-hours bands on hour scales (`offHoursBg`).",
+              "name": "--gantt-off-hours-bg",
+              "default": "rgba(100, 116, 139, 0.07)"
+            },
+            {
+              "description": "Intensive-hours bands (`intensiveBg`).",
+              "name": "--gantt-intensive-bg",
+              "default": "rgba(245, 158, 11, 0.16)"
+            },
+            {
+              "description": "Status dot: not started (`statusNotStarted`).",
+              "name": "--gantt-status-not-started",
+              "default": "#64748B"
+            },
+            {
+              "description": "Status dot: in progress (`statusInProgress`).",
+              "name": "--gantt-status-in-progress",
+              "default": "#2563EB"
+            },
+            {
+              "description": "Status dot: overdue (`statusOverdue`).",
+              "name": "--gantt-status-overdue",
+              "default": "#DC2626"
+            },
+            {
+              "description": "Status dot: done (`statusDone`).",
+              "name": "--gantt-status-done",
+              "default": "#15803D"
+            },
+            {
+              "description": "Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).",
+              "name": "--gantt-bar-text-on-bar",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).",
+              "name": "--gantt-bar-text-on-milestone",
+              "default": "#FFFFFF"
+            },
+            {
+              "description": "Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).",
+              "name": "--gantt-bar-text-on-critical",
+              "default": "#FFFFFF"
+            }
+          ],
+          "cssParts": [
+            {
+              "description": "The root box (toolbar and panes).",
+              "name": "wrapper"
+            },
+            {
+              "description": "The toolbar.",
+              "name": "toolbar"
+            },
+            {
+              "description": "The task-list panel.",
+              "name": "panel"
+            },
+            {
+              "description": "The splitter box between the panes (its handle is the `role=\"separator\"` child).",
+              "name": "splitter"
+            },
+            {
+              "description": "The timeline viewport (header and chart; scrolls on both axes).",
+              "name": "timeline"
+            }
+          ],
+          "members": [
+            {
+              "kind": "field",
+              "name": "tasks",
+              "type": {
+                "text": "GanttTask[]"
+              },
+              "description": "Tasks to display (a tree through `parentId`). Ignored while a `dataSource` is set."
+            },
+            {
+              "kind": "field",
+              "name": "columns",
+              "type": {
+                "text": "VanillaColumnDef[]"
+              },
+              "description": "Task-list columns (`options.columns`, when set, wins); the built-in columns by default."
+            },
+            {
+              "kind": "field",
+              "name": "options",
+              "type": {
+                "text": "GanttOptions"
+              },
+              "description": "Every `GanttOptions` field. Re-assigning equal options changes nothing; the same object counts as changed."
+            },
+            {
+              "kind": "field",
+              "name": "annotations",
+              "type": {
+                "text": "GanttAnnotation[]"
+              },
+              "description": "Highlighted date ranges and markers."
+            },
+            {
+              "kind": "field",
+              "name": "darkMode",
+              "type": {
+                "text": "boolean | 'auto'"
+              },
+              "description": "`true` / `false` / `'auto'` (follows `prefers-color-scheme`).",
+              "attribute": "dark-mode"
+            },
+            {
+              "kind": "field",
+              "name": "showToolbar",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Toolbar with zoom, view-mode pills, view toggle and the Today button.",
+              "attribute": "show-toolbar"
+            },
+            {
+              "kind": "field",
+              "name": "enableDrag",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Bars can be dragged to new dates (per task: `task.draggable = false`).",
+              "attribute": "enable-drag"
+            },
+            {
+              "kind": "field",
+              "name": "enableResize",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Bars can be resized from either end.",
+              "attribute": "enable-resize"
+            },
+            {
+              "kind": "field",
+              "name": "tooltipEnabled",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Hover tooltip on bars.",
+              "attribute": "tooltip-enabled"
+            },
+            {
+              "kind": "field",
+              "name": "showLegend",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Floating legend explaining the vertical markers (today + annotations).",
+              "attribute": "show-legend"
+            },
+            {
+              "kind": "field",
+              "name": "dataSource",
+              "type": {
+                "text": "GanttDataSource | null"
+              },
+              "description": "Lazy, paged loading. Pass `{ fetcher, pageSize }` or a `GanttDataSource`.\nWhile set, it owns the task list (the `tasks` property is ignored)."
+            },
+            {
+              "kind": "field",
+              "name": "renderBar",
+              "type": {
+                "text": "GanttBarRenderer | undefined"
+              },
+              "description": "Replace or decorate the built-in bar SVG (see `GanttBarRenderer`)."
+            },
+            {
+              "kind": "method",
+              "name": "zoomIn",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "One zoom level closer (along `options.zoomLevels`)."
+            },
+            {
+              "kind": "method",
+              "name": "zoomOut",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "One zoom level further out."
+            },
+            {
+              "kind": "field",
+              "name": "viewMode",
+              "type": {
+                "text": "string"
+              },
+              "description": "Active zoom level (a `ViewMode` or a custom `zoomLevels` name).",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "setViewMode",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "mode",
+                  "type": {
+                    "text": "ViewMode | (string & {})"
+                  }
+                }
+              ],
+              "description": "Switch the zoom level: a `ViewMode` or a custom `zoomLevels` name (also the `view-mode` attribute)."
+            },
+            {
+              "kind": "field",
+              "name": "view",
+              "type": {
+                "text": "GanttView"
+              },
+              "description": "Current view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only).",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "setView",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "view",
+                  "type": {
+                    "text": "GanttView"
+                  }
+                }
+              ],
+              "description": "Switch the view: task list and timeline, the task list only, or the timeline only."
+            },
+            {
+              "kind": "method",
+              "name": "togglePanel",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Collapse / expand the task list; expanding restores its last width."
+            },
+            {
+              "kind": "method",
+              "name": "scrollToToday",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "behavior",
+                  "default": "'smooth'",
+                  "type": {
+                    "text": "ScrollBehavior"
+                  }
+                }
+              ],
+              "description": "Centre today in the timeline viewport."
+            },
+            {
+              "kind": "method",
+              "name": "scrollToDate",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "date",
+                  "type": {
+                    "text": "Date"
+                  }
+                },
+                {
+                  "name": "behavior",
+                  "default": "'smooth'",
+                  "type": {
+                    "text": "ScrollBehavior"
+                  }
+                }
+              ],
+              "description": "Centre `date` in the timeline viewport."
+            },
+            {
+              "kind": "method",
+              "name": "scrollToTask",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "behavior",
+                  "default": "'smooth'",
+                  "type": {
+                    "text": "ScrollBehavior"
+                  }
+                }
+              ],
+              "description": "Scroll the given task into view (vertically and horizontally)."
+            },
+            {
+              "kind": "method",
+              "name": "getSelectedTasks",
+              "return": {
+                "type": {
+                  "text": "GanttTask[]"
+                }
+              },
+              "description": "The selected tasks, in task order."
+            },
+            {
+              "kind": "method",
+              "name": "setSelectedTasks",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "ids",
+                  "type": {
+                    "text": "string[]"
+                  }
+                }
+              ],
+              "description": "Select exactly these task ids (fires `selection-change` when the selection changes)."
+            },
+            {
+              "kind": "method",
+              "name": "clearSelection",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Deselect every task."
+            },
+            {
+              "kind": "method",
+              "name": "selectAll",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Select every visible task (multiple selection only)."
+            },
+            {
+              "kind": "method",
+              "name": "updateTask",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "patch",
+                  "type": {
+                    "text": "Partial<GanttTask>"
+                  }
+                }
+              ],
+              "description": "Merge `patch` into the task with this id."
+            },
+            {
+              "kind": "method",
+              "name": "appendTasks",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "tasks",
+                  "type": {
+                    "text": "GanttTask[]"
+                  }
+                }
+              ],
+              "description": "Add tasks after the current ones."
+            },
+            {
+              "kind": "method",
+              "name": "collapseAll",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Collapse every group (task with children)."
+            },
+            {
+              "kind": "method",
+              "name": "expandAll",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Expand every group."
+            },
+            {
+              "kind": "method",
+              "name": "setColumnVisible",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "key",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "visible",
+                  "type": {
+                    "text": "boolean"
+                  }
+                },
+                {
+                  "name": "view",
+                  "optional": true,
+                  "type": {
+                    "text": "'split' | 'table'"
+                  }
+                }
+              ],
+              "description": "Show / hide a column in both views, or only in the split panel / the table view."
+            },
+            {
+              "kind": "method",
+              "name": "toggleColumnVisible",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "key",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "view",
+                  "optional": true,
+                  "type": {
+                    "text": "'split' | 'table'"
+                  }
+                }
+              ],
+              "description": "Show a column if the view (both views by default) hides it, else hide it."
+            },
+            {
+              "kind": "method",
+              "name": "setTheme",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "override",
+                  "type": {
+                    "text": "GanttThemeOverrides"
+                  }
+                }
+              ],
+              "description": "Replace the custom theme overrides (on top of the light/dark base and `options.theme`)."
+            },
+            {
+              "kind": "method",
+              "name": "patchTheme",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "patch",
+                  "type": {
+                    "text": "GanttThemeOverrides"
+                  }
+                }
+              ],
+              "description": "Merge `patch` into the custom theme overrides."
+            },
+            {
+              "kind": "method",
+              "name": "resetTheme",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Drop the `setTheme` / `patchTheme` overrides: back to the light/dark base plus `options.theme`."
+            },
+            {
+              "kind": "method",
+              "name": "getBarVisual",
+              "return": {
+                "type": {
+                  "text": "BarVisual | undefined"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Geometry of a task's bar (position in timeline px, size, label) — e.g. to anchor a popover."
+            },
+            {
+              "kind": "field",
+              "name": "criticalIds",
+              "type": {
+                "text": "ReadonlySet<string>"
+              },
+              "description": "IDs of the tasks on the critical path (empty unless `options.criticalPath`).",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "getState",
+              "return": {
+                "type": {
+                  "text": "GanttState"
+                }
+              },
+              "description": "Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort)."
+            },
+            {
+              "kind": "method",
+              "name": "setState",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "state",
+                  "type": {
+                    "text": "GanttState"
+                  }
+                },
+                {
+                  "name": "emit",
+                  "default": "true",
+                  "description": "`false`: neither fire `state-change` nor persist under `options.stateKey`."
+                }
+              ],
+              "description": "Restore a state snapshot (e.g. from your backend)."
+            }
+          ],
+          "events": [
+            {
+              "type": {
+                "text": "CustomEvent<TaskDragEvent>"
+              },
+              "description": "A bar was moved: `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`.",
+              "name": "task-dragged"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<TaskResizeEvent>"
+              },
+              "description": "A bar was resized: `{ taskId, handle, oldStart, oldEnd, newStart, newEnd, daysDelta }`.",
+              "name": "task-resized"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<SelectionChangeEvent>"
+              },
+              "description": "The selection changed: `{ selectedIds }`.",
+              "name": "selection-change"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttFlatRow>"
+              },
+              "description": "A task-list row was clicked.",
+              "name": "row-click"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttFlatRow>"
+              },
+              "description": "A task-list row was double-clicked.",
+              "name": "row-dblclick"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<{ viewMode: string }>"
+              },
+              "description": "The active zoom level changed.",
+              "name": "view-mode-change"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttState>"
+              },
+              "description": "The UI state changed (panel width or view, zoom, column widths, collapsed rows, sort); debounced, persisted under `options.stateKey`.",
+              "name": "state-change"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<{ error: unknown; page: number }>"
+              },
+              "description": "A data-source page failed after its automatic retries (`dataSource.retry()` tries again).",
+              "name": "load-error"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "dark-mode",
+              "type": {
+                "text": "boolean | 'auto'"
+              },
+              "description": "Sets `darkMode`: present or `\"true\"`, `\"false\"`, or `\"auto\"` (follows `prefers-color-scheme`). Removing it restores the default (`false`).",
+              "fieldName": "darkMode"
+            },
+            {
+              "name": "show-toolbar",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `showToolbar`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`true`).",
+              "fieldName": "showToolbar"
+            },
+            {
+              "name": "enable-drag",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `enableDrag`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`true`).",
+              "fieldName": "enableDrag"
+            },
+            {
+              "name": "enable-resize",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `enableResize`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`true`).",
+              "fieldName": "enableResize"
+            },
+            {
+              "name": "tooltip-enabled",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `tooltipEnabled`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`true`).",
+              "fieldName": "tooltipEnabled"
+            },
+            {
+              "name": "show-legend",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `showLegend`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`false`).",
+              "fieldName": "showLegend"
+            },
+            {
+              "type": {
+                "text": "string"
+              },
+              "description": "The zoom level, through `setViewMode()`: a `ViewMode` or a `zoomLevels` name. Removing it changes nothing.",
+              "name": "view-mode"
+            }
+          ],
+          "cssStates": [
+            {
+              "description": "The dark theme is active (`darkMode` is `true`, or `'auto'` with a dark colour scheme).",
+              "name": "dark"
+            },
+            {
+              "description": "A bar is being dragged or resized.",
+              "name": "dragging"
+            },
+            {
+              "description": "A data-source page is loading.",
+              "name": "loading"
+            }
+          ],
+          "superclass": {
+            "name": "BaseElement",
+            "module": "src/gantry.element.ts"
+          },
+          "tagName": "gantry-element",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "GantryElement",
+          "declaration": {
+            "name": "GantryElement",
+            "module": "dist/index.js"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "gantry-element",
+          "declaration": {
+            "name": "GantryElement",
+            "module": "dist/index.js"
+          }
+        }
+      ]
+    }
+  ]
+}

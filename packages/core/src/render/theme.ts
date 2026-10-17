@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { GanttTheme, GanttThemeOverrides } from '../types';
+import { readableOn } from './contrast';
 
 export const LightTheme: Readonly<Required<GanttTheme>> = {
   backgroundColor: '#FFFFFF',
@@ -166,4 +167,57 @@ export function cssPx(value: string | number | undefined, fallback: number): num
   if (typeof value === 'number') return value;
   const n = parseFloat(value ?? '');
   return Number.isFinite(n) ? n : fallback;
+}
+
+// ─── CSS custom properties, contrast tokens and metrics ──────
+
+/**
+ * Derived tokens: the bar-label colour readable on each bar fill (`readableOn(fill, barTextColor)`).
+ * Painters reference them through `var()`, so a bar visual never depends on theme colours.
+ */
+export const CONTRAST_CSS_VARS = {
+  bar: '--gantt-bar-text-on-bar',
+  milestone: '--gantt-bar-text-on-milestone',
+  critical: '--gantt-bar-text-on-critical',
+} as const;
+
+/**
+ * Every CSS custom property of a resolved theme: the `THEME_CSS_VARS` tokens in order, then the
+ * three contrast tokens (`CONTRAST_CSS_VARS`). Both bindings write exactly these.
+ */
+export function themeToCss(theme: Required<GanttTheme>): ReadonlyArray<readonly [cssVar: string, value: string]> {
+  const out: (readonly [string, string])[] = THEME_CSS_VARS.map(([key, cssVar]) => [cssVar, theme[key]] as const);
+  out.push(
+    [CONTRAST_CSS_VARS.bar, readableOn(theme.barColor, theme.barTextColor)],
+    [CONTRAST_CSS_VARS.milestone, readableOn(theme.milestoneColor, theme.barTextColor)],
+    [CONTRAST_CSS_VARS.critical, readableOn(theme.criticalColor, theme.barTextColor)],
+  );
+  return out;
+}
+
+/** The few theme values that geometry or label fitting depend on (colours stay in CSS). */
+export interface ThemeMetrics {
+  /** Default bar corner radius (px), from `barRadius` */
+  readonly barRadius: number;
+  /** Font size (px) used to fit bar labels: `fontSize` − 1 */
+  readonly fontPx: number;
+  /** Preferred bar-label colour; only labels on explicit `task.barColor` fills resolve it */
+  readonly barTextColor: string;
+}
+
+/**
+ * The metrics of a theme, for `resolveConfig(options, i18n, metrics)` and the bar labels
+ * (`fontPx`, `barTextColor` of `computeBarVisual`). Takes any theme (e.g. a custom bar's `ctx.theme`).
+ */
+export function themeMetrics(theme: Pick<GanttTheme, 'barRadius' | 'fontSize' | 'barTextColor'>): ThemeMetrics {
+  return {
+    barRadius: cssPx(theme.barRadius, 4),
+    fontPx: cssPx(theme.fontSize, 13) - 1,
+    barTextColor: theme.barTextColor,
+  };
+}
+
+/** Shallow equality: a colour-only theme change keeps the same metrics. */
+export function sameThemeMetrics(a: ThemeMetrics, b: ThemeMetrics): boolean {
+  return a.barRadius === b.barRadius && a.fontPx === b.fontPx && a.barTextColor === b.barTextColor;
 }

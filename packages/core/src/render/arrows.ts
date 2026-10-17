@@ -7,13 +7,15 @@
 import { DependencyType } from '../types';
 import type { ResolvedGanttConfig } from './config';
 import type { BarVisual } from './bars';
+import { themeVar, type Paint } from './paint';
 
 export interface ArrowVisual {
   /** Path of the line (ends at the base of the arrow head) */
   d: string;
   /** Arrow head polygon points */
   head: string;
-  color: string;
+  /** `var(--gantt-critical)` on the critical path, else `arrows.color`, else `var(--gantt-arrow)` */
+  paint: Paint;
   width: number;
   dashed: boolean;
   critical: boolean;
@@ -124,7 +126,7 @@ export function computeArrowVisual(
   return {
     d: roundedPolyline(points, radius),
     head,
-    color: isCritical ? cfg.theme.criticalColor : (cfg.arrows.color ?? cfg.theme.arrowColor),
+    paint: isCritical ? themeVar('criticalColor') : (cfg.arrows.color ?? themeVar('arrowColor')),
     width: isCritical ? width + 0.5 : width,
     dashed: lag !== 0,
     critical: isCritical,

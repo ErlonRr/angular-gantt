@@ -7,7 +7,6 @@
 
 import type {
   GanttOptions,
-  GanttTheme,
   GanttScale,
   GanttZoomLevel,
   GanttLength,
@@ -20,12 +19,14 @@ import type {
   GanttI18n,
 } from '../types';
 import { DEFAULT_ZOOM_LEVELS, findZoomLevel, levelPxPerDay, withLegacyHeaderFormats } from './scales';
-import { cssPx } from './theme';
+import type { ThemeMetrics } from './theme';
+import { themeVar, type Paint } from './paint';
 import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
 
 export interface ResolvedLine {
-  color: string;
+  /** Explicit `GanttLineStyle.color`, else the theme token (`var(--gantt-grid-line)`…) */
+  paint: Paint;
   width: number;
   dash?: string | undefined;
 }
@@ -58,8 +59,11 @@ export interface ResolvedToolbar {
   viewToggle: boolean;
 }
 
+/**
+ * Every option with its default. Colours are not resolved here: the model carries `Paint`s
+ * (`var(--gantt-*)` or explicit colours) and the theme reaches pixels through CSS variables.
+ */
 export interface ResolvedGanttConfig {
-  theme: Required<GanttTheme>;
   zoomLevels: GanttZoomLevel[];
   level: GanttZoomLevel;
   scales: GanttScale[];
@@ -117,11 +121,14 @@ export interface ResolvedGanttConfig {
   selection: { enabled: boolean; multi: boolean };
 }
 
+/** `LightTheme.barRadius` / `DarkTheme.barRadius` in px (when no metrics are passed). */
+const DEFAULT_BAR_RADIUS = 4;
+
 const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
   style === false
     ? null
     : {
-        color: style?.color ?? fallback.color,
+        paint: style?.color ?? fallback.paint,
         width: style?.width ?? fallback.width,
         dash: style?.dash ?? fallback.dash,
       };
@@ -173,10 +180,15 @@ export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): Resolve
   };
 }
 
+/**
+ * Resolve the options (and the i18n header formats) into the render config. Only theme
+ * *metrics* enter it — `metrics.barRadius` is the default `bar.radius` (`themeMetrics(theme)`);
+ * theme colours stay out, so a colour-only theme change keeps the config.
+ */
 export function resolveConfig(
   options: GanttOptions = {},
-  theme: Required<GanttTheme>,
   i18n?: GanttI18n,
+  metrics?: Partial<ThemeMetrics>,
 ): ResolvedGanttConfig {
   const zoomLevels = options.zoomLevels?.length ? options.zoomLevels : DEFAULT_ZOOM_LEVELS;
   const level = findZoomLevel(zoomLevels, options.viewMode);
@@ -184,7 +196,6 @@ export function resolveConfig(
   const toolbar = options.toolbar;
 
   return {
-    theme,
     zoomLevels,
     level,
     scales,
@@ -197,9 +208,9 @@ export function resolveConfig(
     rowHeight: options.rowHeight ?? 36,
     indentSize: options.indentSize ?? 16,
     gridLines: {
-      minor: line(options.gridLines?.minor, { color: theme.gridLine, width: 1 }),
-      major: line(options.gridLines?.major, { color: theme.gridLineMajor, width: 1 }),
-      horizontal: line(options.gridLines?.horizontal, { color: theme.borderColor, width: 1 }),
+      minor: line(options.gridLines?.minor, { paint: themeVar('gridLine'), width: 1 }),
+      major: line(options.gridLines?.major, { paint: themeVar('gridLineMajor'), width: 1 }),
+      horizontal: line(options.gridLines?.horizontal, { paint: themeVar('borderColor'), width: 1 }),
       majorUnit: options.gridLines?.majorUnit,
     },
     nonWorking: resolveNonWorking(options.nonWorkingTime),
@@ -208,7 +219,7 @@ export function resolveConfig(
     normalizeDateOnly: options.normalizeDateOnly ?? true,
     bar: {
       height: options.bar?.height ?? '60%',
-      radius: options.bar?.radius ?? cssPx(theme.barRadius, 4),
+      radius: options.bar?.radius ?? metrics?.barRadius ?? DEFAULT_BAR_RADIUS,
       minWidth: options.bar?.minWidth ?? 4,
       progress: {
         show: options.bar?.progress?.show ?? true,

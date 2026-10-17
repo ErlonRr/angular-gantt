@@ -129,6 +129,44 @@ export default tseslint.config(
     },
   },
 
+  // ── @gantry/vanilla: strict CSP + Trusted Types ──────────────
+  // No HTML parsing sinks (Trusted Types `require-trusted-types-for 'script'`), no style text
+  // (a strict `style-src` refuses inline styles: use `setStyleProp`, the CSSOM, or a stylesheet
+  // rule), no inline event handlers, no eval. See packages/vanilla/src/dom/sheet.ts.
+  {
+    files: ['packages/vanilla/src/**/*.ts'],
+    ignores: ['packages/vanilla/src/__tests__/**'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'setHTMLUnsafe', 'createContextualFragment'].map(
+          property => ({
+            property,
+            message: 'HTML parsing is a Trusted Types sink: build nodes with h() / s() (dom/h.ts).',
+          }),
+        ),
+        {
+          property: 'cssText',
+          message: 'Style text breaks a strict style-src CSP: use setStyleProp (dom/patch.ts) or a stylesheet rule.',
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='setAttribute'][arguments.0.value=/^(style|on)/i]",
+          message:
+            'No style or inline event-handler attributes (CSP): use setStyleProp / a stylesheet rule, or addEventListener.',
+        },
+        {
+          selector: "MemberExpression[object.name='document'][property.name=/^write(ln)?$/]",
+          message: 'document.write is a Trusted Types sink and blocks parsing: build nodes with h() / s().',
+        },
+      ],
+      'no-eval': 'error',
+      'no-new-func': 'error',
+    },
+  },
+
   // ── Angular (ngx-gantry + showcase) ──────────────────────────
   {
     files: ['projects/**/*.ts'],

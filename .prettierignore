@@ -3,6 +3,8 @@ dist/
 **/dist/
 node_modules/
 pnpm-lock.yaml
+# Written by `pnpm --filter @gantry/vanilla cem` (checked byte for byte by `cem:check`)
+packages/vanilla/custom-elements.json
 coverage/
 test-results/
 playwright-report/

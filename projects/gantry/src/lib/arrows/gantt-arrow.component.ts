@@ -3,6 +3,7 @@
 //  Paints one dependency link. The path (orthogonal routing with
 //  U-turns, milestone-aware endpoints, rounded corners) comes from
 //  `computeArrowVisual` in @gantry/core — shared with the Web Component.
+//  Its colour is a `Paint`, bound as a CSS property.
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
@@ -22,18 +23,18 @@ import type { ArrowVisual } from '@gantry/core';
     <svg:path
       [attr.d]="arrow().d"
       fill="none"
-      [attr.stroke]="arrow().color"
+      [style.stroke]="arrow().paint"
       [attr.stroke-width]="arrow().width"
       [attr.stroke-dasharray]="arrow().dashed ? '5 3' : null"
       stroke-linejoin="round"
       stroke-linecap="round"
     />
-    <svg:polygon [attr.points]="arrow().head" [attr.fill]="arrow().color" />
+    <svg:polygon [attr.points]="arrow().head" [style.fill]="arrow().paint" />
     @if (arrow().lagLabel; as lag) {
       <svg:text
         [attr.x]="lag.x"
         [attr.y]="lag.y"
-        [attr.fill]="arrow().color"
+        [style.fill]="arrow().paint"
         [attr.font-size]="fontPx() - 2"
         dominant-baseline="central"
         opacity="0.85"

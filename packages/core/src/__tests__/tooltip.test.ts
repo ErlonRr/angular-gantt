@@ -1,10 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_LABELS, DependencyType, TaskType, type GanttTask } from '../types';
 import { formatDate } from '../gantt-math';
-import { resolveTheme } from '../render/theme';
 import { baselineVarianceDays, buildTooltipModel, type TooltipInput } from '../state/tooltip';
 
-const theme = resolveTheme(false);
 const FMT = 'MMM D, YYYY';
 const exclusive = { endDateMode: 'exclusive', normalizeDateOnly: true } as const;
 
@@ -19,7 +17,7 @@ const task = (over: Partial<GanttTask> = {}): GanttTask => ({
 
 const input = (over: Partial<TooltipInput> = {}): TooltipInput => ({
   task: task(),
-  config: { ...exclusive, baseline: false, theme },
+  config: { ...exclusive, baseline: false },
   labels: DEFAULT_LABELS,
   dateFormat: FMT,
   now: new Date(2025, 0, 7, 12),
@@ -47,7 +45,7 @@ describe('buildTooltipModel', () => {
 
   it('reads the duration like the bar: an inclusive end counts its last day', () => {
     const m = buildTooltipModel(
-      input({ config: { endDateMode: 'inclusive', normalizeDateOnly: true, baseline: false, theme } }),
+      input({ config: { endDateMode: 'inclusive', normalizeDateOnly: true, baseline: false } }),
     );
     expect(m.rows.find(r => r.kind === 'duration')?.value).toBe('4 days');
   });
@@ -157,14 +155,14 @@ describe('buildTooltipModel', () => {
 
   it('shows the baseline and its finish variance when the baseline option is on', () => {
     const t = task({ baseline: { start: new Date(2025, 0, 6), end: new Date(2025, 0, 7) } });
-    const m = buildTooltipModel(input({ task: t, config: { ...exclusive, baseline: true, theme } }));
+    const m = buildTooltipModel(input({ task: t, config: { ...exclusive, baseline: true } }));
     expect(m.baselineVariance).toBe('+2d');
     expect(m.rows.filter(r => r.kind === 'baseline')).toEqual([
       { label: 'Baseline start', value: formatDate(new Date(2025, 0, 6), FMT), kind: 'baseline' },
       { label: 'Baseline end', value: formatDate(new Date(2025, 0, 7), FMT), kind: 'baseline' },
       { label: 'Variance', value: '+2d', kind: 'baseline' },
     ]);
-    const off = buildTooltipModel(input({ task: t, config: { ...exclusive, theme, baseline: false } }));
+    const off = buildTooltipModel(input({ task: t, config: { ...exclusive, baseline: false } }));
     expect(off.baselineVariance).toBeNull();
     expect(off.rows.some(r => r.kind === 'baseline')).toBe(false);
   });
@@ -175,14 +173,14 @@ describe('buildTooltipModel', () => {
       end: new Date(2025, 0, 6),
       baseline: { start: new Date(2025, 0, 6), end: new Date(2025, 0, 6) },
     });
-    const m = buildTooltipModel(input({ task: t, config: { ...exclusive, baseline: true, theme } }));
+    const m = buildTooltipModel(input({ task: t, config: { ...exclusive, baseline: true } }));
     expect(m.baselineVariance).toBe('On schedule');
     expect(m.rows.filter(r => r.kind === 'baseline').map(r => r.label)).toEqual(['Baseline start', 'Variance']);
   });
 
   it('requires the baseline flag, so a painter cannot forget it (the chart defaults it to off)', () => {
     // @ts-expect-error -- `baseline` is required
-    const config: TooltipInput['config'] = { ...exclusive, theme };
+    const config: TooltipInput['config'] = { ...exclusive };
     const t = task({ baseline: { start: new Date(2025, 0, 6), end: new Date(2025, 0, 7) } });
     const m = buildTooltipModel(input({ task: t, config }));
     expect(m.baselineVariance).toBeNull();
@@ -240,7 +238,7 @@ describe('buildTooltipModel', () => {
     const m = buildTooltipModel(
       input({
         task: a,
-        config: { ...exclusive, baseline: true, theme },
+        config: { ...exclusive, baseline: true },
         showStatus: true,
         criticalIds: new Set(['a']),
         floatDays: new Map([['a', 0]]),
@@ -264,20 +262,15 @@ describe('buildTooltipModel', () => {
     expect(m.rows.slice(-2).map(r => r.label)).toEqual(['Predecessors', 'Successors']);
   });
 
-  it('resolves colours from the theme and fills the progress like the bar', () => {
+  it('fills the progress like the bar: theme tokens or the task colour', () => {
     const m = buildTooltipModel(input());
-    expect(m.colors).toEqual({
-      background: theme.tooltipBg,
-      border: theme.tooltipBorder,
-      text: theme.tooltipText,
-      fontFamily: theme.fontFamily,
-      progress: theme.barColor,
-      critical: theme.criticalColor,
-    });
-    expect(buildTooltipModel(input({ task: task({ barColor: '#ff0000' }) })).colors.progress).toBe('#ff0000');
+    expect(m.paint).toEqual({ progress: 'var(--gantt-bar)' });
+    expect(m.critical).toBe(false);
+    expect(buildTooltipModel(input({ task: task({ barColor: '#ff0000' }) })).paint.progress).toBe('#ff0000');
     // A critical bar is filled with the critical colour, over its own bar colour
     const critical = buildTooltipModel(input({ task: task({ barColor: '#ff0000' }), criticalIds: new Set(['a']) }));
-    expect(critical.colors.progress).toBe(theme.criticalColor);
+    expect(critical.critical).toBe(true);
+    expect(critical.paint.progress).toBe('var(--gantt-critical)');
   });
 
   it('is pure: the same input gives the same model', () => {

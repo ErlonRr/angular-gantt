@@ -8,11 +8,15 @@ import type { ResolvedGanttConfig } from './config';
 import { resolveLength } from './config';
 import { taskSpan } from './timeline';
 import { readableOn } from './contrast';
+import { CONTRAST_CSS_VARS } from './theme';
+import { themeVar, type Paint } from './paint';
 
 /** Pointer distance (px) from a bar edge that resizes instead of moving. */
 export const RESIZE_HANDLE_PX = 8;
 const LABEL_GAP = 6;
 const LABEL_PAD = 6;
+/** `LightTheme.barTextColor` / `DarkTheme.barTextColor` (when no `barTextColor` is passed) */
+const DEFAULT_BAR_TEXT = '#FFFFFF';
 
 export type BarKind = 'task' | 'group' | 'milestone';
 
@@ -22,7 +26,17 @@ export interface BarLabel {
   y: number;
   anchor: 'start' | 'middle' | 'end';
   inside: boolean;
-  color: string;
+}
+
+/** Which theme fill a bar uses (explicit `task.barColor` keeps the tone of its kind). */
+export type BarTone = 'default' | 'milestone' | 'critical';
+
+/** Paints of a bar: theme tokens (`var(--gantt-*)`) or explicit task / option colours. */
+export interface BarPaint {
+  body: Paint;
+  progress: Paint;
+  /** Paint of `label` (inside or outside); the inside-label paint when there is no label */
+  label: Paint;
 }
 
 export interface BarVisual {
@@ -37,8 +51,10 @@ export interface BarVisual {
   rx: number;
   /** SVG path of the bar body */
   path: string;
-  fill: string;
-  progress: { path: string; color: string; opacity: number } | null;
+  tone: BarTone;
+  /** Colours: theme tokens or explicit task / option colours (`resolvePaint` turns them into hex) */
+  paint: BarPaint;
+  progress: { path: string; opacity: number } | null;
   label: BarLabel | null;
   baseline: { x: number; width: number; y: number } | null;
   /** Summary-bar end caps (path), when `groupBar.style === 'summary'` */
@@ -53,8 +69,13 @@ export interface BarVisualInput {
   toX: (d: Date) => number;
   isCritical?: boolean | undefined;
   resizable?: boolean | undefined;
-  /** Font size used for label fitting */
+  /** Font size used for label fitting (`themeMetrics(theme).fontPx`; default 12) */
   fontPx?: number | undefined;
+  /**
+   * Preferred label colour on explicit `task.barColor` fills (`themeMetrics(theme).barTextColor`;
+   * default `'#FFFFFF'`). Theme fills use the `--gantt-bar-text-on-*` contrast tokens instead.
+   */
+  barTextColor?: string | undefined;
 }
 
 /** Rough text width (no DOM measuring): average glyph ≈ 0.56em. */
@@ -111,15 +132,17 @@ export function barKind(barType: string): BarKind {
 
 export function computeBarVisual(input: BarVisualInput): BarVisual {
   const { geo, cfg, toX, isCritical = false } = input;
-  const theme = cfg.theme;
   const task = geo.row.task;
   const kind = barKind(geo.row.barType);
   const fontPx = input.fontPx ?? 12;
   const rh = geo.height;
   const cy = geo.y + rh / 2;
 
-  const baseFill = task.barColor ?? (kind === 'milestone' ? theme.milestoneColor : theme.barColor);
-  const fill = isCritical ? theme.criticalColor : baseFill;
+  const tone: BarTone = isCritical ? 'critical' : kind === 'milestone' ? 'milestone' : 'default';
+  const bodyPaint: Paint = isCritical
+    ? themeVar('criticalColor')
+    : (task.barColor ?? (kind === 'milestone' ? themeVar('milestoneColor') : themeVar('barColor')));
+  const barTextColor = input.barTextColor ?? DEFAULT_BAR_TEXT;
 
   let x: number, y: number, width: number, height: number, rx: number, path: string;
   let caps: string | null = null;
@@ -156,11 +179,11 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
         ? cfg.bar.progress.show && cfg.groupBar.showProgress
         : false;
   const pct = Math.min(Math.max(task.progress ?? 0, 0), 100);
+  const progressPaint: Paint = task.progressColor ?? cfg.bar.progress.color ?? '#000000';
   if (showProgress && pct > 0) {
     const pw = (width * pct) / 100;
     progress = {
       path: roundedRectPath(x, y, pw, height, rx, pw >= width - rx ? rx : 0),
-      color: task.progressColor ?? cfg.bar.progress.color ?? '#000000',
       opacity: task.progressColor || cfg.bar.progress.color ? 1 : cfg.bar.progress.opacity,
     };
   }
@@ -178,6 +201,21 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
       ? { left: [x - 2, x + RESIZE_HANDLE_PX], right: [x + width - RESIZE_HANDLE_PX, x + width + 2] }
       : null;
 
+  const label = computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx);
+  const opt = cfg.bar.label;
+  // Explicit colours win; theme fills use the contrast tokens, explicit fills a concrete readable colour
+  const insidePaint: Paint =
+    task.textColor ??
+    opt.color ??
+    (tone === 'critical'
+      ? `var(${CONTRAST_CSS_VARS.critical})`
+      : task.barColor != null
+        ? readableOn(task.barColor, barTextColor)
+        : tone === 'milestone'
+          ? `var(${CONTRAST_CSS_VARS.milestone})`
+          : `var(${CONTRAST_CSS_VARS.bar})`);
+  const outsidePaint: Paint = opt.color ?? themeVar('textPrimary');
+
   return {
     kind,
     x,
@@ -187,9 +225,14 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     cy,
     rx,
     path,
-    fill,
+    tone,
+    paint: {
+      body: bodyPaint,
+      progress: progressPaint,
+      label: label ? (label.inside ? insidePaint : outsidePaint) : insidePaint,
+    },
     progress,
-    label: computeLabel(task, kind, { x, y, width, height, cy }, fill, cfg, fontPx),
+    label,
     baseline,
     caps,
     handles,
@@ -200,7 +243,6 @@ function computeLabel(
   task: GanttTask,
   kind: BarKind,
   box: { x: number; y: number; width: number; height: number; cy: number },
-  fill: string,
   cfg: ResolvedGanttConfig,
   fontPx: number,
 ): BarLabel | null {
@@ -209,17 +251,12 @@ function computeLabel(
   const text = opt.template?.(task) ?? task.name;
   if (!text) return null;
 
-  const theme = cfg.theme;
-  const outsideColor = opt.color ?? theme.textPrimary;
-  // Explicit colours win; the theme default switches to white / near-black when unreadable on the fill
-  const insideColor = task.textColor ?? opt.color ?? readableOn(fill, theme.barTextColor);
   const outside = (side: 'left' | 'right'): BarLabel => ({
     text,
     x: side === 'right' ? box.x + box.width + LABEL_GAP : box.x - LABEL_GAP,
     y: box.cy,
     anchor: side === 'right' ? 'start' : 'end',
     inside: false,
-    color: outsideColor,
   });
 
   // Milestones and thin summary bars can't hold text: label beside them
@@ -233,7 +270,5 @@ function computeLabel(
   if (position === 'auto' && estimateTextWidth(text, fontPx) > room) return outside('right');
 
   const fitted = fitText(text, room, fontPx);
-  return fitted
-    ? { text: fitted, x: box.x + box.width / 2, y: box.cy, anchor: 'middle', inside: true, color: insideColor }
-    : null;
+  return fitted ? { text: fitted, x: box.x + box.width / 2, y: box.cy, anchor: 'middle', inside: true } : null;
 }

@@ -22,5 +22,11 @@ export const routes: Routes = [
     loadComponent: () => import('./gantt-custom/gantt-custom.component').then(m => m.GanttCustomComponent),
     title: 'Gantt Custom Bar',
   },
+  // Test-only: renders `window.__GANTRY_FIXTURE__` (e2e/paint.spec.ts); not in the sidebar
+  {
+    path: 'fixture',
+    loadComponent: () => import('./fixture/fixture.component').then(m => m.FixtureComponent),
+    title: 'Gantry Fixture',
+  },
   { path: '**', redirectTo: 'roadmap' },
 ];

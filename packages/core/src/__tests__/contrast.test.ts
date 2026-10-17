@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { contrastRatio, parseColor, readableOn } from '../render/contrast';
 import { LightTheme, DarkTheme, LegacyLightTheme } from '../render/theme';
 import { computeBarVisual } from '../render/bars';
+import { resolvePaint } from '../render/paint';
 import { resolveConfig } from '../render/config';
 import { flattenTree } from '../gantt-data';
 import type { RowGeometry } from '../types';
@@ -100,18 +101,22 @@ describe('bar labels on custom colours', () => {
     ]);
     return { row, y: 0, height: 40, barX: 0, barWidth: 400 } as RowGeometry;
   };
-  const cfg = resolveConfig({ bar: { label: { position: 'inside' } } }, LightTheme);
-  const labelOf = (geo: RowGeometry) => computeBarVisual({ geo, cfg, toX: () => 0 }).label;
+  const cfg = resolveConfig({ bar: { label: { position: 'inside' } } });
+  /** The inside-label colour under the light theme (contrast tokens resolved like `themeToCss` writes them) */
+  const labelOf = (geo: RowGeometry) => {
+    const v = computeBarVisual({ geo, cfg, toX: () => 0, barTextColor: LightTheme.barTextColor });
+    return v.label?.inside ? resolvePaint(v.paint.label, LightTheme) : null;
+  };
 
   it('uses the theme text colour on the default fill', () => {
-    expect(labelOf(geoFor())?.color).toBe(LightTheme.barTextColor);
+    expect(labelOf(geoFor())).toBe(LightTheme.barTextColor);
   });
 
   it('picks a readable colour on a light custom fill', () => {
-    expect(labelOf(geoFor('#FDE68A'))?.color).toBe('#0F172A');
+    expect(labelOf(geoFor('#FDE68A'))).toBe('#0F172A');
   });
 
   it('never overrides an explicit text colour', () => {
-    expect(labelOf(geoFor('#FDE68A', '#FFFFFF'))?.color).toBe('#FFFFFF');
+    expect(labelOf(geoFor('#FDE68A', '#FFFFFF'))).toBe('#FFFFFF');
   });
 });

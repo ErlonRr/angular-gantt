@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gantry · Strict CSP</title>
+  </head>
+  <body>
+    <!-- No inline script or style: e2e/csp.spec.ts serves this page under a strict
+         Content-Security-Policy with Trusted Types (see src/csp.ts). -->
+    <script type="module" src="/src/csp.ts"></script>
+  </body>
+</html>

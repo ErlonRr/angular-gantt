@@ -19,7 +19,7 @@ import { type GanttTheme } from '../types';
   selector: 'gantt-toolbar',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { role: 'toolbar' },
+  host: { role: 'toolbar', '[attr.aria-label]': 'labels().ariaToolbar' },
   template: `
     <div class="gantt-toolbar">
       @if (toolbar().zoom) {

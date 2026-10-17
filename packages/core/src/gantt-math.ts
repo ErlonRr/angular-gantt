@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { type GanttTask, type GanttLabels, type TimeUnit } from './types';
-import { unitStart, unitAdd } from './render/scales';
+import { unitStart, periodNext } from './render/scales';
 import { formatDate as formatPattern } from './format/format';
 
 // ─── Constants ───────────────────────────────────────────────
@@ -175,7 +175,9 @@ export function snapRange(
   const start = unitStart(addDays(extent.start, -paddingDays), scale.unit, step, weekStart);
   const lastCell = unitStart(addDays(extent.end, paddingDays), scale.unit, step, weekStart);
   const end =
-    lastCell.getTime() === extent.end.getTime() && paddingDays === 0 ? lastCell : unitAdd(lastCell, scale.unit, step);
+    lastCell.getTime() === extent.end.getTime() && paddingDays === 0
+      ? lastCell
+      : periodNext(lastCell, scale.unit, step);
   return { start, end };
 }
 

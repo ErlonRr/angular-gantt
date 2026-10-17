@@ -64,6 +64,9 @@ calling UI work done.
 
 - Web Component: no attributes/styles in the constructor (`document.createElement` throws) —
   do it in `connectedCallback`; module top level must stay SSR-safe (guard `document`/`HTMLElement`).
+- Web Component is CSP-strict (constructable stylesheets): no `innerHTML`, `style=`, `cssText` —
+  ESLint enforces it; colours are `Paint`s applied through the CSSOM. After changing its public
+  properties, events or JSDoc, run `pnpm --filter @gantry/vanilla cem` (CI checks the manifest).
 - Angular renders in the light DOM: SVG `id`s must be unique per instance (use the canvas `uid`).
 - Workspace packages export a `@gantry/source` condition; demos, tests and typecheck read the
   TypeScript sources. Published packages are ESM-only with bundled `.d.ts`.

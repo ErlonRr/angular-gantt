@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ViewMode, TaskType, type GanttTask, type TaskDragEvent, type SelectionChangeEvent } from '@gantry/core';
 import { DEMO_TASKS } from '@gantry/core/demo';
 import { GantryElement } from '../gantry.element';
+import { getEngine } from '../engine/registry';
 import '../index';
 
 // Node ≥ 22 defines its own (empty) global `localStorage`, which hides happy-dom's
@@ -69,8 +70,8 @@ describe('<gantry-element>', () => {
     el.options = { viewMode: ViewMode.Week, rowHeight: 44, criticalPath: true, baseline: true };
     await frame();
     expect(el.viewMode).toBe(ViewMode.Week);
-    expect(el.layout.rowHeight).toBe(44);
-    expect(el.layout.cfg.baseline).toBe(true);
+    expect(getEngine(el).graph.config().rowHeight).toBe(44);
+    expect(getEngine(el).graph.config().baseline).toBe(true);
     expect(el.criticalIds.size).toBeGreaterThan(0);
     expect(($(el, '.gantt-tl-row') as HTMLElement).style.height).toBe('44px');
   });
@@ -88,7 +89,8 @@ describe('<gantry-element>', () => {
     expect(el.darkMode).toBe('auto');
     el.setAttribute('dark-mode', 'true');
     expect(el.darkMode).toBe(true);
-    expect(el.dataset['theme']).toBe('dark');
+    expect(getEngine(el).graph.isDark()).toBe(true);
+    expect(el.hasAttribute('data-theme')).toBe(false); // `:state(dark)` instead (a11y.test.ts)
   });
 
   it('virtualises rows: DOM size stays bounded for large data sets', async () => {
@@ -107,7 +109,7 @@ describe('<gantry-element>', () => {
 
     const bar = $(el, '.gantt-bars-layer [data-task-id="a"]')!;
     const canvas = $(el, '.gantry-canvas-container')!;
-    const px = el.layout.timeline.pxPerDay;
+    const px = getEngine(el).graph.timeline().pxPerDay;
     bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
     canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 3 * px, pointerId: 1 }));
     canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 3 * px, pointerId: 1 }));
@@ -207,7 +209,7 @@ describe('<gantry-element>', () => {
     ($(el, '.gantt-tl-col-header') as HTMLElement).click();
     await frame();
     expect(names()).toEqual(['Bravo', 'Alpha']);
-    expect(el.layout.sort()).toBeNull();
+    expect(getEngine(el).graph.sort()).toBeNull();
   });
 
   it('collapses and expands groups', async () => {
@@ -318,16 +320,18 @@ describe('<gantry-element>', () => {
     expect($(el, '.my-bar')?.getAttribute('data-task-id')).toBe('a');
   });
 
-  it('escapes task names in the tooltip', async () => {
+  it('writes task names into the tooltip as text, never as markup', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
-      el = await mount({ tasks: [task('x', '2026-01-01', '2026-01-10', { name: '<img src=x onerror=alert(1)>' })] });
+      const name = '<img src=x onerror=alert(1)>';
+      el = await mount({ tasks: [task('x', '2026-01-01', '2026-01-10', { name })] });
       const bar = $(el, '.gantt-bars-layer [data-task-id="x"]')!;
       bar.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: 10, clientY: 10 }));
       vi.advanceTimersByTime(500);
       const tip = $(el, '.gantt-tooltip')!;
-      expect(tip.querySelector('img')).toBeNull();
-      expect(tip.textContent).toContain('<img src=x');
+      expect(tip.querySelector('img, [onerror]')).toBeNull();
+      // textContent, not escaped markup: the title reads exactly the name (no `&lt;` entities)
+      expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe(name);
     } finally {
       vi.useRealTimers();
     }
@@ -442,6 +446,7 @@ describe('<gantry-element>', () => {
       el.tasks = [task('a', '2020-01-01', '2020-01-10')];
       await frame();
       expect(document.activeElement).toBe(el);
+      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantry-canvas-viewport'));
     });
 
     it('sorts by a built-in column listed next to custom columns', async () => {
@@ -539,9 +544,7 @@ describe('<gantry-element>', () => {
 
     it('names bars with taskAccessibleName: type, dates, progress, critical, baseline', async () => {
       el = await mount({ tasks: planned(), options: { criticalPath: true, baseline: true } });
-      expect(label('a')).toBe(
-        'Task a, Task, 1 Mar – 10 Mar 2026, 50% complete, critical, planned baseline shown',
-      );
+      expect(label('a')).toBe('Task a, Task, 1 Mar – 10 Mar 2026, 50% complete, critical, planned baseline shown');
       expect(label('b')).toBe('Task b, Task, 10 Mar – 20 Mar 2026, 50% complete, critical');
       // Milestones have no progress and never mention the baseline
       expect(label('m')).toBe('Task m, Milestone, 20 Mar 2026');
@@ -598,7 +601,7 @@ describe('<gantry-element>', () => {
       const saved = JSON.parse(window.localStorage.getItem('gantry:v2-test')!) as Record<string, unknown>;
       expect(saved).toMatchObject({ v: 2, view: 'table' });
       // panelWidth 0 is invalid: dropped instead of applied
-      expect(el.layout.panelWidthPx()).toBeNull();
+      expect(getEngine(el).graph.panelW()).toBeNull();
     });
 
     it('opens in the chart view for the legacy panelVisible: false', async () => {
@@ -622,7 +625,7 @@ describe('<gantry-element>', () => {
       zoomIn.click();
       await frame();
       expect(active(el)?.dataset['focusKey']).toBe('zoom-in');
-      expect(active(el)).not.toBe(zoomIn); // rebuilt, yet focused
+      expect(active(el)).toBe(zoomIn); // patched in place: the same button keeps focus
 
       const header = $(el, '[data-focus-key^="sort:"]') as HTMLElement;
       header.focus();
@@ -638,19 +641,31 @@ describe('<gantry-element>', () => {
       expect(active(el)?.getAttribute('aria-expanded')).toBe('false');
     });
 
-    it('builds bands and vertical grid once per timeline, not on every scroll', async () => {
-      el = await mount({ tasks: DEMO_TASKS });
+    it('builds bands and vertical grid once per timeline or horizontal window, not on every scroll', async () => {
+      el = await mount({ tasks: DEMO_TASKS, options: { nonWorkingTime: { weekends: true } } });
+      const { regionRuns } = getEngine(el);
       const bands = $(el, '.gantt-bands');
       const grid = $(el, '.gantt-grid');
+      const nodes = () => $$(el, '.gantt-bands > rect, .gantt-grid-minor, .gantt-grid-major');
+      const before = nodes();
+      const xs = () => $$(el, '.gantt-bands > rect').map(r => r.getAttribute('x'));
+      const bandXs = xs();
+      expect(before.length).toBeGreaterThan(0);
+      const runs = regionRuns['static'];
       ($(el, '.gantry-canvas-viewport') as HTMLElement).scrollTop = 200;
       ($(el, '.gantry-canvas-viewport') as HTMLElement).dispatchEvent(new Event('scroll'));
       await frame();
       await frame();
-      expect($(el, '.gantt-bands')).toBe(bands);
-      expect($(el, '.gantt-grid')).toBe(grid);
+      expect(regionRuns['static']).toBe(runs);
+      expect(nodes().length).toBe(before.length);
+      expect(nodes().every((n, i) => n === before[i])).toBe(true);
       el.setViewMode(ViewMode.Day);
       await frame();
-      expect($(el, '.gantt-bands')).not.toBe(bands);
+      expect(regionRuns['static']).toBe(runs + 1);
+      // The groups are persistent; their keyed children follow the new timeline
+      expect($(el, '.gantt-bands')).toBe(bands);
+      expect($(el, '.gantt-grid')).toBe(grid);
+      expect(xs()).not.toEqual(bandXs);
     });
 
     it('writes a pending state change when disconnected', async () => {
@@ -692,7 +707,7 @@ describe('<gantry-element>', () => {
 
     it("initialScroll 'auto' brings the first task into view when today is far away", async () => {
       el = await mount({ tasks: past });
-      const tl = el.layout.timeline;
+      const tl = getEngine(el).graph.timeline();
       expect(viewport(el).scrollLeft).toBe(tl.toX(new Date(2020, 2, 2)));
     });
 
@@ -705,16 +720,20 @@ describe('<gantry-element>', () => {
       el = await mount({ tasks: past, options: { initialScroll: false } });
       el.options = { initialScroll: 'start' };
       await frame();
-      expect(viewport(el).scrollLeft).toBe(el.layout.timeline.toX(new Date(2020, 2, 2)));
+      expect(viewport(el).scrollLeft).toBe(
+        getEngine(el)
+          .graph.timeline()
+          .toX(new Date(2020, 2, 2)),
+      );
     });
 
     it('keeps the anchor date in place when zooming', async () => {
       el = await mount({ tasks: past, options: { viewMode: ViewMode.Week, initialScroll: false } });
       viewport(el).scrollLeft = 200;
-      const before = el.layout.timeline.toDate(200);
+      const before = getEngine(el).graph.timeline().toDate(200);
       el.setViewMode(ViewMode.Day);
       await frame();
-      const after = el.layout.timeline.toDate(viewport(el).scrollLeft);
+      const after = getEngine(el).graph.timeline().toDate(viewport(el).scrollLeft);
       expect(Math.abs(after.getTime() - before.getTime())).toBeLessThan(86_400_000);
       expect(viewport(el).scrollLeft).toBeGreaterThan(200);
     });

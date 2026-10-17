@@ -15,13 +15,13 @@ import {
   type GanttFlatRow,
   type GanttLabels,
   type GanttTask,
-  type GanttTheme,
   type GanttView,
   type TaskStatus,
 } from '../types';
 import { calendarDays, durationLabel, formatDate, toLocalDay } from '../gantt-math';
 import { taskSpan } from './timeline';
 import type { ResolvedGanttConfig } from './config';
+import { statusPaint, type Paint } from './paint';
 
 // ─── Default column sets ──────────────────────────────────────
 
@@ -66,22 +66,6 @@ export function taskStatus(
   if (now >= end) return 'overdue';
   if (now >= span.start || progress > 0) return 'inProgress';
   return 'notStarted';
-}
-
-/** Theme colour of a status dot (custom statuses use the muted text colour). */
-export function statusColor(status: string, theme: Partial<GanttTheme> & Pick<GanttTheme, 'textMuted'>): string {
-  switch (status) {
-    case 'notStarted':
-      return theme.statusNotStarted ?? theme.textMuted;
-    case 'inProgress':
-      return theme.statusInProgress ?? theme.textMuted;
-    case 'overdue':
-      return theme.statusOverdue ?? theme.textMuted;
-    case 'done':
-      return theme.statusDone ?? theme.textMuted;
-    default:
-      return theme.textMuted;
-  }
 }
 
 /** A task's dependencies as a list, whatever shape `task.dependency` has. */
@@ -439,23 +423,19 @@ export interface CellVisual {
   text: string;
   /** Full text for a tooltip when the cell may be truncated (predecessors) */
   title?: string | undefined;
-  /** Built-in `status` column: the status and its dot colour */
+  /** Built-in `status` column: the status and its dot paint */
   status?: string | undefined;
-  dotColor?: string | undefined;
+  /** `statusPaint(status)`: the status theme token */
+  dotPaint?: Paint | undefined;
 }
 
 /** What a (non-name, non-template) cell shows. */
-export function computeCellVisual(
-  col: ColumnDef,
-  row: GanttFlatRow,
-  ctx: ColumnContext,
-  theme: GanttTheme,
-): CellVisual {
+export function computeCellVisual(col: ColumnDef, row: GanttFlatRow, ctx: ColumnContext): CellVisual {
   const raw = col.render ? col.render(row, ctx) : (row.task as unknown as Record<string, unknown>)[col.key];
   const text = raw == null ? '' : valueToText(raw);
   if (col.builtin && col.key === 'status') {
     const status = taskStatus(row.task, ctx.now, ctx);
-    return { text, status, dotColor: statusColor(status, theme) };
+    return { text, status, dotPaint: statusPaint(status) };
   }
   return col.key === 'predecessors' && text ? { text, title: text } : { text };
 }

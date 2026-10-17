@@ -1,6 +1,8 @@
 /**
  * @file gantry.element.ts
- * Root Web Component (<gantry-element>) orchestrating all Vanilla JS services and subcomponents.
+ * Root Web Component (<gantry-element>): properties, attributes and interaction write the
+ * engine's input signals (`engine/`); one region effect per layer (`engine/render.ts`,
+ * `layers/*`) paints the model the graph derives, once per frame, in a fixed order.
  *
  * Layout:
  * ┌──────────────────────────────────────────────────────────────┐
@@ -11,6 +13,32 @@
  * │   Y mirrored)  │l│    └ canvas (virtualised SVG rows)        │
  * └────────────────┴─┴───────────────────────────────────────────┘
  * Views: 'split' (both), 'table' (task list only), 'chart' (timeline only).
+ *
+ * Properties (`engine/props.ts`): one table names every settable property, its default, its
+ * attribute and how the attribute parses; each accessor below is one line calling `#set`.
+ * Assigning `undefined` restores the default, and properties set on the element before it was
+ * defined (an un-upgraded element) are re-applied through the setters when it upgrades.
+ *
+ * Lifecycle: everything that lives while the element is connected (effects, listeners, the
+ * ResizeObserver, the clock, the data-source subscription) belongs to one owner per connection
+ * (`engine.connect()`), disposed when it disconnects. A move inside the document
+ * (`moveBefore()`, `connectedMoveCallback`) keeps it all: scroll, selection and focus survive.
+ * A move to another document re-adopts the stylesheets built for that document.
+ *
+ * Measurements (D9): sizes are read only in the ResizeObserver callback (and once when
+ * connected), scroll offsets only in the scroll handlers; they reach the graph as input signals.
+ *
+ * Strict CSP and Trusted Types (D16): the shadow tree is built with `h()` / `s()`, its CSS is a
+ * shared constructable sheet plus a per-instance theme sheet (`styles/base.ts`,
+ * `styles/theme-sheet.ts`), every style is a CSSOM write, and the host gets no `style` attribute.
+ *
+ * Accessibility (D15): the host is a `region` named by `labels.ariaChart` and exposes the custom
+ * states `dark`, `dragging` and `loading` (`gantry-element:state(dark)`), all through
+ * `ElementInternals`, so it carries no attribute of ours; an engine without ARIA on
+ * `ElementInternals` gets `role` / `aria-label` host attributes when the element connects. The
+ * host is not a tab stop: the shadow root delegates focus to the internal ones (toolbar, task
+ * list, splitter, timeline viewport; see `layers/skeleton.ts`), and `.gantt-sr-live` announces
+ * selection and load-state changes (`engine/announce.ts`).
  */
 
 import {
@@ -18,244 +46,45 @@ import {
   type GanttOptions,
   type GanttAnnotation,
   type GanttThemeOverrides,
-  type GanttFlatRow,
   type GanttState,
   type GanttView,
-  type GanttI18n,
   type ViewMode,
-  computeCriticalPath,
-  computeVirtualWindow,
-  resolveConfig,
-  taskSpan,
-  initialScrollLeft,
-  initialScrollChanged,
-  zoomAnchorScroll,
-  bottomScale,
-  type ResolvedGanttConfig,
+  zoomStep,
+  flattenTree,
   type BarVisual,
-  type TimelineModel,
   readStoredState,
   writeStoredState,
   normalizeState,
   viewFromOptions,
   viewFromState,
-  resolvePanelWidth,
-  clampPanelWidth,
-  availablePanelWidth,
-  buildLegend,
-  isLegendVisible,
-  resolveKey,
-  type LegendItem,
-  LEGEND_SWATCH_SIZE,
+  initialScrollChanged,
 } from '@gantry/core';
-import { GanttThemeService } from './services/gantt-theme.service';
-import { GanttI18nService } from './services/gantt-i18n.service';
-import { GanttColumnService } from './columns/gantt-column.service';
-import { GanttLayoutService } from './layout/gantt-layout.service';
-import { GanttScrollService } from './scroll/gantt-scroll.service';
-import { GanttSelectionService } from './selection/gantt-selection.service';
-import { GanttDragService } from './drag/gantt-drag.service';
-import { GanttHeaderComponent } from './header/gantt-header.component';
-import { GanttTaskListComponent } from './tasklist/gantt-tasklist.component';
-import { GanttCanvasComponent, type GanttBarRenderer } from './layout/gantt-canvas.component';
-import { GanttToolbarComponent } from './annotations/gantt-toolbar.component';
-import { GanttTooltip } from './tooltip/gantt-tooltip';
+import { createRoot, effect, runWithOwner, untracked, type WritableSignal } from './reactive';
+import { setAttr } from './dom/patch';
+import { createEngine, type Engine } from './engine/engine';
+import type { Inputs } from './engine/inputs';
+import { registerEngine } from './engine/registry';
+import {
+  OBSERVED_ATTRIBUTES,
+  PROPERTY_TABLE,
+  VIEW_MODE_ATTR,
+  orDefault,
+  propertyOfAttribute,
+  type PropertyName,
+} from './engine/props';
+import { scrollToRow, scrollToX } from './interaction/scroll';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import type { VanillaColumnDef, GanttDataSourceConfig, GantryEventDetailMap, GantryEventMap } from './types';
+import type {
+  GanttBarRenderer,
+  VanillaColumnDef,
+  GanttDataSourceConfig,
+  GantryEventDetailMap,
+  GantryEventMap,
+  GantryProperties,
+} from './types';
 
 /** Persisted UI state lives in localStorage; unavailable (SSR, blocked storage) → not persisted. */
 const storage = () => (typeof window === 'undefined' ? null : window.localStorage);
-
-const template = typeof document === 'undefined' ? null : document.createElement('template');
-if (template)
-  template.innerHTML = `
-  <style>
-    :host {
-      display: block;
-      position: relative;
-      width: 100%;
-      height: 100%;
-      box-sizing: border-box;
-      font-family: var(--gantt-font, system-ui, -apple-system, sans-serif);
-      font-size: var(--gantt-font-size, 13px);
-      color: var(--gantt-text, #1E293B);
-      background-color: var(--gantt-bg, #FFFFFF);
-      outline: none;
-    }
-    :host(:focus-visible) { box-shadow: inset 0 0 0 2px var(--gantt-sel-border, #2563EB); }
-    :host([hidden]) { display: none; }
-
-    .gantry-wrapper { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--gantt-bg); overflow: hidden; }
-    .gantry-main { display: flex; flex: 1; overflow: hidden; min-height: 0; position: relative; }
-
-    /* ── Task list panel ─────────────────────────────────── */
-    .gantry-panel {
-      flex: 0 0 auto;
-      overflow-x: auto;
-      overflow-y: hidden;
-      background: var(--gantt-panel-bg);
-      transition: width .25s ease;
-      scrollbar-width: thin;
-      scrollbar-color: var(--gantt-scrollbar-thumb) var(--gantt-scrollbar-track);
-    }
-    .gantry-main.is-resizing .gantry-panel,
-    .gantry-main.is-resizing .gantry-canvas-viewport { transition: none; }
-
-    /* ── Splitter with collapse toggle ──────────────────── */
-    .gantry-splitter {
-      flex: 0 0 6px;
-      position: relative;
-      cursor: col-resize;
-      background: linear-gradient(to right, transparent 2px, var(--gantt-panel-border) 2px, var(--gantt-panel-border) 3px, transparent 3px);
-      z-index: 12;
-      outline: none;
-    }
-    .gantry-splitter:hover, .gantry-splitter:focus-visible, .gantry-main.is-resizing .gantry-splitter {
-      background: linear-gradient(to right, transparent 1px, var(--gantt-sel-border) 1px, var(--gantt-sel-border) 4px, transparent 4px);
-    }
-    .gantry-splitter[data-resizable="false"] { cursor: default; }
-    .gantry-splitter-toggle {
-      position: absolute;
-      top: var(--gantry-toggle-top, 50%);
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 18px;
-      height: 32px;
-      padding: 0;
-      border: 1px solid var(--gantt-border);
-      border-radius: 9px;
-      background: var(--gantt-panel-bg);
-      color: var(--gantt-text-sec);
-      font-size: 15px;
-      font-weight: 600;
-      line-height: 1;
-      cursor: pointer;
-      box-shadow: 0 1px 4px rgba(0,0,0,.12);
-      opacity: .85;
-    }
-    .gantry-splitter-toggle:hover { opacity: 1; color: var(--gantt-text); border-color: var(--gantt-sel-border); }
-    .gantry-splitter-toggle[hidden] { display: none; }
-
-    /* ── Timeline ───────────────────────────────────────── */
-    .gantry-canvas-viewport {
-      flex: 1;
-      overflow: auto;
-      position: relative;
-      min-width: 0;
-      transition: opacity .25s ease;
-      scrollbar-width: thin;
-      scrollbar-color: var(--gantt-scrollbar-thumb) var(--gantt-scrollbar-track);
-    }
-    .gantry-canvas-header-sticky { position: sticky; top: 0; z-index: 10; background: var(--gantt-header-bg); width: max-content; }
-
-    .gantry-wrapper[data-view="table"] .gantry-canvas-viewport { opacity: 0; pointer-events: none; }
-    .gantry-wrapper[data-view="table"] .gantry-splitter { display: none; }
-    .gantry-wrapper[data-view="chart"] .gantry-panel { overflow: hidden; }
-
-    .gantry-panel::-webkit-scrollbar, .gantry-canvas-viewport::-webkit-scrollbar { width: 6px; height: 6px; }
-    .gantry-panel::-webkit-scrollbar-track, .gantry-canvas-viewport::-webkit-scrollbar-track { background: var(--gantt-scrollbar-track); }
-    .gantry-panel::-webkit-scrollbar-thumb, .gantry-canvas-viewport::-webkit-scrollbar-thumb { background: var(--gantt-scrollbar-thumb); border-radius: 3px; }
-
-    /* ── Header tiers ───────────────────────────────────── */
-    .gantt-sr-alert {
-      position: absolute; width: 1px; height: 1px; overflow: hidden;
-      clip-path: inset(50%); white-space: nowrap;
-    }
-    .g-header { position: relative; }
-    .g-tier { position: absolute; left: 0; right: 0; border-bottom: 1px solid var(--gantt-border); box-sizing: border-box; }
-    .g-cell {
-      position: absolute; top: 0; bottom: 0; box-sizing: border-box;
-      display: flex; align-items: center; justify-content: center;
-      overflow: clip; white-space: nowrap;
-      font-size: calc(var(--gantt-font-size, 13px) - 1px);
-      color: var(--gantt-text-sec);
-    }
-    .g-tier:first-child .g-cell { color: var(--gantt-text); font-weight: 600; font-size: var(--gantt-font-size, 13px); }
-    .g-tier--start .g-cell { justify-content: flex-start; }
-    .g-cell-label { position: sticky; left: 0; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-box; }
-    .g-cell--current { background: color-mix(in srgb, var(--gantt-today) 14%, transparent); }
-    .g-cell--current .g-cell-label { color: var(--gantt-today); font-weight: 600; }
-    .g-band { position: absolute; top: 0; bottom: 0; pointer-events: none; }
-    .g-today-pointer {
-      position: absolute; bottom: 0; width: 0; height: 0; margin-left: -5px;
-      border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--gantt-today);
-    }
-
-    /* ── Toolbar ────────────────────────────────────────── */
-    .gantt-toolbar {
-      display: flex; align-items: center; flex-wrap: wrap; gap: 10px;
-      padding: 6px 10px; background: var(--gantt-header-bg); border-bottom: 1px solid var(--gantt-border);
-    }
-    .gantt-tb-group { display: flex; align-items: center; gap: 3px; }
-    .gantt-tb-group + .gantt-tb-group { padding-left: 10px; border-left: 1px solid var(--gantt-border); }
-    .gantt-tb-views { margin-left: auto; border-left: none !important; }
-    .gantt-tb-btn, .gantt-tb-pill {
-      font: inherit; font-size: 12px; cursor: pointer; border-radius: 5px;
-      border: 1px solid var(--gantt-border); background: var(--gantt-panel-bg); color: var(--gantt-text-sec);
-      padding: 3px 10px;
-    }
-    .gantt-tb-pill { border-color: transparent; background: transparent; padding: 3px 8px; }
-    .gantt-tb-btn:hover, .gantt-tb-pill:hover { color: var(--gantt-text); border-color: var(--gantt-border); }
-    .gantt-tb-pill[aria-pressed="true"] { background: var(--gantt-bar); border-color: var(--gantt-bar); color: #fff; }
-    .gantt-tb-today { color: var(--gantt-today); border-color: color-mix(in srgb, var(--gantt-today) 45%, transparent); }
-
-    /* ── Task list ──────────────────────────────────────── */
-    .gantt-col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 2; }
-    .gantt-col-resize:hover { background: var(--gantt-sel-border); opacity: .6; }
-    .gantt-tl-row:hover { filter: brightness(0.97); }
-    .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border); }
-
-    /* ── Bars ───────────────────────────────────────────── */
-    .gantt-bar-draggable { cursor: grab; }
-    .gantry-dragging, .gantry-dragging .gantt-bar-draggable { cursor: grabbing; }
-    .gantt-bar-label { font-family: var(--gantt-font); user-select: none; }
-    .gantt-bar-label--outside { font-weight: 500; }
-
-    /* ── Legend ─────────────────────────────────────────── */
-    .gantt-legend {
-      position: absolute; bottom: 12px; right: 12px; z-index: 15;
-      display: flex; align-items: center; gap: 14px; padding: 6px 12px; border-radius: 8px; font-size: 11px;
-      background: var(--gantt-panel-bg); border: 1px solid var(--gantt-border); color: var(--gantt-text-sec);
-      box-shadow: 0 4px 16px rgba(0,0,0,0.12); pointer-events: none;
-    }
-    .gantt-legend-title { font-weight: 700; text-transform: uppercase; letter-spacing: .4px; font-size: 9.5px; color: var(--gantt-text-muted); }
-    .gantt-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--gantt-text); }
-    .gantt-legend-swatch { flex: none; }
-
-    @media (prefers-reduced-motion: reduce) {
-      .gantry-panel, .gantry-canvas-viewport { transition: none; }
-    }
-  </style>
-  <div class="gantry-wrapper" part="wrapper" data-view="split">
-    <div class="gantry-toolbar-container" part="toolbar"></div>
-    <div class="gantry-main">
-      <div class="gantry-panel" part="panel">
-        <div class="gantry-tasklist-container"></div>
-      </div>
-      <div class="gantry-splitter" part="splitter" role="separator" aria-orientation="vertical" tabindex="0">
-        <button type="button" class="gantry-splitter-toggle"></button>
-      </div>
-      <div class="gantry-canvas-viewport" part="timeline">
-        <div class="gantry-canvas-header-sticky">
-          <div class="gantry-header-container"></div>
-        </div>
-        <div class="gantry-canvas-container"></div>
-      </div>
-    </div>
-  </div>
-  <div class="gantt-legend" hidden></div>
-  <div class="gantt-sr-alert" role="alert"></div>
-`;
-
-const BOOLEAN_ATTRS = {
-  'show-toolbar': 'showToolbar',
-  'enable-drag': 'enableDrag',
-  'enable-resize': 'enableResize',
-  'tooltip-enabled': 'tooltipEnabled',
-  'show-legend': 'showLegend',
-} as const;
-
-const parseBool = (v: string | null) => v !== null && v !== 'false';
 
 // Typed event listener overloads (`el.addEventListener('task-dragged', e => e.detail.taskId)`):
 // interface + class merging is the standard way to type a custom element's events
@@ -297,315 +126,345 @@ export interface GantryElement {
 const BaseElement: typeof HTMLElement =
   typeof HTMLElement === 'undefined' ? (class {} as typeof HTMLElement) : HTMLElement;
 
+/** Public getters without a setter (`setViewMode()` / `setView()` change them; `criticalIds` is derived). */
+const READ_ONLY_PROPERTIES = ['viewMode', 'view', 'criticalIds'] as const;
+
+/** The element's `ElementInternals`, or `null` where the engine has none (or they are taken). */
+function attachInternalsOf(el: HTMLElement): ElementInternals | null {
+  if (typeof el.attachInternals !== 'function') return null;
+  try {
+    return el.attachInternals();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sets custom states (`:state(name)`) on `states`; a no-op without `CustomStateSet`. Chromium
+ * 90–124 only takes the legacy `--name` form (`:--name`).
+ */
+function stateSetter(states: CustomStateSet | null): (name: string, on: boolean) => void {
+  return (name, on) => {
+    if (!states) return;
+    if (!on) {
+      states.delete(name);
+      states.delete(`--${name}`);
+      return;
+    }
+    try {
+      states.add(name);
+    } catch {
+      try {
+        states.add(`--${name}`);
+      } catch {
+        // custom states unsupported
+      }
+    }
+  };
+}
+
+// The JSDoc below is the source of the Custom Elements Manifest (`custom-elements.json`, written by
+// `pnpm cem`, checked by `pnpm cem:check`): `__tests__/manifest.test.ts` compares its attributes,
+// events, parts, states and CSS properties with `engine/props.ts`, `GANTRY_EVENTS` and
+// `themeToCss()`. Accessors with an attribute also carry `@attr` (links attribute ↔ property).
+/**
+ * `<gantry-element>`: an interactive Gantt chart (task list, timeline, dependencies, critical
+ * path, drag and resize, lazy paging, theming, i18n). Set `tasks` and `options` as properties;
+ * every `GanttOptions` field behaves as in the other Gantry bindings.
+ *
+ * @tagname gantry-element
+ *
+ * @attr {boolean | 'auto'} dark-mode - Sets `darkMode`: present or `"true"`, `"false"`, or `"auto"` (follows `prefers-color-scheme`). Removing it restores the default (`false`).
+ * @attr {boolean} show-toolbar - Sets `showToolbar`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
+ * @attr {boolean} enable-drag - Sets `enableDrag`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
+ * @attr {boolean} enable-resize - Sets `enableResize`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
+ * @attr {boolean} tooltip-enabled - Sets `tooltipEnabled`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
+ * @attr {boolean} show-legend - Sets `showLegend`: present = `true`, `"false"` = `false`. Removing it restores the default (`false`).
+ * @attr {string} view-mode - The zoom level, through `setViewMode()`: a `ViewMode` or a `zoomLevels` name. Removing it changes nothing.
+ *
+ * @fires {CustomEvent<TaskDragEvent>} task-dragged - A bar was moved: `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`.
+ * @fires {CustomEvent<TaskResizeEvent>} task-resized - A bar was resized: `{ taskId, handle, oldStart, oldEnd, newStart, newEnd, daysDelta }`.
+ * @fires {CustomEvent<SelectionChangeEvent>} selection-change - The selection changed: `{ selectedIds }`.
+ * @fires {CustomEvent<GanttFlatRow>} row-click - A task-list row was clicked.
+ * @fires {CustomEvent<GanttFlatRow>} row-dblclick - A task-list row was double-clicked.
+ * @fires {CustomEvent<{ viewMode: string }>} view-mode-change - The active zoom level changed.
+ * @fires {CustomEvent<GanttState>} state-change - The UI state changed (panel width or view, zoom, column widths, collapsed rows, sort); debounced, persisted under `options.stateKey`.
+ * @fires {CustomEvent<{ error: unknown; page: number }>} load-error - A data-source page failed after its automatic retries (`dataSource.retry()` tries again).
+ *
+ * @csspart wrapper - The root box (toolbar and panes).
+ * @csspart toolbar - The toolbar.
+ * @csspart panel - The task-list panel.
+ * @csspart splitter - The splitter box between the panes (its handle is the `role="separator"` child).
+ * @csspart timeline - The timeline viewport (header and chart; scrolls on both axes).
+ *
+ * @cssstate dark - The dark theme is active (`darkMode` is `true`, or `'auto'` with a dark colour scheme).
+ * @cssstate dragging - A bar is being dragged or resized.
+ * @cssstate loading - A data-source page is loading.
+ *
+ * @cssprop [--gantt-bg=#FFFFFF] - Chart background (theme `backgroundColor`). Defaults are the light theme's.
+ * @cssprop [--gantt-header-bg=#F8FAFC] - Header background (`headerBackground`).
+ * @cssprop [--gantt-row-bg=#FFFFFF] - Row background (`rowBg`).
+ * @cssprop [--gantt-row-bg-alt=#F8FAFC] - Alternate row background (`rowBgAlt`).
+ * @cssprop [--gantt-bar=#2563EB] - Bar fill (`barColor`); set `--gantt-bar-text-on-bar` with it.
+ * @cssprop [--gantt-bar-text=#FFFFFF] - Preferred bar label colour (`barTextColor`).
+ * @cssprop [--gantt-bar-radius=4px] - Bar corner radius (`barRadius`; change it through the theme API, it shapes the layout).
+ * @cssprop [--gantt-milestone=#8B5CF6] - Milestone fill (`milestoneColor`); set `--gantt-bar-text-on-milestone` with it.
+ * @cssprop [--gantt-baseline=#64748B] - Baseline bars (`baselineColor`).
+ * @cssprop [--gantt-critical=#DC2626] - Critical-path bars and arrows (`criticalColor`); set `--gantt-bar-text-on-critical` with it.
+ * @cssprop [--gantt-panel-bg=#FFFFFF] - Task-list background (`panelBg`).
+ * @cssprop [--gantt-panel-border=#E2E8F0] - Task-list borders (`panelBorder`).
+ * @cssprop [--gantt-border=#E2E8F0] - Borders between regions (`borderColor`).
+ * @cssprop [--gantt-grid-line=#EEF2F6] - Grid lines (`gridLine`).
+ * @cssprop [--gantt-grid-line-major=#CBD5E1] - Delimiters between periods (`gridLineMajor`).
+ * @cssprop [--gantt-today=#B45309] - Today marker and current-period highlight (`todayColor`).
+ * @cssprop [--gantt-text=#1E293B] - Primary text (`textPrimary`).
+ * @cssprop [--gantt-text-sec=#475569] - Secondary text (`textSecondary`).
+ * @cssprop [--gantt-text-muted=#64748B] - Muted text (`textMuted`).
+ * @cssprop [--gantt-font=system-ui, -apple-system, sans-serif] - Font family (`fontFamily`).
+ * @cssprop [--gantt-font-size=13px] - Base font size (`fontSize`; change it through the theme API, it shapes the layout).
+ * @cssprop [--gantt-arrow=#2563EB] - Dependency arrows (`arrowColor`).
+ * @cssprop [--gantt-tooltip-bg=#FFFFFF] - Tooltip background (`tooltipBg`).
+ * @cssprop [--gantt-tooltip-bdr=#E2E8F0] - Tooltip border (`tooltipBorder`).
+ * @cssprop [--gantt-tooltip-txt=#1E293B] - Tooltip text (`tooltipText`).
+ * @cssprop [--gantt-sel-bg=#EFF6FF] - Selected row background (`selectionBg`).
+ * @cssprop [--gantt-sel-border=#2563EB] - Selection outline and focus rings (`selectionBorder`).
+ * @cssprop [--gantt-scrollbar-track=#F1F5F9] - Scrollbar track (`scrollbarTrack`).
+ * @cssprop [--gantt-scrollbar-thumb=#CBD5E1] - Scrollbar thumb (`scrollbarThumb`).
+ * @cssprop [--gantt-weekend-bg=rgba(100, 116, 139, 0.08)] - Weekend bands (`weekendBg`).
+ * @cssprop [--gantt-holiday-bg=rgba(239, 68, 68, 0.08)] - Holiday bands (`holidayBg`).
+ * @cssprop [--gantt-off-hours-bg=rgba(100, 116, 139, 0.07)] - Off-hours bands on hour scales (`offHoursBg`).
+ * @cssprop [--gantt-intensive-bg=rgba(245, 158, 11, 0.16)] - Intensive-hours bands (`intensiveBg`).
+ * @cssprop [--gantt-status-not-started=#64748B] - Status dot: not started (`statusNotStarted`).
+ * @cssprop [--gantt-status-in-progress=#2563EB] - Status dot: in progress (`statusInProgress`).
+ * @cssprop [--gantt-status-overdue=#DC2626] - Status dot: overdue (`statusOverdue`).
+ * @cssprop [--gantt-status-done=#15803D] - Status dot: done (`statusDone`).
+ * @cssprop [--gantt-bar-text-on-bar=#FFFFFF] - Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).
+ * @cssprop [--gantt-bar-text-on-milestone=#FFFFFF] - Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).
+ * @cssprop [--gantt-bar-text-on-critical=#FFFFFF] - Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).
+ */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class GantryElement extends BaseElement {
-  static readonly observedAttributes = ['dark-mode', 'view-mode', ...Object.keys(BOOLEAN_ATTRS)];
+  static readonly observedAttributes = OBSERVED_ATTRIBUTES;
 
-  private readonly shadow: ShadowRoot;
+  /** Inputs, graph, layers and connected effects (private; tests reach it through `engine/registry`) */
+  readonly #engine: Engine;
 
-  readonly themeSvc = new GanttThemeService();
-  readonly i18nSvc = new GanttI18nService();
-  readonly colSvc = new GanttColumnService(this.i18nSvc);
-  readonly layout = new GanttLayoutService();
-  readonly scrollSvc = new GanttScrollService();
-  readonly selSvc = new GanttSelectionService();
-  readonly dragSvc = new GanttDragService();
-  private readonly tooltip: GanttTooltip;
+  /** ARIA through `ElementInternals` (`null`: the engine lacks it, host attributes instead) */
+  readonly #aria: ElementInternals | null;
+  /** The `aria-label` this element wrote on the host (attribute fallback; a page-set label wins) */
+  #hostLabel: string | undefined;
 
-  private readonly wrapperEl: HTMLElement;
-  private readonly mainEl: HTMLElement;
-  private readonly toolbarContainerEl: HTMLElement;
-  private readonly panelEl: HTMLElement;
-  private readonly splitterEl: HTMLElement;
-  private readonly toggleEl: HTMLButtonElement;
-  private readonly tasklistContainerEl: HTMLElement;
-  private readonly canvasViewportEl: HTMLElement;
-  private readonly headerContainerEl: HTMLElement;
-  private readonly canvasContainerEl: HTMLElement;
-  private readonly legendEl: HTMLElement;
-  /** Persistent live region: announces a failed data-source page once */
-  private readonly srAlertEl: HTMLElement;
-  /** Last data-source error reported through `load-error` */
-  private reportedLoadError: unknown = null;
-  /** Columns assigned through the `columns` property (options.columns overrides them) */
-  private columnsProp: VanillaColumnDef[] | null = null;
-
-  private headerComp?: GanttHeaderComponent | undefined;
-  private tasklistComp?: GanttTaskListComponent | undefined;
-  private canvasComp?: GanttCanvasComponent | undefined;
-  private toolbarComp?: GanttToolbarComponent | undefined;
-
-  // ── Property backing fields ───────────────────────────────
-  private _options: GanttOptions = {};
-  private _annotations: GanttAnnotation[] = [];
-  private _darkMode: boolean | 'auto' = false;
-  private _showToolbar = true;
-  private _enableDrag = true;
-  private _enableResize = true;
-  private _tooltipEnabled = true;
-  private _showLegend = false;
-  private _dataSource: GanttDataSource | null = null;
-  private _renderBar?: GanttBarRenderer | undefined;
-
-  // ── Render bookkeeping ────────────────────────────────────
-  private frame = 0;
-  /** true = toolbar/header/config need re-resolving, not just the rows */
-  private fullRenderPending = false;
-  private resizeObserver?: ResizeObserver | undefined;
-  private clock?: ReturnType<typeof setInterval> | undefined;
-  /** The first render with data has applied `initialScroll` (or a requested scroll) */
-  private initialScrollDone = false;
-  /** Timeline the canvas was last painted with — anchors the scroll when it changes */
-  private paintedTimeline?: TimelineModel | undefined;
-  private critical: { tasks: GanttTask[] | null; key: string; ids: Set<string>; float: Map<string, number> } = {
-    tasks: null,
-    key: '',
-    ids: new Set(),
-    float: new Map(),
-  };
-  private lastViewMode: string;
-  private restoredStateKey?: string | undefined;
-  private stateTimer?: ReturnType<typeof setTimeout> | undefined;
-  /** Last panel width actually applied (px) */
-  private panelPx = 0;
-  private headerTimeline?: object | undefined;
-  /** Scroll requested before the pending render — replayed on the new timeline */
-  private pendingScroll?: (() => void) | undefined;
+  /** The `options` last assigned (the engine keeps an earlier, structurally equal object) */
+  #options: GanttOptions = {};
+  #restoredStateKey: string | undefined;
+  #stateTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     super();
-    this.shadow = this.attachShadow({ mode: 'open' });
-    this.shadow.appendChild(template!.content.cloneNode(true));
+    const shadow = this.attachShadow({ mode: 'open', delegatesFocus: true });
+    const engine = (this.#engine = createEngine(this, shadow, {
+      emit: (type, detail) => this.#emit(type, detail),
+      saveState: () => this.#saveState(),
+    }));
+    registerEngine(this, engine);
+    const { graph: G, inputs: I, dom } = engine;
 
-    const $ = <T extends HTMLElement = HTMLElement>(sel: string) => this.shadow.querySelector<T>(sel)!;
-    this.wrapperEl = $('.gantry-wrapper');
-    this.mainEl = $('.gantry-main');
-    this.toolbarContainerEl = $('.gantry-toolbar-container');
-    this.panelEl = $('.gantry-panel');
-    this.splitterEl = $('.gantry-splitter');
-    this.toggleEl = $<HTMLButtonElement>('.gantry-splitter-toggle');
-    this.tasklistContainerEl = $('.gantry-tasklist-container');
-    this.canvasViewportEl = $('.gantry-canvas-viewport');
-    this.headerContainerEl = $('.gantry-header-container');
-    this.canvasContainerEl = $('.gantry-canvas-container');
-    this.legendEl = $('.gantt-legend');
-    this.srAlertEl = $('.gantt-sr-alert');
+    // Role, name and custom states without host attributes (none may be added in the constructor)
+    const internals = attachInternalsOf(this);
+    const aria = (this.#aria = internals && 'role' in internals ? internals : null);
+    if (aria) aria.role = 'region';
+    const setState = stateSetter(internals && 'states' in internals ? internals.states : null);
 
-    this.tooltip = new GanttTooltip(this.shadow, this.i18nSvc);
-    this.lastViewMode = this.layout.viewMode();
-
-    this.scrollSvc.bindViewports(this.panelEl, this.canvasViewportEl);
-    this.scrollSvc.onScroll = () => this.scheduleRender(false);
-    // The panel only scrolls horizontally; forward vertical wheel to the timeline
-    this.panelEl.addEventListener(
-      'wheel',
-      e => {
-        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-        this.canvasViewportEl.scrollTop += e.deltaY;
-        e.preventDefault();
-      },
-      { passive: false },
-    );
-
-    this.dragSvc.onTaskDragged = e => {
-      this.layout.updateTask(e.taskId, { start: e.newStart, end: e.newEnd });
-      this.emit('task-dragged', e);
-      this.scheduleRender();
-    };
-    this.dragSvc.onTaskResized = e => {
-      this.layout.updateTask(e.taskId, { start: e.newStart, end: e.newEnd });
-      this.emit('task-resized', e);
-      this.scheduleRender();
-    };
-    this.dragSvc.preview.subscribe(() => this.scheduleRender(false));
-    this.dragSvc.state.subscribe(s => this.canvasContainerEl.classList.toggle('gantry-dragging', s.kind !== 'idle'));
-
-    this.selSvc.onChange = e => this.emit('selection-change', e);
-    this.selSvc.state.subscribe(() => this.scheduleRender(false));
-    const mirrorColumns = () => {
-      this.layout.columns.set(this.colSvc.columns);
-      this.layout.builtins.set(this.colSvc.builtins);
-    };
-    this.colSvc.onChange = () => {
-      mirrorColumns();
-      this.scheduleRender(false);
-    };
-    mirrorColumns();
-
-    this.layout.viewMode.subscribe(vm => {
-      if (vm === this.lastViewMode) return;
-      this.lastViewMode = vm;
-      this.emit('view-mode-change', { viewMode: vm });
-      this.saveState();
+    // Element-lifetime effects, synchronous like the events they fire. Owned by a root: the element
+    // may be created inside an effect (an event handler), which must not dispose them when it re-runs
+    runWithOwner(createRoot(), () => {
+      effect(() => {
+        const dragging = engine.drag.state().kind !== 'idle';
+        dom.canvasContainer.classList.toggle('gantry-dragging', dragging);
+        setState('dragging', dragging);
+      });
+      effect(() => setState('dark', G.isDark()));
+      effect(() => setState('loading', I.loadState()?.isLoading === true));
+      // The chart's name: the host region and the timeline viewport, kept in sync with the labels
+      effect(() => {
+        const label = G.i18n().labels.ariaChart;
+        setAttr(dom.viewport, 'aria-label', label);
+        if (aria) aria.ariaLabel = label;
+        else if (this.#hostLabel !== undefined) this.#hostAria(label);
+      });
+      const zoomLevel = () => {
+        try {
+          return G.viewMode();
+        } catch {
+          return null; // invalid options: the render reports the error
+        }
+      };
+      let shownViewMode = untracked(zoomLevel);
+      effect(() => {
+        const vm = zoomLevel();
+        if (vm === null || vm === shownViewMode) return;
+        shownViewMode = vm;
+        this.#emit('view-mode-change', { viewMode: vm });
+        this.#saveState();
+      });
     });
 
-    this.bindCanvasInteractions();
-    this.bindSplitter();
-    this.addEventListener('keydown', e => this.onKeyDown(e));
+    // Properties set before the element was defined shadow the accessors: re-apply them through the setters
+    for (const { name } of PROPERTY_TABLE) {
+      if (!Object.hasOwn(this, name)) continue;
+      const value: unknown = Reflect.get(this, name);
+      Reflect.deleteProperty(this, name);
+      Reflect.set(this, name, value);
+    }
+    // A read-only property assigned before definition would hide its getter for good: drop the value
+    for (const name of READ_ONLY_PROPERTIES) if (Object.hasOwn(this, name)) Reflect.deleteProperty(this, name);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────
 
   connectedCallback(): void {
-    // Attributes/styles may only be added once connected (not in the constructor)
-    if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
-    this.themeSvc.init(this, this._darkMode);
-    this.resizeObserver = new ResizeObserver(() => this.scheduleRender(false));
-    this.resizeObserver.observe(this.mainEl);
-    // Keep "today" fresh in long-lived sessions
-    this.clock = setInterval(() => {
-      this.layout.tick();
-      this.scheduleRender();
-    }, 60_000);
-    if (this._dataSource) this.attachDataSource(this._dataSource);
-    this.scheduleRender();
+    // Attributes may only be added once connected (not in the constructor)
+    if (!this.#aria) this.#hostAria(this.#engine.graph.i18n.peek().labels.ariaChart);
+    this.#engine.connect();
+  }
+
+  /** Without ARIA on `ElementInternals`: the region's role and name as host attributes (the page's own win). */
+  #hostAria(label: string): void {
+    if (!this.hasAttribute('role')) this.setAttribute('role', 'region');
+    const current = this.getAttribute('aria-label');
+    if (current !== null && current !== this.#hostLabel) return;
+    this.#hostLabel = label;
+    if (current !== label) this.setAttribute('aria-label', label);
   }
 
   disconnectedCallback(): void {
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = undefined;
-    clearInterval(this.clock);
-    this.themeSvc.destroy();
-    this.tooltip.hide();
-    this.dragSvc.cancel();
-    if (this.frame) cancelAnimationFrame(this.frame);
-    this.frame = 0;
-    // Write a pending state save now; stop listening to the data source until reconnected
-    if (this.stateTimer) {
-      clearTimeout(this.stateTimer);
-      this.stateTimer = undefined;
-      this.writeState();
+    this.#engine.disconnect();
+    // Write a pending state save now
+    if (this.#stateTimer !== undefined) {
+      clearTimeout(this.#stateTimer);
+      this.#stateTimer = undefined;
+      this.#writeState();
     }
-    if (this._dataSource) this._dataSource.onChange = undefined;
+  }
+
+  /** Moved inside the document (`moveBefore()`): nothing is torn down, scroll, selection and focus stay. */
+  connectedMoveCallback(): void {
+    // Defined so the browser keeps the element connected: no disconnectedCallback / connectedCallback
+  }
+
+  /** Moved to another document: its stylesheets are re-adopted from that document. */
+  adoptedCallback(): void {
+    this.#engine.adopt();
   }
 
   attributeChangedCallback(name: string, _old: string | null, value: string | null): void {
-    if (name === 'dark-mode') {
-      this.darkMode = value === 'auto' ? 'auto' : parseBool(value);
-    } else if (name === 'view-mode') {
+    if (name === VIEW_MODE_ATTR) {
       if (value) this.setViewMode(value);
-    } else if (name in BOOLEAN_ATTRS) {
-      // missing attribute = default (true), except show-legend which defaults to false
-      const prop = BOOLEAN_ATTRS[name as keyof typeof BOOLEAN_ATTRS];
-      this[prop] = value === null ? prop !== 'showLegend' : parseBool(value);
+      return;
     }
+    const spec = propertyOfAttribute(name);
+    // A removed attribute parses to `undefined`: the property's default
+    if (spec?.parse) this.#set(spec.name, spec.parse(value) as never);
   }
 
-  // ── Properties ────────────────────────────────────────────
+  // ── Properties (one per `PROPERTY_TABLE` entry; `undefined` restores the default) ──
 
-  /** Tasks to display. Ignored while a `dataSource` is set. */
+  /** Tasks to display (a tree through `parentId`). Ignored while a `dataSource` is set. */
   get tasks(): GanttTask[] {
-    return this.layout.tasks();
+    return this.#engine.graph.tasks.peek();
   }
-  set tasks(val: GanttTask[]) {
-    if (this._dataSource) return;
-    this.layout.setTasks(val ?? []);
-    this.scheduleRender();
+  set tasks(v: GanttTask[] | undefined) {
+    this.#set('tasks', v);
   }
 
+  /** Task-list columns (`options.columns`, when set, wins); the built-in columns by default. */
   get columns(): VanillaColumnDef[] {
-    return this.colSvc.columns;
+    return this.#engine.columns.catalogue.peek().columns;
   }
-  set columns(val: VanillaColumnDef[] | null | undefined) {
-    this.columnsProp = val?.length ? val : null;
-    // options.columns, when set, keeps priority
-    if (!this._options.columns?.length) {
-      if (this.columnsProp) this.colSvc.setColumns(this.columnsProp);
-      else this.colSvc.resetColumns();
-    }
-    this.scheduleRender();
+  set columns(v: VanillaColumnDef[] | null | undefined) {
+    this.#set('columns', v);
   }
 
+  /** Every `GanttOptions` field. Re-assigning equal options changes nothing; the same object counts as changed. */
   get options(): GanttOptions {
-    return this._options;
+    return this.#options;
   }
-  set options(val: GanttOptions | null | undefined) {
-    const opts = val ?? {};
-    const prev = this._options;
-    this._options = opts;
-    this.i18nSvc.apply(opts);
-    // options.columns wins; removing it falls back to the `columns` property, else the built-ins
-    if (opts.columns?.length) this.colSvc.setColumns(opts.columns as VanillaColumnDef[]);
-    else if (prev.columns?.length) {
-      if (this.columnsProp) this.colSvc.setColumns(this.columnsProp);
-      else this.colSvc.resetColumns();
-    } else this.colSvc.refresh();
-    this.themeSvc.setOptionsTheme(opts.theme);
-    if (opts.darkMode != null) this.darkMode = opts.darkMode;
-    if (opts.enableDrag != null) this._enableDrag = opts.enableDrag;
-    if (opts.enableResize != null) this._enableResize = opts.enableResize;
-    // Only re-apply UI state the consumer actually changed — don't undo user interaction
-    if (opts.viewMode && opts.viewMode !== prev.viewMode) this.layout.viewMode.set(opts.viewMode);
-    const view = viewFromOptions(opts);
-    if (view && view !== viewFromOptions(prev)) this.layout.view.set(view);
-    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth)
-      this.layout.panelWidthPx.set(null);
-    if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) this.initialScrollDone = false;
-    if (opts.stateKey && opts.stateKey !== this.restoredStateKey) {
-      this.restoredStateKey = opts.stateKey;
-      const saved = readStoredState(storage, opts.stateKey);
-      if (saved) this.setState(saved, false);
-    }
-    this.scheduleRender();
+  set options(v: GanttOptions | null | undefined) {
+    this.#set('options', v);
   }
 
+  /** Highlighted date ranges and markers. */
   get annotations(): GanttAnnotation[] {
-    return this._annotations;
+    return this.#engine.inputs.annotationsIn.peek();
   }
-  set annotations(val: GanttAnnotation[]) {
-    this._annotations = val ?? [];
-    this.scheduleRender();
+  set annotations(v: GanttAnnotation[] | undefined) {
+    this.#set('annotations', v);
   }
 
-  /** `true` / `false` / `'auto'` (follows `prefers-color-scheme`). */
+  /**
+   * `true` / `false` / `'auto'` (follows `prefers-color-scheme`).
+   * @attr dark-mode
+   */
   get darkMode(): boolean | 'auto' {
-    return this._darkMode;
+    return this.#engine.inputs.darkModeIn.peek();
   }
-  set darkMode(val: boolean | 'auto') {
-    this._darkMode = val;
-    this.themeSvc.setDarkMode(val);
-    this.scheduleRender();
+  set darkMode(v: boolean | 'auto' | undefined) {
+    this.#set('darkMode', v);
   }
 
+  /**
+   * Toolbar with zoom, view-mode pills, view toggle and the Today button.
+   * @attr show-toolbar
+   */
   get showToolbar(): boolean {
-    return this._showToolbar;
+    return this.#engine.inputs.showToolbar.peek();
   }
-  set showToolbar(val: boolean) {
-    this._showToolbar = val;
-    this.scheduleRender();
+  set showToolbar(v: boolean | undefined) {
+    this.#set('showToolbar', v);
   }
 
+  /**
+   * Bars can be dragged to new dates (per task: `task.draggable = false`).
+   * @attr enable-drag
+   */
   get enableDrag(): boolean {
-    return this._enableDrag;
+    return this.#engine.inputs.enableDrag.peek();
   }
-  set enableDrag(val: boolean) {
-    this._enableDrag = val;
-    this.scheduleRender();
+  set enableDrag(v: boolean | undefined) {
+    this.#set('enableDrag', v);
   }
 
+  /**
+   * Bars can be resized from either end.
+   * @attr enable-resize
+   */
   get enableResize(): boolean {
-    return this._enableResize;
+    return this.#engine.inputs.enableResize.peek();
   }
-  set enableResize(val: boolean) {
-    this._enableResize = val;
-    this.scheduleRender();
+  set enableResize(v: boolean | undefined) {
+    this.#set('enableResize', v);
   }
 
+  /**
+   * Hover tooltip on bars.
+   * @attr tooltip-enabled
+   */
   get tooltipEnabled(): boolean {
-    return this._tooltipEnabled;
+    return this.#engine.inputs.tooltipEnabled.peek();
   }
-  set tooltipEnabled(val: boolean) {
-    this._tooltipEnabled = val;
-    if (!val) this.tooltip.hide();
+  set tooltipEnabled(v: boolean | undefined) {
+    this.#set('tooltipEnabled', v);
   }
 
-  /** Floating legend explaining the vertical markers (today + annotations). */
+  /**
+   * Floating legend explaining the vertical markers (today + annotations).
+   * @attr show-legend
+   */
   get showLegend(): boolean {
-    return this._showLegend;
+    return this.#engine.inputs.showLegend.peek();
   }
-  set showLegend(val: boolean) {
-    this._showLegend = val;
-    this.scheduleRender();
+  set showLegend(v: boolean | undefined) {
+    this.#set('showLegend', v);
   }
 
   /**
@@ -613,738 +472,293 @@ export class GantryElement extends BaseElement {
    * While set, it owns the task list (the `tasks` property is ignored).
    */
   get dataSource(): GanttDataSource | null {
-    return this._dataSource;
+    return this.#engine.inputs.dataSource.peek();
   }
-  set dataSource(val: GanttDataSource | GanttDataSourceConfig | null | undefined) {
-    if (this._dataSource) this._dataSource.onChange = undefined;
-    const ds = val == null ? null : val instanceof GanttDataSource ? val : new GanttDataSource(val);
-    this._dataSource = ds;
-    this.reportedLoadError = null;
-    this.srAlertEl.textContent = '';
-    if (!ds) return;
-    this.attachDataSource(ds);
-    this.scheduleRender();
-  }
-
-  /** Mirror the data source into the layout (also on reconnect) and start it per `initialPage`. */
-  private attachDataSource(ds: GanttDataSource): void {
-    ds.onChange = () => this.syncDataSource(ds);
-    this.syncDataSource(ds);
-    if (ds.loadedCount === 0 && ds.autoStart) void ds.loadNext();
-  }
-
-  /** Copy the loaded items; report each new failure once (event + screen-reader alert). */
-  private syncDataSource(ds: GanttDataSource): void {
-    this.layout.setTasks(ds.items);
-    if (ds.error === null) {
-      if (this.reportedLoadError !== null) this.srAlertEl.textContent = '';
-      this.reportedLoadError = null;
-    } else if (ds.error !== this.reportedLoadError && this.isConnected) {
-      this.reportedLoadError = ds.error;
-      this.srAlertEl.textContent = this.i18nSvc.labels.loadError;
-      this.emit('load-error', { error: ds.error, page: ds.nextPage });
-    }
-    this.scheduleRender();
+  set dataSource(v: GanttDataSource | GanttDataSourceConfig | null | undefined) {
+    this.#set('dataSource', v);
   }
 
   /** Replace or decorate the built-in bar SVG (see `GanttBarRenderer`). */
   get renderBar(): GanttBarRenderer | undefined {
-    return this._renderBar;
+    return this.#engine.inputs.renderBar.peek();
   }
-  set renderBar(fn: GanttBarRenderer | undefined) {
-    this._renderBar = fn;
-    this.scheduleRender();
+  set renderBar(v: GanttBarRenderer | undefined) {
+    this.#set('renderBar', v);
+  }
+
+  /** Writes a property into the engine (`undefined` = the default). */
+  #set<K extends PropertyName>(name: K, value: GantryProperties[K] | null): void {
+    const v = orDefault(name, value);
+    const engine = this.#engine;
+    const I = engine.inputs;
+    switch (name) {
+      case 'tasks':
+        if (!I.dataSource.peek()) engine.setTasks((v as GanttTask[] | null) ?? []);
+        return;
+      case 'columns':
+        // options.columns, when set, keeps priority
+        I.columnsIn.set((v as VanillaColumnDef[] | null)?.length ? (v as VanillaColumnDef[]) : null);
+        return;
+      case 'options':
+        this.#setOptions((v as GanttOptions | null) ?? {});
+        return;
+      case 'dataSource': {
+        const ds = v as GanttDataSource | GanttDataSourceConfig | null;
+        engine.setDataSource(ds === null ? null : ds instanceof GanttDataSource ? ds : new GanttDataSource(ds));
+        return;
+      }
+      case 'annotations':
+        I.annotationsIn.set((v as GanttAnnotation[] | null) ?? []);
+        return;
+      case 'tooltipEnabled':
+        if (!v) engine.layers.tooltip.hide();
+        break;
+    }
+    // The other properties write the input of the same name (`darkMode` → `darkModeIn`); the
+    // lifecycle tests round-trip every table entry
+    (I[(name === 'darkMode' ? 'darkModeIn' : name) as keyof Inputs] as WritableSignal<unknown>).set(v);
+  }
+
+  #setOptions(opts: GanttOptions): void {
+    const { inputs: I, layers } = this.#engine;
+    const prev = I.optionsIn.peek();
+    this.#options = opts;
+    // Locale, columns, theme and config follow in the graph; equal options change nothing
+    I.optionsIn.set(opts);
+    if (opts.darkMode != null) this.darkMode = opts.darkMode;
+    if (opts.enableDrag != null) I.enableDrag.set(opts.enableDrag);
+    if (opts.enableResize != null) I.enableResize.set(opts.enableResize);
+    // Only re-apply UI state the consumer actually changed — don't undo user interaction
+    if (opts.viewMode && opts.viewMode !== prev.viewMode) I.viewModeOverride.set(opts.viewMode);
+    const view = viewFromOptions(opts);
+    if (view && view !== viewFromOptions(prev)) I.viewOverride.set(view);
+    if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) I.panelW.set(null);
+    if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) layers['scroll-commands'].resetInitialScroll();
+    if (opts.stateKey && opts.stateKey !== this.#restoredStateKey) {
+      this.#restoredStateKey = opts.stateKey;
+      const saved = readStoredState(storage, opts.stateKey);
+      if (saved) this.setState(saved, false);
+    }
   }
 
   // ── Public API ────────────────────────────────────────────
 
+  /** One zoom level closer (along `options.zoomLevels`). */
   zoomIn(): void {
-    this.layout.zoomIn();
-    this.scheduleRender();
+    this.#zoom(-1);
   }
+  /** One zoom level further out. */
   zoomOut(): void {
-    this.layout.zoomOut();
-    this.scheduleRender();
+    this.#zoom(1);
+  }
+  #zoom(dir: 1 | -1): void {
+    const { inputs: I, graph: G } = this.#engine;
+    I.viewModeOverride.set(zoomStep(G.config.peek().zoomLevels, G.viewMode.peek(), dir));
   }
 
   /** Active zoom level (a `ViewMode` or a custom `zoomLevels` name). */
   get viewMode(): string {
-    return this.layout.viewMode();
+    return this.#engine.graph.viewMode.peek();
   }
+  /** Switch the zoom level: a `ViewMode` or a custom `zoomLevels` name (also the `view-mode` attribute). */
   setViewMode(mode: ViewMode | (string & {})): void {
-    this.layout.viewMode.set(mode);
-    this.scheduleRender();
+    this.#engine.inputs.viewModeOverride.set(mode);
   }
 
   /** Current view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). */
   get view(): GanttView {
-    return this.layout.view();
+    return this.#engine.inputs.viewOverride.peek();
   }
+  /** Switch the view: task list and timeline, the task list only, or the timeline only. */
   setView(view: GanttView): void {
-    if (view === this.layout.view()) return;
-    this.layout.view.set(view);
-    this.saveState();
-    this.scheduleRender();
+    const { inputs: I } = this.#engine;
+    if (view === I.viewOverride.peek()) return;
+    I.viewOverride.set(view);
+    this.#saveState();
   }
 
   /** Collapse / expand the task list; expanding restores its last width. */
   togglePanel(): void {
-    this.setView(this.layout.view() === 'split' ? 'chart' : 'split');
+    this.setView(this.view === 'split' ? 'chart' : 'split');
   }
 
+  /** Centre today in the timeline viewport. */
   scrollToToday(behavior: ScrollBehavior = 'smooth'): void {
     this.scrollToDate(new Date(), behavior);
   }
 
   /** Centre `date` in the timeline viewport. */
   scrollToDate(date: Date, behavior: ScrollBehavior = 'smooth'): void {
-    if (this.fullRenderPending || !this.layout.config()) {
-      this.pendingScroll = () => this.scrollToDate(date, behavior);
-      return;
-    }
-    const x = this.layout.timeline.toX(date);
-    this.scrollSvc.scrollToX(x - this.canvasViewportEl.clientWidth / 2, behavior);
+    this.#engine.layers['scroll-commands'].request(() => this.#scrollToDateNow(date, behavior));
   }
 
   /** Scroll the given task into view (vertically and horizontally). */
   scrollToTask(id: string, behavior: ScrollBehavior = 'smooth'): void {
-    if (this.fullRenderPending || !this.layout.config()) {
-      this.pendingScroll = () => this.scrollToTask(id, behavior);
-      return;
-    }
-    const geo = this.layout.geometryById.get(id);
+    this.#engine.layers['scroll-commands'].request(() => this.#scrollToTaskNow(id, behavior));
+  }
+
+  /** Centring reads the viewport width of the painted model (see `layers/scroll-commands.ts`). */
+  #scrollToDateNow(date: Date, behavior: ScrollBehavior): void {
+    const { graph: G, inputs: I, dom } = this.#engine;
+    const tl = G.timeline.peek();
+    scrollToX(dom.viewport, tl.toX(date) - dom.viewport.clientWidth / 2, behavior, {
+      inputs: I,
+      maxLeft: tl.totalWidth - I.canvasW.peek(),
+    });
+  }
+
+  #scrollToTaskNow(id: string, behavior: ScrollBehavior): void {
+    const { graph: G, dom } = this.#engine;
+    const geo = G.geoById.peek().get(id);
     if (!geo) return;
-    this.scrollSvc.scrollToRow(geo.row.visibleIndex, this.layout.rowHeight, behavior);
-    this.scrollToDate(geo.row.task.start, behavior);
+    scrollToRow(dom.viewport, geo.row.visibleIndex, G.config.peek().rowHeight, behavior);
+    this.#scrollToDateNow(geo.row.task.start, behavior);
   }
 
+  /** The selected tasks, in task order. */
   getSelectedTasks(): GanttTask[] {
-    const ids = this.selSvc.selectedIds;
-    return this.layout.tasks().filter(t => ids.has(t.id));
+    const { inputs: I, graph: G } = this.#engine;
+    const ids = I.selection.peek().selected;
+    return G.tasks.peek().filter(t => ids.has(t.id));
   }
+  /** Select exactly these task ids (fires `selection-change` when the selection changes). */
   setSelectedTasks(ids: string[]): void {
-    this.selSvc.setSelected(ids);
+    this.#engine.selection.setSelected(ids);
   }
+  /** Deselect every task. */
   clearSelection(): void {
-    this.selSvc.clear();
+    this.#engine.selection.clear();
   }
+  /** Select every visible task (multiple selection only). */
   selectAll(): void {
-    const selection = this.layout.config()?.selection;
-    if (!selection) return;
-    this.selSvc.selectAll(this.visibleIds(), selection);
+    const { graph: G, layers, selection } = this.#engine;
+    if (!layers['scroll-commands'].hasRendered()) return;
+    selection.selectAll(
+      G.visibleRows.peek().map(r => r.task.id),
+      G.config.peek().selection,
+    );
   }
 
+  /** Merge `patch` into the task with this id. */
   updateTask(id: string, patch: Partial<GanttTask>): void {
-    this.layout.updateTask(id, patch);
-    this.scheduleRender();
+    const { inputs: I, graph: G } = this.#engine;
+    I.tasksIn.set(G.tasks.peek().map(t => (t.id === id ? { ...t, ...patch } : t)));
   }
+  /** Add tasks after the current ones. */
   appendTasks(tasks: GanttTask[]): void {
-    this.layout.appendTasks(tasks);
-    this.scheduleRender();
+    const { inputs: I, graph: G } = this.#engine;
+    // `graph.tasks` repairs the appended tasks like set ones
+    if (tasks.length) I.tasksIn.set([...G.tasks.peek(), ...tasks]);
   }
 
+  /** Collapse every group (task with children). */
   collapseAll(): void {
-    this.layout.collapseAll();
-    this.saveState();
-    this.scheduleRender();
+    const { inputs: I, graph: G } = this.#engine;
+    const parentIds = flattenTree(G.tasks.peek(), new Set())
+      .filter(r => r.hasChildren)
+      .map(r => r.task.id);
+    I.collapsedIds.set(new Set(parentIds));
+    this.#saveState();
   }
+  /** Expand every group. */
   expandAll(): void {
-    this.layout.expandAll();
-    this.saveState();
-    this.scheduleRender();
+    this.#engine.inputs.collapsedIds.set(new Set());
+    this.#saveState();
   }
 
-  /** Show / hide a column (also persisted with `stateKey` via its width map). */
   /** Show / hide a column in both views, or only in the split panel / the table view. */
   setColumnVisible(key: string, visible: boolean, view?: 'split' | 'table'): void {
-    this.colSvc.setVisible(key, visible, view);
+    this.#engine.columns.setVisible(key, visible, view);
   }
   /** Show a column if the view (both views by default) hides it, else hide it. */
   toggleColumnVisible(key: string, view?: 'split' | 'table'): void {
-    this.colSvc.toggleVisible(key, view, this.layout.config() ?? undefined);
+    const { columns, graph: G, layers } = this.#engine;
+    columns.toggleVisible(key, view, layers['scroll-commands'].hasRendered() ? G.config.peek() : undefined);
   }
 
   /** Replace the custom theme overrides (on top of the light/dark base and `options.theme`). */
   setTheme(override: GanttThemeOverrides): void {
-    this.themeSvc.setTheme(override);
-    this.scheduleRender();
+    this.#engine.inputs.apiTheme.set({ ...override });
   }
+  /** Merge `patch` into the custom theme overrides. */
   patchTheme(patch: GanttThemeOverrides): void {
-    this.themeSvc.patchTheme(patch);
-    this.scheduleRender();
+    this.#engine.inputs.apiTheme.update(cur => ({ ...cur, ...patch }));
+  }
+  /** Drop the `setTheme` / `patchTheme` overrides: back to the light/dark base plus `options.theme`. */
+  resetTheme(): void {
+    const { apiTheme } = this.#engine.inputs;
+    if (Object.keys(apiTheme.peek()).length) apiTheme.set({});
   }
 
-  /** Rendered geometry of a task's bar (position in timeline px, size, label) — e.g. to anchor a popover. */
+  /** Geometry of a task's bar (position in timeline px, size, label) — e.g. to anchor a popover. */
   getBarVisual(id: string): BarVisual | undefined {
-    return this.canvasComp?.visuals.get(id);
+    const { graph: G } = this.#engine;
+    const geo = G.geoById.peek().get(id);
+    return geo && G.barVisual.peek()(geo);
   }
 
   /** IDs of the tasks on the critical path (empty unless `options.criticalPath`). */
   get criticalIds(): ReadonlySet<string> {
-    return this.criticalPath()?.ids ?? new Set();
-  }
-
-  /** CPM result (critical ids + total float), recomputed only when the tasks or the date reading change. */
-  private criticalPath(): { ids: ReadonlySet<string>; float: ReadonlyMap<string, number> } | null {
-    if (!this._options.criticalPath) return null;
-    const tasks = this.layout.tasks();
-    const cfg = this.layout.config();
-    // Only the date reading matters — not the config object, which every full render replaces
-    const key = `${cfg?.endDateMode}|${cfg?.normalizeDateOnly}`;
-    if (this.critical.tasks !== tasks || this.critical.key !== key) {
-      const cpm = computeCriticalPath(tasks, cfg ?? {});
-      this.critical = { tasks, key, ids: cpm.criticalIds, float: cpm.floatMap };
-    }
-    return this.critical;
+    return this.#engine.graph.critical.peek()?.criticalIds ?? new Set();
   }
 
   /** Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). */
   getState(): GanttState {
+    const { inputs: I, graph: G, columns, layers } = this.#engine;
+    const view = I.viewOverride.peek();
+    const panelPx = layers['scroll-commands'].hasRendered() ? G.panelPx.peek() : 0;
     return {
-      panelWidth: this.layout.panelWidthPx() ?? (this.panelPx || undefined),
-      panelCollapsed: this.layout.view() === 'chart',
-      view: this.layout.view(),
-      viewMode: this.layout.viewMode(),
-      columnWidths: this.colSvc.widths,
-      collapsedIds: [...this.layout.collapsedIds()],
-      sort: this.layout.sort(),
+      panelWidth: I.panelW.peek() ?? (panelPx || undefined),
+      panelCollapsed: view === 'chart',
+      view,
+      viewMode: G.viewMode.peek(),
+      columnWidths: columns.widths(),
+      collapsedIds: [...I.collapsedIds.peek()],
+      sort: I.sort.peek(),
     };
   }
 
-  /** Restore a state snapshot (e.g. from your backend). */
+  /**
+   * Restore a state snapshot (e.g. from your backend).
+   * @param emit - `false`: neither fire `state-change` nor persist under `options.stateKey`.
+   */
   setState(state: GanttState, emit = true): void {
+    const { inputs: I, columns } = this.#engine;
     state = normalizeState(state);
-    if (state.panelWidth != null) this.layout.panelWidthPx.set(state.panelWidth);
+    if (state.panelWidth != null) I.panelW.set(state.panelWidth);
     const view = viewFromState(state);
-    if (view) this.layout.view.set(view);
-    if (state.viewMode) this.layout.viewMode.set(state.viewMode);
-    if (state.columnWidths) this.colSvc.setColumnWidths(state.columnWidths);
-    if (state.collapsedIds) this.layout.collapsedIds.set(new Set(state.collapsedIds));
-    if (state.sort !== undefined) this.layout.sort.set(state.sort);
-    if (emit) this.saveState();
-    this.scheduleRender();
+    if (view) I.viewOverride.set(view);
+    if (state.viewMode) I.viewModeOverride.set(state.viewMode);
+    if (state.columnWidths) columns.setColumnWidths(state.columnWidths);
+    if (state.collapsedIds) I.collapsedIds.set(new Set(state.collapsedIds));
+    if (state.sort !== undefined) I.sort.set(state.sort);
+    if (emit) this.#saveState();
   }
 
   // ── State persistence ─────────────────────────────────────
 
-  /** Debounced: emit `state-change` and persist under `options.stateKey`. */
-  private saveState(): void {
-    clearTimeout(this.stateTimer);
-    this.stateTimer = setTimeout(() => {
-      this.stateTimer = undefined;
-      this.writeState();
+  /** Debounced: emit `state-change` and persist under `options.stateKey` (flushed on disconnect). */
+  #saveState(): void {
+    clearTimeout(this.#stateTimer);
+    this.#stateTimer = setTimeout(() => {
+      this.#stateTimer = undefined;
+      this.#writeState();
     }, 150);
   }
 
-  private writeState(): void {
+  #writeState(): void {
     const state = this.getState();
-    this.emit('state-change', state);
-    const key = this._options.stateKey;
+    this.#emit('state-change', state);
+    const key = this.#engine.inputs.optionsIn.peek().stateKey;
     if (key) writeStoredState(storage, key, state);
   }
 
-  // ── Rendering ─────────────────────────────────────────────
+  // ── Events ────────────────────────────────────────────────
 
-  /** Batch renders into one per frame. `full=false` re-renders rows only (scroll, hover, drag). */
-  private scheduleRender(full = true): void {
-    if (full) this.fullRenderPending = true;
-    if (this.frame || !this.isConnected) return;
-    this.frame = requestAnimationFrame(() => {
-      this.frame = 0;
-      const fullRender = this.fullRenderPending;
-      this.fullRenderPending = false;
-      try {
-        this.render(fullRender);
-      } catch (err) {
-        console.error('[gantry] render error:', err);
-      }
-    });
-  }
-
-  private i18nBundle(): GanttI18n {
-    return { locale: this.i18nSvc.locale, labels: this.i18nSvc.labels, formats: this.i18nSvc.formats };
-  }
-
-  /** Resolve options + interactive state into the config the render model reads. */
-  private reconfigure(): ResolvedGanttConfig {
-    const i18n = this.i18nBundle();
-    const cfg = resolveConfig(
-      { ...this._options, viewMode: this.layout.viewMode() },
-      this.themeSvc.resolvedTheme,
-      i18n,
-    );
-    // A custom zoomLevels list may not contain the current level
-    if (cfg.level.name !== this.layout.viewMode()) this.layout.viewMode.set(cfg.level.name);
-    this.layout.i18n.set(i18n);
-    this.layout.config.set(cfg);
-    return cfg;
-  }
-
-  private render(full: boolean): void {
-    const cfg = full || !this.layout.config() ? this.reconfigure() : this.layout.cfg;
-    const theme = cfg.theme;
-    const labels = this.i18nSvc.labels;
-    const layout = this.layout;
-    const view = layout.view();
-    // In the coordinates of the painted timeline: read before the DOM changes (and clamps it)
-    const scrollLeftBefore = this.canvasViewportEl.scrollLeft;
-    // Rebuilt controls lose focus: remember which one had it
-    const focusKey = (this.shadow.activeElement as HTMLElement | null)?.dataset?.['focusKey'];
-
-    this.wrapperEl.dataset['view'] = view;
-    this.applyPanelWidth(cfg, view);
-    layout.viewportWidth.set(Math.max(0, this.canvasViewportEl.clientWidth));
-
-    const tl = layout.timeline;
-    const rows = layout.visibleRows;
-    const rowHeight = cfg.rowHeight;
-    const headerHeight = tl.headerHeight;
-    this.style.setProperty('--gantry-toggle-top', `${headerHeight + 24}px`);
-
-    if (full) {
-      this.renderToolbar(cfg);
-      this.renderLegend(cfg);
-    }
-    // The header only changes with the timeline model (not on vertical scroll)
-    if (this.headerTimeline !== tl) {
-      this.headerTimeline = tl;
-      const headerProps = { timeline: tl, config: cfg, labels };
-      if (!this.headerComp) this.headerComp = new GanttHeaderComponent(this.headerContainerEl, headerProps);
-      else this.headerComp.updateProps(headerProps);
-    }
-
-    // Keep the bottoms of both panes level despite either one's horizontal scrollbar
-    const panelSB = this.panelEl.offsetHeight - this.panelEl.clientHeight;
-    const canvasSB = this.canvasViewportEl.offsetHeight - this.canvasViewportEl.clientHeight;
-    this.tasklistContainerEl.style.paddingBottom = `${Math.max(0, canvasSB - panelSB)}px`;
-    this.canvasContainerEl.style.marginBottom = `${Math.max(0, panelSB - canvasSB)}px`;
-
-    // Virtual window shared by both panes
-    const viewportH = Math.max(
-      rowHeight,
-      (this.canvasViewportEl.clientHeight || this.panelEl.clientHeight || 500) - headerHeight,
-    );
-    const vw = computeVirtualWindow(this.scrollSvc.scrollTop, rowHeight, viewportH, rows.length, 4);
-    const windowRows = rows.slice(vw.first, vw.last + 1);
-
-    const ds = this._dataSource;
-    const tasklistProps = {
-      visibleRows: windowRows,
-      rowCount: rows.length,
-      columns: this.colSvc.columnsFor(view, cfg),
-      cellContext: layout.columnContext,
-      rowHeight,
-      selectedIds: this.selSvc.selectedIds,
-      theme,
-      labels,
-      colHeaderHeight: headerHeight,
-      indentSize: cfg.indentSize,
-      paddingTop: vw.paddingTop,
-      paddingBottom: vw.paddingBottom,
-      sort: layout.sort(),
-      loadMore: ds
-        ? { isLoading: ds.isLoading, hasMore: ds.hasMore, loadedCount: ds.loadedCount, error: ds.error !== null }
-        : null,
-      tableView: view === 'table',
-    };
-    if (!this.tasklistComp) {
-      this.tasklistComp = new GanttTaskListComponent(this.tasklistContainerEl, tasklistProps);
-      this.tasklistComp.collapseToggle$.subscribe(id => {
-        layout.toggleCollapse(id);
-        this.saveState();
-        this.scheduleRender();
-      });
-      this.tasklistComp.rowClick$.subscribe(({ row, event }) => this.onRowClick(row, event));
-      this.tasklistComp.rowDblClick$.subscribe(row => this.emit('row-dblclick', row));
-      this.tasklistComp.sortColumn$.subscribe(key => {
-        layout.toggleSort(key);
-        this.saveState();
-        this.scheduleRender();
-      });
-      this.tasklistComp.columnWidthChange$.subscribe(({ key, width }) => this.colSvc.setColumnWidth(key, width));
-      this.tasklistComp.columnResizeEnd$.subscribe(() => this.saveState());
-      this.tasklistComp.loadMore$.subscribe(() => void this._dataSource?.loadNext());
-      this.tasklistComp.retry$.subscribe(() => void this._dataSource?.retry());
-    } else {
-      this.tasklistComp.updateProps(tasklistProps);
-    }
-
-    // Timeline (skipped while hidden in table view)
-    if (view !== 'table' || !this.canvasComp) {
-      this.dragSvc.configure({
-        pxPerDay: tl.pxPerDay,
-        toX: tl.toX,
-        span: (start, end) => taskSpan({ start, end }, cfg),
-        snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
-      });
-      const allGeometries = layout.rowGeometries;
-      const canvasProps = {
-        timeline: tl,
-        config: cfg,
-        labels,
-        locale: this.i18nSvc.locale,
-        visibleGeometries: allGeometries.slice(vw.first, vw.last + 1),
-        allGeometries,
-        windowTop: vw.first * rowHeight,
-        windowBottom: (vw.last + 1) * rowHeight,
-        totalHeight: layout.totalHeight,
-        annotations: this._annotations,
-        criticalIds: this.criticalIds,
-        selectedIds: this.selSvc.selectedIds,
-        enableDrag: this._enableDrag,
-        enableResize: this._enableResize,
-        dragPreview: this.dragSvc.preview(),
-        renderBar: this._renderBar,
-      };
-      if (!this.canvasComp) this.canvasComp = new GanttCanvasComponent(this.canvasContainerEl, canvasProps);
-      else this.canvasComp.updateProps(canvasProps);
-    }
-
-    // A requested scroll wins; otherwise the first render with data applies `initialScroll`
-    // and later timeline changes keep the anchor date in place
-    if (this.pendingScroll) {
-      const scroll = this.pendingScroll;
-      this.pendingScroll = undefined;
-      this.initialScrollDone = true;
-      scroll();
-    } else if (!this.initialScrollDone && rows.length && view !== 'table') {
-      this.initialScrollDone = true;
-      const left = initialScrollLeft({
-        timeline: tl,
-        initialScroll: cfg.initialScroll,
-        viewportWidth: this.canvasViewportEl.clientWidth,
-        now: this.layout.now(),
-      });
-      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
-    } else if (view !== 'table') {
-      this.keepScrollAnchor(tl, scrollLeftBefore);
-    }
-    if (view !== 'table') this.paintedTimeline = tl;
-    if (focusKey) this.restoreFocus(focusKey);
-
-    // Lazy loading: fetch the next page when the window nears the end — never while
-    // a failed page waits for `retry()`, and the first page only per `initialPage`
-    if (ds && ds.hasMore && !ds.isLoading && ds.error === null && ds.loadedCount > 0 && vw.last >= rows.length - 3)
-      void ds.loadNext();
-  }
-
-  /** Focus the rebuilt control that had focus before the render (toolbar, sort header, collapse…). */
-  private restoreFocus(key: string): void {
-    const active = this.shadow.activeElement as HTMLElement | null;
-    if (active?.dataset['focusKey'] === key) return;
-    for (const el of this.shadow.querySelectorAll<HTMLElement>('[data-focus-key]')) {
-      if (el.dataset['focusKey'] === key) {
-        el.focus({ preventScroll: true });
-        return;
-      }
-    }
-    // The control is gone (e.g. its row scrolled out of the virtual window): keep focus on the
-    // chart, so its keyboard shortcuts keep working, instead of dropping it to <body>
-    this.focus({ preventScroll: true });
-  }
-
-  /** Keep the date at the viewport centre (zoom) or left edge (new range start) in place. */
-  private keepScrollAnchor(tl: TimelineModel, scrollLeft: number): void {
-    const prev = this.paintedTimeline;
-    if (!prev || prev === tl) return;
-    const zoomed = prev.pxPerDay !== tl.pxPerDay;
-    if (!zoomed && prev.start.getTime() === tl.start.getTime()) return;
-    const anchorX = zoomed ? this.canvasViewportEl.clientWidth / 2 : 0;
-    this.scrollSvc.scrollToX(zoomAnchorScroll(prev, tl, scrollLeft, anchorX), 'instant');
-  }
-
-  /** Panel width for the current view; split view honours the user's last width. */
-  private applyPanelWidth(cfg: ResolvedGanttConfig, view: GanttView): void {
-    const width = resolvePanelWidth({
-      view,
-      panel: cfg.panel,
-      userWidth: this.layout.panelWidthPx(),
-      hostWidth: this.mainEl.clientWidth || this.clientWidth,
-      splitterWidth: this.splitterEl.offsetWidth,
-    });
-    if (width !== this.panelPx) {
-      this.panelPx = width;
-      this.panelEl.style.width = `${width}px`;
-    }
-    this.panelEl.inert = view === 'chart';
-    // Hidden behind the table view: out of the tab order and the accessibility tree
-    this.canvasViewportEl.inert = view === 'table';
-    this.splitterEl.dataset['resizable'] = String(cfg.panel.resizable && view === 'split');
-    this.toggleEl.hidden = !cfg.panel.collapsible;
-    const collapsed = view === 'chart';
-    this.toggleEl.textContent = collapsed ? '›' : '‹';
-    const label = collapsed ? this.i18nSvc.labels.showPanel : this.i18nSvc.labels.hidePanel;
-    this.toggleEl.title = label;
-    this.toggleEl.setAttribute('aria-label', label);
-    this.toggleEl.setAttribute('aria-expanded', String(!collapsed));
-  }
-
-  private renderToolbar(cfg: ResolvedGanttConfig): void {
-    const show = this._showToolbar && cfg.toolbar !== false;
-    if (!show || cfg.toolbar === false) {
-      this.toolbarComp?.destroy();
-      this.toolbarComp = undefined;
-      return;
-    }
-    const props = {
-      toolbar: cfg.toolbar,
-      zoomLevels: cfg.zoomLevels,
-      currentView: this.layout.viewMode(),
-      view: this.layout.view(),
-      labels: this.i18nSvc.labels,
-    };
-    if (this.toolbarComp) {
-      this.toolbarComp.updateProps(props);
-      return;
-    }
-    this.toolbarComp = new GanttToolbarComponent(this.toolbarContainerEl, props);
-    this.toolbarComp.zoomIn$.subscribe(() => this.zoomIn());
-    this.toolbarComp.zoomOut$.subscribe(() => this.zoomOut());
-    this.toolbarComp.viewModeChange$.subscribe(vm => this.setViewMode(vm));
-    this.toolbarComp.scrollToToday$.subscribe(() => this.scrollToToday());
-    this.toolbarComp.viewChange$.subscribe(v => this.setView(v));
-  }
-
-  private renderLegend(cfg: ResolvedGanttConfig): void {
-    const labels = this.i18nSvc.labels;
-    const items = buildLegend({
-      showToday: cfg.showToday,
-      todayVisible: this.layout.timeline.todayX >= 0,
-      annotations: this._annotations,
-      theme: cfg.theme,
-      labels,
-      criticalPath: cfg.criticalPath,
-      baseline: cfg.baseline,
-    });
-
-    // The legend explains timeline markers: nothing to explain in the table view
-    this.legendEl.hidden = !isLegendVisible(this._showLegend, this.layout.view(), items);
-    this.legendEl.replaceChildren();
-    if (this.legendEl.hidden) return;
-
-    const title = document.createElement('span');
-    title.className = 'gantt-legend-title';
-    title.textContent = labels.legend;
-    this.legendEl.appendChild(title);
-    for (const item of items) {
-      const el = document.createElement('span');
-      el.className = 'gantt-legend-item';
-      const label = document.createElement('span');
-      label.textContent = item.label;
-      el.append(legendSwatchEl(item), label);
-      this.legendEl.appendChild(el);
-    }
-  }
-
-  // ── Interaction ───────────────────────────────────────────
-
-  private emit<K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]): void {
+  #emit<K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]): void {
+    /** @ignore The events are listed with `@fires` on the class (Custom Elements Manifest). */
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-
-  private onRowClick(row: GanttFlatRow, event: MouseEvent | KeyboardEvent): void {
-    this.selSvc.handleClick(row.task.id, event, this.visibleIds(), this.layout.cfg.selection);
-    this.emit('row-click', row);
-  }
-
-  /** Ids of the visible rows in display order (Shift ranges, select all). */
-  private visibleIds(): string[] {
-    return this.layout.visibleRows.map(r => r.task.id);
-  }
-
-  /** Splitter: drag to resize the task list, button / Enter to collapse. */
-  private bindSplitter(): void {
-    const splitter = this.splitterEl;
-    this.toggleEl.addEventListener('pointerdown', e => e.stopPropagation());
-    this.toggleEl.addEventListener('click', () => this.togglePanel());
-
-    splitter.addEventListener('pointerdown', e => {
-      const cfg = this.layout.config();
-      if (e.button !== 0 || !cfg?.panel.resizable || this.layout.view() !== 'split') return;
-      e.preventDefault();
-      const startX = e.clientX;
-      const startW = this.panelPx;
-      const available = availablePanelWidth(this.mainEl.clientWidth, splitter.offsetWidth);
-      this.mainEl.classList.add('is-resizing');
-      try {
-        splitter.setPointerCapture(e.pointerId);
-      } catch {
-        /* synthetic event */
-      }
-      const move = (ev: PointerEvent) => {
-        this.layout.panelWidthPx.set(clampPanelWidth(startW + ev.clientX - startX, cfg.panel, available));
-        this.scheduleRender(false);
-      };
-      const end = () => {
-        splitter.removeEventListener('pointermove', move);
-        splitter.removeEventListener('pointerup', end);
-        splitter.removeEventListener('pointercancel', end);
-        this.mainEl.classList.remove('is-resizing');
-        this.saveState();
-      };
-      splitter.addEventListener('pointermove', move);
-      splitter.addEventListener('pointerup', end);
-      splitter.addEventListener('pointercancel', end);
-    });
-
-    splitter.addEventListener('keydown', e => {
-      const cfg = this.layout.config();
-      if (!cfg) return;
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.togglePanel();
-      } else if (
-        (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
-        this.layout.view() === 'split' &&
-        cfg.panel.resizable
-      ) {
-        e.preventDefault();
-        const available = availablePanelWidth(this.mainEl.clientWidth, splitter.offsetWidth);
-        this.layout.panelWidthPx.set(
-          clampPanelWidth(this.panelPx + (e.key === 'ArrowLeft' ? -24 : 24), cfg.panel, available),
-        );
-        this.saveState();
-        this.scheduleRender(false);
-      }
-    });
-  }
-
-  /** Bar group (`[data-task-id]`) under an event target inside the canvas. */
-  private barAt(target: EventTarget | null): SVGElement | null {
-    return (target as Element | null)?.closest?.<SVGElement>('[data-task-id]') ?? null;
-  }
-
-  /** Visible row under a canvas-relative pointer position. */
-  private rowAtPointer(e: MouseEvent): GanttFlatRow | undefined {
-    const top = this.canvasContainerEl.getBoundingClientRect().top;
-    const index = Math.floor((e.clientY - top) / this.layout.rowHeight);
-    return this.layout.visibleRows[index];
-  }
-
-  private resizeHandleAt(bar: SVGElement, clientX: number): 'left' | 'right' | null {
-    if (!this._enableResize) return null;
-    const handles = this.canvasComp?.visuals.get(bar.getAttribute('data-task-id')!)?.handles;
-    if (!handles) return null;
-    const x = clientX - this.canvasContainerEl.getBoundingClientRect().left;
-    if (x >= handles.left[0] && x <= handles.left[1]) return 'left';
-    if (x >= handles.right[0] && x <= handles.right[1]) return 'right';
-    return null;
-  }
-
-  private bindCanvasInteractions(): void {
-    const canvas = this.canvasContainerEl;
-
-    canvas.addEventListener('pointerdown', e => {
-      if (e.button !== 0) return;
-      const bar = this.barAt(e.target);
-      if (!bar || !this._enableDrag || !bar.classList.contains('gantt-bar-draggable')) return;
-      const geo = this.layout.geometryById.get(bar.getAttribute('data-task-id')!);
-      if (!geo) return;
-      this.focus({ preventScroll: true });
-      this.tooltip.hide();
-      this.dragSvc.startDrag(e, geo, this.resizeHandleAt(bar, e.clientX) ?? 'bar', canvas);
-    });
-
-    canvas.addEventListener('click', e => {
-      if (this.dragSvc.lastDragMoved) {
-        this.dragSvc.lastDragMoved = false;
-        return;
-      }
-      const row = this.rowAtPointer(e);
-      if (row) this.onRowClick(row, e);
-    });
-
-    canvas.addEventListener('dblclick', e => {
-      const row = this.rowAtPointer(e);
-      if (row) this.emit('row-dblclick', row);
-    });
-
-    canvas.addEventListener('pointermove', e => {
-      if (this.dragSvc.state().kind !== 'idle') return;
-      const bar = this.barAt(e.target);
-      canvas.style.cursor =
-        bar && bar.classList.contains('gantt-bar-draggable') && this.resizeHandleAt(bar, e.clientX) ? 'ew-resize' : '';
-      if (!this._tooltipEnabled) return;
-      const row = bar && this.layout.geometryById.get(bar.getAttribute('data-task-id')!)?.row;
-      const cfg = this.layout.config();
-      if (row && cfg) {
-        const cpm = this.criticalPath();
-        this.tooltip.enter(row, e, {
-          config: cfg,
-          now: this.layout.now(),
-          criticalIds: cpm?.ids,
-          floatDays: cpm?.float,
-          tasksById: this.layout.columnContext.taskById,
-        });
-        this.tooltip.move(e);
-      } else {
-        this.tooltip.leave();
-      }
-    });
-
-    canvas.addEventListener('pointerleave', () => this.tooltip.leave());
-  }
-
-  private onKeyDown(event: KeyboardEvent): void {
-    // Don't hijack typing inside slotted/custom cell inputs, editable cells or the splitter
-    if (event.defaultPrevented) return;
-    const origin = event.composedPath()[0] as HTMLElement | undefined;
-    if (origin && (/^(INPUT|TEXTAREA|SELECT)$/.test(origin.tagName) || origin.isContentEditable)) return;
-    if (origin === this.splitterEl) return;
-
-    // Only the commands the Web Component handles take the key; anything else keeps its default action
-    switch (resolveKey(event, 'any', { active: this.dragSvc.state().kind !== 'idle' })) {
-      case 'cancel':
-        this.dragSvc.cancel();
-        break;
-      case 'clearSelection':
-        this.selSvc.clear();
-        break;
-      case 'selectAll':
-        this.selectAll();
-        break;
-      case 'zoomIn':
-        this.zoomIn();
-        break;
-      case 'zoomOut':
-        this.zoomOut();
-        break;
-      case 'today':
-        this.scrollToToday();
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-  }
-}
-
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/** Legend swatch from the core geometry; the colour is set as an attribute, never interpolated. */
-function legendSwatchEl(item: LegendItem): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', `gantt-legend-swatch gantt-legend-swatch--${item.shape}`);
-  svg.setAttribute('width', String(LEGEND_SWATCH_SIZE.width));
-  svg.setAttribute('height', String(LEGEND_SWATCH_SIZE.height));
-  svg.setAttribute('aria-hidden', 'true');
-  const sw = item.swatch;
-  const shape = document.createElementNS(SVG_NS, sw.kind);
-  const attrs: Record<string, string | number | null> =
-    sw.kind === 'line'
-      ? {
-          x1: sw.x,
-          y1: sw.y1,
-          x2: sw.x,
-          y2: sw.y2,
-          stroke: item.color,
-          'stroke-width': sw.strokeWidth,
-          'stroke-dasharray': sw.dash,
-        }
-      : { x: sw.x, y: sw.y, width: sw.width, height: sw.height, rx: sw.rx, fill: item.color };
-  for (const [k, v] of Object.entries(attrs)) if (v !== null) shape.setAttribute(k, String(v));
-  svg.appendChild(shape);
-  return svg;
 }
 
 declare global {

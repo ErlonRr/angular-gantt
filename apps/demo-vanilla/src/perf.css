@@ -1,0 +1,10 @@
+/* Perf page: the chart fills the window */
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+.perf-chart {
+  display: block;
+  height: 100vh;
+}

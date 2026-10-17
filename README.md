@@ -63,6 +63,26 @@ takes the same `GanttOptions` object, and both renderers draw from the same `@ga
 render model — an option behaves identically everywhere. Try them all live in the
 **playground** (`pnpm dev:vanilla`).
 
+Each binding documents the rest of its API in its own README:
+
+- **Web Component** `<gantry-element>` (the React, Vue and Svelte wrappers forward to it):
+  [properties][wc-properties], [attributes][wc-attributes], [events][wc-events],
+  [methods][wc-methods], [keyboard and focus][wc-focus], [CSS custom properties][wc-css],
+  [parts][wc-parts], [custom states][wc-states] and [Content Security Policy][wc-csp]. The package
+  ships a [Custom Elements Manifest][cem] (`custom-elements.json`) for IDEs, Storybook and linters.
+- **Angular** `<gantry>`: [Inputs & Outputs](#inputs--outputs) and [Theming](#theming-1).
+
+[wc-properties]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#properties
+[wc-attributes]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#attributes
+[wc-events]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#events
+[wc-methods]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#methods
+[wc-focus]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#keyboard-and-focus
+[wc-css]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#css-custom-properties
+[wc-parts]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#parts
+[wc-states]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#custom-states
+[wc-csp]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#content-security-policy
+[cem]: https://github.com/webcomponents/custom-elements-manifest
+
 ### Timeline, header tiers and zoom
 
 ```ts
@@ -145,7 +165,8 @@ options = {
 
 Per task: `barColor`, `progressColor`, `textColor`, `rowColor`, `className`, `draggable`.
 For full control replace the bar renderer (`renderBar` in the Web Component / bindings,
-`provideGanttBar` in Angular) — custom renderers receive the computed geometry in `ctx.visual`.
+`provideGanttBar` in Angular) — custom renderers receive the computed geometry in `ctx.visual`
+and its colours in `ctx.visual.paint` (see [Theming](#theming)).
 
 ### Task list panel, table view and saved state
 
@@ -191,7 +212,7 @@ columns = [
 ### Theming
 
 Colours, font and radius come from the theme (`options.theme`, `setTheme()`, `patchTheme()`,
-light/dark/auto). They are also exposed as CSS custom properties on the chart root:
+light/dark/auto). The theme reaches the pixels only through CSS custom properties:
 
 | Variable                           | Theme key          |     | Variable                                | Theme key       |
 | ---------------------------------- | ------------------ | --- | --------------------------------------- | --------------- |
@@ -203,6 +224,42 @@ light/dark/auto). They are also exposed as CSS custom properties on the chart ro
 | `--gantt-critical`                 | `criticalColor`    |     | `--gantt-off-hours-bg`                  | `offHoursBg`    |
 | `--gantt-arrow`                    | `arrowColor`       |     | `--gantt-intensive-bg`                  | `intensiveBg`   |
 | `--gantt-text` / `-sec` / `-muted` | text colours       |     | `--gantt-sel-bg` / `--gantt-sel-border` | selection       |
+
+- **Paints.** Every colour of the render model is a `Paint`: a theme token such as
+  `var(--gantt-bar)`, or an explicit colour (`task.barColor`, a holiday `color`, `arrows.color`…)
+  passed through as is. Both bindings apply paints as CSS properties (`style.fill`, never a
+  presentation attribute), so a value like `'red;background:url(x)'` can't inject CSS.
+- **Where the tokens live.** The Web Component writes them into a `:host` stylesheet in its
+  shadow root, so page CSS on the element overrides them and a string `style` attribute no
+  longer wipes them. Angular sets them inline on the `<gantry>` host (page CSS needs `!important`
+  there; prefer `setTheme()`).
+
+  ```css
+  gantry-element {
+    --gantt-bar: #6366f1;
+    --gantt-bar-text-on-bar: #ffffff; /* keep the label readable on the new fill */
+  }
+  ```
+
+- **Contrast tokens.** Labels inside theme-coloured bars use three derived tokens:
+  `--gantt-bar-text-on-bar`, `--gantt-bar-text-on-milestone` and `--gantt-bar-text-on-critical`,
+  each `readableOn(fill, barTextColor)` (white or near-black when `barTextColor` is unreadable on
+  the fill). `setTheme()` / `patchTheme()` recompute them; a page-CSS override of `--gantt-bar`,
+  `--gantt-milestone` or `--gantt-critical` must also set the matching token. Labels on an
+  explicit `task.barColor` get a concrete readable colour; `task.textColor` and `bar.label.color`
+  always win.
+- **Metrics.** `barRadius` (the default `bar.radius`), `fontSize` (bar labels use `fontSize − 1`)
+  and `barTextColor` shape the layout, so change them through the theme API, not page CSS:
+  `themeMetrics(theme)` returns them and `resolveConfig(options, i18n, themeMetrics(theme))`
+  reads them. The resolved config holds no colours, so a colour-only theme change leaves the
+  layout as it is.
+- **Every token.** All 40 custom properties (the theme keys and the three contrast tokens) are
+  listed in the Angular [token map](#theming-1) and the Web Component's [CSS custom
+  properties][wc-css].
+- **Custom renderers.** `ctx.visual.paint.{body,progress,label}` may be `var()` strings: apply
+  them as style properties (`el.style.setProperty('fill', paint)`), or get a concrete colour with
+  `resolvePaint(paint, ctx.theme)` (`ctx.theme` is the chart's resolved theme). `themeToCss(theme)`
+  lists every custom property a theme writes, the contrast tokens included.
 
 ---
 
@@ -440,14 +497,19 @@ localisable (`labels.legend`, `labels.today`, `labels.annotation`, `labels.legen
 
 ## Theming
 
-Every colour/metric is a CSS custom property set on the `<gantry>` host, so you can
-override in plain CSS, or use `setTheme()` / `patchTheme()` / `provideGantt({ theme })`.
+Every colour/metric is a CSS custom property set inline on the `<gantry>` host (the
+bar-label contrast tokens `--gantt-bar-text-on-*` included): use `setTheme()` / `patchTheme()` /
+`provideGantt({ theme })`, or override in page CSS with `!important`. Bars, rows, bands and
+arrows bind their colours as CSS properties (`[style.fill]`), so page CSS that targeted their
+`fill` / `stroke` attributes no longer applies: restyle through the tokens (see
+[Theming](#theming) under Configuration).
 
 ```css
 gantry {
-  --gantt-bar: #6366f1;
-  --gantt-today: #f59e0b;
-  --gantt-font: 'Inter', system-ui, sans-serif;
+  --gantt-bar: #6366f1 !important;
+  --gantt-bar-text-on-bar: #ffffff !important;
+  --gantt-today: #f59e0b !important;
+  --gantt-font: 'Inter', system-ui, sans-serif !important;
 }
 ```
 
@@ -464,22 +526,28 @@ near-black when `barTextColor` is unreadable on a custom `barColor` (an explicit
 are exported from `@gantry/core`. The 1.x colours are available as `LegacyLightTheme` /
 `LegacyDarkTheme`. Full token map:
 
-| `GanttTheme` field | CSS variable              |     | `GanttTheme` field | CSS variable              |
-| ------------------ | ------------------------- | --- | ------------------ | ------------------------- |
-| `backgroundColor`  | `--gantt-bg`              |     | `borderColor`      | `--gantt-border`          |
-| `headerBackground` | `--gantt-header-bg`       |     | `gridLine`         | `--gantt-grid-line`       |
-| `rowBg`            | `--gantt-row-bg`          |     | `todayColor`       | `--gantt-today`           |
-| `rowBgAlt`         | `--gantt-row-bg-alt`      |     | `textPrimary`      | `--gantt-text`            |
-| `barColor`         | `--gantt-bar`             |     | `textSecondary`    | `--gantt-text-sec`        |
-| `barTextColor`     | `--gantt-bar-text`        |     | `textMuted`        | `--gantt-text-muted`      |
-| `barRadius`        | `--gantt-bar-radius`      |     | `fontFamily`       | `--gantt-font`            |
-| `milestoneColor`   | `--gantt-milestone`       |     | `fontSize`         | `--gantt-font-size`       |
-| `baselineColor`    | `--gantt-baseline`        |     | `arrowColor`       | `--gantt-arrow`           |
-| `criticalColor`    | `--gantt-critical`        |     | `tooltipBg`        | `--gantt-tooltip-bg`      |
-| `panelBg`          | `--gantt-panel-bg`        |     | `tooltipBorder`    | `--gantt-tooltip-bdr`     |
-| `panelBorder`      | `--gantt-panel-border`    |     | `tooltipText`      | `--gantt-tooltip-txt`     |
-| `selectionBg`      | `--gantt-sel-bg`          |     | `selectionBorder`  | `--gantt-sel-border`      |
-| `scrollbarTrack`   | `--gantt-scrollbar-track` |     | `scrollbarThumb`   | `--gantt-scrollbar-thumb` |
+| `GanttTheme` field | CSS variable              |     | `GanttTheme` field               | CSS variable                    |
+| ------------------ | ------------------------- | --- | -------------------------------- | ------------------------------- |
+| `backgroundColor`  | `--gantt-bg`              |     | `fontSize`                       | `--gantt-font-size`             |
+| `headerBackground` | `--gantt-header-bg`       |     | `arrowColor`                     | `--gantt-arrow`                 |
+| `rowBg`            | `--gantt-row-bg`          |     | `tooltipBg`                      | `--gantt-tooltip-bg`            |
+| `rowBgAlt`         | `--gantt-row-bg-alt`      |     | `tooltipBorder`                  | `--gantt-tooltip-bdr`           |
+| `barColor`         | `--gantt-bar`             |     | `tooltipText`                    | `--gantt-tooltip-txt`           |
+| `barTextColor`     | `--gantt-bar-text`        |     | `selectionBg`                    | `--gantt-sel-bg`                |
+| `barRadius`        | `--gantt-bar-radius`      |     | `selectionBorder`                | `--gantt-sel-border`            |
+| `milestoneColor`   | `--gantt-milestone`       |     | `scrollbarTrack`                 | `--gantt-scrollbar-track`       |
+| `baselineColor`    | `--gantt-baseline`        |     | `scrollbarThumb`                 | `--gantt-scrollbar-thumb`       |
+| `criticalColor`    | `--gantt-critical`        |     | `weekendBg`                      | `--gantt-weekend-bg`            |
+| `panelBg`          | `--gantt-panel-bg`        |     | `holidayBg`                      | `--gantt-holiday-bg`            |
+| `panelBorder`      | `--gantt-panel-border`    |     | `offHoursBg`                     | `--gantt-off-hours-bg`          |
+| `borderColor`      | `--gantt-border`          |     | `intensiveBg`                    | `--gantt-intensive-bg`          |
+| `gridLine`         | `--gantt-grid-line`       |     | `statusNotStarted`               | `--gantt-status-not-started`    |
+| `gridLineMajor`    | `--gantt-grid-line-major` |     | `statusInProgress`               | `--gantt-status-in-progress`    |
+| `todayColor`       | `--gantt-today`           |     | `statusOverdue`                  | `--gantt-status-overdue`        |
+| `textPrimary`      | `--gantt-text`            |     | `statusDone`                     | `--gantt-status-done`           |
+| `textSecondary`    | `--gantt-text-sec`        |     | derived: label on a bar          | `--gantt-bar-text-on-bar`       |
+| `textMuted`        | `--gantt-text-muted`      |     | derived: label on a milestone    | `--gantt-bar-text-on-milestone` |
+| `fontFamily`       | `--gantt-font`            |     | derived: label on a critical bar | `--gantt-bar-text-on-critical`  |
 
 ---
 

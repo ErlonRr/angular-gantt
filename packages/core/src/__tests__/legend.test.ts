@@ -1,15 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_LABELS } from '../types';
-import { resolveTheme } from '../render/theme';
 import { buildLegend, isLegendVisible, legendSwatch, LEGEND_SWATCH_SIZE, type LegendInput } from '../state/legend';
-
-const theme = resolveTheme(false);
 
 const input = (over: Partial<LegendInput> = {}): LegendInput => ({
   showToday: true,
   todayVisible: true,
   annotations: [],
-  theme,
   labels: DEFAULT_LABELS,
   ...over,
 });
@@ -20,18 +16,30 @@ describe('buildLegend', () => {
       input({ annotations: [{ color: '#ff0000', label: { text: 'Release' } }, {}, { label: { text: 'Freeze' } }] }),
     );
     expect(items).toEqual([
-      { key: 'today', color: theme.todayColor, label: 'Today', shape: 'line', swatch: legendSwatch('line') },
-      { key: 'annotation-0', color: '#ff0000', label: 'Release', shape: 'dashed', swatch: legendSwatch('dashed') },
+      {
+        key: 'today',
+        paint: 'var(--gantt-today)',
+        label: 'Today',
+        shape: 'line',
+        swatch: legendSwatch('line'),
+      },
+      {
+        key: 'annotation-0',
+        paint: '#ff0000',
+        label: 'Release',
+        shape: 'dashed',
+        swatch: legendSwatch('dashed'),
+      },
       {
         key: 'annotation-1',
-        color: theme.arrowColor,
+        paint: 'var(--gantt-arrow)',
         label: 'Annotation',
         shape: 'dashed',
         swatch: legendSwatch('dashed'),
       },
       {
         key: 'annotation-2',
-        color: theme.arrowColor,
+        paint: 'var(--gantt-arrow)',
         label: 'Freeze',
         shape: 'dashed',
         swatch: legendSwatch('dashed'),
@@ -49,12 +57,18 @@ describe('buildLegend', () => {
     expect(items).toEqual([
       {
         key: 'critical',
-        color: theme.criticalColor,
+        paint: 'var(--gantt-critical)',
         label: 'Critical path',
         shape: 'bar',
         swatch: legendSwatch('bar'),
       },
-      { key: 'baseline', color: theme.baselineColor, label: 'Baseline', shape: 'strip', swatch: legendSwatch('strip') },
+      {
+        key: 'baseline',
+        paint: 'var(--gantt-baseline)',
+        label: 'Baseline',
+        shape: 'strip',
+        swatch: legendSwatch('strip'),
+      },
     ]);
     expect(buildLegend(input({ todayVisible: false, criticalPath: false, baseline: false }))).toEqual([]);
     expect(buildLegend(input({ todayVisible: false }))).toEqual([]);
@@ -85,6 +99,11 @@ describe('buildLegend', () => {
     }
     expect(legendSwatch('dashed')).toMatchObject({ kind: 'line', dash: '3 2' });
     expect(legendSwatch('strip')).toMatchObject({ kind: 'rect', height: 3 });
+  });
+
+  it('paints an isToday annotation like the today marker (same as its line)', () => {
+    const items = buildLegend(input({ todayVisible: false, annotations: [{ isToday: true, color: '#ff0000' }] }));
+    expect(items.map(i => i.paint)).toEqual(['var(--gantt-today)']);
   });
 
   it('gives every item a unique key even with duplicate labels', () => {

@@ -74,6 +74,8 @@ import {
   buildLegend,
   LEGEND_SWATCH_SIZE,
   isLegendVisible,
+  themeMetrics,
+  sameThemeMetrics,
   type LegendItem,
   type ResolvedGanttConfig,
   type TimelineModel,
@@ -172,7 +174,6 @@ const browserStorage = () => (typeof window === 'undefined' ? null : window.loca
           [cellContext]="layout.columnContext()"
           [rowHeight]="layout.rowHeight()"
           [selectedIds]="selSvc.selectedIds()"
-          [theme]="theme()"
           [colHeaderHeight]="layout.totalHeaderHeight()"
           [indentSize]="cfg().indentSize"
           [paddingTop]="vsPaddingTop()"
@@ -191,7 +192,6 @@ const browserStorage = () => (typeof window === 'undefined' ? null : window.loca
         <!-- Load-more footer (lazy datasource) -->
         @if (dataSource(); as ds) {
           <gantt-load-more
-            [theme]="theme()"
             [isLoading]="ds.isLoading()"
             [hasMore]="ds.hasMore()"
             [error]="ds.error() !== null"
@@ -285,7 +285,7 @@ const browserStorage = () => (typeof window === 'undefined' ? null : window.loca
                   [attr.y1]="sw.y1"
                   [attr.x2]="sw.x"
                   [attr.y2]="sw.y2"
-                  [attr.stroke]="item.color"
+                  [style.stroke]="item.paint"
                   [attr.stroke-width]="sw.strokeWidth"
                   [attr.stroke-dasharray]="sw.dash"
                 />
@@ -296,7 +296,7 @@ const browserStorage = () => (typeof window === 'undefined' ? null : window.loca
                   [attr.width]="sw.width"
                   [attr.height]="sw.height"
                   [attr.rx]="sw.rx"
-                  [attr.fill]="item.color"
+                  [style.fill]="item.paint"
                 />
               }
             </svg>
@@ -517,14 +517,13 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly stateChange = output<GanttState>();
 
   // ── Resolved configuration (shared render model) ─────────
+  /** Resolved theme: host chrome bindings (colours reach the chart through `--gantt-*` tokens) */
+  protected readonly theme = this.themeSvc.resolvedTheme;
+  /** The theme values geometry depends on; a colour-only theme change keeps them (and the config) */
+  private readonly themeMetrics = computed(() => themeMetrics(this.theme()), { equal: sameThemeMetrics });
   protected readonly cfg = computed<ResolvedGanttConfig>(() =>
-    resolveConfig(
-      { ...this.options(), viewMode: this.layout.viewMode() },
-      this.themeSvc.resolvedTheme(),
-      this.i18n.bundle(),
-    ),
+    resolveConfig({ ...this.options(), viewMode: this.layout.viewMode() }, this.i18n.bundle(), this.themeMetrics()),
   );
-  protected readonly theme = computed(() => this.cfg().theme);
   /** Consumer columns: `options.columns` wins over the `columns` input (compared by reference) */
   private readonly columnSource = computed<ColumnDef[]>(() => {
     const fromOptions = this.options().columns as ColumnDef[] | undefined;
@@ -594,7 +593,7 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
   private _lastViewMode?: string;
 
   // ── Critical path ─────────────────────────────────────────
-  /** Only these config fields affect the critical path (cfg itself changes with theme, i18n…) */
+  /** Only these config fields affect the critical path (cfg itself changes with options, i18n, theme metrics…) */
   private readonly cpmConfig = computed(
     () => {
       const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
@@ -622,7 +621,6 @@ export class GantryComponent implements OnInit, AfterViewInit, OnDestroy {
       showToday: cfg.showToday,
       todayVisible: this.layout.todayX() >= 0,
       annotations: this.annotations(),
-      theme: cfg.theme,
       labels: this.i18n.labels(),
       criticalPath: cfg.criticalPath,
       baseline: cfg.baseline,

@@ -2,7 +2,8 @@
   "extends": "../../../../tsconfig.base.json",
   "compilerOptions": {
     "verbatimModuleSyntax": true,
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "types": ["node"]
   },
   "include": ["../**/*.ts"]
 }

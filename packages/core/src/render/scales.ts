@@ -93,6 +93,17 @@ export function unitAdd(date: Date, unit: TimeUnit, n: number): Date {
   }
 }
 
+/**
+ * The boundary after the period starting at `start` (a period boundary itself). Like `unitAdd`, but
+ * hour periods always end on a whole hour: after a 30-minute daylight-saving jump (Lord Howe) the
+ * shortened cell ends at the next full hour instead of carrying the :30 into every later cell.
+ */
+export function periodNext(start: Date, unit: TimeUnit, step: number): Date {
+  return unit === 'hour'
+    ? new Date(start.getFullYear(), start.getMonth(), start.getDate(), start.getHours() + step)
+    : unitAdd(start, unit, step);
+}
+
 /** Week number: ISO-8601 when the week starts on Monday, US-style (week 1 holds Jan 1) on Sunday. */
 export function weekNumber(date: Date, weekStart: 0 | 1 = 1): number {
   if (weekStart === 1) return isoWeek(date);
@@ -292,7 +303,7 @@ export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: num
   // Hard cap protects against runaway configs (e.g. hour scale over decades)
   for (let i = 0; cur < end && i < 50_000; i++) {
     out.push(cur);
-    cur = unitAdd(cur, unit, step);
+    cur = periodNext(cur, unit, step);
   }
   return out;
 }
@@ -324,7 +335,7 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
     const cells: ScaleCell[] = [];
 
     for (const cellStart of unitBoundaries(start, end, scale.unit, step, weekStart)) {
-      const cellEnd = unitAdd(cellStart, scale.unit, step);
+      const cellEnd = periodNext(cellStart, scale.unit, step);
       const x0 = Math.max(0, xOf(cellStart));
       const x1 = Math.min(totalWidth, xOf(cellEnd));
       if (x1 <= x0) continue;

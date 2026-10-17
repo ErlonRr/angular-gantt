@@ -16,6 +16,7 @@
 
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+import { annotationPaint, PAINTS, resolvePaint, resolveTheme } from '@gantry/core';
 import { type GanttAnnotation, type GanttTheme, type GanttLayoutParams } from '../types';
 import { dateToPixel } from '../gantt-math';
 
@@ -150,7 +151,10 @@ export class GanttAnnotationComponent {
   // ── Resolved annotations ──────────────────────────────────
   protected readonly resolved = computed<ResolvedAnnotation[]>(() => {
     const { origin, pxPerDay } = this.layoutParams();
-    const theme = this.theme();
+    // The shared paints (`PAINTS.today`, `annotationPaint`) resolved against the bound theme: this
+    // standalone component may sit outside a chart, where the `--gantt-*` tokens are not set
+    const theme = resolveTheme(false, this.theme());
+    const todayColor = resolvePaint(PAINTS.today, theme);
     const result: ResolvedAnnotation[] = [];
 
     // Today annotation (auto-generated if showToday is true)
@@ -160,12 +164,12 @@ export class GanttAnnotationComponent {
         raw: {
           x1: new Date(),
           isToday: true,
-          color: theme.todayColor,
+          color: todayColor,
           label: undefined,
         },
         x1: todayX,
         x2: null,
-        color: theme.todayColor,
+        color: todayColor,
         dashArray: null,
         isToday: true,
       });
@@ -180,7 +184,7 @@ export class GanttAnnotationComponent {
         raw: ann,
         x1,
         x2,
-        color: ann.color ?? theme.arrowColor,
+        color: resolvePaint(annotationPaint(ann), theme),
         dashArray: ann.isToday ? null : '5 3',
         isToday: ann.isToday ?? false,
       });

@@ -6,6 +6,7 @@
 //  (infinite scroll mode), or shows a button (manual mode).
 //
 //  Placed inside the [tlFooter] slot of GanttTaskListComponent.
+//  Colours and fonts are stylesheet rules on the chart's `--gantt-*` tokens.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -36,20 +37,11 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     '[attr.aria-busy]': 'isLoading() || null',
     '[style.display]': '"block"',
     '[style.padding]': '"8px 12px"',
-    '[style.border-top]': '"1px solid " + theme().borderColor',
-    '[style.background-color]': 'theme().panelBg',
   },
   template: `
     @if (isLoading()) {
       <!-- Loading spinner -->
-      <div
-        [style.display]="'flex'"
-        [style.align-items]="'center'"
-        [style.gap]="'8px'"
-        [style.color]="theme().textMuted"
-        [style.font-size]="theme().fontSize"
-        [style.font-family]="theme().fontFamily"
-      >
+      <div class="gantt-load-status" [style.display]="'flex'" [style.align-items]="'center'" [style.gap]="'8px'">
         <div class="gantt-spinner"></div>
         <span>{{ labels().loading }}</span>
       </div>
@@ -62,24 +54,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         [style.align-items]="'center'"
         [style.justify-content]="'center'"
         [style.gap]="'8px'"
-        [style.color]="theme().textSecondary"
-        [style.font-size]="theme().fontSize"
-        [style.font-family]="theme().fontFamily"
       >
         <span>{{ labels().loadError }}</span>
-        <button
-          type="button"
-          class="gantt-load-more-btn"
-          [style.padding]="'3px 10px'"
-          [style.border]="'1px solid ' + theme().borderColor"
-          [style.border-radius]="'4px'"
-          [style.background]="'transparent'"
-          [style.color]="theme().textSecondary"
-          [style.font-size]="theme().fontSize"
-          [style.font-family]="theme().fontFamily"
-          [style.cursor]="'pointer'"
-          (click)="retry.emit()"
-        >
+        <button type="button" class="gantt-load-more-btn" [style.padding]="'3px 10px'" (click)="retry.emit()">
           {{ labels().retry }}
         </button>
       </div>
@@ -93,13 +70,6 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           class="gantt-load-more-btn"
           [style.width]="'100%'"
           [style.padding]="'6px 12px'"
-          [style.border]="'1px solid ' + theme().borderColor"
-          [style.border-radius]="'4px'"
-          [style.background]="'transparent'"
-          [style.color]="theme().textSecondary"
-          [style.font-size]="theme().fontSize"
-          [style.font-family]="theme().fontFamily"
-          [style.cursor]="'pointer'"
           (click)="loadMore.emit()"
         >
           ↓ {{ labels().loadMore }} ({{ loadedCount() }} / {{ totalCount() > 0 ? totalCount() : '?' }})
@@ -107,19 +77,39 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       }
     } @else {
       <!-- All loaded -->
-      <div
-        [style.text-align]="'center'"
-        [style.color]="theme().textMuted"
-        [style.font-size]="'11px'"
-        [style.padding]="'4px 0'"
-        [style.font-family]="theme().fontFamily"
-      >
+      <div class="gantt-load-done" [style.text-align]="'center'" [style.font-size]="'11px'" [style.padding]="'4px 0'">
         ✓ {{ labels().allLoaded(loadedCount()) }}
       </div>
     }
   `,
   styles: [
     `
+      :host {
+        border-top: 1px solid var(--gantt-border);
+        background-color: var(--gantt-panel-bg);
+      }
+      .gantt-load-status,
+      .gantt-load-done {
+        color: var(--gantt-text-muted);
+        font-family: var(--gantt-font);
+      }
+      .gantt-load-status,
+      .gantt-load-error {
+        font-size: var(--gantt-font-size);
+      }
+      .gantt-load-error {
+        color: var(--gantt-text-sec);
+        font-family: var(--gantt-font);
+      }
+      .gantt-load-more-btn {
+        border: 1px solid var(--gantt-border);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--gantt-text-sec);
+        font-size: var(--gantt-font-size);
+        font-family: var(--gantt-font);
+        cursor: pointer;
+      }
       @keyframes gantt-spin {
         to {
           transform: rotate(360deg);
@@ -141,7 +131,8 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
   ],
 })
 export class GanttLoadMoreComponent implements OnInit, OnDestroy {
-  readonly theme = input.required<GanttTheme>();
+  /** @deprecated Ignored: the footer is painted with the chart's `--gantt-*` tokens. */
+  readonly theme = input<GanttTheme | undefined>(undefined);
   readonly isLoading = input<boolean>(false);
   readonly hasMore = input<boolean>(false);
   /** The last page failed: show the error and a Retry button (no auto-load) */

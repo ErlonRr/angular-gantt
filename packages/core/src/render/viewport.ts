@@ -12,6 +12,12 @@ export type InitialScroll = 'auto' | 'today' | 'start' | Date | false;
 /** Gap (px) left before the first task when scrolling to it. */
 export const START_SCROLL_MARGIN = 32;
 
+/**
+ * Viewport height (px) assumed for the vertical window before the timeline viewport has
+ * been measured (first render, or a host without layout such as SSR and tests).
+ */
+export const VIEWPORT_FALLBACK_HEIGHT = 500;
+
 export interface InitialScrollInput {
   timeline: TimelineModel;
   initialScroll: InitialScroll;

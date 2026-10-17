@@ -17,7 +17,8 @@ paths:
 - Geometry goes in `src/render/`: `scales.ts` (tiers, formats, zoom presets), `timeline.ts`
   (range, delimiters, bands, row geometry), `bars.ts`, `arrows.ts`, `drag.ts`, `theme.ts`.
 - New theme key: add it to `GanttTheme`, both palettes in `render/theme.ts`, `THEME_CSS_VARS`,
-  and the README theming table.
+  the README theming tables, and the `@cssprop` list of `<gantry-element>` (then
+  `pnpm --filter @gantry/vanilla cem`).
 - Dates: x positions via `calendarDays` / `dateToPixel` / `toX`; date-only UTC values are local
   days (`toLocalDay`); `addDays` keeps date-only values date-only. Normalise user dates once at
   the input boundary; dates core generates itself (scale cells, bands, `now`) are already local

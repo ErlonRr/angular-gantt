@@ -38,7 +38,7 @@ const resolve = (
   columns: ColumnDef[] = builtins,
   custom = false,
   visibility?: Parameters<typeof resolveViewColumns>[0]['visibility'],
-) => resolveViewColumns({ columns, builtins, custom, view, config: resolveConfig(options, LightTheme), visibility });
+) => resolveViewColumns({ columns, builtins, custom, view, config: resolveConfig(options), visibility });
 
 // ─── taskStatus ──────────────────────────────────────────────
 
@@ -180,11 +180,14 @@ describe('built-in cells', () => {
       builtins.find(c => c.key === key)!,
       rows.find(r => r.task.id === id)!,
       ctx,
-      LightTheme,
     );
 
-  it('status text, dot colour and data', () => {
-    expect(cell('status', 'a')).toMatchObject({ text: 'Done', status: 'done', dotColor: LightTheme.statusDone });
+  it('status text, dot paint and data', () => {
+    expect(cell('status', 'a')).toMatchObject({
+      text: 'Done',
+      status: 'done',
+      dotPaint: 'var(--gantt-status-done, var(--gantt-text-muted))',
+    });
     expect(cell('status', 'b')).toMatchObject({ text: 'In progress', status: 'inProgress' });
   });
 
@@ -206,7 +209,6 @@ describe('built-in cells', () => {
         builtins.find(c => c.key === 'duration')!,
         one,
         inclusive,
-        LightTheme,
       ).text,
     ).toBe('1 day');
   });
@@ -219,7 +221,6 @@ describe('built-in cells', () => {
         builtins.find(c => c.key === 'type')!,
         g,
         ctx,
-        LightTheme,
       ).text,
     ).toBe('Group');
   });
@@ -239,7 +240,6 @@ describe('built-in cells', () => {
         it.find(c => c.key === 'status')!,
         r,
         ctx,
-        LightTheme,
       ).text,
     ).toBe('Completata');
   });
@@ -354,7 +354,7 @@ describe('column model edge cases', () => {
       builtins,
       custom: false,
       view: 'split',
-      config: resolveConfig({}, LightTheme),
+      config: resolveConfig({}),
       edits: { added: [owner], removed: ['end'], order: ['owner'] },
     });
     expect(keys(cols)).toEqual(['owner', 'name', 'start', 'progress']);

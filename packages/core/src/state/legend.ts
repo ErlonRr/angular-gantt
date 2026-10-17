@@ -5,7 +5,8 @@
 //  these items as is, so they always list the same entries.
 // ─────────────────────────────────────────────────────────────
 
-import { DEFAULT_LABELS, type GanttAnnotation, type GanttLabels, type GanttTheme, type GanttView } from '../types';
+import { DEFAULT_LABELS, type GanttAnnotation, type GanttLabels, type GanttView } from '../types';
+import { PAINTS, annotationPaint, themeVar, type Paint } from '../render/paint';
 
 /** Legend-only strings (part of `GanttLabels`). */
 export type LegendExtraLabels = Pick<GanttLabels, 'legendCritical' | 'legendBaseline'>;
@@ -45,7 +46,8 @@ export function legendSwatch(shape: LegendShape): LegendSwatch {
 export interface LegendItem {
   /** Stable, unique key (for `@for track` / keyed lists): `today`, `annotation-<i>`, `critical`, `baseline` */
   key: string;
-  color: string;
+  /** Swatch paint: a theme token or the annotation's own colour */
+  paint: Paint;
   label: string;
   shape: LegendShape;
   /** Geometry of `shape` (see `legendSwatch`) */
@@ -57,8 +59,7 @@ export interface LegendInput {
   showToday: boolean;
   /** The today marker falls inside the drawn range (`timeline.todayX >= 0`) */
   todayVisible: boolean;
-  annotations: readonly Pick<GanttAnnotation, 'color' | 'label'>[];
-  theme: Pick<GanttTheme, 'todayColor' | 'arrowColor' | 'criticalColor' | 'baselineColor'>;
+  annotations: readonly Pick<GanttAnnotation, 'color' | 'label' | 'isToday'>[];
   labels: Pick<GanttLabels, 'today' | 'annotation'> & {
     [K in keyof LegendExtraLabels]?: LegendExtraLabels[K] | undefined;
   };
@@ -73,15 +74,21 @@ export interface LegendInput {
 
 /** Legend entries in display order. Pure: same input, same items. */
 export function buildLegend(input: LegendInput): LegendItem[] {
-  const { theme, labels } = input;
+  const { labels } = input;
   const items: LegendItem[] = [];
   if (input.showToday && input.todayVisible) {
-    items.push({ key: 'today', color: theme.todayColor, label: labels.today, shape: 'line', swatch: SWATCHES.line });
+    items.push({
+      key: 'today',
+      paint: PAINTS.today,
+      label: labels.today,
+      shape: 'line',
+      swatch: SWATCHES.line,
+    });
   }
   input.annotations.forEach((ann, i) => {
     items.push({
       key: `annotation-${i}`,
-      color: ann.color ?? theme.arrowColor,
+      paint: annotationPaint(ann),
       label: ann.label?.text ?? labels.annotation,
       shape: 'dashed',
       swatch: SWATCHES.dashed,
@@ -90,7 +97,7 @@ export function buildLegend(input: LegendInput): LegendItem[] {
   if (input.criticalPath) {
     items.push({
       key: 'critical',
-      color: theme.criticalColor,
+      paint: themeVar('criticalColor'),
       label: labels.legendCritical ?? DEFAULT_LEGEND_LABELS.legendCritical,
       shape: 'bar',
       swatch: SWATCHES.bar,
@@ -99,7 +106,7 @@ export function buildLegend(input: LegendInput): LegendItem[] {
   if (input.baseline) {
     items.push({
       key: 'baseline',
-      color: theme.baselineColor,
+      paint: PAINTS.baseline,
       label: labels.legendBaseline ?? DEFAULT_LEGEND_LABELS.legendBaseline,
       shape: 'strip',
       swatch: SWATCHES.strip,

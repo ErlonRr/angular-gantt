@@ -47,6 +47,10 @@ jobs:
         run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:tz
+      - name: Custom Elements Manifest is up to date (packages/vanilla/custom-elements.json)
+        run: pnpm --filter @gantry/vanilla cem:check
+      - name: Bundle size budget (`import '@gantry/vanilla'`, minified + gzip)
+        run: node scripts/size.mjs --max 50
       - name: Build packages, Angular library, showcase and demos
         run: pnpm build
       - name: Lint published packages
@@ -62,7 +66,9 @@ jobs:
           npx --yes publint@0.3 --strict dist/ngx-gantry
 
   e2e:
-    # Same image as `pnpm e2e:update`, so screenshot baselines match pixel for pixel
+    # Same image as `pnpm e2e:update`, so screenshot baselines match pixel for pixel. Chromium only
+    # (playwright.config.ts): the whole suite — qa, parity, paint, csp, a11y, lifecycle, perf
+    # (blocking, one retry) and the screenshot baselines (visual).
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.64.0-noble

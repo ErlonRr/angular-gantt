@@ -24,6 +24,10 @@
 //
 //  Scroll is handled externally by GanttScrollService (step 11).
 //  This component only renders rows — it does NOT own scroll state.
+//
+//  Chrome colours are stylesheet rules on the `--gantt-*` tokens; row
+//  backgrounds, status dots and task icons are `Paint`s bound as CSS
+//  properties (a theme token or the task's own colour).
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -40,7 +44,14 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 
 import { type GanttFlatRow, type ColumnDef, type GanttTheme } from '../types';
-import { buildColumnContext, computeCellVisual, type CellVisual, type ColumnContext } from '@gantry/core';
+import {
+  buildColumnContext,
+  computeCellVisual,
+  rowPaint,
+  themeVar,
+  type CellVisual,
+  type ColumnContext,
+} from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({
@@ -79,16 +90,12 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       aria-rowindex="1"
       [style.grid-template-columns]="gridTemplate()"
       [style.height.px]="colHeaderHeight()"
-      [style.background-color]="theme().headerBackground"
-      [style.border-bottom]="'1px solid ' + theme().borderColor"
     >
       @for (col of visibleColumns(); track col.key) {
         <div
           class="gantt-tl-col-header"
           role="columnheader"
           [style.justify-content]="justify(col.align)"
-          [style.border-right]="'1px solid ' + theme().borderColor"
-          [style.color]="theme().textPrimary"
           [style.cursor]="col.sortable ? 'pointer' : 'default'"
           [attr.aria-sort]="col.sortable ? ariaSort(col.key) : null"
           [attr.tabindex]="col.sortable ? 0 : null"
@@ -101,7 +108,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
             <span
               aria-hidden="true"
               [style.font-size.px]="9"
-              [style.color]="sort()?.key === col.key ? theme().textPrimary : theme().textMuted"
+              [style.color]="sort()?.key === col.key ? paints.text : paints.muted"
               >{{ sortIcon(col.key) }}</span
             >
           }
@@ -136,7 +143,6 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.grid-template-columns]="gridTemplate()"
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
-          [style.border-bottom]="'1px solid ' + theme().borderColor"
           tabindex="-1"
           (click)="onRowClick($event, row)"
           (keydown)="onRowKey($event, row)"
@@ -151,8 +157,6 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
               [attr.data-status]="cell?.status ?? null"
               [attr.title]="cell?.title ?? null"
               [style.justify-content]="justify(col.align)"
-              [style.border-right]="'1px solid ' + theme().borderColor"
-              [style.color]="theme().textPrimary"
             >
               @if (col.cellTemplate) {
                 <!-- Custom cell via <ng-template ganttColumn> -->
@@ -164,7 +168,6 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                     <button
                       type="button"
                       class="gantt-collapse-btn"
-                      [style.color]="theme().textSecondary"
                       [attr.aria-expanded]="!row.isCollapsed"
                       [attr.aria-label]="collapseAriaLabel(row)"
                       (click)="onCollapseClick($event, row)"
@@ -179,27 +182,19 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                     aria-hidden="true"
                     [style.flex-shrink]="'0'"
                     [style.font-size]="'10px'"
-                    [style.color]="row.task.barColor ?? theme().textMuted"
+                    [style.color]="row.task.barColor ?? paints.muted"
                     >{{ taskIcon(row) }}</span
                   >
-                  <span
-                    class="gantt-tl-ellipsis"
-                    [style.font-weight]="row.hasChildren ? '600' : '400'"
-                    [style.color]="row.hasChildren ? theme().textPrimary : theme().textSecondary"
-                    >{{ nameText(col, row) }}</span
-                  >
+                  <span class="gantt-tl-ellipsis" [style.font-weight]="row.hasChildren ? '600' : '400'">{{
+                    nameText(col, row)
+                  }}</span>
                 </span>
               } @else {
                 <!-- Regular cell: ColumnDef.render(), else the task field -->
                 @if (cell?.status) {
-                  <span class="gantt-tl-status-dot" aria-hidden="true" [style.background]="cell?.dotColor"></span>
+                  <span class="gantt-tl-status-dot" aria-hidden="true" [style.background-color]="cell?.dotPaint"></span>
                 }
-                <span
-                  class="gantt-tl-ellipsis"
-                  [style.text-align]="col.align ?? 'start'"
-                  [style.color]="theme().textSecondary"
-                  >{{ cell?.text }}</span
-                >
+                <span class="gantt-tl-ellipsis" [style.text-align]="col.align ?? 'start'">{{ cell?.text }}</span>
               }
             </div>
           }
@@ -235,6 +230,8 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         top: 0;
         z-index: 5;
         box-sizing: border-box;
+        background-color: var(--gantt-header-bg);
+        border-bottom: 1px solid var(--gantt-border);
       }
       .gantt-tl-col-header {
         position: relative;
@@ -245,6 +242,8 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         overflow: hidden;
         font-weight: 600;
         user-select: none;
+        border-right: 1px solid var(--gantt-border);
+        color: var(--gantt-text);
       }
       .gantt-tl-rows {
         flex: 1;
@@ -255,6 +254,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         box-sizing: border-box;
         cursor: default;
         transition: background-color 0.1s;
+        border-bottom: 1px solid var(--gantt-border);
       }
       .gantt-tl-row:hover {
         filter: brightness(0.96);
@@ -268,6 +268,15 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         overflow: hidden;
         padding: 0 8px;
         box-sizing: border-box;
+        border-right: 1px solid var(--gantt-border);
+        color: var(--gantt-text);
+      }
+      /* Cell text (name and regular cells); a group's name is primary text */
+      .gantt-tl-cell .gantt-tl-ellipsis {
+        color: var(--gantt-text-sec);
+      }
+      .gantt-tl-row--group .gantt-tl-name > .gantt-tl-ellipsis {
+        color: var(--gantt-text);
       }
       .gantt-tl-name {
         display: flex;
@@ -312,6 +321,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         line-height: 1;
         cursor: pointer;
         touch-action: manipulation;
+        color: var(--gantt-text-sec);
       }
       .gantt-collapse-btn:hover {
         opacity: 0.75;
@@ -350,7 +360,8 @@ export class GanttTaskListComponent {
   readonly rowCount = input<number>(0);
   readonly rowHeight = input<number>(32);
   readonly selectedIds = input<ReadonlySet<string>>(new Set());
-  readonly theme = input.required<GanttTheme>();
+  /** @deprecated Ignored: the task list is painted with the chart's `--gantt-*` tokens. */
+  readonly theme = input<GanttTheme | undefined>(undefined);
   readonly colHeaderHeight = input<number>(32);
   readonly indentSize = input<number>(16);
   readonly paddingTop = input<number>(0);
@@ -413,11 +424,12 @@ export class GanttTaskListComponent {
     return this.selectedIds().has(row.task.id);
   }
 
-  /** Same zebra striping as the timeline rows */
+  /** Text paints of the classless spans (sort icon, task icon) */
+  protected readonly paints = { text: themeVar('textPrimary'), muted: themeVar('textMuted') } as const;
+
+  /** Same background as the timeline rows (`rowPaint`: selection > `task.rowColor` > zebra) */
   protected rowBg(row: GanttFlatRow): string {
-    const theme = this.theme();
-    if (this.isSelected(row)) return theme.selectionBg;
-    return row.task.rowColor ?? (row.visibleIndex % 2 === 0 ? theme.rowBg : theme.rowBgAlt);
+    return rowPaint({ row }, this.isSelected(row));
   }
 
   protected taskIcon(row: GanttFlatRow): string {
@@ -434,7 +446,7 @@ export class GanttTaskListComponent {
   /** Text (and status dot / title) of a regular cell — null for the name and template cells */
   protected cellVisual(col: ColumnDef, row: GanttFlatRow): CellVisual | null {
     if (col.cellTemplate || col.key === 'name') return null;
-    return computeCellVisual(col, row, this.ctx(), this.theme());
+    return computeCellVisual(col, row, this.ctx());
   }
 
   // ── Collapse toggle ───────────────────────────────────────

@@ -7,7 +7,6 @@ import {
   type GanttFlatRow,
   DEFAULT_LABELS,
   resolveConfig,
-  resolveTheme,
   buildTimeline,
   computeRowGeometries,
   computeBarVisual,
@@ -29,8 +28,7 @@ import {
 } from '../index';
 import type { GanttOptions } from '../index';
 
-const theme = resolveTheme(false);
-const cfg = (o: GanttOptions = {}) => resolveConfig(o, theme);
+const cfg = (o: GanttOptions = {}) => resolveConfig(o);
 const t = (id: string, s: Date, e: Date, extra: Partial<GanttTask> = {}): GanttTask => ({
   id,
   name: `Task ${id}`,
@@ -203,7 +201,7 @@ describe('bars & arrows', () => {
     });
     expect(a.d.match(/[LQ]/g)!.length).toBeGreaterThan(4);
     expect(a.head.startsWith(`${to.x},`)).toBe(true);
-    expect(a.color).toBe(theme.arrowColor);
+    expect(a.paint).toBe('var(--gantt-arrow)');
   });
 
   it('enters milestones at the shape edge, critical arrows use criticalColor', () => {
@@ -211,6 +209,6 @@ describe('bars & arrows', () => {
     const ms = computeBarVisual({ geo: geos[2], cfg: c, toX: tl.toX });
     const a = computeArrowVisual(from, ms, {}, c, { fromTop: 0, fromBottom: 0 }, true);
     expect(a.head.startsWith(`${ms.x},`)).toBe(true);
-    expect(a.color).toBe(theme.criticalColor);
+    expect(a.paint).toBe('var(--gantt-critical)');
   });
 });

@@ -6,8 +6,9 @@
 
 import type { GanttTask, GanttFlatRow, RowGeometry, GanttI18n, TimeUnit } from '../types';
 import { calendarDays, fromCalendarDays, snapRange, toLocalDay, addDays } from '../gantt-math';
-import { bottomScale, buildTiers, unitAdd, unitBoundaries, unitStart, type ScaleTier } from './scales';
+import { bottomScale, buildTiers, periodNext, unitAdd, unitBoundaries, unitStart, type ScaleTier } from './scales';
 import type { ResolvedGanttConfig } from './config';
+import { themeVar, type Paint } from './paint';
 
 export type TimeBandKind = 'weekend' | 'holiday' | 'off-hours' | 'intensive' | 'custom';
 
@@ -15,7 +16,8 @@ export interface TimeBand {
   x: number;
   width: number;
   kind: TimeBandKind;
-  color: string;
+  /** Explicit holiday / intensive / highlight colour, else the theme token (`var(--gantt-weekend-bg)`…) */
+  paint: Paint;
   className?: string | undefined;
   label?: string | undefined;
 }
@@ -109,7 +111,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
 
   // Fill the viewport: extend by whole bottom cells
   if (cfg.fitToWidth && input.viewportWidth) {
-    for (let i = 0; localX(end) < input.viewportWidth && i < 10_000; i++) end = unitAdd(end, bottom.unit, step);
+    for (let i = 0; localX(end) < input.viewportWidth && i < 10_000; i++) end = periodNext(end, bottom.unit, step);
   }
   const totalWidth = localX(end);
 
@@ -163,20 +165,23 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
 // ─── Non-working time ─────────────────────────────────────────
 
 const HOUR_SCALE_MIN_PX_PER_HOUR = 6;
+const WEEKEND = themeVar('weekendBg');
+const HOLIDAY = themeVar('holidayBg');
+const OFF_HOURS = themeVar('offHoursBg');
+const INTENSIVE = themeVar('intensiveBg');
 
 /**
  * Shaded bands for weekends, holidays, off-hours, intensive hours and the
- * `highlightTime` callback. Contiguous bands of the same kind/colour merge.
+ * `highlightTime` callback. Contiguous bands of the same kind and paint merge.
  */
 export function computeTimeBands(
   start: Date,
   end: Date,
   pxPerDay: number,
-  cfg: Pick<ResolvedGanttConfig, 'nonWorking' | 'highlightTime' | 'theme'>,
+  cfg: Pick<ResolvedGanttConfig, 'nonWorking' | 'highlightTime'>,
   toX: (d: Date) => number,
 ): TimeBand[] {
   const nw = cfg.nonWorking;
-  const theme = cfg.theme;
   const bands: TimeBand[] = [];
   const minPx = nw?.minPxPerDay ?? 12;
   if ((!nw && !cfg.highlightTime) || pxPerDay < minPx) return bands;
@@ -185,7 +190,7 @@ export function computeTimeBands(
     from: Date,
     to: Date,
     kind: TimeBandKind,
-    color: string,
+    paint: Paint,
     extra?: { className?: string | undefined; label?: string | undefined },
   ) => {
     const x = toX(from);
@@ -195,14 +200,14 @@ export function computeTimeBands(
     if (
       prev &&
       prev.kind === kind &&
-      prev.color === color &&
+      prev.paint === paint &&
       prev.className === extra?.className &&
       prev.x + prev.width === x &&
       prev.label === extra?.label
     ) {
       prev.width += width;
     } else {
-      bands.push({ x, width, kind, color, ...extra });
+      bands.push({ x, width, kind, paint, ...extra });
     }
   };
 
@@ -216,15 +221,18 @@ export function computeTimeBands(
     const custom = cfg.highlightTime?.(day, 'day');
 
     if (holiday) {
-      push(day, next, 'holiday', holiday.color ?? theme.holidayBg, { label: holiday.label });
+      push(day, next, 'holiday', holiday.color ?? HOLIDAY, { label: holiday.label });
       continue;
     }
     if (nw?.weekends.has(day.getDay())) {
-      push(day, next, 'weekend', theme.weekendBg);
+      push(day, next, 'weekend', WEEKEND);
       continue;
     }
     if (custom)
-      push(day, next, 'custom', custom.color ?? theme.weekendBg, { className: custom.className, label: custom.label });
+      push(day, next, 'custom', custom.color ?? WEEKEND, {
+        className: custom.className,
+        label: custom.label,
+      });
 
     if (!hourScale || !nw) continue;
     // Off-hours = complement of the working ranges for this weekday
@@ -232,13 +240,13 @@ export function computeTimeBands(
       const ranges = nw.workingHours(day.getDay());
       let cursor = 0;
       for (const r of ranges) {
-        if (r.start > cursor) push(at(day, cursor), at(day, r.start), 'off-hours', theme.offHoursBg);
+        if (r.start > cursor) push(at(day, cursor), at(day, r.start), 'off-hours', OFF_HOURS);
         cursor = Math.max(cursor, r.end);
       }
-      if (cursor < 24) push(at(day, cursor), next, 'off-hours', theme.offHoursBg);
+      if (cursor < 24) push(at(day, cursor), next, 'off-hours', OFF_HOURS);
     }
     for (const r of nw.intensive) {
-      push(at(day, r.start), at(day, r.end), 'intensive', r.color ?? theme.intensiveBg, { label: r.label });
+      push(at(day, r.start), at(day, r.end), 'intensive', r.color ?? INTENSIVE, { label: r.label });
     }
   }
 
@@ -246,7 +254,7 @@ export function computeTimeBands(
     for (const hour of unitBoundaries(start, end, 'hour', 1, 1)) {
       const h = cfg.highlightTime(hour, 'hour');
       if (h)
-        push(hour, unitAdd(hour, 'hour', 1), 'custom', h.color ?? theme.intensiveBg, {
+        push(hour, periodNext(hour, 'hour', 1), 'custom', h.color ?? INTENSIVE, {
           className: h.className,
           label: h.label,
         });

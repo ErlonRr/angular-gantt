@@ -15,6 +15,10 @@
 //  Applied on the bar <g> element — works on SVG elements too
 //  because we use clientX/Y from the pointer event.
 //
+//  The popover lives in <body>, outside the chart host, so it carries
+//  the theme's `--gantt-*` tokens itself; its chrome and the progress
+//  fill (a `Paint`) read them through `var()`.
+//
 //  Usage (applied automatically by GanttCanvasComponent):
 //    <g ganttTaskBar [ganttTooltip]="geo" [tooltipTheme]="theme" />
 // ─────────────────────────────────────────────────────────────
@@ -22,7 +26,7 @@
 import { Directive, ElementRef, inject, input, type OnDestroy, type OnInit, DOCUMENT } from '@angular/core';
 
 import { type RowGeometry, type GanttTask, type GanttTheme } from '../types';
-import { buildTooltipModel, resolveTheme, type ResolvedGanttConfig, type TooltipModel } from '@gantry/core';
+import { buildTooltipModel, resolveTheme, themeToCss, type ResolvedGanttConfig, type TooltipModel } from '@gantry/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 /** What the tooltip reads besides the row: the clock, the critical path, float and the task index. */
@@ -142,11 +146,11 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
 
     // Update content and colours in case the task or theme changed
     const model = this._model();
-    this._applyPopoverStyles(pop, model);
+    this._applyPopoverStyles(pop);
     pop.innerHTML = this._buildHTML(model);
     // Colours go through the CSSOM, never into markup (a task colour can't inject CSS)
     const fill = pop.querySelector<HTMLElement>('.gantt-tooltip-fill');
-    if (fill) fill.style.background = this._progressFill(model);
+    if (fill) fill.style.background = model.paint.progress;
 
     // An inline `display: none` would hide an open popover too: show it explicitly first
     pop.style.display = 'block';
@@ -194,7 +198,11 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
     pop.style.top = `${Math.max(8, top)}px`;
   }
 
-  private _applyPopoverStyles(pop: HTMLElement, m: TooltipModel): void {
+  private _applyPopoverStyles(pop: HTMLElement): void {
+    // The chart's theme tokens (the popover is outside the chart host); missing optional keys use the light theme
+    for (const [cssVar, value] of themeToCss(resolveTheme(false, this.tooltipTheme() ?? FALLBACK_THEME))) {
+      pop.style.setProperty(cssVar, value);
+    }
     Object.assign(pop.style, {
       position: 'fixed',
       inset: 'auto',
@@ -203,10 +211,10 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
       pointerEvents: 'none',
       padding: '8px 12px',
       borderRadius: '6px',
-      background: m.colors.background,
-      border: `1px solid ${m.colors.border}`,
-      color: m.colors.text,
-      fontFamily: m.colors.fontFamily,
+      background: 'var(--gantt-tooltip-bg)',
+      border: '1px solid var(--gantt-tooltip-bdr)',
+      color: 'var(--gantt-tooltip-txt)',
+      fontFamily: 'var(--gantt-font)',
       fontSize: '12px',
       boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
       maxWidth: '280px',
@@ -231,7 +239,6 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
         endDateMode: dates.endDateMode,
         normalizeDateOnly: dates.normalizeDateOnly,
         baseline: dates.baseline ?? false,
-        theme: this.tooltipTheme() ?? FALLBACK_THEME,
       },
       labels: this.i18n.labels(),
       locale: this.i18n.locale(),
@@ -241,12 +248,6 @@ export class GanttTooltipDirective implements OnInit, OnDestroy {
       floatDays: ctx.floatDays,
       tasksById: ctx.tasksById,
     });
-  }
-
-  /** Progress fill: keeps `--gantt-*` CSS-variable theming for the default colours; an explicit bar colour wins. */
-  private _progressFill(m: TooltipModel): string {
-    if (m.critical) return `var(--gantt-critical, ${m.colors.progress})`;
-    return this.ganttTooltip().row.task.barColor ? m.colors.progress : `var(--gantt-bar, ${m.colors.progress})`;
   }
 
   private _buildHTML(m: TooltipModel): string {

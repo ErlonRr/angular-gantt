@@ -409,9 +409,12 @@ export interface GanttLabels {
   /** Finish variance against the baseline, e.g. "+3d" / "On schedule" */
   varianceDays: (days: number) => string;
   // Accessibility
+  /** Accessible name of the chart (the element's region) and of its timeline viewport */
   ariaChart: string;
   /** Accessible name of the task list (split panel and table view) */
   ariaTaskList: string;
+  /** Accessible name of the toolbar */
+  ariaToolbar: string;
   ariaExpand: (name: string) => string;
   ariaCollapse: (name: string) => string;
   // Accessible names of bars (`taskAccessibleName`)
@@ -434,6 +437,8 @@ export interface GanttLabels {
   // Screen-reader announcements (aria-live)
   /** Selection changed; `0` means it was cleared */
   announceSelection: (count: number) => string;
+  /** A page of the data source loaded and more remain; `count` tasks are loaded so far (the last page reads `allLoaded`) */
+  announceLoaded: (count: number) => string;
   /** Bar moved by `amount` (> 0 later, < 0 earlier) */
   announceMoved: (name: string, amount: number, unit: AnnounceUnit) => string;
   /** Bar start (`edge: 'start'`) or end moved by `amount` */
@@ -452,6 +457,8 @@ export interface GanttLabels {
   announceLinkStart: (name: string) => string;
   announceLinkCreated: (from: string, to: string) => string;
   announceLinkCancel: string;
+  /** Movement shown above the drag ghost, e.g. "+3d" / "-2h" (`amount` in snap units) */
+  dragDelta: (amount: number, unit: AnnounceUnit) => string;
   // Tooltip rows
   /** Label of the critical-path row */
   ttCritical: string;
@@ -536,6 +543,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   varianceDays: days => (days === 0 ? 'On schedule' : `${days > 0 ? '+' : '−'}${Math.abs(days)}d`),
   ariaChart: 'Gantt chart timeline',
   ariaTaskList: 'Tasks',
+  ariaToolbar: 'Chart toolbar',
   ariaExpand: name => `Expand ${name}`,
   ariaCollapse: name => `Collapse ${name}`,
   ariaProgress: p => `${p}% complete`,
@@ -547,6 +555,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   ariaTimeFormat: 'HH:mm',
   ariaListSeparator: ', ',
   announceSelection: n => (n === 0 ? 'Selection cleared' : n === 1 ? '1 task selected' : `${n} tasks selected`),
+  announceLoaded: n => `${n} tasks loaded`,
   announceMoved: (name, amount, unit) => `${name} moved ${unitCount(Math.abs(amount), unit)} ${later(amount)}`,
   announceResized: (name, edge, amount, unit) =>
     `${name} ${edge} moved ${unitCount(Math.abs(amount), unit)} ${later(amount)}`,
@@ -562,6 +571,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   announceLinkStart: name => `Linking from ${name}. Move to another task and press Enter, or Escape to cancel.`,
   announceLinkCreated: (from, to) => `Linked ${from} to ${to}`,
   announceLinkCancel: 'Linking cancelled',
+  dragDelta: (amount, unit) => `${amount > 0 ? '+' : ''}${amount}${unit === 'hour' ? 'h' : 'd'}`,
   ttCritical: 'Critical path',
   ttCriticalValue: 'Yes',
   ttFloat: 'Float',
@@ -932,6 +942,10 @@ export interface GanttLayoutParams {
 export interface GanttBarContext {
   row: GanttFlatRow;
   geometry: RowGeometry;
+  /**
+   * The resolved theme of the chart. `ctx.visual.paint.*` may be `var(--gantt-*)` tokens: apply
+   * them as CSS properties (`style.fill`), or turn them into colours with `resolvePaint(paint, ctx.theme)`.
+   */
   theme: GanttTheme;
   layoutParams: GanttLayoutParams;
   /** Whether this task is on the critical path */

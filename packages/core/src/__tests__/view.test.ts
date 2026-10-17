@@ -14,7 +14,6 @@ import {
   type PanelWidthInput,
 } from '../state/view';
 import { resolveConfig } from '../render/config';
-import { LightTheme } from '../render/theme';
 
 type SplitPatch = Partial<Omit<PanelWidthInput, 'panel'>> & { panel?: Partial<PanelWidthConfig> };
 
@@ -75,7 +74,7 @@ describe('resolvePanelWidth', () => {
   });
 
   it('reads its bounds and width from the resolved config', () => {
-    const { panel } = resolveConfig({ panel: { width: 250, minWidth: 200, maxWidth: '25%' } }, LightTheme);
+    const { panel } = resolveConfig({ panel: { width: 250, minWidth: 200, maxWidth: '25%' } });
     expect(resolvePanelWidth({ view: 'split', panel, hostWidth: 1206 })).toBe(250);
     expect(resolvePanelWidth({ view: 'split', panel, hostWidth: 1206, userWidth: 900 })).toBe(300);
     expect(resolvePanelWidth({ view: 'table', panel, hostWidth: 1206 })).toBe(1206);
@@ -95,7 +94,7 @@ describe('viewFromOptions / viewFromState', () => {
   it('lets an explicit panel.collapsed override the legacy panelVisible, as resolveConfig does', () => {
     const options = { panel: { collapsed: false }, panelVisible: false };
     expect(viewFromOptions(options)).toBeUndefined();
-    expect(resolveConfig(options, LightTheme).panel.collapsed).toBe(false);
+    expect(resolveConfig(options).panel.collapsed).toBe(false);
     expect(viewFromOptions({ panel: {}, panelVisible: false })).toBe('chart');
     expect(viewFromOptions({ panel: { collapsed: true }, panelVisible: true })).toBe('chart');
   });

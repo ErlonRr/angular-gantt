@@ -28,6 +28,7 @@ import {
   type GanttDependency,
   type GanttFlatRow,
   type GanttTask,
+  type GanttTheme,
   DependencyType,
   type SelectionChangeEvent,
   type TaskDragEvent,
@@ -37,7 +38,13 @@ import {
   computeBarVisual,
   computeArrowVisual,
   taskSpan,
-  cssPx,
+  rowPaint,
+  annotationPaint,
+  themeMetrics,
+  sameThemeMetrics,
+  LightTheme,
+  PAINTS,
+  DRAG_SOURCE_OPACITY,
   type BarVisual,
   type ArrowVisual,
   type TimelineModel,
@@ -50,6 +57,7 @@ import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttDragPreviewComponent } from '../drag/gantt-drag-preview.component';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
+import { GanttThemeService } from '../services/gantt-theme.service';
 import { GanttLayoutService } from './gantt-layout.service';
 import { GanttTooltipDirective, type GanttTooltipContext } from '../tooltip/gantt-tooltip.directive';
 
@@ -96,7 +104,7 @@ let nextCanvasId = 0;
                 y1="0"
                 x2="0"
                 y2="6"
-                [attr.stroke]="config().theme.textMuted"
+                [style.stroke]="paints.hatch"
                 stroke-width="1.5"
                 stroke-opacity="0.35"
               />
@@ -112,7 +120,7 @@ let nextCanvasId = 0;
               [attr.y]="geo.y"
               [attr.width]="timeline().totalWidth"
               [attr.height]="geo.height"
-              [attr.fill]="rowBg(geo)"
+              [style.fill]="rowPaint(geo, selSvc.isSelected(geo.row.task.id))"
             />
           }
         </g>
@@ -126,7 +134,7 @@ let nextCanvasId = 0;
               y="0"
               [attr.width]="band.width"
               [attr.height]="totalHeight()"
-              [attr.fill]="band.color"
+              [style.fill]="band.paint"
             />
             @if (hatch() && band.kind !== 'intensive') {
               <svg:rect
@@ -150,7 +158,7 @@ let nextCanvasId = 0;
                 y1="0"
                 [attr.x2]="x + 0.5"
                 [attr.y2]="totalHeight()"
-                [attr.stroke]="minor.color"
+                [style.stroke]="minor.paint"
                 [attr.stroke-width]="minor.width"
                 [attr.stroke-dasharray]="minor.dash ?? null"
               />
@@ -164,7 +172,7 @@ let nextCanvasId = 0;
                 [attr.y1]="geo.y + geo.height - 0.5"
                 [attr.x2]="timeline().totalWidth"
                 [attr.y2]="geo.y + geo.height - 0.5"
-                [attr.stroke]="hz.color"
+                [style.stroke]="hz.paint"
                 [attr.stroke-width]="hz.width"
                 [attr.stroke-dasharray]="hz.dash ?? null"
               />
@@ -178,7 +186,7 @@ let nextCanvasId = 0;
                 y1="0"
                 [attr.x2]="x + 0.5"
                 [attr.y2]="totalHeight()"
-                [attr.stroke]="major.color"
+                [style.stroke]="major.paint"
                 [attr.stroke-width]="major.width"
                 [attr.stroke-dasharray]="major.dash ?? null"
               />
@@ -195,7 +203,7 @@ let nextCanvasId = 0;
                 [attr.y]="windowTop()"
                 [attr.width]="ann.x2 - ann.x1"
                 [attr.height]="windowHeight()"
-                [attr.fill]="ann.color"
+                [style.fill]="ann.paint"
                 [attr.opacity]="ann.opacity ?? 0.08"
               />
             }
@@ -204,7 +212,7 @@ let nextCanvasId = 0;
               [attr.y1]="windowTop()"
               [attr.x2]="ann.x1"
               [attr.y2]="windowBottom()"
-              [attr.stroke]="ann.color"
+              [style.stroke]="ann.paint"
               stroke-width="1.5"
               stroke-dasharray="5 3"
               opacity="0.8"
@@ -220,7 +228,7 @@ let nextCanvasId = 0;
             [attr.y1]="windowTop()"
             [attr.x2]="timeline().todayX"
             [attr.y2]="windowBottom()"
-            [attr.stroke]="config().theme.todayColor"
+            [style.stroke]="paints.today"
             stroke-width="2"
             pointer-events="none"
           />
@@ -238,11 +246,11 @@ let nextCanvasId = 0;
           @for (geo of visibleGeometries(); track geo.row.task.id) {
             <g
               [ganttTooltip]="geo"
-              [tooltipTheme]="config().theme"
+              [tooltipTheme]="theme()"
               [tooltipDates]="config()"
               [tooltipContext]="tooltipContext()"
               [tooltipEnabled]="tooltipEnabled() && !dragSvc.isActive()"
-              [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? 0.35 : null"
+              [attr.opacity]="dragSvc.activeTaskId() === geo.row.task.id ? dragSourceOpacity : null"
             >
               <g ganttBarHost [barComponent]="resolveBarComponent(geo.row.barType)" [ctx]="barContext(geo)"></g>
             </g>
@@ -256,7 +264,7 @@ let nextCanvasId = 0;
               <svg:text
                 [attr.x]="ann.x1 + 6"
                 [attr.y]="windowTop() + 14"
-                [attr.fill]="ann.label.color ?? ann.color"
+                [style.fill]="ann.label.color ?? ann.paint"
                 [attr.font-size]="ann.label.fontSize ?? fontPx() - 1"
                 [attr.font-weight]="ann.label.fontWeight ?? 600"
                 style="user-select:none"
@@ -271,10 +279,10 @@ let nextCanvasId = 0;
         <g
           ganttDragPreview
           [preview]="dragSvc.preview()"
-          [theme]="config().theme"
-          [barHeight]="ghostHeight()"
-          [radius]="config().bar.radius"
-          [unit]="snapUnit()"
+          [geometry]="dragGeometry()"
+          [config]="config()"
+          [timeline]="timeline()"
+          [fontPx]="fontPx()"
         ></g>
       </svg>
     </div>
@@ -319,12 +327,18 @@ export class GanttCanvasComponent {
   private readonly svgEl = viewChild<ElementRef<SVGSVGElement>>('svgEl');
   private readonly registry = inject(GanttBarRegistry);
   protected readonly dragSvc = inject(GanttDragService);
-  private readonly selSvc = inject(GanttSelectionService);
+  protected readonly selSvc = inject(GanttSelectionService);
   protected readonly i18n = inject(GanttI18nService);
   /** The chart's clock (absent when the canvas is used on its own) */
   private readonly layout = inject(GanttLayoutService, { optional: true });
+  /** The chart's theme (absent when the canvas is used on its own: the light theme) */
+  private readonly themeSvc = inject(GanttThemeService, { optional: true });
 
-  protected readonly fontPx = computed(() => cssPx(this.config().theme.fontSize, 13) - 1);
+  /** Resolved theme: custom bars' `ctx.theme` and the tooltip popover's tokens */
+  protected readonly theme = computed<Required<GanttTheme>>(() => this.themeSvc?.resolvedTheme() ?? LightTheme);
+  /** Label font and the label colour on explicit bar colours; a colour-only theme change keeps them */
+  private readonly metrics = computed(() => themeMetrics(this.theme()), { equal: sameThemeMetrics });
+  protected readonly fontPx = computed(() => this.metrics().fontPx);
   protected readonly windowHeight = computed(() => Math.max(0, this.windowBottom() - this.windowTop()));
   protected readonly hatch = computed(() => this.config().nonWorking?.style === 'hatch');
   protected readonly snapUnit = computed<'day' | 'hour'>(() => {
@@ -354,7 +368,7 @@ export class GanttCanvasComponent {
     const cfg = this.config();
     const tl = this.timeline();
     const crit = this.criticalIds();
-    const fontPx = this.fontPx();
+    const { fontPx, barTextColor } = this.metrics();
     const resizable = this.enableDrag() && this.enableResize();
     const cache = new WeakMap<RowGeometry, BarVisual>();
     return (geo: RowGeometry): BarVisual => {
@@ -365,6 +379,7 @@ export class GanttCanvasComponent {
           cfg,
           toX: tl.toX,
           fontPx,
+          barTextColor,
           isCritical: crit.has(geo.row.task.id),
           resizable: resizable && geo.row.task.draggable !== false,
         });
@@ -404,19 +419,25 @@ export class GanttCanvasComponent {
     return out;
   });
 
-  protected readonly ghostHeight = computed(() => {
+  /** Row geometry of the task being dragged or resized (the drag ghost's row) */
+  protected readonly dragGeometry = computed(() => {
     const id = this.dragSvc.activeTaskId();
-    const geo = id ? this.allGeometries().find(g => g.row.task.id === id) : undefined;
-    return geo ? this.visuals()(geo).height : null;
+    return (id ? this.allGeometries().find(g => g.row.task.id === id) : undefined) ?? null;
   });
+
+  /** Theme paints of the body (`var(--gantt-*)`), applied as CSS properties */
+  protected readonly paints = PAINTS;
+  protected readonly dragSourceOpacity = DRAG_SOURCE_OPACITY;
+  /** Row background: selection > `task.rowColor` > zebra (shared with the task list) */
+  protected readonly rowPaint = rowPaint;
 
   protected readonly resolvedAnnotations = computed(() => {
     const tl = this.timeline();
-    const theme = this.config().theme;
     return this.annotations().map(ann => ({
       x1: tl.toX(ann.x1),
       x2: ann.x2 ? tl.toX(ann.x2) : null,
-      color: ann.isToday ? theme.todayColor : (ann.color ?? theme.arrowColor),
+      // An `isToday` annotation takes the today colour (Angular only, kept as is)
+      paint: annotationPaint(ann),
       label: ann.label,
       opacity: ann.opacity,
     }));
@@ -431,7 +452,7 @@ export class GanttCanvasComponent {
     return {
       row: geo.row,
       geometry: geo,
-      theme: cfg.theme,
+      theme: this.theme(),
       layoutParams: { origin: tl.start, pxPerDay: tl.pxPerDay, rowHeight: cfg.rowHeight },
       isCritical: this.criticalIds().has(id),
       isSelected: this.selSvc.isSelected(id),
@@ -444,13 +465,6 @@ export class GanttCanvasComponent {
 
   protected resolveBarComponent(barType: string) {
     return this.registry.resolve(barType);
-  }
-
-  protected rowBg(geo: RowGeometry): string {
-    const theme = this.config().theme;
-    if (this.selSvc.isSelected(geo.row.task.id)) return theme.selectionBg;
-    if (geo.row.task.rowColor) return geo.row.task.rowColor;
-    return geo.row.visibleIndex % 2 === 0 ? theme.rowBg : theme.rowBgAlt;
   }
 
   // ── Pointer events ─────────────────────────────────────────

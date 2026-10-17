@@ -5,10 +5,11 @@
 //  as HTML so labels stick to the left edge while scrolling and
 //  ellipsize natively. Period delimiters, the current period and
 //  non-working time match the chart body. Same markup as the Web Component.
+//  Cell borders come from core (`headerCellBorder`); colours are paints.
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
-import type { TimelineModel, ResolvedGanttConfig } from '@gantry/core';
+import { headerCellBorder, type TimelineModel, type ResolvedGanttConfig } from '@gantry/core';
 
 @Component({
   selector: 'gantt-header',
@@ -30,7 +31,7 @@ import type { TimelineModel, ResolvedGanttConfig } from '@gantry/core';
                 class="g-band g-band--{{ band.kind }}"
                 [style.left.px]="band.x"
                 [style.width.px]="band.width"
-                [style.background]="band.color"
+                [style.background-color]="band.paint"
               ></div>
             }
           }
@@ -40,7 +41,7 @@ import type { TimelineModel, ResolvedGanttConfig } from '@gantry/core';
               [class.g-cell--current]="last && cell.isCurrent"
               [style.left.px]="cell.x"
               [style.width.px]="cell.width"
-              [style.border-left]="cellBorder(cell.x, last)"
+              [style.border-left]="headerCellBorder(config(), timeline(), i, cell) ?? 'none'"
             >
               <span class="g-cell-label" [title]="cell.label">{{ cell.label }}</span>
             </div>
@@ -125,15 +126,6 @@ export class GanttHeaderComponent {
   readonly config = input.required<ResolvedGanttConfig>();
 
   protected readonly showBands = computed(() => !!this.config().nonWorking?.showInHeader);
-  private readonly majorSet = computed(() => new Set(this.timeline().majorLines));
-
-  /** Upper tiers are delimiters by definition; lower cells only at major boundaries. */
-  protected cellBorder(x: number, isBottom: boolean): string {
-    if (x <= 0) return 'none';
-    const major = this.config().gridLines.major;
-    const isMajor = !isBottom || this.majorSet().has(x);
-    return isMajor && major
-      ? `${major.width}px ${major.dash ? 'dashed' : 'solid'} ${major.color}`
-      : `1px solid ${this.config().theme.borderColor}`;
-  }
+  /** Left border of a cell: upper tiers are delimiters, bottom cells only at major boundaries */
+  protected readonly headerCellBorder = headerCellBorder;
 }

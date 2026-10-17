@@ -5,7 +5,7 @@
 //
 //  Data flow (all computed(), no imperative push):
 //
-//   options + viewMode + theme + i18n ──► config  (resolveConfig)
+//   options + viewMode + i18n + theme metrics ──► config  (resolveConfig)
 //   tasks + config + viewport width   ──► timeline (buildTimeline)
 //   tasks + collapsed + sort          ──► visibleRows
 //   visibleRows + timeline            ──► rowGeometries (computeRowGeometries)

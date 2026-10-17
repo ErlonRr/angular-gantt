@@ -44,7 +44,8 @@
     "e2e:full": "pnpm build && playwright test",
     "e2e:visual": "bash scripts/e2e-container.sh e2e/visual.spec.ts",
     "e2e:update": "bash scripts/e2e-container.sh e2e/visual.spec.ts --update-snapshots=all",
-    "test:angular": "ng test gantry --watch=false"
+    "test:angular": "ng test gantry --watch=false",
+    "size": "node scripts/size.mjs"
   },
   "dependencies": {
     "@angular/common": "catalog:",
@@ -59,6 +60,7 @@
     "@angular/build": "catalog:",
     "@angular/cli": "catalog:",
     "@angular/compiler-cli": "catalog:",
+    "@axe-core/playwright": "catalog:",
     "@changesets/cli": "^3.0.3",
     "@eslint/js": "^10.0.1",
     "@microsoft/api-extractor": "catalog:",

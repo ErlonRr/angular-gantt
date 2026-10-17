@@ -13,7 +13,6 @@ import {
 import { buildTimeline, type TimeBand, type TimelineModel } from '../render/timeline';
 import type { ScaleCell, ScaleTier } from '../render/scales';
 import { resolveConfig } from '../render/config';
-import { LightTheme } from '../render/theme';
 import type { GanttTask } from '../types';
 
 // ─── Synthetic models ─────────────────────────────────────────
@@ -41,7 +40,7 @@ const band = (x: number, width: number, kind: TimeBand['kind'] = 'weekend'): Tim
   x,
   width,
   kind,
-  color: '#eee',
+  paint: '#eee',
 });
 
 // Brute-force references
@@ -233,25 +232,22 @@ describe('windowing a built timeline', () => {
   };
 
   it('Week view with weekends', () => {
-    const config = resolveConfig({ viewMode: 'Week', nonWorkingTime: { weekends: [0, 6] } }, LightTheme);
+    const config = resolveConfig({ viewMode: 'Week', nonWorkingTime: { weekends: [0, 6] } });
     const tl = buildTimeline({ tasks, config, now });
     expect(tl.bands.length).toBeGreaterThan(0);
     check(tl);
   });
 
   it('Hour view with working hours, intensive hours and hour highlights (unsorted bands)', () => {
-    const config = resolveConfig(
-      {
-        viewMode: 'Hour',
-        nonWorkingTime: {
-          weekends: [0, 6],
-          workingHours: { start: 9, end: 17 },
-          intensiveHours: [{ start: 10, end: 12 }],
-        },
-        highlightTime: (d, unit) => (unit === 'hour' && d.getHours() === 14 ? { color: '#f00' } : null),
+    const config = resolveConfig({
+      viewMode: 'Hour',
+      nonWorkingTime: {
+        weekends: [0, 6],
+        workingHours: { start: 9, end: 17 },
+        intensiveHours: [{ start: 10, end: 12 }],
       },
-      LightTheme,
-    );
+      highlightTime: (d, unit) => (unit === 'hour' && d.getHours() === 14 ? { color: '#f00' } : null),
+    });
     const tl = buildTimeline({ tasks, config, now });
     const xs = tl.bands.map(b => b.x);
     expect(xs.some((x, i) => i > 0 && x < (xs[i - 1] ?? 0))).toBe(true);

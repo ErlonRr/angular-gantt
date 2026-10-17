@@ -15,15 +15,22 @@ import type {
   SelectionChangeEvent,
   PagedLoaderConfig,
   ColumnContext,
+  GanttBarContext,
 } from '@gantry/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
-import type { GanttBarRenderer } from './layout/gantt-canvas.component';
 
 /** Custom cell content: a DOM node, or a string rendered as text. `ctx` carries "now" and the task index. */
 export type VanillaCellTemplate = (row: GanttFlatRow, ctx: ColumnContext) => Node | string;
 
 /** Column definition whose `cellTemplate` builds the cell's DOM content. */
 export type VanillaColumnDef = ColumnDef<VanillaCellTemplate>;
+
+/**
+ * Custom bar renderer. Return an SVG element to replace the built-in bar, or
+ * `null`/`undefined` to fall back to `renderDefault()`. `ctx.visual` holds the
+ * computed geometry (position, size, label placement).
+ */
+export type GanttBarRenderer = (ctx: GanttBarContext, renderDefault: () => SVGElement) => SVGElement | null | undefined;
 
 /**
  * Lazy-loading configuration — the same shape as Angular's
@@ -49,7 +56,10 @@ export type GantryEventMap = {
   [K in keyof GantryEventDetailMap]: CustomEvent<GantryEventDetailMap[K]>;
 };
 
-/** Settable properties of `<gantry-element>` — what framework bindings forward. */
+/**
+ * Settable properties of `<gantry-element>` — what framework bindings forward. Assigning
+ * `undefined` restores a property's default.
+ */
 export interface GantryProperties {
   tasks?: GanttTask[] | undefined;
   columns?: VanillaColumnDef[] | undefined;
@@ -65,20 +75,8 @@ export interface GantryProperties {
   renderBar?: GanttBarRenderer | undefined;
 }
 
-export const GANTRY_PROPERTIES = [
-  'tasks',
-  'columns',
-  'options',
-  'annotations',
-  'darkMode',
-  'showToolbar',
-  'enableDrag',
-  'enableResize',
-  'tooltipEnabled',
-  'showLegend',
-  'dataSource',
-  'renderBar',
-] as const satisfies readonly (keyof GantryProperties)[];
+/** Settable properties of `<gantry-element>`, in order (from the property table, `engine/props.ts`). */
+export { GANTRY_PROPERTIES } from './engine/props';
 
 /** DOM event name → camelCase callback name used by the React / Vue / Svelte bindings. */
 export const GANTRY_EVENTS = {

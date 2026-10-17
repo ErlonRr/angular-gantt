@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTimeline } from '../render/timeline';
 import { resolveConfig } from '../render/config';
-import { LightTheme } from '../render/theme';
 import { initialScrollLeft, zoomAnchorScroll, clampScroll, START_SCROLL_MARGIN } from '../render/viewport';
 import type { GanttOptions, GanttTask } from '../types';
 
@@ -17,7 +16,7 @@ const VW = 800;
 const timeline = (now: Date, options: GanttOptions = {}, list = tasks) =>
   buildTimeline({
     tasks: list,
-    config: resolveConfig({ viewMode: 'Week', ...options }, LightTheme),
+    config: resolveConfig({ viewMode: 'Week', ...options }),
     viewportWidth: VW,
     now,
   });
