@@ -41,6 +41,7 @@ const svelteServerBuild = (): Plugin => {
 //  - vanilla: the <gantry-element> Web Component in happy-dom.
 //  - react / vue / svelte: the framework wrappers in happy-dom (SSR specs switch to the node
 //             environment with a `// @vitest-environment node` comment).
+//  - demo-kit: the demo apps' shared playground model, API reference and theme switch (happy-dom).
 // Workspace packages resolve to their TypeScript sources via the
 // `@gantry/source` export condition, so no package build is needed.
 export default defineConfig({
@@ -70,6 +71,10 @@ export default defineConfig({
         plugins: [svelteServerBuild(), svelte({ configFile: false, compilerOptions: { runes: true } })],
         resolve: { conditions: ['@gantry/source', 'browser'] },
         test: { name: 'svelte', include: ['packages/svelte/src/**/*.test.ts'], environment: 'happy-dom' },
+      },
+      {
+        extends: true,
+        test: { name: 'demo-kit', include: ['apps/demo-kit/src/**/*.test.ts'], environment: 'happy-dom' },
       },
     ],
   },

@@ -1,342 +1,147 @@
-import '../../demo.css';
+// The Web Component options playground. The controls edit a `PlaygroundState` (demo-kit's
+// playground model, shared with the site's /playground page); the chart runs its options, the
+// Code card prints them for each framework and `?setup=` keeps them in the link.
+//
+// e2e drives this page: its chart is the first <gantry-element>, and options, darkMode or tasks a
+// test assigns stay put — the page re-assigns options only when a control changes (or the zoom
+// changes while the chart still runs the playground's options) and darkMode only when the site
+// theme changes.
+import 'demo-kit/site.css';
+import './playground.css';
 import '@gantry/vanilla';
-import { ViewMode, WEEK_FORMATS, type GanttOptions, type GanttScale, type ScaleFormat } from '@gantry/vanilla';
+import type { GanttOptions, GanttTask } from '@gantry/vanilla';
 import { createDemoData } from '@gantry/core/demo';
+import faviconUrl from 'demo-kit/favicon.svg?url';
+import {
+  PLAYGROUND_DEFAULTS,
+  changedKeys,
+  decodeState,
+  encodeState,
+  playgroundOptions,
+  withValue,
+  type PlaygroundState,
+} from 'demo-kit/playground';
+import { PACKAGES, SITE } from 'demo-kit/site';
+import { initTheme, onThemeChange, toggleTheme, type SiteTheme } from 'demo-kit/theme';
+import { codePanel } from './code-panel';
+import { byId, drawIcon, drawIcons, h } from './dom';
+import { eventLog } from './event-log';
+import { copyButton } from './feedback';
+import { buildOptionsForm } from './options-form';
+
+const SETUP_PARAM = 'setup';
 
 const gantt = document.querySelector('gantry-element')!;
-const log = document.getElementById('log')!;
-const controls = document.getElementById('controls')!;
-const code = document.getElementById('code')!;
 
-// The demo plan is moved so today sits about 40% into it
+// ── Shell: favicon, version, links, icons, theme ─────────────
+
+document.head.append(h('link', { rel: 'icon', type: 'image/svg+xml', href: faviconUrl }));
+byId('site-version').textContent = `v${SITE.version}`;
+byId<HTMLAnchorElement>('site-repo').href = SITE.repoUrl;
+byId('footer-meta').append(
+  h('strong', {}, SITE.name),
+  ` v${SITE.version} · ${SITE.license} · `,
+  h('a', { href: SITE.repoUrl }, 'GitHub'),
+  ' · ',
+  h('a', { href: PACKAGES.vanilla.npmUrl }, 'npm'),
+  ' · made by ',
+  h('a', { href: SITE.authorUrl }, SITE.author),
+);
+byId('footer-tagline').textContent = SITE.tagline;
+drawIcons(document.body);
+
+const themeToggle = byId<HTMLButtonElement>('theme-toggle');
+const showTheme = (theme: SiteTheme) => {
+  themeToggle.setAttribute('aria-pressed', String(theme === 'dark'));
+  drawIcon(themeToggle.querySelector('svg')!, theme === 'dark' ? 'sun' : 'moon');
+  // The chart follows the site theme when it changes, never in between
+  gantt.darkMode = theme === 'dark';
+};
+onThemeChange(showTheme);
+themeToggle.addEventListener('click', () => toggleTheme());
+initTheme();
+
+// ── Chart ────────────────────────────────────────────────────
+
+// The demo plan, moved so today sits about 40% into it
 const demo = createDemoData();
 gantt.tasks = demo.tasks;
 gantt.annotations = demo.annotations;
 gantt.showLegend = true;
 
-// ── Playground state → options ─────────────────────────────
+// ── State: controls → options, code and link ────────────────
 
-const defaults = {
-  viewMode: ViewMode.Week as string,
-  weekFormat: 'number',
-  weekStart: 1,
-  initialScroll: 'auto',
-  weekends: true,
-  holiday: true,
-  workStart: 9,
-  workEnd: 18,
-  intensive: true,
-  nwStyle: 'shade',
-  majorDash: false,
-  rowHeight: 36,
-  barHeight: 60,
-  radius: 4,
-  label: 'auto',
-  milestone: 'diamond',
-  groupStyle: 'summary',
-  arrowRadius: 4,
-  baseline: false,
-  criticalPath: false,
-  inclusive: false,
-  stateKey: false,
-  panelCols: 'default',
-  tableCols: 'default',
-};
-type State = typeof defaults;
-let state: State = { ...defaults };
+let state: PlaygroundState = decodeState(new URLSearchParams(location.search).get(SETUP_PARAM));
+/** The options object the page last gave the chart (to tell them from options a script assigned). */
+let applied: GanttOptions | undefined;
 
-/** Column-key presets for the split panel and the table view (`panel.columns` / `table.columns`). */
-const PANEL_COLUMNS: Record<string, string[] | undefined> = {
-  default: undefined,
-  status: ['name', 'status', 'start', 'progress'],
-  minimal: ['name'],
-  legacy: ['name', 'start', 'end', 'duration', 'progress'],
-};
-const TABLE_COLUMNS: Record<string, string[] | undefined> = {
-  default: undefined,
-  everything: [
-    'id',
-    'name',
-    'type',
-    'status',
-    'start',
-    'end',
-    'duration',
-    'progress',
-    'predecessors',
-    'baselineStart',
-    'baselineEnd',
-    'variance',
-  ],
-  schedule: ['name', 'start', 'end', 'duration'],
-};
+const form = buildOptionsForm(byId('options'), (key, value) => setState(withValue(state, key, value)));
+const code = codePanel(state);
+const changedCount = byId('options-changed');
 
-const WEEK: Record<string, ScaleFormat> = {
-  number: WEEK_FORMATS.number,
-  label: WEEK_FORMATS.label,
-  range: WEEK_FORMATS.range,
-  rangeMonth: WEEK_FORMATS.rangeMonth,
-  numberRange: WEEK_FORMATS.numberRange,
-};
-
-function toOptions(s: State): GanttOptions {
-  const today = new Date();
-  const weekScales: GanttScale[] = [
-    { unit: 'month', format: 'MMMM YYYY' },
-    { unit: 'week', format: WEEK[s.weekFormat] },
-  ];
-  return {
-    viewMode: s.viewMode,
-    scales: s.viewMode === ViewMode.Week ? weekScales : undefined,
-    weekStart: s.weekStart as 0 | 1,
-    initialScroll: s.initialScroll === 'none' ? false : (s.initialScroll as 'auto' | 'today' | 'start'),
-    rowHeight: s.rowHeight,
-    baseline: s.baseline,
-    criticalPath: s.criticalPath,
-    endDateMode: s.inclusive ? 'inclusive' : 'exclusive',
-    gridLines: { major: s.majorDash ? { dash: '4 3', width: 1.5 } : {} },
-    nonWorkingTime: {
-      weekends: s.weekends,
-      holidays: s.holiday
-        ? [{ start: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2), label: 'Holiday' }]
-        : [],
-      workingHours: { start: s.workStart, end: s.workEnd },
-      intensiveHours: s.intensive ? [{ start: 10, end: 12, label: 'Focus' }] : [],
-      style: s.nwStyle as 'shade' | 'hatch' | 'disabled',
-    },
-    bar: { height: `${s.barHeight}%`, radius: s.radius, label: { position: s.label as 'auto' } },
-    milestone: { shape: s.milestone as 'diamond' },
-    groupBar: { style: s.groupStyle as 'summary' },
-    arrows: { radius: s.arrowRadius },
-    stateKey: s.stateKey ? 'playground' : undefined,
-    panel: { columns: PANEL_COLUMNS[s.panelCols] },
-    table: { columns: TABLE_COLUMNS[s.tableCols] },
-  };
+function applyOptions(): void {
+  applied = playgroundOptions(state, new Date());
+  gantt.options = applied;
 }
 
-function apply(): void {
-  const opts = toOptions(state);
-  gantt.options = opts;
-  code.textContent = JSON.stringify(
-    opts,
-    (_k, v: unknown) => (typeof v === 'function' ? `ƒ ${v.name || 'format'}` : v),
-    2,
-  );
+/** Shows `state` everywhere but in the chart: controls, changed count, code and the link. */
+function showState(): void {
+  form.sync(state);
+  changedCount.textContent = String(changedKeys(state).length);
+  code.update(state);
+  const url = new URL(location.href);
+  const setup = encodeState(state);
+  if (setup) url.searchParams.set(SETUP_PARAM, setup);
+  else url.searchParams.delete(SETUP_PARAM);
+  if (url.href !== location.href) history.replaceState(history.state, '', url);
 }
 
-// ── Controls ───────────────────────────────────────────────
-
-type Control =
-  | { kind: 'select'; key: keyof State; label: string; options: [string | number, string][] }
-  | { kind: 'range'; key: keyof State; label: string; min: number; max: number; step?: number }
-  | { kind: 'check'; key: keyof State; label: string };
-
-const sections: [string, Control[]][] = [
-  [
-    'Timeline',
-    [
-      { kind: 'select', key: 'viewMode', label: 'Zoom', options: Object.values(ViewMode).map(v => [v, v]) },
-      {
-        kind: 'select',
-        key: 'weekFormat',
-        label: 'Week label',
-        options: [
-          ['number', 'W52'],
-          ['label', 'Week 52'],
-          ['range', '4–11'],
-          ['rangeMonth', '4–11 Mar'],
-          ['numberRange', 'W52 · 4–11'],
-        ],
-      },
-      {
-        kind: 'select',
-        key: 'weekStart',
-        label: 'Week starts',
-        options: [
-          [1, 'Monday'],
-          [0, 'Sunday'],
-        ],
-      },
-      {
-        kind: 'select',
-        key: 'initialScroll',
-        label: 'Initial scroll',
-        options: [
-          ['auto', 'Auto'],
-          ['today', 'Today'],
-          ['start', 'First task'],
-          ['none', 'None'],
-        ],
-      },
-      { kind: 'check', key: 'majorDash', label: 'Dashed delimiters' },
-      { kind: 'check', key: 'inclusive', label: 'Inclusive end dates' },
-    ],
-  ],
-  [
-    'Non-working time',
-    [
-      { kind: 'check', key: 'weekends', label: 'Weekends' },
-      { kind: 'check', key: 'holiday', label: 'Holiday (in 2 days)' },
-      { kind: 'range', key: 'workStart', label: 'Work from (Hour)', min: 0, max: 12 },
-      { kind: 'range', key: 'workEnd', label: 'Work until (Hour)', min: 12, max: 24 },
-      { kind: 'check', key: 'intensive', label: 'Intensive 10–12' },
-      {
-        kind: 'select',
-        key: 'nwStyle',
-        label: 'Style',
-        options: [
-          ['shade', 'Shade'],
-          ['hatch', 'Hatch'],
-          ['disabled', 'Disabled'],
-        ],
-      },
-    ],
-  ],
-  [
-    'Bars',
-    [
-      { kind: 'range', key: 'rowHeight', label: 'Row height', min: 24, max: 64 },
-      { kind: 'range', key: 'barHeight', label: 'Bar height %', min: 20, max: 100, step: 5 },
-      { kind: 'range', key: 'radius', label: 'Radius', min: 0, max: 16 },
-      {
-        kind: 'select',
-        key: 'label',
-        label: 'Label',
-        options: [
-          ['auto', 'Auto'],
-          ['inside', 'Inside'],
-          ['right', 'Right'],
-          ['left', 'Left'],
-          ['none', 'None'],
-        ],
-      },
-      {
-        kind: 'select',
-        key: 'milestone',
-        label: 'Milestone',
-        options: [
-          ['diamond', 'Diamond'],
-          ['circle', 'Circle'],
-          ['square', 'Square'],
-        ],
-      },
-      {
-        kind: 'select',
-        key: 'groupStyle',
-        label: 'Group bar',
-        options: [
-          ['summary', 'Summary'],
-          ['bar', 'Bar'],
-        ],
-      },
-      { kind: 'range', key: 'arrowRadius', label: 'Arrow corners', min: 0, max: 12 },
-      { kind: 'check', key: 'baseline', label: 'Baseline' },
-      { kind: 'check', key: 'criticalPath', label: 'Critical path' },
-    ],
-  ],
-  [
-    'Columns',
-    [
-      {
-        kind: 'select',
-        key: 'panelCols',
-        label: 'Panel',
-        options: [
-          ['default', 'Name · Start · End · %'],
-          ['status', 'Name · Status · Start · %'],
-          ['minimal', 'Name only'],
-          ['legacy', '1.x (5 columns)'],
-        ],
-      },
-      {
-        kind: 'select',
-        key: 'tableCols',
-        label: 'Table view',
-        options: [
-          ['default', 'Default (8, + baseline)'],
-          ['everything', 'Every built-in'],
-          ['schedule', 'Schedule only'],
-        ],
-      },
-    ],
-  ],
-  ['State', [{ kind: 'check', key: 'stateKey', label: 'Remember layout' }]],
-];
-
-function renderControls(): void {
-  controls.replaceChildren();
-  for (const [title, items] of sections) {
-    const h = document.createElement('h3');
-    h.textContent = title;
-    controls.appendChild(h);
-    for (const c of items) {
-      const label = document.createElement('label');
-      label.append(c.label);
-      const value = state[c.key];
-      if (c.kind === 'select') {
-        const sel = document.createElement('select');
-        for (const [v, text] of c.options) sel.add(new Option(text, String(v), false, String(v) === String(value)));
-        sel.addEventListener('change', () => update(c.key, typeof value === 'number' ? Number(sel.value) : sel.value));
-        label.appendChild(sel);
-      } else if (c.kind === 'range') {
-        const out = document.createElement('output');
-        out.textContent = String(value);
-        const input = Object.assign(document.createElement('input'), {
-          type: 'range',
-          min: c.min,
-          max: c.max,
-          step: c.step ?? 1,
-          value,
-        });
-        input.addEventListener('input', () => {
-          out.textContent = input.value;
-          update(c.key, Number(input.value));
-        });
-        label.append(input, out);
-      } else {
-        const input = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!value });
-        input.addEventListener('change', () => update(c.key, input.checked));
-        label.appendChild(input);
-      }
-      controls.appendChild(label);
-    }
-  }
+function setState(next: PlaygroundState): void {
+  if (next === state) return;
+  state = next;
+  showState();
+  applyOptions();
 }
 
-function update<K extends keyof State>(key: K, value: State[K]): void {
-  state = { ...state, [key]: value };
-  apply();
-}
-
-// Keep the zoom select in sync with toolbar / keyboard zoom
-gantt.addEventListener('view-mode-change', e => {
-  if (state.viewMode === e.detail.viewMode) return;
-  state = { ...state, viewMode: e.detail.viewMode };
-  renderControls();
-  apply();
+byId('options-reset').addEventListener('click', () => setState({ ...PLAYGROUND_DEFAULTS }));
+byId('today').addEventListener('click', () => gantt.scrollToToday());
+copyButton(byId<HTMLButtonElement>('copy-link'), () => location.href, {
+  icon: 'link',
+  doneMessage: 'Link to this setup copied to the clipboard',
 });
+
+// ── Events ───────────────────────────────────────────────────
+
+const log = eventLog();
+const taskName = (id: string) => gantt.tasks.find((t: GanttTask) => t.id === id)?.name ?? id;
+const days = (n: number) => `${n > 0 ? '+' : ''}${n} day${Math.abs(n) === 1 ? '' : 's'}`;
 
 gantt.addEventListener('task-dragged', e => {
-  log.textContent = `moved ${e.detail.taskId} by ${e.detail.daysMoved} day(s)`;
+  log.add('task-dragged', `${taskName(e.detail.taskId)} · ${days(e.detail.daysMoved)}`);
 });
 gantt.addEventListener('task-resized', e => {
-  log.textContent = `resized ${e.detail.taskId} (${e.detail.handle}) by ${e.detail.daysDelta} day(s)`;
+  log.add('task-resized', `${taskName(e.detail.taskId)} · ${e.detail.handle} edge ${days(e.detail.daysDelta)}`);
+});
+gantt.addEventListener('selection-change', e => {
+  const ids = e.detail.selectedIds;
+  log.add('selection-change', ids.length ? ids.map(taskName).join(', ') : 'none');
 });
 gantt.addEventListener('state-change', e => {
-  log.textContent = `state: ${e.detail.view} · panel ${e.detail.panelWidth ?? '—'}px · ${e.detail.viewMode}`;
+  const s = e.detail;
+  const panel = s.panelCollapsed ? 'collapsed' : s.panelWidth != null ? `${Math.round(s.panelWidth)} px` : 'default';
+  log.add('state-change', `view ${s.view ?? 'split'} · zoom ${s.viewMode ?? '—'} · panel ${panel}`);
+});
+// The toolbar, the + / − keys and a restored layout change the zoom: keep the Zoom control in step
+gantt.addEventListener('view-mode-change', e => {
+  log.add('view-mode-change', e.detail.viewMode);
+  const next = withValue(state, 'viewMode', e.detail.viewMode);
+  if (next.viewMode === state.viewMode) return; // same zoom, or a custom level the control lacks
+  const runsOurOptions = gantt.options === applied;
+  state = next;
+  showState();
+  // Re-derive the options (the week tiers belong to the Week zoom) unless a script replaced them
+  if (runsOurOptions) applyOptions();
 });
 
-const dark = document.getElementById('dark')!;
-dark.addEventListener('click', () => {
-  const on = dark.getAttribute('aria-pressed') !== 'true';
-  dark.setAttribute('aria-pressed', String(on));
-  gantt.darkMode = on;
-});
-document.getElementById('reset')!.addEventListener('click', () => {
-  state = { ...defaults };
-  renderControls();
-  apply();
-});
-
-renderControls();
-apply();
+showState();
+applyOptions();

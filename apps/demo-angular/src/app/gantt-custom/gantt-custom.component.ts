@@ -1,79 +1,20 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { GantryComponent, type GanttTask, GanttBarBase, provideGanttBar, TaskType } from 'ngx-gantry';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { GantryComponent, type GanttTask, provideGanttBar, TaskType } from 'ngx-gantry';
 import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
+import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';
+import { EpicBarComponent } from './epic-bar.component';
 
-// ─── Custom "Epic" bar component ─────────────────────────────
-// Extends GanttBarBase, which declares the `ctx` input (row, geometry, core visual, theme, state).
-@Component({
-  selector: 'g[epicBar]',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { style: 'cursor: pointer;' },
-  template: `
-    <!-- Thick rounded bar with gradient-like darker left edge -->
-    <svg:rect
-      [attr.x]="geo().barX"
-      [attr.y]="geo().y + 5"
-      [attr.width]="geo().barWidth"
-      [attr.height]="geo().height - 10"
-      rx="6"
-      [attr.fill]="task().barColor ?? '#6366F1'"
-      opacity="0.9"
-    />
-    <!-- Progress fill -->
-    @if (progress() > 0) {
-      <svg:rect
-        [attr.x]="geo().barX"
-        [attr.y]="geo().y + 5"
-        [attr.width]="(geo().barWidth * progress()) / 100"
-        [attr.height]="geo().height - 10"
-        rx="6"
-        fill="rgba(255,255,255,0.25)"
-      />
-    }
-    <!-- Lightning icon + label -->
-    <svg:text
-      [attr.x]="geo().barX + 8"
-      [attr.y]="geo().y + geo().height / 2"
-      [attr.fill]="'#fff'"
-      font-size="12"
-      font-weight="600"
-      dominant-baseline="central"
-      style="user-select:none;pointer-events:none"
-    >
-      ⚡ {{ task().name }}
-    </svg:text>
-    <!-- Progress badge -->
-    @if (geo().barWidth > 80) {
-      <svg:text
-        [attr.x]="geo().barX + geo().barWidth - 6"
-        [attr.y]="geo().y + geo().height / 2"
-        [attr.fill]="'rgba(255,255,255,0.7)'"
-        font-size="10"
-        text-anchor="end"
-        dominant-baseline="central"
-        style="user-select:none;pointer-events:none"
-      >
-        {{ progress() }}%
-      </svg:text>
-    }
-  `,
-})
-export class EpicBarComponent extends GanttBarBase {
-  protected readonly geo = computed(() => this.ctx().geometry);
-  protected readonly task = computed(() => this.ctx().row.task);
-  protected readonly progress = computed(() => this.task().progress ?? 0);
-}
-
-// ─── Demo tasks that use barType: 'epic' ─────────────────────
+// ─── Demo tasks: the epics use barType: 'epic' ─────────────────
 const d = (iso: string) => new Date(iso);
 
+// Epic colours carry white text (AA contrast)
 const TASKS: GanttTask[] = [
   {
     id: 'e1',
     name: 'Authentication epic',
     barType: 'epic',
-    barColor: '#6366F1',
+    barColor: '#4f46e5',
     start: d('2026-01-05'),
     end: d('2026-03-01'),
     progress: 80,
@@ -82,7 +23,7 @@ const TASKS: GanttTask[] = [
     id: 'e2',
     name: 'Payments epic',
     barType: 'epic',
-    barColor: '#EC4899',
+    barColor: '#be185d',
     start: d('2026-02-15'),
     end: d('2026-05-01'),
     progress: 35,
@@ -91,7 +32,7 @@ const TASKS: GanttTask[] = [
     id: 'e3',
     name: 'Reporting epic',
     barType: 'epic',
-    barColor: '#F59E0B',
+    barColor: '#b45309',
     start: d('2026-04-01'),
     end: d('2026-07-01'),
     progress: 10,
@@ -135,74 +76,58 @@ const TASKS: GanttTask[] = [
     type: TaskType.Milestone,
     start: d('2026-03-31'),
     end: d('2026-03-31'),
-    barColor: '#F59E0B',
+    barColor: '#b45309',
   },
 ];
+
+const EPICS = TASKS.filter(t => t.barType === 'epic').length;
 
 @Component({
   selector: 'app-gantt-custom',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent],
+  imports: [GantryComponent, ExampleHeadComponent, ExampleUsageComponent],
   // Charts inside this page resolve barType 'epic' to EpicBarComponent; other pages don't see it
   providers: [provideGanttBar({ type: 'epic', component: EpicBarComponent })],
   template: `
-    <div class="custom-bar">
-      <span class="custom-title">Custom bar type: <code>barType: 'epic'</code></span>
-      <span class="custom-desc"> EpicBarComponent provided for this page with provideGanttBar() </span>
+    <header appExampleHead="custom-bar"></header>
+
+    <div class="gs-card">
+      <div class="gs-card-head gs-toolbar">
+        <div class="gs-seg" role="group" aria-label="Bars of the epics">
+          <button type="button" class="gs-seg-btn" [attr.aria-pressed]="epic()" (click)="epic.set(true)">
+            barType: 'epic'
+          </button>
+          <button type="button" class="gs-seg-btn" [attr.aria-pressed]="!epic()" (click)="epic.set(false)">
+            Built-in bars
+          </button>
+        </div>
+        <span class="gs-pill">{{ epics }} epics</span>
+      </div>
+
+      <gantry
+        class="gs-chart ex-chart"
+        [series]="tasks()"
+        [options]="{ viewMode: 'Month', rowHeight: 44, showToday: true }"
+        [darkMode]="theme.isDark()"
+        showToolbar
+        showLegend
+      />
     </div>
 
-    <gantry
-      [series]="tasks"
-      [options]="{ viewMode: 'Month', rowHeight: 44, showToday: true }"
-      [showToolbar]="true"
-      [darkMode]="theme.mode()"
-      [showLegend]="true"
-    />
+    <app-example-usage path="custom-bar" />
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
-      }
-      .custom-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-shrink: 0;
-        padding: 9px 14px;
-        background: hsl(var(--card));
-        border-bottom: 1px solid hsl(var(--border));
-      }
-      .custom-title {
-        font-size: 13px;
-        font-weight: 600;
-        color: hsl(var(--primary));
-      }
-      .custom-title code {
-        font-family: var(--app-font-mono);
-        background: hsl(var(--muted));
-        padding: 1px 6px;
-        border-radius: var(--app-radius-sm);
-        font-size: 12px;
-      }
-      .custom-desc {
-        font-family: var(--app-font-mono);
-        font-size: 11px;
-        color: hsl(var(--muted-fg));
-      }
-      gantry {
-        flex: 1;
-        min-height: 0;
-      }
-    `,
-  ],
+  styles: [EXAMPLE_STYLES],
 })
 export class GanttCustomComponent {
   protected readonly theme = inject(AppThemeService);
+  protected readonly epics = EPICS;
+
+  /** Draw the epics with EpicBarComponent, or switch them back to the built-in bars. */
+  protected readonly epic = signal(true);
 
   /** The template plan moved so today sits inside it */
-  readonly tasks = anchorToToday(TASKS).tasks;
+  private readonly plan = anchorToToday(TASKS).tasks;
+  protected readonly tasks = computed(() =>
+    this.epic() ? this.plan : this.plan.map(t => (t.barType === 'epic' ? { ...t, barType: undefined } : t)),
+  );
 }

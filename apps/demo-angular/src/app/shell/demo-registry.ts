@@ -1,48 +1,30 @@
-// ─────────────────────────────────────────────────────────────
-//  gantry-demo · shell/demo-registry.ts
-//
-//  Single list of demos surfaced in the IDE-style sidebar and the
-//  "usage" docs panel. Add a demo here + a matching route in
-//  app.routes.ts — the shell picks it up automatically.
-// ─────────────────────────────────────────────────────────────
+// The example pages of the site: each one is a route (app.routes.ts) listed on /examples. The
+// header imports EXAMPLES to keep "Examples" active on these routes.
 
-export const PACKAGE_NAME = 'ngx-gantry';
-export const INSTALL_CMD = 'npm i ngx-gantry';
-export const REPO_URL = 'https://github.com/ErlonRr/angular-gantt';
-export const NPM_URL = 'https://www.npmjs.com/package/ngx-gantry';
-export const DOCS_URL = 'https://github.com/ErlonRr/angular-gantt#readme';
-
-export interface DemoEntry {
-  /** Route path (without leading slash) */
+export interface ExampleEntry {
+  /** Route path, without the leading slash. */
   path: string;
-  /** Sidebar label */
-  label: string;
-  /** One-line description shown under the label */
+  title: string;
+  /** One line, under the title on the /examples card. */
   description: string;
-  /** Glyph shown in the leading badge */
-  icon: string;
-  /** Grouping bucket */
-  category: DemoCategory;
-  /** Longer "what this shows" blurb for the usage panel */
+  /** The options and APIs the example is about. */
+  tags: readonly string[];
+  /** The lead of the example page: one line (the chart below must start in the first viewport). */
   blurb: string;
-  /** Copy-pasteable usage snippet */
+  /** File name shown on the usage snippet. */
+  file: string;
+  /** Copy-pasteable usage snippet. */
   usage: string;
 }
 
-export type DemoCategory = 'Showcase' | 'Core' | 'Performance' | 'Extensibility';
-
-/** Category display order in the sidebar */
-export const DEMO_CATEGORY_ORDER: DemoCategory[] = ['Showcase', 'Core', 'Performance', 'Extensibility'];
-
-export const DEMOS: DemoEntry[] = [
+export const EXAMPLES: readonly ExampleEntry[] = [
   {
     path: 'roadmap',
-    label: 'Product roadmap',
-    description: 'Squads · milestones · custom columns',
-    icon: '★',
-    category: 'Showcase',
-    blurb:
-      'Groups (squads), release milestones, dependencies and baselines, plus rich custom panel columns (owner avatar + status badge) and a live EN/IT locale switch.',
+    title: 'Product roadmap',
+    description: 'Squads as groups, release milestones and custom panel columns.',
+    tags: ['TaskType.Group', 'cellTemplate', 'baseline', 'locale', 'labels'],
+    blurb: 'Squads as groups, release milestones, and Owner and Status columns from templates.',
+    file: 'roadmap.component.ts',
     usage: `import { Component, computed, viewChild, type TemplateRef } from '@angular/core';
 import { GantryComponent, type ColumnDef, type ColumnCellContext } from 'ngx-gantry';
 
@@ -72,12 +54,11 @@ export class Roadmap {
   },
   {
     path: 'demo',
-    label: 'Project board',
-    description: 'Dependencies · baseline · critical path',
-    icon: '▦',
-    category: 'Core',
-    blurb:
-      'The everyday board: task tree with groups & milestones, FS/FF/SS/SF dependencies with lag, baselines, the critical path, annotations, drag & resize, selection, and a two-way [(viewMode)] zoom level.',
+    title: 'Project board',
+    description: 'Dependencies with lag, baselines, the critical path and selection.',
+    tags: ['dependency', 'criticalPath', 'baseline', '[(viewMode)]', 'selectionChange'],
+    blurb: 'Dependencies with lag, baselines, the critical path, selection and two-way zoom.',
+    file: 'board.component.ts',
     usage: `import { GantryComponent, type GanttTask, DependencyType, provideGantt } from 'ngx-gantry';
 
 // main.ts (optional: built-in bars need no provider) — defaults for every chart
@@ -99,38 +80,39 @@ zoom = signal<string | undefined>('Month');
   },
   {
     path: 'lazy',
-    label: 'Lazy load',
-    description: '120 tasks · paginated datasource',
-    icon: '⚡',
-    category: 'Performance',
-    blurb:
-      'A paginated data source (the shared core PagedLoader, exposed as signals) with auto/manual "load more" — fetches rows on demand instead of loading everything up front.',
-    usage: `import { createGanttDataSource } from 'ngx-gantry';
+    title: 'Lazy loading',
+    description: '120 tasks fetched 25 at a time from a paged data source.',
+    tags: ['GanttDataSource', 'pageSize', 'retries', 'loadError'],
+    blurb: 'Rows load 25 at a time as you scroll. A failed page is retried, then offers Retry.',
+    file: 'tasks.component.ts',
+    usage: `import { GanttDataSource } from 'ngx-gantry';
 
-ds = createGanttDataSource({  // same as new GanttDataSource({ … })
+ds = new GanttDataSource({  // or createGanttDataSource({ … })
   fetcher: (page, size) =>
     fetch('/api/tasks?page=' + page + '&size=' + size).then(r => r.json()),
   pageSize: 25,  // a shorter page is the last one
   retries: 2,    // then ds.error() is set until ds.retry()
 });
 
+// signals: ds.items(), ds.loadedCount(), ds.isLoading(), ds.hasMore(), ds.error()
+// methods: ds.loadNext(), ds.retry(), ds.reset()
+
 // template — the next page loads as the last rows scroll into view
 <gantry [dataSource]="ds" (loadError)="report($event.error)" />`,
   },
   {
     path: 'custom-bar',
-    label: 'Custom bars',
-    description: 'provideGanttBar · custom epic bars',
-    icon: '◆',
-    category: 'Extensibility',
-    blurb:
-      'Plug any Angular component in as a bar type with provideGanttBar — here an "epic" bar drawn with your own SVG, provided for this page only and selected per task with barType.',
+    title: 'Custom bars',
+    description: 'Your own Angular component draws a bar type.',
+    tags: ['provideGanttBar', 'GanttBarBase', 'barType'],
+    blurb: 'provideGanttBar turns your own Angular component into a bar type, picked per task.',
+    file: 'plan.component.ts',
     usage: `import { GanttBarBase, provideGanttBar } from 'ngx-gantry';
 
 @Component({
   selector: 'g[epicBar]',
   template: \`<svg:rect [attr.x]="geo().barX" [attr.y]="geo().y + 5"
-    [attr.width]="geo().barWidth" [attr.height]="geo().height - 10" rx="6" fill="#6366F1" />\`,
+    [attr.width]="geo().barWidth" [attr.height]="geo().height - 10" rx="6" fill="#4f46e5" />\`,
 })
 export class EpicBar extends GanttBarBase {
   // GanttBarBase declares the ctx input: row, geometry, core visual, theme, state
@@ -148,8 +130,9 @@ export class PlanPage {
   },
 ];
 
-/** Resolve the active demo from a router URL (e.g. "/roadmap"). */
-export function demoForUrl(url: string): DemoEntry | undefined {
-  const path = url.split('?')[0].split('#')[0].replace(/^\//, '');
-  return DEMOS.find(d => d.path === path);
+/** The example of a route path ("roadmap"). */
+export function exampleAt(path: string): ExampleEntry {
+  const found = EXAMPLES.find(e => e.path === path);
+  if (!found) throw new Error(`No example at /${path}`);
+  return found;
 }

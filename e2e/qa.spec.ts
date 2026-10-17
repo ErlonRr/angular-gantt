@@ -15,8 +15,14 @@ const PAGES = [
   { name: 'angular-custom-bar', url: `http://localhost:${TARGETS.angular.port}/custom-bar` },
 ];
 
+/** Rows of the task-list grid, mounted or not (`aria-rowcount`; rows are windowed, only those in view exist). */
+function gridRows(chart: Chart): Promise<number> {
+  return chart.evalRoot(root => Number(root.querySelector('[aria-rowcount]')?.getAttribute('aria-rowcount') ?? 0));
+}
+
 /** Append generated tasks to the Web Component so virtual scrolling and scroll sync get exercised. */
 async function addRows(chart: Chart, n: number): Promise<void> {
+  const before = await gridRows(chart);
   await chart.host().evaluate((el, count) => {
     const g = el as HTMLElement & { tasks: unknown[] };
     const base = new Date();
@@ -29,7 +35,7 @@ async function addRows(chart: Chart, n: number): Promise<void> {
     }));
     g.tasks = [...g.tasks, ...extra];
   }, n);
-  await expect(chart.get(SEL.row).nth(20)).toBeAttached();
+  await expect.poll(() => gridRows(chart)).toBeGreaterThanOrEqual(before + n);
 }
 
 /** `GANTRY_E2E_OPTIONS='{"viewMode":"Day"}'` merges a configuration into every Web Component target. */

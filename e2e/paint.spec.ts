@@ -11,7 +11,11 @@ import { SCENARIOS, paintFixture, type PaintFixture, type Scenario } from './pai
 type Target = 'vanilla' | 'angular';
 const TARGET_LIST: readonly Target[] = ['vanilla', 'angular'];
 
-/** Replace the playground's element with a fresh one (no playground listeners or state) fed by the fixture. */
+/**
+ * Replace the playground's element with a fresh one (no playground listeners or state) fed by the
+ * fixture, in the same fixed box as the Angular `/fixture` route (1150 × 700 at the top left), so
+ * both bindings window the same rows and columns.
+ */
 async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
   await chart.open(`http://localhost:${TARGETS.vanilla.port}/`);
   await chart.host().evaluate((old, f) => {
@@ -26,7 +30,16 @@ async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
     const byDay = new Map(f.highlight.map(h => [dayKey(new Date(h.day)), h]));
     const el = document.createElement('gantry-element') as HTMLElement & Record<string, unknown>;
     el.id = old.id;
-    el.className = old.className;
+    for (const [prop, value] of [
+      ['position', 'fixed'],
+      ['top', '0'],
+      ['left', '0'],
+      ['z-index', '100'],
+      ['width', '1150px'],
+      ['height', '700px'],
+    ]) {
+      el.style.setProperty(prop, value);
+    }
     el['darkMode'] = f.darkMode;
     el['showToolbar'] = true;
     el['enableDrag'] = true;

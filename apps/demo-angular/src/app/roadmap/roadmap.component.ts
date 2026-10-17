@@ -1,11 +1,6 @@
-// ─────────────────────────────────────────────────────────────
-//  gantry-demo · roadmap/roadmap.component.ts
-//
-//  Showcase demo: a product roadmap for a fictional SaaS ("Nimbus").
-//  Exercises groups (squads), dependencies (FS/SS + lag), baselines,
-//  release milestones, progress — and CUSTOM LEFT-PANEL COLUMNS
-//  (Owner avatar + Status badge) rendered via `cellTemplate`.
-// ─────────────────────────────────────────────────────────────
+// Example: a product roadmap for a fictional SaaS ("Nimbus"). Groups (squads), dependencies
+// (FS / SS with lag), baselines, release milestones, progress, and custom panel columns (owner
+// avatar, status badge) drawn by Angular templates through `cellTemplate`.
 
 import {
   ChangeDetectionStrategy,
@@ -30,6 +25,7 @@ import {
 } from 'ngx-gantry';
 import { anchorToToday } from '@gantry/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
+import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';
 
 // ── Italian translation (partial override — the rest falls back to EN) ──
 const IT_LABELS: Partial<GanttLabels> = {
@@ -106,25 +102,27 @@ interface Owner {
   initials: string;
   color: string;
 }
+// White initials on these fills pass AA (≥ 5:1) in both themes
 const OWNERS: Record<string, Owner> = {
-  ale: { name: 'Alessia M.', initials: 'AM', color: '#6366F1' },
-  tom: { name: 'Tomás R.', initials: 'TR', color: '#10B981' },
-  kai: { name: 'Kai N.', initials: 'KN', color: '#EC4899' },
-  liv: { name: 'Liv B.', initials: 'LB', color: '#F59E0B' },
-  sam: { name: 'Sam O.', initials: 'SO', color: '#0EA5E9' },
+  ale: { name: 'Alessia M.', initials: 'AM', color: '#4f46e5' },
+  tom: { name: 'Tomás R.', initials: 'TR', color: '#047857' },
+  kai: { name: 'Kai N.', initials: 'KN', color: '#be185d' },
+  liv: { name: 'Liv B.', initials: 'LB', color: '#b45309' },
+  sam: { name: 'Sam O.', initials: 'SO', color: '#0369a1' },
 };
 
 // ── Status ────────────────────────────────────────────────────
+// Colours: the `st-<id>` classes below (light and dark pairs, AA contrast)
 type StatusId = 'done' | 'on-track' | 'at-risk';
 interface Status {
+  id: StatusId;
   label: string;
-  color: string;
-  bg: string;
+  labelIt: string;
 }
 const STATUS: Record<StatusId, Status> = {
-  done: { label: 'Done', color: '#059669', bg: 'rgba(16,185,129,0.15)' },
-  'on-track': { label: 'On track', color: '#4f46e5', bg: 'rgba(99,102,241,0.15)' },
-  'at-risk': { label: 'At risk', color: '#d97706', bg: 'rgba(245,158,11,0.16)' },
+  done: { id: 'done', label: 'Done', labelIt: 'Completata' },
+  'on-track': { id: 'on-track', label: 'On track', labelIt: 'In linea' },
+  'at-risk': { id: 'at-risk', label: 'At risk', labelIt: 'A rischio' },
 };
 
 // ── Roadmap data ──────────────────────────────────────────────
@@ -141,7 +139,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-01-05'),
     end: d('2026-07-15'),
     progress: 52,
-    barColor: '#6366F1',
+    barColor: '#4f46e5',
     data: m('ale', 'on-track'),
   },
   {
@@ -183,7 +181,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-06-15'),
     end: d('2026-06-15'),
     dependency: 'plat-3',
-    barColor: '#6366F1',
+    barColor: '#4f46e5',
     data: m('ale', 'on-track'),
   },
 
@@ -195,7 +193,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-02-01'),
     end: d('2026-08-20'),
     progress: 34,
-    barColor: '#EC4899',
+    barColor: '#be185d',
     data: m('kai', 'on-track'),
   },
   {
@@ -236,7 +234,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-07-20'),
     end: d('2026-07-20'),
     dependency: 'grow-3',
-    barColor: '#EC4899',
+    barColor: '#be185d',
     data: m('kai', 'on-track'),
   },
 
@@ -248,7 +246,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-03-01'),
     end: d('2026-09-15'),
     progress: 20,
-    barColor: '#0EA5E9',
+    barColor: '#0369a1',
     data: m('sam', 'on-track'),
   },
   {
@@ -279,7 +277,7 @@ const TASKS: GanttTask[] = [
     start: d('2026-08-31'),
     end: d('2026-08-31'),
     dependency: 'mob-2',
-    barColor: '#0EA5E9',
+    barColor: '#0369a1',
     data: m('sam', 'on-track'),
   },
 ];
@@ -287,175 +285,136 @@ const TASKS: GanttTask[] = [
 @Component({
   selector: 'app-roadmap',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent],
+  imports: [GantryComponent, ExampleHeadComponent, ExampleUsageComponent],
   template: `
-    <div class="rm-bar app-dotted-grid">
-      <div class="rm-head">
-        <span class="rm-kicker">// showcase</span>
-        <h1 class="rm-title">
-          Nimbus — Product Roadmap <span>{{ planYears }}</span>
-        </h1>
-        <p class="rm-sub">3 squads · dependencies · baselines · release milestones · custom panel columns</p>
+    <header appExampleHead="roadmap"></header>
+
+    <div class="gs-card">
+      <div class="gs-card-head gs-toolbar">
+        <p class="gs-card-title">Nimbus {{ planYears }}</p>
+        <span class="gs-pill">{{ squads }} squads · {{ tasks.length }} rows</span>
+        <span class="gs-spacer"></span>
+        <ul class="rm-legend" aria-label="Status">
+          @for (s of statuses; track s.id) {
+            <li><span class="rm-dot" [class]="'st-' + s.id"></span>{{ lang() === 'it' ? s.labelIt : s.label }}</li>
+          }
+        </ul>
+        <div class="gs-seg" role="group" aria-label="Chart language">
+          <button type="button" class="gs-seg-btn" [attr.aria-pressed]="lang() === 'en'" (click)="lang.set('en')">
+            English
+          </button>
+          <button
+            type="button"
+            class="gs-seg-btn"
+            lang="it"
+            [attr.aria-pressed]="lang() === 'it'"
+            (click)="lang.set('it')"
+          >
+            Italiano
+          </button>
+        </div>
       </div>
-      <div class="rm-legend">
-        <span class="lg"><i class="dot" style="background:#059669"></i>Done</span>
-        <span class="lg"><i class="dot" style="background:#4f46e5"></i>On track</span>
-        <span class="lg"><i class="dot" style="background:#d97706"></i>At risk</span>
-        <span class="rm-lang">
-          <button type="button" [class.on]="lang() === 'en'" (click)="lang.set('en')">EN</button>
-          <button type="button" [class.on]="lang() === 'it'" (click)="lang.set('it')">IT</button>
-        </span>
-      </div>
+
+      <!-- Custom panel cells (columns' cellTemplate) -->
+      <ng-template #ownerCell let-row>
+        @if (owner(row); as o) {
+          <span class="rm-owner">
+            <span class="rm-avatar" aria-hidden="true" [style.background-color]="o.color">{{ o.initials }}</span>
+            <span class="rm-owner-name">{{ o.name }}</span>
+          </span>
+        }
+      </ng-template>
+
+      <ng-template #statusCell let-row>
+        @if (status(row); as s) {
+          <span class="rm-badge" [class]="'st-' + s.id">{{ lang() === 'it' ? s.labelIt : s.label }}</span>
+        }
+      </ng-template>
+
+      <gantry
+        class="gs-chart ex-chart"
+        [series]="tasks"
+        [columns]="columns()"
+        [options]="opts()"
+        [darkMode]="theme.isDark()"
+        showToolbar
+        enableDrag
+        enableResize
+        tooltipEnabled
+        showLegend
+      />
     </div>
 
-    <!-- Custom left-panel column templates (rendered via cellTemplate) -->
-    <ng-template #ownerCell let-row>
-      @if (owner(row); as o) {
-        <span class="cell-owner">
-          <span class="avatar" [style.background]="o.color">{{ o.initials }}</span>
-          <span class="owner-name">{{ o.name }}</span>
-        </span>
-      }
-    </ng-template>
-
-    <ng-template #statusCell let-row>
-      @if (status(row); as s) {
-        <span class="badge" [style.color]="s.color" [style.background]="s.bg">{{ s.label }}</span>
-      }
-    </ng-template>
-
-    <gantry
-      [series]="tasks"
-      [columns]="columns()"
-      [options]="opts()"
-      [darkMode]="theme.mode()"
-      [showToolbar]="true"
-      [enableDrag]="true"
-      [enableResize]="true"
-      [tooltipEnabled]="true"
-      [showLegend]="true"
-    />
+    <app-example-usage path="roadmap" />
   `,
   styles: [
+    EXAMPLE_STYLES,
     `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
+      /* Status colours: light / dark pairs (the page theme sets color-scheme), AA on their tints */
+      .st-done {
+        --st-fg: light-dark(#047857, #6ee7b7);
+        --st-bg: light-dark(#d1fae5, rgb(16 185 129 / 0.16));
       }
-
-      .rm-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 20px;
-        padding: 14px 20px;
-        flex-shrink: 0;
-        background: hsl(var(--card));
-        border-bottom: 1px solid hsl(var(--border));
+      .st-on-track {
+        --st-fg: light-dark(#4338ca, #a5b4fc);
+        --st-bg: light-dark(#e0e7ff, rgb(99 102 241 / 0.2));
       }
-      .rm-kicker {
-        font-family: var(--app-font-mono);
-        font-size: 11px;
-        font-weight: 600;
-        color: hsl(var(--primary));
-        letter-spacing: 0.4px;
-      }
-      .rm-title {
-        font-size: 19px;
-        font-weight: 700;
-        color: hsl(var(--fg));
-        margin-top: 2px;
-      }
-      .rm-title span {
-        color: hsl(var(--primary));
-      }
-      .rm-sub {
-        font-size: 12px;
-        color: hsl(var(--muted-fg));
-        margin-top: 3px;
+      .st-at-risk {
+        --st-fg: light-dark(#92400e, #fcd34d);
+        --st-bg: light-dark(#fef3c7, rgb(245 158 11 / 0.16));
       }
       .rm-legend {
         display: flex;
-        gap: 14px;
-        align-items: center;
+        flex-wrap: wrap;
+        gap: 4px 14px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        color: var(--gs-muted);
+        font-size: 14px;
       }
-      .rm-legend .lg {
+      .rm-legend li {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        font-size: 11.5px;
-        color: hsl(var(--muted-fg));
-        font-weight: 500;
       }
-      .rm-legend .dot {
-        width: 8px;
-        height: 8px;
+      .rm-dot {
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
-        display: inline-block;
+        background: var(--st-fg);
       }
-      .rm-lang {
-        display: inline-flex;
-        gap: 2px;
-        margin-left: 6px;
-      }
-      .rm-lang button {
-        padding: 2px 8px;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-        border: 1px solid hsl(var(--border));
-        background: hsl(var(--muted));
-        color: hsl(var(--muted-fg));
-        border-radius: var(--app-radius-sm);
-      }
-      .rm-lang button.on {
-        background: hsl(var(--primary));
-        border-color: hsl(var(--primary));
-        color: hsl(var(--primary-fg));
-      }
-
-      /* Custom cells */
-      .cell-owner {
+      .rm-owner {
         display: inline-flex;
         align-items: center;
         gap: 7px;
-        overflow: hidden;
-        width: 100%;
+        min-width: 0;
+        max-width: 100%;
       }
-      .avatar {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+      .rm-avatar {
+        display: inline-grid;
+        flex: none;
+        place-items: center;
         width: 22px;
         height: 22px;
-        flex-shrink: 0;
         border-radius: 50%;
-        color: #fff;
-        font-size: 9.5px;
+        color: #ffffff;
+        font-size: 10px;
         font-weight: 700;
-        letter-spacing: -0.3px;
       }
-      .owner-name {
-        font-size: 12px;
-        color: hsl(var(--fg));
+      .rm-owner-name {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .badge {
+      .rm-badge {
         padding: 2px 9px;
         border-radius: 999px;
-        font-size: 10.5px;
-        font-weight: 700;
-        letter-spacing: 0.2px;
+        background: var(--st-bg);
+        color: var(--st-fg);
+        font-size: 12px;
+        font-weight: 650;
         white-space: nowrap;
-      }
-
-      gantry {
-        flex: 1;
-        min-height: 0;
       }
     `,
   ],
@@ -474,6 +433,9 @@ export class RoadmapComponent {
 
   private readonly ownerTpl = viewChild<TemplateRef<ColumnCellContext>>('ownerCell');
   private readonly statusTpl = viewChild<TemplateRef<ColumnCellContext>>('statusCell');
+
+  protected readonly statuses = Object.values(STATUS);
+  protected readonly squads = this.tasks.filter(t => t.type === TaskType.Group).length;
 
   /** UI language toggle (EN default). */
   readonly lang = signal<'en' | 'it'>('en');

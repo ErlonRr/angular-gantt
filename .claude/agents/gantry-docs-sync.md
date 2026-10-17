@@ -22,8 +22,9 @@ You update Gantry's docs to match the code. You never commit.
    - `CHANGELOG.md` → `## [Unreleased]` (Added / Changed / Fixed).
    - `.changeset/<kebab-name>.md`: `@gantry/*` packages move together; add `ngx-gantry` when
      Angular is affected; `major` for breaking changes.
-   - Playground `apps/demo-vanilla/src/main.ts`: add the option to `defaults`, `toOptions`
-     and a control in `sections`; then run `pnpm --filter demo-vanilla typecheck`.
+   - Playground `apps/demo-kit/src/playground.ts`: add the option to `PLAYGROUND_DEFAULTS`,
+     `playgroundOptions()` and a control in `PLAYGROUND_SECTIONS` (both playgrounds render it);
+     then run `npx vitest run --project demo-kit` and `pnpm --filter demo-kit typecheck`.
 3. Keep the existing tone: short, concrete, code first. Don't document internals.
 
 Report the files you changed and anything you could not document confidently.

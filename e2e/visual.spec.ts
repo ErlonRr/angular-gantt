@@ -7,6 +7,34 @@ test.skip(!process.env['GANTRY_E2E_VISUAL'], 'screenshot baselines run in the Pl
 
 const VIEW_MODES = ['Hour', 'Day', 'Week', 'Month', 'Quarter', 'Year'] as const;
 
+/**
+ * Every baseline is the chart in this box at the top left of the page, whatever the demo page
+ * around it looks like: a redesign of the page doesn't touch the baselines, a change of the chart
+ * does. The rule is in the page before its scripts run, so the chart is born at this size (a
+ * resize after the first render would move its scroll position) and sits on whole pixels.
+ */
+const BOX_CSS =
+  'gantry-element, gantry { position: fixed !important; top: 0 !important; left: 0 !important; ' +
+  'z-index: 100 !important; width: 1100px !important; height: 640px !important; }';
+
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(css => {
+    const add = () => {
+      const style = document.createElement('style');
+      style.textContent = css;
+      (document.head ?? document.documentElement).append(style);
+    };
+    if (document.documentElement) add();
+    else {
+      new MutationObserver((_, observer) => {
+        if (!document.documentElement) return;
+        observer.disconnect();
+        add();
+      }).observe(document, { childList: true });
+    }
+  }, BOX_CSS);
+});
+
 test.describe('Web Component', () => {
   test.beforeEach(async ({ chart }) => {
     await chart.open(`http://localhost:${TARGETS.vanilla.port}/`);

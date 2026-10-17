@@ -70,6 +70,8 @@ test('moveBefore() keeps scroll, selection and focus and rebuilds nothing (conne
     v.scrollLeft = 400;
   });
   await expect.poll(() => chart.viewport().evaluate(v => v.scrollTop)).toBeGreaterThan(0);
+  // The rows follow the scroll on the next frame: pick one only once they have
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   const id = await chart.get(SEL.row).nth(6).getAttribute('data-task-id');
   expect(id).toBeTruthy();
   await chart.host().evaluate((el, taskId) => (el as Gantry).setSelectedTasks([taskId]), id!);

@@ -12,6 +12,7 @@ import {
 import { createDemoData } from '@gantry/core/demo';
 import { addDays, snapToDay } from '@gantry/core';
 import { AppThemeService } from '../shell/app-theme.service';
+import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';
 
 // Same plan as the Web Component demos, moved so today sits inside it
 const DEMO = createDemoData();
@@ -26,134 +27,83 @@ function optionsFromUrl(): GanttOptions {
   }
 }
 
+const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n)}`;
+
 @Component({
   selector: 'app-gantt-demo',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent],
+  imports: [GantryComponent, ExampleHeadComponent, ExampleUsageComponent],
   template: `
-    <div class="demo-bar">
-      <div class="demo-group">
-        <span class="demo-label">Features</span>
-        <button [class.on]="opts().baseline" (click)="toggle('baseline')">Baseline</button>
-        <button [class.on]="opts().criticalPath" (click)="toggle('criticalPath')">Critical path</button>
-      </div>
-      <div class="demo-group">
-        <span class="demo-label">Tasks</span>
-        <button (click)="addTask()">+ Add</button>
-        <button (click)="gantt().collapseAll()">Collapse all</button>
-        <button (click)="gantt().expandAll()">Expand all</button>
-      </div>
-      <div class="demo-group">
-        <span class="demo-label">Zoom</span>
-        @for (level of zoomLevels; track level) {
+    <header appExampleHead="demo"></header>
+
+    <div class="gs-card">
+      <div class="gs-card-head gs-toolbar">
+        <div class="gs-seg" role="group" aria-label="Features">
+          <button type="button" class="gs-seg-btn" [attr.aria-pressed]="!!opts().baseline" (click)="toggle('baseline')">
+            Baseline
+          </button>
           <button
             type="button"
-            [class.on]="shownZoom() === level"
-            [attr.aria-pressed]="shownZoom() === level"
-            (click)="zoom.set(level)"
+            class="gs-seg-btn"
+            [attr.aria-pressed]="!!opts().criticalPath"
+            (click)="toggle('criticalPath')"
           >
-            {{ level }}
+            Critical path
           </button>
-        }
+        </div>
+        <div class="gs-seg" role="group" aria-label="Zoom">
+          @for (level of zoomLevels; track level) {
+            <button
+              type="button"
+              class="gs-seg-btn"
+              [attr.aria-pressed]="shownZoom() === level"
+              (click)="zoom.set(level)"
+            >
+              {{ level }}
+            </button>
+          }
+        </div>
+        <span class="gs-spacer"></span>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="addTask()">Add task</button>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="gantt().collapseAll()">Collapse all</button>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="gantt().expandAll()">Expand all</button>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="gantt().selectAll()">Select all</button>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="gantt().clearSelection()">Clear</button>
       </div>
-      <div class="demo-group">
-        <span class="demo-label">Selection</span>
-        <button (click)="gantt().selectAll()">Select all</button>
-        <button (click)="gantt().clearSelection()">Clear</button>
-        <span class="demo-badge">{{ selCount() }}</span>
-      </div>
-      <div class="demo-event">{{ lastEvent() }}</div>
+
+      <gantry
+        #ganttRef
+        class="gs-chart ex-chart"
+        [series]="tasks()"
+        [options]="opts()"
+        [annotations]="annotations"
+        [darkMode]="theme.isDark()"
+        [(viewMode)]="zoom"
+        showToolbar
+        enableDrag
+        enableResize
+        tooltipEnabled
+        showLegend
+        (viewModeChange)="lastEvent.set('Zoom level: ' + $event)"
+        (taskDragged)="onDrag($event)"
+        (taskResized)="onResize($event)"
+        (selectionChange)="onSel($event)"
+      >
+        <!-- Projected into the chart's own toolbar (the ganttToolbar slot) -->
+        <span ganttToolbar class="gs-pill">{{ selCount() }} selected</span>
+        <p ganttToolbar class="ex-status demo-status" role="status" [title]="lastEvent()">{{ lastEvent() }}</p>
+      </gantry>
     </div>
 
-    <gantry
-      #ganttRef
-      [series]="tasks()"
-      [options]="opts()"
-      [annotations]="annotations"
-      [darkMode]="theme.mode()"
-      [(viewMode)]="zoom"
-      showToolbar
-      enableDrag
-      enableResize
-      tooltipEnabled
-      showLegend
-      (viewModeChange)="lastEvent.set('Zoom: ' + $event)"
-      (taskDragged)="onDrag($event)"
-      (taskResized)="onResize($event)"
-      (selectionChange)="onSel($event)"
-    />
+    <app-example-usage path="demo" />
   `,
   styles: [
+    EXAMPLE_STYLES,
     `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
-      }
-      .demo-bar {
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        flex-wrap: wrap;
-        padding: 8px 14px;
-        background: hsl(var(--card));
-        border-bottom: 1px solid hsl(var(--border));
-        flex-shrink: 0;
-      }
-      .demo-group {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-      }
-      .demo-label {
-        font-family: var(--app-font-mono);
-        font-size: 10px;
-        color: hsl(var(--muted-fg));
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .demo-bar button {
-        padding: 4px 10px;
-        font-size: 12px;
-        border-radius: var(--app-radius-sm);
-        cursor: pointer;
-        background: hsl(var(--muted));
-        color: hsl(var(--fg));
-        border: 1px solid hsl(var(--border));
-        transition: background 0.1s;
-      }
-      .demo-bar button:hover {
-        background: hsl(var(--accent));
-      }
-      .demo-bar button.on {
-        background: hsl(var(--primary));
-        border-color: hsl(var(--primary));
-        color: hsl(var(--primary-fg));
-      }
-      .demo-badge {
-        padding: 2px 8px;
-        background: hsl(var(--primary));
-        color: hsl(var(--primary-fg));
-        border-radius: 10px;
-        font-size: 12px;
-        min-width: 22px;
-        text-align: center;
-      }
-      .demo-event {
-        margin-left: auto;
-        font-family: var(--app-font-mono);
-        font-size: 11px;
-        color: hsl(var(--muted-fg));
-        max-width: 300px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      gantry {
-        flex: 1;
-        min-height: 0;
+      .demo-status {
+        max-width: 320px;
+        padding: 0 4px;
+        font-size: 13px;
       }
     `,
   ],
@@ -164,7 +114,7 @@ export class GanttDemoComponent {
 
   readonly tasks = signal<GanttTask[]>(DEMO.tasks);
   readonly selCount = signal(0);
-  readonly lastEvent = signal('—');
+  readonly lastEvent = signal('No events yet: drag a bar or select rows');
   readonly annotations: GanttAnnotation[] = DEMO.annotations;
 
   private readonly _opts = signal<GanttOptions>({
@@ -188,10 +138,10 @@ export class GanttDemoComponent {
    * parity test passes it through `?options=`).
    */
   readonly zoom = signal<string | undefined>(undefined);
-  readonly zoomLevels = [ViewMode.Day, ViewMode.Week, ViewMode.Month, ViewMode.Quarter];
+  readonly zoomLevels = [ViewMode.Week, ViewMode.Month, ViewMode.Quarter];
   protected readonly shownZoom = computed(() => this.zoom() ?? this.opts().viewMode ?? ViewMode.Month);
 
-  toggle(key: keyof GanttOptions) {
+  toggle(key: 'baseline' | 'criticalPath') {
     this._opts.update(o => ({ ...o, [key]: !o[key] }));
   }
 
@@ -199,28 +149,27 @@ export class GanttDemoComponent {
     const id = `task-${Date.now()}`;
     const start = snapToDay(new Date());
     const end = addDays(start, 14);
-    this.tasks.update(ts => [
-      ...ts,
-      {
-        id,
-        name: `New task ${id.slice(-4)}`,
-        parentId: 'p1',
-        start,
-        end,
-        progress: 0,
-      },
-    ]);
-    this.lastEvent.set(`Added: ${id}`);
+    const name = `New task ${id.slice(-4)}`;
+    this.tasks.update(ts => [...ts, { id, name, parentId: 'p1', start, end, progress: 0 }]);
+    this.lastEvent.set(`Added “${name}”, starting today`);
   }
 
   onDrag(e: TaskDragEvent) {
-    this.lastEvent.set(`Drag: ${e.taskId} ${e.daysMoved > 0 ? '+' : ''}${e.daysMoved}d`);
+    this.lastEvent.set(`Moved ${this.nameOf(e.taskId)} by ${signed(e.daysMoved)} days`);
   }
   onResize(e: TaskResizeEvent) {
-    this.lastEvent.set(`Resize [${e.handle}]: ${e.taskId} ${e.daysDelta > 0 ? '+' : ''}${e.daysDelta}d`);
+    const edge = e.handle === 'left' ? 'start' : 'end';
+    this.lastEvent.set(`Resized the ${edge} of ${this.nameOf(e.taskId)} by ${signed(e.daysDelta)} days`);
   }
   onSel(e: SelectionChangeEvent) {
     this.selCount.set(e.selectedIds.length);
-    if (e.selectedIds.length) this.lastEvent.set(`Selected: ${e.selectedIds.slice(0, 3).join(', ')}`);
+    const names = e.selectedIds.slice(0, 3).map(id => this.nameOf(id));
+    const more = e.selectedIds.length > 3 ? ` and ${e.selectedIds.length - 3} more` : '';
+    this.lastEvent.set(e.selectedIds.length ? `Selected ${names.join(', ')}${more}` : 'Selection cleared');
+  }
+
+  private nameOf(id: string): string {
+    const name = this.tasks().find(t => t.id === id)?.name;
+    return name ? `“${name}”` : id;
   }
 }

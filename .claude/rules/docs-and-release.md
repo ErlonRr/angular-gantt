@@ -14,7 +14,11 @@ paths:
   READMEs outside the repo, so relative links break).
 - Every user-facing change gets a `.changeset/*.md` (the `@gantry/*` packages are versioned
   together; `ngx-gantry` independently) and a line under `## [Unreleased]` in `CHANGELOG.md`.
-- New option → add a control to the playground (`apps/demo-vanilla/src/main.ts`) so it can be tried live.
-- Demo apps are private and must typecheck: `pnpm --filter demo-<name> typecheck`.
+- New option → add a control to `PLAYGROUND_SECTIONS` and map it in `playgroundOptions()`
+  (`apps/demo-kit/src/playground.ts`): the vanilla playground and the site's `/playground` both
+  render it, and its code tabs print it for every framework.
+- Demo apps are private and must typecheck: `pnpm --filter demo-<name> typecheck`. They share
+  `demo-kit` (look, theme switch, links, icons, playground and API models): use its `gs-` classes,
+  never page-wide element selectors.
 - On release, keep the "Recent Releases" `<details>` accordion in `README.md` and
   `packages/angular/README.md` to the last 5 releases (see the `/gantry-release` skill).

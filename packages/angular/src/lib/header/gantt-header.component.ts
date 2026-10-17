@@ -35,7 +35,8 @@ import { GanttLayoutService } from '../layout/gantt-layout.service';
           [style.height.px]="tier.height"
         >
           @if (last && showBands()) {
-            @for (band of layout.bandWindow(); track band) {
+            <!-- Keyed like the Web Component (a rebuilt timeline keeps the nodes): bands by kind and x, cells by x -->
+            @for (band of layout.bandWindow(); track band.kind + ':' + band.x) {
               <div
                 class="g-band g-band--{{ band.kind }}"
                 [style.left.px]="band.x"
@@ -44,7 +45,7 @@ import { GanttLayoutService } from '../layout/gantt-layout.service';
               ></div>
             }
           }
-          @for (cell of tier.cells; track cell) {
+          @for (cell of tier.cells; track cell.x) {
             <div
               class="g-cell {{ cell.className ?? '' }}"
               [class.g-cell--current]="last && cell.isCurrent"

@@ -82,17 +82,18 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
       [showLegend]="true"
     />
   `,
+  // A fixed box at the top left, above the site shell: what the tests measure (scrolling, windowed
+  // rows and columns) never depends on the page around it. e2e/paint.spec.ts gives the Web
+  // Component the same box, so both bindings mount the same rows and columns.
   styles: [
     `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
-      }
       gantry {
-        flex: 1;
-        min-height: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 100;
+        width: 1150px;
+        height: 700px;
       }
     `,
   ],

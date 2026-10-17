@@ -47,7 +47,8 @@ File-by-file map: [parity-map.md](parity-map.md).
 
 ## 3. Show and document it
 
-- Playground control: `apps/demo-vanilla/src/main.ts` (`defaults`, `toOptions`, `sections`).
+- Playground control: `apps/demo-kit/src/playground.ts` (`PLAYGROUND_DEFAULTS`, `PLAYGROUND_SECTIONS`,
+  `playgroundOptions()`): the vanilla playground and the site's `/playground` both render it.
 - Root `README.md` → "Configuration" (snippet + one-line explanation); theming table for new
   theme keys; package READMEs only when the element/binding API surface changes.
 - `CHANGELOG.md` → `## [Unreleased]`; a `.changeset/*.md` with the right bumps.

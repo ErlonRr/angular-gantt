@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@gantry/svelte": "workspace:^",
-    "@gantry/core": "workspace:^"
+    "@gantry/core": "workspace:^",
+    "demo-kit": "workspace:*"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "catalog:",

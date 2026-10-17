@@ -1,31 +1,9 @@
-/* Global styles for gantry-demo demo app */
-@use './styles/tokens.scss';
+// The site look: demo-kit's site.css (gs- classes), shared with every demo app. Imported here, not
+// listed in angular.json "styles", so a running `ng serve` picks it up on reload.
+@use '../../demo-kit/src/site';
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html,
-body {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  font-family: var(--app-font-sans);
-  font-size: 14px;
-  background: hsl(var(--bg));
-  color: hsl(var(--fg));
-  transition:
-    background-color 0.3s ease,
-    color 0.3s ease;
-}
-
-app-root {
-  display: flex;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
 }

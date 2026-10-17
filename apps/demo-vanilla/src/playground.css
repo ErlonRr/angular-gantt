@@ -1,0 +1,18 @@
+/* Playground page: the chart is as tall as the first screen allows (480–720 px), so on a desktop
+   screen the whole chart, scrollbars included, shows without scrolling the page. 320 px is what
+   sits above it (header, page head, card head) plus a small margin below. */
+.pg-chart {
+  height: 520px;
+  height: clamp(480px, calc(100svh - 320px), 720px);
+  /* The card's rounded bottom, set on the chart itself: a script that moves the element into
+     another container (e2e moveBefore) changes none of its styles */
+  overflow: hidden;
+  border-radius: 0 0 var(--gs-radius) var(--gs-radius);
+}
+
+/* Phone width: the brand and the header actions keep one line (the eyebrow names the package) */
+@media (max-width: 479px) {
+  .pg-badge {
+    display: none;
+  }
+}

@@ -10,7 +10,8 @@ configurable open-source Gantt — every option behaves identically in every bin
       ├── @gantry/react   React 18/19 wrapper                            packages/react
       ├── @gantry/vue     Vue 3.5 render-function wrapper                packages/vue
       └── @gantry/svelte  Svelte 5 runes wrapper                         packages/svelte
-apps/demo-*  Vite demos (demo-vanilla = options playground) · apps/demo-angular  Angular showcase
+apps/demo-angular  the Gantry site (Angular) · apps/demo-*  Vite demos (demo-vanilla = options playground)
+apps/demo-kit  the demos' shared look (site.css, gs- classes), theme switch, playground model
 ```
 
 ## Architecture (read before changing rendering)
@@ -58,6 +59,9 @@ calling UI work done.
 - Public API changes need a changeset with the right bump (`major` for breaking changes) and
   an update to the README "Configuration" section.
 - Accessibility is part of done: roles, `aria-*`, keyboard paths and focus styles for anything interactive.
+- Demo pages use `demo-kit` (`site.css` `gs-` classes, never element selectors: the Angular chart
+  renders in the light DOM). A new option gets a control in `PLAYGROUND_SECTIONS`
+  (`apps/demo-kit/src/playground.ts`), which both playgrounds render.
 - Loop breaker: if a build or test fails twice with the same error, stop and report instead of retrying.
 
 ## Gotchas

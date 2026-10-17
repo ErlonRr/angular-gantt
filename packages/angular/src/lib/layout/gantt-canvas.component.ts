@@ -152,7 +152,8 @@ interface MountedArrow {
 
         <!-- Non-working time inside the horizontal window (full height: unchanged by a vertical scroll) -->
         <g class="gantt-bands" aria-hidden="true" pointer-events="none">
-          @for (band of layout.bandWindow(); track band) {
+          <!-- Keyed by kind and x like the Web Component: a rebuilt timeline keeps the rects -->
+          @for (band of layout.bandWindow(); track band.kind + ':' + band.x) {
             <svg:rect
               [attr.class]="'gantt-band gantt-band--' + band.kind + (band.className ? ' ' + band.className : '')"
               [attr.x]="band.x"
@@ -177,7 +178,7 @@ interface MountedArrow {
         <g class="gantt-grid" aria-hidden="true" pointer-events="none" shape-rendering="crispEdges">
           @let lines = layout.lineWindow();
           @if (config().gridLines.minor; as minor) {
-            @for (x of lines.minor; track x) {
+            @for (x of lines.minor; track $index) {
               <svg:line
                 class="gantt-grid-minor"
                 [attr.x1]="x + 0.5"
@@ -205,7 +206,7 @@ interface MountedArrow {
             }
           }
           @if (config().gridLines.major; as major) {
-            @for (x of lines.major; track x) {
+            @for (x of lines.major; track $index) {
               <svg:line
                 class="gantt-grid-major"
                 [attr.x1]="x + 0.5"

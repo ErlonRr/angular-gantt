@@ -12,7 +12,8 @@
   "dependencies": {
     "vue": "catalog:",
     "@gantry/vue": "workspace:^",
-    "@gantry/core": "workspace:^"
+    "@gantry/core": "workspace:^",
+    "demo-kit": "workspace:*"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "catalog:",

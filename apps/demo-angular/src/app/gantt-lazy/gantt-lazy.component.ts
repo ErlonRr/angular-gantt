@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { GantryComponent, type GanttTask, TaskType, createGanttDataSource } from 'ngx-gantry';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { GantryComponent, type GanttTask, TaskType, GanttDataSource } from 'ngx-gantry';
 import { addDays, snapToDay } from '@gantry/core';
 import { AppThemeService } from '../shell/app-theme.service';
+import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';
 
-// ── Fake async fetcher — simulates an API ─────────────────────
+// ── Fake API: 120 tasks served 25 per page ────────────────────
 // The series starts 20 days ago, so today falls inside the first page (tasks 1–25)
 const FIRST_DAY = addDays(snapToDay(new Date()), -20);
 const ALL_TASKS: GanttTask[] = Array.from({ length: 120 }, (_, i) => {
@@ -16,101 +17,88 @@ const ALL_TASKS: GanttTask[] = Array.from({ length: 120 }, (_, i) => {
     end,
     progress: (i * 37) % 101,
     type: i % 15 === 0 ? TaskType.Milestone : TaskType.Task,
-    barColor: i % 3 === 0 ? '#6366F1' : i % 3 === 1 ? '#10B981' : undefined,
+    barColor: i % 3 === 0 ? '#4f46e5' : i % 3 === 1 ? '#047857' : undefined,
   };
 });
-
-async function fakeFetch(page: number, pageSize: number): Promise<GanttTask[]> {
-  await new Promise(r => setTimeout(r, 600 + Math.random() * 400)); // simulate network
-  const start = (page - 1) * pageSize;
-  return ALL_TASKS.slice(start, start + pageSize);
-}
+const PAGE_SIZE = 25;
 
 @Component({
   selector: 'app-gantt-lazy',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent],
+  imports: [GantryComponent, ExampleHeadComponent, ExampleUsageComponent],
   template: `
-    <div class="lazy-bar">
-      <span class="lazy-title">Lazy Load — 120 tasks, 25 per page</span>
-      <span class="lazy-info">
-        Loaded: <b>{{ ds.loadedCount() }}</b> / {{ totalCount }}
-        &nbsp;·&nbsp;
-        {{ ds.isLoading() ? 'Loading…' : ds.hasMore() ? 'Scroll or click Load more' : 'All loaded' }}
-      </span>
-      <button [disabled]="ds.isLoading() || !ds.hasMore()" (click)="ds.loadNext()">Load more</button>
-      <button (click)="ds.reset()">Reset</button>
+    <header appExampleHead="lazy"></header>
+
+    <div class="gs-card">
+      <div class="gs-card-head gs-toolbar">
+        <span class="gs-pill">{{ ds.loadedCount() }} of {{ total }} loaded</span>
+        <!-- Not a live region: the chart announces loads and failures itself -->
+        <p class="ex-status" [title]="status()">{{ status() }}</p>
+        <button type="button" class="gs-chip" [attr.aria-pressed]="failing()" (click)="failing.set(!failing())">
+          Fail requests
+        </button>
+        <button
+          type="button"
+          class="gs-btn gs-btn--sm"
+          [disabled]="ds.isLoading() || !ds.hasMore() || !!ds.error()"
+          (click)="ds.loadNext()"
+        >
+          Load more
+        </button>
+        <button type="button" class="gs-btn gs-btn--sm" [disabled]="!ds.error()" (click)="ds.retry()">Retry</button>
+        <button type="button" class="gs-btn gs-btn--sm" (click)="reset()">Reset</button>
+      </div>
+
+      <gantry
+        class="gs-chart ex-chart"
+        [dataSource]="ds"
+        [options]="{ viewMode: 'Month', rowHeight: 32, showToday: true }"
+        [darkMode]="theme.isDark()"
+        showToolbar
+        showLegend
+        (loadError)="lastError.set($event.page)"
+      />
     </div>
 
-    <gantry
-      [dataSource]="ds"
-      [options]="{ viewMode: 'Month', rowHeight: 32, showToday: true }"
-      [showToolbar]="true"
-      [darkMode]="theme.mode()"
-      [showLegend]="true"
-    />
+    <app-example-usage path="lazy" />
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        height: 100%;
-        overflow: hidden;
-      }
-      .lazy-bar {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        flex-shrink: 0;
-        padding: 9px 14px;
-        background: hsl(var(--card));
-        border-bottom: 1px solid hsl(var(--border));
-      }
-      .lazy-title {
-        font-size: 13px;
-        font-weight: 600;
-        color: hsl(var(--primary));
-      }
-      .lazy-info {
-        font-family: var(--app-font-mono);
-        font-size: 12px;
-        color: hsl(var(--muted-fg));
-        margin-right: auto;
-      }
-      .lazy-info b {
-        color: hsl(var(--fg));
-      }
-      .lazy-bar button {
-        padding: 4px 11px;
-        font-size: 12px;
-        border-radius: var(--app-radius-sm);
-        cursor: pointer;
-        background: hsl(var(--muted));
-        color: hsl(var(--fg));
-        border: 1px solid hsl(var(--border));
-      }
-      .lazy-bar button:hover:not(:disabled) {
-        background: hsl(var(--accent));
-      }
-      .lazy-bar button:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-      }
-      gantry {
-        flex: 1;
-        min-height: 0;
-      }
-    `,
-  ],
+  styles: [EXAMPLE_STYLES],
 })
 export class GanttLazyComponent {
   protected readonly theme = inject(AppThemeService);
 
-  readonly totalCount = ALL_TASKS.length;
+  protected readonly total = ALL_TASKS.length;
+  /** "Fail requests": every request fails, so the automatic retry runs out and Retry is needed. */
+  protected readonly failing = signal(false);
+  /** Page of the last failure reported by the chart's `loadError` output. */
+  protected readonly lastError = signal<number | null>(null);
 
-  readonly ds = createGanttDataSource({
-    fetcher: fakeFetch,
-    pageSize: 25,
+  readonly ds = new GanttDataSource({
+    fetcher: (page, size) => this.fetchPage(page, size),
+    pageSize: PAGE_SIZE,
+    retries: 1,
+    retryDelay: 400,
   });
+
+  private readonly pages = Math.ceil(ALL_TASKS.length / PAGE_SIZE);
+  protected readonly status = computed(() => {
+    if (this.ds.error())
+      return `Page ${this.lastError() ?? this.ds.nextPage()} failed twice. Turn off Fail requests, then Retry.`;
+    if (this.ds.isLoading()) return `Loading page ${this.ds.nextPage()}…`;
+    if (!this.ds.hasMore()) return `All ${this.total} tasks loaded.`;
+    return `Page ${this.ds.page()} of ${this.pages} loaded. Scroll down or press Load more.`;
+  });
+
+  protected reset(): void {
+    this.lastError.set(null);
+    void this.ds.reset();
+  }
+
+  /** Simulated network: 0.6–1 s per page, or a failure while "Fail requests" is on. */
+  private async fetchPage(page: number, size: number): Promise<GanttTask[]> {
+    await new Promise(r => setTimeout(r, 600 + Math.random() * 400));
+    if (this.failing()) throw new Error('Simulated network error');
+    const start = (page - 1) * size;
+    return ALL_TASKS.slice(start, start + size);
+  }
 }

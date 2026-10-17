@@ -13,7 +13,8 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "@gantry/react": "workspace:^",
-    "@gantry/core": "workspace:^"
+    "@gantry/core": "workspace:^",
+    "demo-kit": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "catalog:",

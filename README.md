@@ -61,7 +61,8 @@ import { Gantry, ViewMode } from '@gantry/react';
 Every binding (Angular `[options]`, React / Vue / Svelte `options`, `<gantry-element>.options`)
 takes the same `GanttOptions` object, and both renderers draw from the same `@gantry/core`
 render model — an option behaves identically everywhere. Try them all live in the
-**playground** (`pnpm dev:vanilla`).
+**playground** — the site's `/playground` (`pnpm start`) or the Web Component one
+(`pnpm dev:vanilla`).
 
 Each binding documents the rest of its API in its own README:
 
@@ -905,12 +906,24 @@ Every change is listed in the [changelog](https://github.com/ErlonRr/angular-gan
 
 ---
 
-## Live showcase (the demo app)
+## Live showcase (the demo site)
 
-`apps/demo-angular` is a small **custom showcase**: an
-IDE-style sidebar lists the demos, each renders the live `<gantry>`, and a
-docs panel shows a copy-pasteable **Usage** snippet plus install/GitHub/npm links.
-It doubles as living documentation and as the site you can deploy next to the blog.
+`apps/demo-angular` is the **Gantry site**, built with `ngx-gantry`:
+
+- **Home** — what Gantry is, with live charts;
+- **Playground** — every option at hand: the code follows your choices in the syntax of each
+  framework and the link keeps the setup (`?setup=`);
+- **Examples** — a product roadmap (custom columns, locales), a project board, lazy loading with a
+  data source and custom bar components, each with its usage code;
+- **Theming** — the `--gantt-*` custom properties with presets, a contrast check and the code;
+- **Frameworks** — install and use it as a Web Component or in Angular, React, Vue and Svelte;
+- **API** — the `<gantry-element>` properties, methods, events, CSS custom properties, parts and
+  states, generated from the Custom Elements Manifest.
+
+The Web Component playground (`apps/demo-vanilla`) and the React, Vue and Svelte demos share the
+site's look through the private `apps/demo-kit` package: design tokens and components
+(`site.css`, `gs-` classes only, so no page style reaches a chart), the light/dark switch, links,
+icons, the playground model (`PLAYGROUND_SECTIONS`, read by both playgrounds) and the API model.
 
 ```bash
 pnpm start                 # dev server (ng serve gantry-demo)
@@ -918,9 +931,9 @@ pnpm build:demo            # static build → dist/gantry-demo (relative base hr
 ```
 
 Deploy `dist/gantry-demo/browser` to any static host (GitHub Pages, Netlify,
-Vercel). For deep-link refresh on a static host, add an SPA fallback
-(`404.html` = `index.html`, or a `_redirects` / rewrite rule) — landing on `/`
-and navigating via the sidebar works without it.
+Vercel — `vercel.json` builds and deploys it). The site uses path routes: add an SPA fallback
+(`404.html` = `index.html`, or a `_redirects` / rewrite rule) so a deep link such as `/playground`
+loads on refresh.
 
 ## Development tooling
 
@@ -934,8 +947,9 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `packages/vanilla`                                  | `@gantry/vanilla` — the `<gantry-element>` Web Component       |
 | `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                 |
 | `packages/angular`                                  | `ngx-gantry` — the Angular library (imports `@gantry/core`)    |
-| `apps/demo-angular`                                 | Angular showcase app                                           |
+| `apps/demo-angular`                                 | the Gantry site (Angular showcase)                             |
 | `apps/demo-*`                                       | one Vite demo per framework                                    |
+| `apps/demo-kit`                                     | the demos' shared look, theme switch and playground model      |
 
 | Script                                                                      | Effect                                                                                                                                |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |

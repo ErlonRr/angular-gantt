@@ -57,7 +57,11 @@
                 "input": "apps/demo-angular/src/assets",
                 "output": "/assets"
               },
-              "apps/demo-angular/src/favicon.ico"
+              {
+                "glob": "favicon.svg",
+                "input": "apps/demo-kit/src",
+                "output": "/"
+              }
             ],
             "styles": ["apps/demo-angular/src/styles.scss"],
             "scripts": []

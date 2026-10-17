@@ -21,11 +21,11 @@ Playwright starts `vite preview` on the fixed ports below, or reuses servers alr
 there (`pnpm qa:serve start <targets>` builds and serves them; `pnpm qa:serve stop` stops them).
 If Chromium is missing: `npx playwright install chromium`.
 
-| Target               | URL                   | Notes                                                                |
-| -------------------- | --------------------- | -------------------------------------------------------------------- |
-| vanilla              | http://localhost:4171 | options playground (`<gantry-element>`), tested with 60 extra rows   |
-| react / vue / svelte | :4172 / :4175 / :4174 | wrapper demos                                                        |
-| angular              | http://localhost:4180 | showcase: `/roadmap` · `/demo` · `/lazy` (120 tasks) · `/custom-bar` |
+| Target               | URL                   | Notes                                                                                                                                                  |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| vanilla              | http://localhost:4171 | options playground (`<gantry-element>`), tested with 60 extra rows                                                                                     |
+| react / vue / svelte | :4172 / :4175 / :4174 | wrapper demos                                                                                                                                          |
+| angular              | http://localhost:4180 | the site: `/` · `/playground` · `/examples` · `/theming` · `/frameworks` · `/api`; examples `/roadmap` · `/demo` · `/lazy` (120 tasks) · `/custom-bar` |
 
 The clock is frozen (`e2e/fixtures.ts` → `NOW`), locale `en-US`, time zone `Europe/Rome`, and
 every test fails on a console error or page error.
@@ -33,6 +33,8 @@ every test fails on a console error or page error.
 - A configuration: `GANTRY_E2E_OPTIONS='{"viewMode":"Day","bar":{"height":"80%"}}' pnpm e2e e2e/qa.spec.ts`
   merges it into every Web Component target, so bindings can be compared.
 - Phone size: add a project or run with `--project` after adding a mobile viewport in `playwright.config.ts`.
+- The pages around the charts: `e2e/site.spec.ts` (one h1, nav, skip link, theme switch, axe
+  outside the charts, no horizontal scroll at 390 px) on the site and every demo.
 
 ## 2. Look at the screenshots
 
