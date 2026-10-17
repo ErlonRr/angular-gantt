@@ -13,6 +13,7 @@ catalog:
   '@vitejs/plugin-react': '^6.1.2'
   '@vitejs/plugin-vue': '^6.0.10'
   'react': '^19.0.0'
+  'react-dom': '^19.0.0'
   'svelte': '^5.1.0'
   'svelte-check': '^4.7.6'
   'typescript': '~6.0.3'

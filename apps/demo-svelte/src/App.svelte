@@ -13,7 +13,8 @@
   let gantt = $state<GantryElement>();
   // The demo plan is moved so today sits inside it
   const demo = createDemoData();
-  const tasks = $state<GanttTask[]>(demo.tasks);
+  // `$state.raw`: no proxy around every task; replacing the array re-renders the chart
+  let tasks = $state.raw<GanttTask[]>(demo.tasks);
   let viewMode = $state<string>(ViewMode.Month);
   let baseline = $state(false);
   let criticalPath = $state(false);
@@ -23,8 +24,7 @@
   const options = $derived({ viewMode, baseline, criticalPath });
 
   function applyDates(e: TaskDragEvent | TaskResizeEvent) {
-    const task = tasks.find(t => t.id === e.taskId);
-    if (task) Object.assign(task, { start: e.newStart, end: e.newEnd });
+    tasks = tasks.map(t => (t.id === e.taskId ? { ...t, start: e.newStart, end: e.newEnd } : t));
   }
 </script>
 

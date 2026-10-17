@@ -1,0 +1,47 @@
+// @vitest-environment node
+// `Gantry.svelte` destructures its props explicitly (bindings rule): every name of
+// GANTRY_PROPERTIES and GANTRY_EVENTS must be there, or it would fall into `...rest` and reach the
+// element as a stray attribute / an `on…` listener that never fires.
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantry/vanilla';
+import * as api from '../index';
+
+const source = readFileSync(new URL('../Gantry.svelte', import.meta.url), 'utf8');
+
+/** The names destructured from `$props()` */
+function destructured(): string[] {
+  const match = /let\s*\{([^}]*)\}\s*:\s*Props\s*=\s*\$props\(\)/.exec(source);
+  if (!match) throw new Error('no `let { … }: Props = $props()` in Gantry.svelte');
+  return match[1]!
+    .split(',')
+    .map(entry => /^\s*(?:\.\.\.)?\s*([A-Za-z_$][\w$]*)/.exec(entry)?.[1])
+    .filter((name): name is string => name !== undefined);
+}
+
+describe('Gantry.svelte props', () => {
+  it('destructures every GANTRY_PROPERTIES name', () => {
+    const names = destructured();
+    expect(GANTRY_PROPERTIES.filter(name => !names.includes(name))).toEqual([]);
+  });
+
+  it('destructures every GANTRY_EVENTS callback', () => {
+    const names = destructured();
+    expect(Object.values(GANTRY_EVENTS).filter(name => !names.includes(name))).toEqual([]);
+  });
+
+  it('destructures nothing else but element, style and the rest', () => {
+    const known = new Set<string>([...GANTRY_PROPERTIES, ...Object.values(GANTRY_EVENTS), 'element', 'style', 'rest']);
+    expect(destructured().filter(name => !known.has(name))).toEqual([]);
+  });
+});
+
+describe('public API', () => {
+  it('has named exports only: the component, the data source and @gantry/core', () => {
+    expect(api).not.toHaveProperty('default');
+    expect(typeof api.Gantry).toBe('function');
+    expect(typeof api.GanttDataSource).toBe('function');
+    expect(api.ViewMode.Week).toBe('Week');
+    expect(typeof api.buildTimeline).toBe('function');
+  });
+});

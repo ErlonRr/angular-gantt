@@ -40,13 +40,14 @@
   },
   "files": [
     "dist",
+    "!dist/__tests__",
     "README.md",
     "LICENSE"
   ],
   "sideEffects": false,
   "scripts": {
     "build": "svelte-package -i src -o dist",
-    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json && svelte-check --tsconfig ./src/__tests__/tsconfig.json"
   },
   "dependencies": {
     "@gantry/vanilla": "workspace:^",
