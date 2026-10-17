@@ -35,7 +35,7 @@ just paint it. Work through the steps in order; skip a step only when it truly d
 ## 2. Painters — change both, in the same session
 
 - Web Component: `packages/vanilla/src/…` (canvas / header / tasklist / element).
-- Angular: `projects/gantry/src/lib/…` (canvas template / header / tasklist / gantry.component).
+- Angular: `packages/angular/src/lib/…` (canvas template / header / tasklist / gantry.component).
 - Same CSS class names and DOM structure, so the QA script and user CSS work on both.
 - New property or event → `packages/vanilla/src/types.ts` (`GantryProperties` +
   `GANTRY_PROPERTIES`, `GantryEventDetailMap` + `GANTRY_EVENTS`) **and** an Angular

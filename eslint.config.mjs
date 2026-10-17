@@ -68,7 +68,7 @@ export default tseslint.config(
   },
   {
     // Tests and tooling: assertions and fixtures work with loose values
-    files: ['**/__tests__/**', '**/*.spec.ts', 'projects/*/src/test/**', 'e2e/**', '**/*.config.*', 'scripts/**'],
+    files: ['**/__tests__/**', '**/*.spec.ts', 'packages/angular/src/test/**', 'e2e/**', '**/*.config.*', 'scripts/**'],
     rules: {
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
@@ -167,9 +167,9 @@ export default tseslint.config(
     },
   },
 
-  // ── Angular (ngx-gantry + showcase) ──────────────────────────
+  // ── Angular (ngx-gantry in packages/angular + showcase in apps/demo-angular) ──────────────────────────
   {
-    files: ['projects/**/*.ts'],
+    files: ['packages/angular/**/*.ts', 'apps/demo-angular/**/*.ts'],
     extends: [...angular.configs.tsRecommended],
     processor: angular.processInlineTemplates,
     rules: {
@@ -180,7 +180,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['projects/**/*.html'],
+    files: ['packages/angular/**/*.html', 'apps/demo-angular/**/*.html'],
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },
 

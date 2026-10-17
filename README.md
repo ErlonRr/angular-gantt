@@ -692,7 +692,7 @@ type characters on many keyboards); other keys keep their browser default.
 
 ## Live showcase (the demo app)
 
-`projects/gantry-demo` is a small **custom showcase**: an
+`apps/demo-angular` is a small **custom showcase**: an
 IDE-style sidebar lists the demos, each renders the live `<gantry>`, and a
 docs panel shows a copy-pasteable **Usage** snippet plus install/GitHub/npm links.
 It doubles as living documentation and as the site you can deploy next to the blog.
@@ -718,8 +718,8 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `packages/core`                                     | `@gantry/core` — framework-free logic, shared by every binding |
 | `packages/vanilla`                                  | `@gantry/vanilla` — the `<gantry-element>` Web Component       |
 | `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                 |
-| `projects/gantry`                                   | `ngx-gantry` — the Angular library (imports `@gantry/core`)    |
-| `projects/gantry-demo`                              | Angular showcase app                                           |
+| `packages/angular`                                  | `ngx-gantry` — the Angular library (imports `@gantry/core`)    |
+| `apps/demo-angular`                                 | Angular showcase app                                           |
 | `apps/demo-*`                                       | one Vite demo per framework                                    |
 
 | Script                                                                      | Effect                                                                                                                                |

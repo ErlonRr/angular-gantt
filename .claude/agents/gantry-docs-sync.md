@@ -11,7 +11,7 @@ You update Gantry's docs to match the code. You never commit.
 1. Find the public delta: `git diff` on `packages/core/src/types.ts` (`GanttOptions`,
    `GanttTheme`, building-block interfaces), `packages/core/src/render/config.ts` (defaults),
    `packages/vanilla/src/types.ts` (`GANTRY_PROPERTIES`, `GANTRY_EVENTS`), element methods in
-   `packages/vanilla/src/gantry.element.ts`, Angular `projects/gantry/src/public-api.ts` and
+   `packages/vanilla/src/gantry.element.ts`, Angular `packages/angular/src/public-api.ts` and
    `gantry.component.ts` inputs/outputs.
 2. Update only what the delta touches:
    - Root `README.md` → "Configuration": a snippet line with the option, its default and a

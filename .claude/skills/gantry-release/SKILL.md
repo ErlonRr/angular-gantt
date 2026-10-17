@@ -43,7 +43,7 @@ pnpm version-packages        # = changeset version: bumps versions, writes packa
 
 - Root `CHANGELOG.md` (Keep a Changelog): move `## [Unreleased]` into `## [X.Y.Z] — YYYY-MM-DD`
   (today), leave an empty `## [Unreleased]` on top.
-- `README.md` **and** `projects/gantry/README.md`: in the `<details><summary><b>Recent Releases`
+- `README.md` **and** `packages/angular/README.md`: in the `<details><summary><b>Recent Releases`
   accordion, add the new version at the top (3–6 bullets, bold lead-in like the existing
   entries) and keep only the last 5 releases.
 
@@ -51,7 +51,7 @@ pnpm version-packages        # = changeset version: bumps versions, writes packa
 
 ```bash
 for p in packages/*; do (cd "$p" && pnpm pack --pack-destination "$TMPDIR/gantry-packs"); done
-(cd projects/gantry && pnpm pack --pack-destination "$TMPDIR/gantry-packs")   # from dist/ngx-gantry
+(cd packages/angular && pnpm pack --pack-destination "$TMPDIR/gantry-packs")   # from dist/ngx-gantry
 for t in "$TMPDIR"/gantry-packs/gantry-*.tgz; do npx -y publint@0.3 --strict "$t"; done
 for t in "$TMPDIR"/gantry-packs/gantry-{core,vanilla,react,vue}-*.tgz; do npx -y @arethetypeswrong/cli@0.18 "$t" --profile esm-only; done
 ```

@@ -1,9 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "../tsconfig.angular.json",
+  "extends": "../../tsconfig.angular.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": ".."
+    "rootDir": "../.."
   },
-  "include": ["**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

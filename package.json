@@ -34,7 +34,7 @@
     "build": "pnpm build:packages && pnpm build:lib && pnpm build:app && pnpm build:demos",
     "build:packages": "pnpm --filter \"./packages/*\" -r build",
     "build:demos": "pnpm --filter \"./apps/*\" -r build",
-    "typecheck": "pnpm --filter \"./packages/*\" --filter \"./apps/*\" -r typecheck && tsc -p tsconfig.json && tsc -p projects/tsconfig.json",
+    "typecheck": "pnpm --filter \"./packages/*\" --filter \"./apps/*\" -r typecheck && tsc -p tsconfig.json && tsc -p packages/angular/tsconfig.json && tsc -p apps/demo-angular/tsconfig.json",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build:packages && pnpm build:lib && changeset publish",
@@ -46,15 +46,6 @@
     "e2e:update": "bash scripts/e2e-container.sh e2e/visual.spec.ts --update-snapshots=all",
     "test:angular": "ng test gantry --watch=false",
     "size": "node scripts/size.mjs"
-  },
-  "dependencies": {
-    "@angular/common": "catalog:",
-    "@angular/compiler": "catalog:",
-    "@angular/core": "catalog:",
-    "@angular/platform-browser": "catalog:",
-    "@angular/router": "catalog:",
-    "rxjs": "^7.8.2",
-    "tslib": "^2.8.1"
   },
   "devDependencies": {
     "@angular/build": "catalog:",

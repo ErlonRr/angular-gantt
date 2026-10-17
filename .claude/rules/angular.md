@@ -1,6 +1,7 @@
 ---
 paths:
-  - 'projects/gantry/**'
+  - 'packages/angular/**'
+  - 'apps/demo-angular/**'
 ---
 
 # ngx-gantry (Angular) rules
@@ -20,6 +21,6 @@ paths:
 - Match the Web Component: same option names, same CSS classes, same behaviour. When you
   change one painter, change the other (the `gantry-reviewer` agent checks this).
 - Verify with `pnpm --filter @gantry/core build && pnpm build:lib`, then `pnpm build:app`.
-- Unit tests: `projects/gantry/src/**/*.spec.ts`, run with `pnpm test:angular` (`@angular/build:unit-test`,
+- Unit tests: `packages/angular/src/**/*.spec.ts`, run with `pnpm test:angular` (`@angular/build:unit-test`,
   Vitest + jsdom; `src/test/dom-shims.ts` stubs ResizeObserver / IntersectionObserver / scrollTo).
   Provide `provideZonelessChangeDetection()`; await `fixture.whenStable()` instead of `detectChanges()`.

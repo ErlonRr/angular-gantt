@@ -5,12 +5,12 @@ configurable open-source Gantt — every option behaves identically in every bin
 
 ```
 @gantry/core        types · render model · timeline math · CPM          packages/core
- ├── ngx-gantry      native Angular 22 (zoneless, signals, OnPush)       projects/gantry
+ ├── ngx-gantry      native Angular 22 (zoneless, signals, OnPush)       packages/angular
  └── @gantry/vanilla <gantry-element> Web Component (shadow DOM)         packages/vanilla
       ├── @gantry/react   React 18/19 wrapper                            packages/react
       ├── @gantry/vue     Vue 3.5 render-function wrapper                packages/vue
       └── @gantry/svelte  Svelte 5 runes wrapper                         packages/svelte
-apps/demo-*  Vite demos (demo-vanilla = options playground) · projects/gantry-demo  Angular showcase
+apps/demo-*  Vite demos (demo-vanilla = options playground) · apps/demo-angular  Angular showcase
 ```
 
 ## Architecture (read before changing rendering)
@@ -19,7 +19,7 @@ All geometry and every default live in `packages/core/src/render/`:
 `resolveConfig()` (the only place options get defaults) → `buildTimeline()` (range, header
 tiers, period delimiters, non-working bands, today) → `computeRowGeometries()` →
 `computeBarVisual()` / `computeArrowVisual()`; drag/resize math in `DragSession`.
-Angular (`projects/gantry/src/lib`) and the Web Component (`packages/vanilla/src`) only
+Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/src`) only
 **paint** that model. If two bindings disagree, the bug is in the one that computes instead of painting.
 
 ## Commands

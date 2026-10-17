@@ -1,6 +1,6 @@
 ---
 name: gantry-reviewer
-description: Reviews Gantry changes for parity and architecture regressions — options honoured by both renderers, geometry only in @gantry/core, date/time-zone rules, public API and SSR safety, accessibility, tests, docs and changesets. Use proactively after changing packages/core, packages/vanilla, projects/gantry or the framework bindings, and before reporting a feature as done.
+description: Reviews Gantry changes for parity and architecture regressions — options honoured by both renderers, geometry only in @gantry/core, date/time-zone rules, public API and SSR safety, accessibility, tests, docs and changesets. Use proactively after changing packages/core, packages/vanilla, packages/angular or the framework bindings, and before reporting a feature as done.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: inherit
@@ -22,7 +22,7 @@ caller names a base or commit range, diff against it.
    `packages/core/src/render/*`. A painter (Web Component or Angular) that computes geometry
    or hard-codes a default is a finding.
 2. **Parity**: a rendering/behaviour change in `packages/vanilla/src` has its counterpart in
-   `projects/gantry/src/lib` (and vice versa): same option, same CSS classes, same events.
+   `packages/angular/src/lib` (and vice versa): same option, same CSS classes, same events.
 3. **Options**: new options are typed in `packages/core/src/types.ts` with a JSDoc default and
    resolved in `resolveConfig()`; nothing reads raw `GanttOptions` for rendering.
 4. **Dates**: no `/ 86_400_000` (or `864e5`) for positions; `toLocalDay` / `calendarDays` /

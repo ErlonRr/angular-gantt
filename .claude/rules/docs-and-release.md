@@ -3,7 +3,6 @@ paths:
   - 'README.md'
   - 'CHANGELOG.md'
   - 'packages/*/README.md'
-  - 'projects/gantry/README.md'
   - '.changeset/**'
   - 'apps/**'
 ---
@@ -18,4 +17,4 @@ paths:
 - New option → add a control to the playground (`apps/demo-vanilla/src/main.ts`) so it can be tried live.
 - Demo apps are private and must typecheck: `pnpm --filter demo-<name> typecheck`.
 - On release, keep the "Recent Releases" `<details>` accordion in `README.md` and
-  `projects/gantry/README.md` to the last 5 releases (see the `/gantry-release` skill).
+  `packages/angular/README.md` to the last 5 releases (see the `/gantry-release` skill).

@@ -11,7 +11,7 @@ if (!target) throw new Error('Usage: resolve-workspace-deps.mjs <package.json>')
 
 const root = resolve(import.meta.dirname, '..');
 const versions = {};
-for (const dir of ['packages', 'projects']) {
+for (const dir of ['packages']) {
   for (const name of readdirSync(join(root, dir))) {
     const file = join(root, dir, name, 'package.json');
     if (!existsSync(file)) continue;
