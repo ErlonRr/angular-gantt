@@ -1,0 +1,85 @@
+// ─────────────────────────────────────────────────────────────
+//  gantry · bars/builtin-bar.ts
+//  Shared rendering for the built-in bars. Geometry (size, radius,
+//  label placement, progress, baseline) comes from the @gantry/core
+//  render model in `ctx.visual` — identical to the Web Component.
+//  Colours are `Paint`s (`var(--gantt-*)` or an explicit task colour)
+//  bound as CSS properties, never as presentation attributes.
+// ─────────────────────────────────────────────────────────────
+
+import { Directive, computed, inject } from '@angular/core';
+import { taskAccessibleName, themeMetrics, PAINTS } from '@gantry/core';
+import { GanttBarBase } from './bar-base';
+import { GanttI18nService } from '../services/gantt-i18n.service';
+
+/** Template shared by the built-in task / group / milestone bars. */
+export const BUILTIN_BAR_TEMPLATE = `
+  @if (ctx().visual; as v) {
+    <svg:path class="gantt-bar-body" [attr.d]="v.path" [style.fill]="v.paint.body"
+      [style.stroke]="ctx().isSelected ? paints.selectionStroke : null"
+      [attr.stroke-width]="ctx().isSelected ? 1.5 : null"/>
+    @if (v.caps) {
+      <svg:path class="gantt-bar-caps" [attr.d]="v.caps" [style.fill]="v.paint.body"/>
+    }
+    @if (v.progress; as p) {
+      <svg:path class="gantt-bar-progress" [attr.d]="p.path" [style.fill]="v.paint.progress"
+        [attr.fill-opacity]="p.opacity" pointer-events="none"/>
+    }
+    @if (v.baseline; as b) {
+      <svg:line class="gantt-bar-baseline" [attr.x1]="b.x" [attr.y1]="b.y" [attr.x2]="b.x + b.width" [attr.y2]="b.y"
+        [style.stroke]="paints.baseline" stroke-width="2" stroke-dasharray="5 3"
+        stroke-linecap="round" pointer-events="none"/>
+    }
+    @if (v.label; as l) {
+      <svg:text [attr.class]="l.inside ? 'gantt-bar-label' : 'gantt-bar-label gantt-bar-label--outside'"
+        [attr.x]="l.x" [attr.y]="l.y" [style.fill]="v.paint.label" [attr.font-size]="fontPx()"
+        [attr.text-anchor]="l.anchor"
+        dominant-baseline="central" pointer-events="none">{{ l.text }}</svg:text>
+    }
+  }
+`;
+
+export const BUILTIN_BAR_STYLES = `
+  :host(.gantt-bar-draggable) .gantt-bar-body,
+  :host(.gantt-bar-draggable) .gantt-bar-caps { cursor: grab; }
+  :host(.gantt-bar-draggable:active) .gantt-bar-body { cursor: grabbing; }
+  .gantt-bar-label { user-select: none; font-family: var(--gantt-font); }
+  .gantt-bar-label--outside { font-weight: 500; }
+`;
+
+/** Base for the built-in bars: template helpers on top of `GanttBarBase`'s `ctx` input. */
+@Directive()
+export abstract class GanttBuiltinBar extends GanttBarBase {
+  /** Label font size: the theme metric the label fitting used (`themeMetrics`) */
+  protected readonly fontPx = computed(() => themeMetrics(this.ctx().theme).fontPx);
+
+  /**
+   * Selection outline and baseline rail: theme paints (`var(--gantt-*)`). Typed explicitly so the
+   * published d.ts names `PAINTS` instead of inlining `import("ngx-gantry").Paint` self-references.
+   */
+  protected readonly paints: typeof PAINTS = PAINTS;
+
+  /** Optional: a bar rendered outside `<gantry>` falls back to the English labels */
+  private readonly i18n = inject(GanttI18nService, { optional: true });
+
+  /** Name, type, dates, progress, critical and baseline state (shared with the Web Component) */
+  protected readonly ariaLabel = computed(() => {
+    const { row, isCritical, showBaseline } = this.ctx();
+    return taskAccessibleName(row, {
+      labels: this.i18n?.labels(),
+      locale: this.i18n?.locale(),
+      critical: isCritical,
+      baseline: showBaseline && !!row.task.baseline,
+    });
+  });
+}
+
+/** Host bindings shared by the built-in bars. */
+export const BUILTIN_BAR_HOST = {
+  '[attr.data-task-id]': 'ctx().row.task.id',
+  '[attr.data-bar-type]': 'ctx().row.barType',
+  role: 'listitem',
+  '[attr.aria-label]': 'ariaLabel()',
+  '[class.gantt-bar-draggable]': 'ctx().draggable !== false',
+  '[class]': "ctx().row.task.className ?? ''",
+};

@@ -1,0 +1,27 @@
+/* Page-local layout: the chart stays in the first viewport (1400 × 820) */
+.gs-main.fw-main {
+  padding-top: 20px;
+}
+.gs-page-head.fw-head {
+  margin-bottom: 20px;
+}
+.fw-controls {
+  margin-bottom: 12px;
+}
+.fw-controls > .gs-card-body {
+  padding-block: 12px;
+}
+.fw-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.fw-zoom > .gs-select {
+  width: auto;
+}
+.fw-status {
+  margin: 0;
+}
+.fw-chart-card {
+  height: clamp(480px, calc(100vh - 300px), 760px);
+}

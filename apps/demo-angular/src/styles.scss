@@ -1,0 +1,9 @@
+// The site look: demo-kit's site.css (gs- classes), shared with every demo app. Imported here, not
+// listed in angular.json "styles", so a running `ng serve` picks it up on reload.
+@use '../../demo-kit/src/site';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}

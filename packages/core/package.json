@@ -1,0 +1,60 @@
+{
+  "name": "@gantry/core",
+  "version": "1.0.0",
+  "description": "Framework-free core of Gantry: Gantt chart types, timeline math, tree data helpers and critical-path computation.",
+  "keywords": [
+    "gantt",
+    "gantt-chart",
+    "timeline",
+    "project-management",
+    "roadmap",
+    "schedule",
+    "critical-path",
+    "svg"
+  ],
+  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "directory": "packages/core"
+  },
+  "license": "MIT",
+  "author": "Erlon Rrustemaj",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "@gantry/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./demo": {
+      "@gantry/source": "./src/demo.ts",
+      "types": "./dist/demo.d.ts",
+      "default": "./dist/demo.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/__tests__/tsconfig.json"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

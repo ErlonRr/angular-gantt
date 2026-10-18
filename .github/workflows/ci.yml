@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: ESLint (type-checked, Angular templates, Svelte, Vue, React hooks, core rules)
+        run: pnpm lint
+      - name: Prettier
+        run: pnpm format:check
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    name: build-and-test (Node ${{ matrix.node }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck packages, demos, e2e and the Angular projects
+        run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:tz
+      - name: Custom Elements Manifest is up to date (packages/vanilla/custom-elements.json)
+        run: pnpm --filter @gantry/vanilla cem:check
+      - name: Bundle size budget (`import '@gantry/vanilla'`, minified + gzip)
+        run: node scripts/size.mjs --max 50
+      - name: Build packages, Angular library, showcase and demos
+        run: pnpm build
+      - name: API report is up to date (ngx-gantry)
+        # packages/angular/etc/ngx-gantry.api.md vs the built d.ts; after a deliberate change run `pnpm api:angular`
+        run: pnpm api:angular:check
+      - name: Lint published packages
+        run: |
+          for dir in packages/*; do
+            (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/packs")
+          done
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-core-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vanilla-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-react-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vue-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-svelte-*.tgz
+          npx --yes publint@0.3 --strict dist/ngx-gantry
+
+  e2e:
+    # Same image as `pnpm e2e:update`, so screenshot baselines match pixel for pixel. Chromium only
+    # (playwright.config.ts): the whole suite — qa, parity, paint, csp, a11y, lifecycle, perf
+    # (blocking, one retry) and the screenshot baselines (visual).
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build packages, Angular library, showcase and demos
+        run: pnpm build
+      - run: pnpm e2e
+        env:
+          HOME: /root
+          GANTRY_E2E_VISUAL: '1' # same image as `pnpm e2e:update`: compare the screenshot baselines
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

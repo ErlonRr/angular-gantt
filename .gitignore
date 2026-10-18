@@ -8,8 +8,6 @@ dist/
 out-tsc/
 .angular/
 
-# Storybook build
-storybook-static/
 
 # IDE
 .idea/
@@ -28,3 +26,16 @@ Thumbs.db
 coverage/
 
 .agents/
+
+# Claude Code: personal settings / memory (shared config in .claude/ is committed)
+.claude/settings.local.json
+.claude/agent-memory-local/
+CLAUDE.local.md
+
+# SvelteKit packaging temp dir
+.svelte-kit/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

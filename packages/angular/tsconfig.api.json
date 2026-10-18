@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  // Program api-extractor reads (`api-extractor.json`): the ng-packagr d.ts bundle of `pnpm build:lib`.
+  // `@gantry/core` resolves through this package's node_modules symlink and `preserveSymlinks` keeps that
+  // path, so the report treats core as external (one `export * from "@gantry/core"` line, not all of core).
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "lib": ["es2022", "dom"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "preserveSymlinks": true,
+    "paths": {
+      "@gantry/core": ["./node_modules/@gantry/core"]
+    }
+  },
+  "files": ["../../dist/ngx-gantry/types/ngx-gantry.d.ts"]
+}

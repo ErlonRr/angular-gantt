@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Try every option of the Gantry Web Component: the chart, the code and the link follow your choices."
+    />
+    <title>Playground · Gantry Web Component</title>
+  </head>
+  <body>
+    <!-- Static shell; src/main.ts fills the version, links, icons, options, code and events -->
+    <div class="gs-app">
+      <a class="gs-skip" href="#main">Skip to content</a>
+      <header class="gs-header">
+        <div class="gs-container gs-header-inner">
+          <a class="gs-brand" href="./">
+            <span class="gs-logo" aria-hidden="true"></span>
+            <span>Gantry</span>
+            <span class="gs-version" id="site-version"></span>
+            <span class="gs-badge pg-badge">Web Component</span>
+          </a>
+          <div class="gs-header-actions">
+            <button type="button" class="gs-icon-btn" id="theme-toggle" aria-label="Dark theme" aria-pressed="false">
+              <svg data-icon="moon"></svg>
+            </button>
+            <a class="gs-icon-btn" id="site-repo" aria-label="Source code on GitHub"><svg data-icon="github"></svg></a>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="gs-main" tabindex="-1">
+        <div class="gs-container">
+          <div class="gs-page-head">
+            <div>
+              <p class="gs-eyebrow">Playground · @gantry/vanilla</p>
+              <h1 class="gs-title">Try every option</h1>
+              <p class="gs-lead">Change an option: the chart, its code and this page's link follow.</p>
+            </div>
+            <button type="button" class="gs-btn" id="copy-link">
+              <svg data-icon="link"></svg>
+              <span>Copy link</span>
+            </button>
+          </div>
+
+          <div class="gs-split">
+            <div class="gs-stack">
+              <section class="gs-card" aria-labelledby="preview-title">
+                <div class="gs-card-head">
+                  <h2 class="gs-card-title" id="preview-title">Preview</h2>
+                  <button type="button" class="gs-btn gs-btn--sm" id="today">
+                    <svg data-icon="today"></svg>
+                    <span>Today</span>
+                  </button>
+                </div>
+                <gantry-element id="gantt" class="gs-chart pg-chart"></gantry-element>
+              </section>
+
+              <section class="gs-card" aria-labelledby="code-title">
+                <div class="gs-card-head">
+                  <h2 class="gs-card-title" id="code-title">Code</h2>
+                  <p class="gs-hint">The options the preview runs, for your framework.</p>
+                </div>
+                <div class="gs-card-body">
+                  <div class="gs-tabs" role="tablist" aria-label="Framework" id="code-tabs"></div>
+                  <div role="tabpanel" id="code-panel">
+                    <div class="gs-code gs-code--scroll">
+                      <div class="gs-code-head">
+                        <span id="code-file"></span>
+                        <button type="button" class="gs-copy" id="copy-code" aria-label="Copy the code">
+                          <svg data-icon="copy"></svg>
+                          <span aria-hidden="true">Copy</span>
+                        </button>
+                      </div>
+                      <pre tabindex="0" id="code-pre"><code id="code"></code></pre>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="gs-card" aria-labelledby="events-title">
+                <div class="gs-card-head">
+                  <h2 class="gs-card-title" id="events-title">
+                    Events
+                    <span class="gs-count"
+                      ><span id="events-count">0</span><span class="gs-sr-only"> logged</span></span
+                    >
+                  </h2>
+                  <button type="button" class="gs-btn gs-btn--sm" id="events-clear">Clear</button>
+                </div>
+                <p class="gs-empty" id="events-empty">
+                  Drag or resize a bar, select a row or zoom: the events show here.
+                </p>
+                <ul class="gs-log" id="events" aria-live="polite" aria-label="Events, newest first"></ul>
+              </section>
+            </div>
+
+            <section class="gs-card gs-sticky" aria-labelledby="options-title">
+              <div class="gs-card-head">
+                <h2 class="gs-card-title" id="options-title">
+                  Options
+                  <span class="gs-count"
+                    ><span id="options-changed">0</span><span class="gs-sr-only"> changed</span></span
+                  >
+                </h2>
+                <button type="button" class="gs-btn gs-btn--sm" id="options-reset">
+                  <svg data-icon="reset"></svg>
+                  <span>Reset all</span>
+                </button>
+              </div>
+              <div class="gs-scroll" id="options"></div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <footer class="gs-footer">
+        <div class="gs-container">
+          <p id="footer-meta"></p>
+          <p id="footer-tagline"></p>
+        </div>
+      </footer>
+    </div>
+    <div class="gs-sr-only" role="status" id="status"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

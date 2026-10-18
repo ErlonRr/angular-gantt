@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm test*)",
+      "Bash(pnpm typecheck*)",
+      "Bash(pnpm build*)",
+      "Bash(pnpm qa*)",
+      "Bash(npx -y pnpm@10.33.0 test*)",
+      "Bash(npx -y pnpm@10.33.0 typecheck*)",
+      "Bash(npx -y pnpm@10.33.0 build*)",
+      "Bash(npx -y pnpm@10.33.0 qa*)",
+      "Bash(pnpm e2e*)",
+      "Bash(npx -y pnpm@10.33.0 e2e*)",
+      "Bash(npx playwright test*)",
+      "Bash(npx playwright show-report*)",
+      "Bash(npx vitest *)",
+      "Bash(npx tsc *)",
+      "Bash(npx changeset status*)",
+      "Bash(bash scripts/qa/serve.sh *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)"
+    ],
+    "ask": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git tag *)",
+      "Bash(git reset --hard *)",
+      "Bash(npm publish *)",
+      "Bash(pnpm publish *)",
+      "Bash(pnpm release *)",
+      "Bash(pnpm version-packages *)",
+      "Bash(npx changeset publish *)",
+      "Bash(npx changeset version *)",
+      "Bash(npx -y pnpm@10.33.0 publish *)",
+      "Bash(npx -y pnpm@10.33.0 release *)",
+      "Bash(npx -y pnpm@10.33.0 version-packages *)",
+      "Bash(pnpm e2e:update*)",
+      "Bash(npx -y pnpm@10.33.0 e2e:update*)",
+      "Bash(npx playwright test*--update-snapshots*)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(npm unpublish *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(~/.npmrc)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/test-touched-package.sh",
+            "args": [],
+            "timeout": 120,
+            "statusMessage": "Running the edited package's unit tests\u2026"
+          }
+        ]
+      }
+    ]
+  }
+}

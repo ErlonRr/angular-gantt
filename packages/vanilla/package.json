@@ -1,0 +1,73 @@
+{
+  "name": "@gantry/vanilla",
+  "version": "1.0.0",
+  "description": "Gantry Gantt chart as a framework-agnostic Web Component (<gantry-element>). Works with plain JS or any framework.",
+  "keywords": [
+    "web-component",
+    "custom-element",
+    "vanilla",
+    "javascript",
+    "gantt",
+    "gantt-chart",
+    "timeline",
+    "project-management",
+    "roadmap",
+    "schedule",
+    "critical-path",
+    "svg"
+  ],
+  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#readme",
+  "bugs": {
+    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "directory": "packages/vanilla"
+  },
+  "license": "MIT",
+  "author": "Erlon Rrustemaj",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "customElements": "custom-elements.json",
+  "sideEffects": [
+    "./dist/index.js",
+    "./src/index.ts",
+    "./src/gantry.element.ts"
+  ],
+  "exports": {
+    ".": {
+      "@gantry/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./custom-elements.json": "./custom-elements.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "custom-elements.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json && tsc -p src/__tests__/tsconfig.json",
+    "cem": "cem analyze",
+    "cem:check": "node scripts/cem-check.mjs"
+  },
+  "dependencies": {
+    "@gantry/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@custom-elements-manifest/analyzer": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

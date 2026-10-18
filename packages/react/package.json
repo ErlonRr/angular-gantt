@@ -1,0 +1,68 @@
+{
+  "name": "@gantry/react",
+  "version": "1.0.0",
+  "description": "Gantry Gantt chart for React \u2014 a free, full-featured interactive Gantt component.",
+  "keywords": [
+    "react",
+    "react-component",
+    "gantt",
+    "gantt-chart",
+    "timeline",
+    "project-management",
+    "roadmap",
+    "schedule",
+    "critical-path",
+    "svg"
+  ],
+  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/react#readme",
+  "bugs": {
+    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "directory": "packages/react"
+  },
+  "license": "MIT",
+  "author": "Erlon Rrustemaj",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "@gantry/source": "./src/index.tsx",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@gantry/vanilla": "workspace:^",
+    "@gantry/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

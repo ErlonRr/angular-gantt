@@ -1,0 +1,66 @@
+{
+  "name": "@gantry/vue",
+  "version": "1.0.0",
+  "description": "Gantry Gantt chart for Vue 3 \u2014 a free, full-featured interactive Gantt component.",
+  "keywords": [
+    "vue",
+    "vue3",
+    "vue-component",
+    "gantt",
+    "gantt-chart",
+    "timeline",
+    "project-management",
+    "roadmap",
+    "schedule",
+    "critical-path",
+    "svg"
+  ],
+  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/vue#readme",
+  "bugs": {
+    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "directory": "packages/vue"
+  },
+  "license": "MIT",
+  "author": "Erlon Rrustemaj",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "@gantry/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@gantry/vanilla": "workspace:^",
+    "@gantry/core": "workspace:^"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "vue": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

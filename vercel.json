@@ -4,7 +4,5 @@
   "installCommand": "pnpm install",
   "buildCommand": "pnpm exec ng build gantry-demo --configuration production --base-href /",
   "outputDirectory": "dist/gantry-demo/browser",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
