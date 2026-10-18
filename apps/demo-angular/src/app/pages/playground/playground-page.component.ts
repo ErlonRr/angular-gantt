@@ -35,6 +35,7 @@ import { FRAMEWORKS, type FrameworkId } from 'demo-kit/site';
 import { AppThemeService } from '../../shell/app-theme.service';
 import { CodeBlockComponent } from '../../shell/code-block.component';
 import { IconComponent } from '../../shell/icon.component';
+import { TABS } from '../../shell/tabs';
 
 const TAB_KEY = 'gantry-site-code-tab';
 const MAX_EVENTS = 50;
@@ -77,7 +78,7 @@ function days(n: number): string {
 @Component({
   selector: 'app-playground-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent, CodeBlockComponent, IconComponent],
+  imports: [GantryComponent, CodeBlockComponent, IconComponent, TABS],
   template: `
     <div class="gs-page-head">
       <div>
@@ -130,21 +131,15 @@ function days(n: number): string {
             <p class="gs-hint">What the preview runs.</p>
           </div>
           <div class="gs-card-body">
-            <div class="gs-tabs" role="tablist" aria-label="Framework">
+            <div
+              class="gs-tabs"
+              aria-label="Framework"
+              tabPanel="pg-code-panel"
+              [appTabList]="framework()"
+              (tabSelect)="setFramework($event)"
+            >
               @for (fw of frameworks; track fw.id) {
-                <button
-                  type="button"
-                  role="tab"
-                  class="gs-tab"
-                  aria-controls="pg-code-panel"
-                  [id]="'pg-tab-' + fw.id"
-                  [attr.aria-selected]="fw.id === framework()"
-                  [tabIndex]="fw.id === framework() ? 0 : -1"
-                  (click)="setFramework(fw.id)"
-                  (keydown)="onTabKey($event)"
-                >
-                  {{ fw.label }}
-                </button>
+                <button type="button" class="gs-tab" [appTab]="fw.id" [id]="'pg-tab-' + fw.id">{{ fw.label }}</button>
               }
             </div>
             <div id="pg-code-panel" role="tabpanel" [attr.aria-labelledby]="'pg-tab-' + framework()">
@@ -338,19 +333,6 @@ export class PlaygroundPageComponent {
     } catch {
       // Storage blocked: the choice lasts for this page
     }
-  }
-
-  /** Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern). */
-  protected onTabKey(e: KeyboardEvent): void {
-    const ids = this.frameworks.map(f => f.id);
-    const i = ids.indexOf(this.framework());
-    const n = ids.length;
-    const keys: Record<string, number> = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 };
-    const next = keys[e.key];
-    if (next === undefined) return;
-    e.preventDefault();
-    this.setFramework(ids[next]);
-    (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   }
 
   protected copyLink(): void {

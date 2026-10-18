@@ -182,14 +182,26 @@ describe('region effects', () => {
     const canvas = $(el, '.gantry-canvas-container')!;
     const px = getEngine(el).graph.timeline().pxPerDay;
     expect($(el, '.gantt-drag-preview')).toBeNull();
-    bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
-    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 2 * px, pointerId: 1 }));
+    // Bars are hit by geometry: press the middle of the body (the canvas box is at 0,0 in happy-dom)
+    const v = el.getBarVisual('t0')!;
+    const x = v.x + v.width / 2;
+    bar.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: x,
+        clientY: v.cy,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }),
+    );
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 2 * px, pointerId: 1, pointerType: 'mouse' }));
     flush(el);
     const ghost = $(el, '.gantt-drag-preview');
     expect(ghost).not.toBeNull();
     expect(ghost!.parentElement?.lastElementChild).toBe(ghost);
     expect(Number(ghost!.getAttribute('x'))).toBeGreaterThan(0);
-    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 2 * px, pointerId: 1 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 2 * px, pointerId: 1, pointerType: 'mouse' }));
     flush(el);
     expect($(el, '.gantt-drag-preview')).toBeNull();
     expect(ghost!.isConnected).toBe(false);

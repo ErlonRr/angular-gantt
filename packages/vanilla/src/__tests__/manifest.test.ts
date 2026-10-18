@@ -94,7 +94,7 @@ describe('custom-elements.json', () => {
   it('lists the observed attributes, each linked to its property', () => {
     expect(names(element.attributes)).toEqual([...OBSERVED_ATTRIBUTES]);
     expect(names(element.attributes)).toEqual([...GantryElement.observedAttributes]);
-    expect(element.attributes).toHaveLength(7);
+    expect(element.attributes).toHaveLength(9);
     for (const attr of element.attributes) {
       expect(attr.description, attr.name).toBeTruthy();
       expect(attr.fieldName, attr.name).toBe(
@@ -123,7 +123,7 @@ describe('custom-elements.json', () => {
   it('lists the public methods and nothing private', () => {
     const methods = element.members.filter(m => m.kind === 'method');
     expect(names(methods).sort()).toEqual(prototypeApi().methods.sort());
-    expect(methods).toHaveLength(24);
+    expect(methods).toHaveLength(25);
     for (const member of element.members) {
       expect(member.name.startsWith('#'), member.name).toBe(false);
       expect(member.static, member.name).toBeUndefined();
@@ -138,16 +138,28 @@ describe('custom-elements.json', () => {
     }
   });
 
-  it('lists the five CSS parts the shadow tree exposes', () => {
-    expect(names(element.cssParts)).toEqual(['wrapper', 'toolbar', 'panel', 'splitter', 'timeline']);
+  it('lists the CSS parts the shadow tree exposes', () => {
+    expect(names(element.cssParts)).toEqual(['wrapper', 'toolbar', 'panel', 'splitter', 'timeline', 'legend', 'state']);
     const el = document.createElement('gantry-element');
     const task: GanttTask = { id: 'a', name: 'A', start: new Date(2026, 2, 2), end: new Date(2026, 2, 6), progress: 0 };
     el.tasks = [task];
     document.body.appendChild(el);
     getEngine(el).flushSync();
     const rendered = [...el.shadowRoot!.querySelectorAll('[part]')].map(node => node.getAttribute('part'));
-    expect(rendered.sort()).toEqual(names(element.cssParts).sort());
+    // The state box is attached only while the chart is not ready, the legend only while shown (D27)
+    const { stateBox, legend } = getEngine(el).dom;
+    expect(stateBox.isConnected).toBe(false);
+    expect(legend.isConnected).toBe(false);
+    expect([...rendered, stateBox.getAttribute('part'), legend.getAttribute('part')].sort()).toEqual(
+      names(element.cssParts).sort(),
+    );
     for (const part of element.cssParts) expect(part.description, part.name).toBeTruthy();
+  });
+
+  it('lists the empty slot', () => {
+    const slots = (element as ClassDoc & { slots?: Doc[] }).slots ?? [];
+    expect(names(slots)).toEqual(['empty']);
+    for (const slot of slots) expect(slot.description, slot.name).toBeTruthy();
   });
 
   it('lists the three custom states', () => {
@@ -157,7 +169,7 @@ describe('custom-elements.json', () => {
 
   it('lists every themeToCss() token as a CSS property, in order, with the light theme as default', () => {
     const tokens = themeToCss(LightTheme);
-    expect(element.cssProperties).toHaveLength(42);
+    expect(element.cssProperties).toHaveLength(43);
     expect(element.cssProperties.map(p => [p.name, p.default])).toEqual(tokens.map(([name, value]) => [name, value]));
     for (const prop of element.cssProperties) expect(prop.description, prop.name).toBeTruthy();
   });

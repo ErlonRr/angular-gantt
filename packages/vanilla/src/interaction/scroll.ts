@@ -5,9 +5,17 @@
  *
  * The timeline viewport scrolls in both axes (its header is sticky); the panel scrolls
  * horizontally only, its vertical offset mirrors the timeline's in both directions so wheel and
- * touch scrolling work over either pane. The listeners live while the element is connected.
+ * touch scrolling work over either pane. Core `createScrollMirror` decides what to write: a pane's
+ * scroll event that only echoes the mirror's own write is not mirrored back, so keyboard moves at
+ * key-repeat speed (each scrolls the timeline in its keydown) are never undone by the previous
+ * move's echo. The listeners live while the element is connected.
+ *
+ * `scrollToX` is also how the zoom anchoring (`layers/scroll-commands.ts`) and the auto-scroll of
+ * a drag (`interaction/autoscroll.ts`) move the timeline: an instant jump writes `scrollLeft` at
+ * once, so the windowed header and grid follow in the same flush.
  */
 
+import { createScrollMirror, type ScrollPane } from '@gantryjs/core';
 import type { Inputs } from '../engine/inputs';
 
 /**
@@ -15,19 +23,26 @@ import type { Inputs } from '../engine/inputs';
  * the element binds it when it connects and aborts it when it disconnects.
  */
 export function bindScroll(panel: HTMLElement, canvas: HTMLElement, inputs: Inputs, signal: AbortSignal): void {
-  const sync = (from: HTMLElement, to: HTMLElement) => () => {
-    // The mirrored pane fires its own scroll event; equal offsets end the loop
-    if (to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
+  const mirror = createScrollMirror();
+  const paneOf = (pane: ScrollPane) => (pane === 'timeline' ? canvas : panel);
+  const read = (pane: ScrollPane) => paneOf(pane).scrollTop;
+  const write = (pane: ScrollPane, top: number) => {
+    paneOf(pane).scrollTop = top;
+  };
+  const sync = (pane: ScrollPane) => () => {
+    mirror.scrolled(pane, read, write);
     inputs.scrollTop.set(canvas.scrollTop);
     inputs.scrollLeft.set(canvas.scrollLeft);
   };
-  canvas.addEventListener('scroll', sync(canvas, panel), { passive: true, signal });
-  panel.addEventListener('scroll', sync(panel, canvas), { passive: true, signal });
-  // The panel only scrolls horizontally: a vertical wheel over it scrolls the timeline
+  canvas.addEventListener('scroll', sync('timeline'), { passive: true, signal });
+  panel.addEventListener('scroll', sync('panel'), { passive: true, signal });
+  // The panel only scrolls horizontally: a vertical wheel over it scrolls the timeline. Ctrl/⌘ +
+  // wheel (and a trackpad pinch) is a zoom: over the timeline the chart zooms
+  // (`interaction/zoom.ts`), over the panel the browser keeps it
   panel.addEventListener(
     'wheel',
     e => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+      if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
       canvas.scrollTop += e.deltaY;
       e.preventDefault();
     },

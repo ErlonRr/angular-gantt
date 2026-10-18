@@ -1,35 +1,34 @@
 /**
  * @file overlay.ts
- * Overlay region: the annotations (regions and lines under the bars, labels above them), the
- * today line and the drag ghost.
+ * Overlay region: the annotations (regions and lines under the bars, labels above them while the
+ * marker lane is off), the today line and the drag ghost.
  *
- * - Annotations are keyed by index and patched; they are revisited only when they, the timeline,
- *   the window or the font size change, so a drag move costs nothing here.
+ * - Annotations are core's `computeAnnotationVisuals` over the mounted window, keyed by index and
+ *   patched; they are revisited only when they, the timeline, the window, the font size or the
+ *   marker lane change, so a drag move costs nothing here. While the marker lane shows
+ *   (`graph.laneHeight` > 0, D12) their labels are in the header's lane, not over the bars.
  * - The today line (`line.gantt-today`, before `g.gantt-arrows`) and the ghost
  *   (`rect.gantt-drag-preview`, last in the SVG) are single persistent nodes, attached only while
  *   shown. The ghost is patched in O(1) from `computeDragGhostVisual` (`graph.ghostVisual`), with
  *   its movement label (`text.gantt-drag-preview-label`) right before it.
  */
 
-import { annotationPaint, type GanttAnnotation } from '@gantryjs/core';
+import { computeAnnotationVisuals, type AnnotationVisual } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
 import { showNode } from './skeleton';
 
-/** One annotation shape: the shaded region (`x2` set) or the line at `x1`. */
+/** One annotation shape: the shaded region (`annotation.x2` set) or the dashed line at `x1`. */
 interface Mark {
   readonly key: string;
   readonly kind: 'region' | 'line';
-  readonly ann: GanttAnnotation;
+  readonly v: AnnotationVisual;
 }
 
-/** One annotation label. */
-interface Label {
-  readonly key: string;
-  readonly ann: GanttAnnotation & { readonly label: NonNullable<GanttAnnotation['label']> };
-}
+/** An annotation drawn with its label in the canvas (the marker lane is off). */
+type Labelled = AnnotationVisual & { readonly label: NonNullable<AnnotationVisual['label']> };
 
 const same = (a: readonly unknown[] | undefined, b: readonly unknown[]) =>
   a?.length === b.length && a.every((v, i) => Object.is(v, b[i]));
@@ -60,56 +59,59 @@ export function createOverlayLayer(ctx: LayerContext): Layer {
       const { top, bottom } = G.windowSpan();
       const annotations = I.annotationsIn();
       const fontPx = G.metrics().fontPx;
+      const lane = G.laneHeight() > 0;
 
-      // Annotations: regions and lines under the bars, labels on top of them
-      const deps = [annotations, tl, top, bottom, fontPx];
+      // Annotations: regions and lines under the bars, labels on top of them (lane off)
+      const deps = [annotations, tl, top, bottom, fontPx, lane];
       if (!same(annotationsFor, deps)) {
         annotationsFor = deps;
+        const visuals = computeAnnotationVisuals(annotations, tl, { top, bottom }, fontPx, lane);
         const marks: Mark[] = [];
-        const labels: Label[] = [];
-        annotations.forEach((ann, i) => {
-          if (ann.x2) marks.push({ key: `${i}:region`, kind: 'region', ann });
-          marks.push({ key: `${i}:line`, kind: 'line', ann });
-          if (ann.label) labels.push({ key: String(i), ann: ann as Label['ann'] });
-        });
+        const labels: Labelled[] = [];
+        for (const v of visuals) {
+          if (v.region) marks.push({ key: `${v.key}:region`, kind: 'region', v });
+          marks.push({ key: `${v.key}:line`, kind: 'line', v });
+          if (v.label) labels.push(v as Labelled);
+        }
         reconcile<Mark, SVGRectElement | SVGLineElement>(
           dom.annotations,
           marks,
           m => m.key,
-          m =>
-            m.kind === 'region'
-              ? s('rect')
-              : s('line', { 'stroke-width': 1.5, 'stroke-dasharray': '5 3', opacity: 0.8 }),
-          (el, { kind, ann }) => {
-            const x1 = tl.toX(ann.x1);
+          m => s(m.kind === 'region' ? 'rect' : 'line'),
+          (el, { kind, v }) => {
             if (kind === 'region') {
-              setAttr(el, 'x', x1);
-              setAttr(el, 'y', top);
-              setAttr(el, 'width', tl.toX(ann.x2!) - x1);
-              setAttr(el, 'height', bottom - top);
-              setAttr(el, 'opacity', ann.opacity ?? 0.08);
-              setStyleProp(el, 'fill', annotationPaint(ann));
+              const r = v.region!;
+              setAttr(el, 'x', r.x);
+              setAttr(el, 'y', r.y);
+              setAttr(el, 'width', r.width);
+              setAttr(el, 'height', r.height);
+              setAttr(el, 'opacity', r.opacity);
+              setStyleProp(el, 'fill', v.paint);
             } else {
-              setAttr(el, 'x1', x1);
-              setAttr(el, 'y1', top);
-              setAttr(el, 'x2', x1);
-              setAttr(el, 'y2', bottom);
-              setStyleProp(el, 'stroke', annotationPaint(ann));
+              const l = v.line;
+              setAttr(el, 'x1', l.x);
+              setAttr(el, 'y1', l.y1);
+              setAttr(el, 'x2', l.x);
+              setAttr(el, 'y2', l.y2);
+              setAttr(el, 'stroke-width', l.strokeWidth);
+              setAttr(el, 'stroke-dasharray', l.dash);
+              setAttr(el, 'opacity', l.opacity);
+              setStyleProp(el, 'stroke', v.paint);
             }
           },
         );
-        reconcile<Label, SVGTextElement>(
+        reconcile<Labelled, SVGTextElement>(
           dom.annotationLabels,
           labels,
-          l => l.key,
+          v => v.key,
           () => s('text'),
-          (el, { ann }) => {
-            setAttr(el, 'x', tl.toX(ann.x1) + 6);
-            setAttr(el, 'y', top + 14);
-            setAttr(el, 'font-size', ann.label.fontSize ?? fontPx - 1);
-            setAttr(el, 'font-weight', ann.label.fontWeight ?? 600);
-            setStyleProp(el, 'fill', ann.label.color ?? annotationPaint(ann));
-            setText(el, ann.label.text);
+          (el, { label }) => {
+            setAttr(el, 'x', label.x);
+            setAttr(el, 'y', label.y);
+            setAttr(el, 'font-size', label.fontSize);
+            setAttr(el, 'font-weight', label.fontWeight);
+            setStyleProp(el, 'fill', label.paint);
+            setText(el, label.text);
           },
         );
       }

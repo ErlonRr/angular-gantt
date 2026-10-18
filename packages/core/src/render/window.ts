@@ -51,7 +51,16 @@ export interface HorizontalWindowInput {
    * memoized on it) only changes when the scroll crosses a chunk (default: no snapping).
    */
   quantum?: number | undefined;
+  /**
+   * Width (px) to assume while `viewportWidth` is not measurable — e.g. on the server, so SSR
+   * mounts the cells around `scrollLeft` instead of the whole timeline. Default: none (the
+   * whole timeline is mounted); a non-finite or non-positive value counts as none.
+   */
+  fallbackWidth?: number | undefined;
 }
+
+/** A width a viewport can be windowed with: a finite number > 0. */
+const measurableWidth = (w: number | undefined): w is number => w !== undefined && Number.isFinite(w) && w > 0;
 
 /**
  * The pixel range a painter mounts for a horizontal scroll position: the viewport
@@ -59,7 +68,8 @@ export interface HorizontalWindowInput {
  *
  * While the viewport has no measurable width (`viewportWidth` not a finite number
  * > 0 — before the first layout, while hidden, in SSR or in DOM-less tests) the
- * whole timeline `[0, totalWidth]` is returned, so nothing goes blank. A non-finite
+ * whole timeline `[0, totalWidth]` is returned, so nothing goes blank — unless a
+ * `fallbackWidth` is given, which then stands in for the viewport width. A non-finite
  * `scrollLeft` counts as `0`, a non-finite `overscan` falls back to the default and
  * a non-finite or non-positive `quantum` disables snapping.
  *
@@ -69,8 +79,8 @@ export interface HorizontalWindowInput {
  */
 export function computeHorizontalWindow(input: HorizontalWindowInput): HorizontalWindow {
   const width = Number.isFinite(input.totalWidth) ? Math.max(0, input.totalWidth) : 0;
-  const viewportWidth = input.viewportWidth;
-  if (!(Number.isFinite(viewportWidth) && viewportWidth > 0)) return { x0: 0, x1: width };
+  const viewportWidth = measurableWidth(input.viewportWidth) ? input.viewportWidth : input.fallbackWidth;
+  if (!measurableWidth(viewportWidth)) return { x0: 0, x1: width };
   const left = Number.isFinite(input.scrollLeft) ? input.scrollLeft : 0;
   const overscan = Math.max(
     0,

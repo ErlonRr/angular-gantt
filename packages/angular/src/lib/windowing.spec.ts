@@ -245,7 +245,7 @@ describe('vertical window', () => {
     const rh = c.layout.rowHeight();
     // 15 rows below the header: any offset inside row 50 mounts rows 46..(50 + 16 + 4)
     await c.set(() => {
-      c.layout.viewportHeight.set(c.layout.totalHeaderHeight() + 15 * rh);
+      c.layout.viewportHeight.set(c.layout.headerHeight() + 15 * rh);
       c.scroll.scrollTop.set(50 * rh + 1);
     });
     const win = c.layout.vWindow();

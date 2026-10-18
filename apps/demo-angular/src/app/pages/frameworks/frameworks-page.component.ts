@@ -14,6 +14,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FRAMEWORKS, PACKAGES, SITE, type FrameworkId } from 'demo-kit/site';
 import { CodeBlockComponent } from '../../shell/code-block.component';
 import { InstallBlockComponent } from '../../shell/install-block.component';
+import { TABS } from '../../shell/tabs';
 import { InlineCodeComponent } from '../api/inline-code.component';
 import {
   CSP_CODE,
@@ -32,7 +33,7 @@ const isFramework = (id: string | null): id is FrameworkId => FRAMEWORKS.some(f 
 @Component({
   selector: 'app-frameworks-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, CodeBlockComponent, InstallBlockComponent, InlineCodeComponent],
+  imports: [RouterLink, CodeBlockComponent, InstallBlockComponent, InlineCodeComponent, TABS],
   styles: `
     .fw-panel {
       gap: 18px;
@@ -73,21 +74,16 @@ const isFramework = (id: string | null): id is FrameworkId => FRAMEWORKS.some(f 
       </div>
     </header>
 
-    <div #tablist class="gs-tabs" role="tablist" aria-label="Framework">
+    <div
+      #tablist
+      class="gs-tabs"
+      aria-label="Framework"
+      tabPanel="fw-panel"
+      [appTabList]="selected()"
+      (tabSelect)="select($event)"
+    >
       @for (f of frameworks; track f.id) {
-        <button
-          type="button"
-          role="tab"
-          class="gs-tab"
-          [id]="'fw-tab-' + f.id"
-          [attr.aria-selected]="f.id === selected()"
-          [attr.aria-controls]="f.id === selected() ? 'fw-panel' : null"
-          [attr.tabindex]="f.id === selected() ? 0 : -1"
-          (click)="select(f.id)"
-          (keydown)="onKey($event)"
-        >
-          {{ f.label }}
-        </button>
+        <button type="button" class="gs-tab" [appTab]="f.id" [id]="'fw-tab-' + f.id">{{ f.label }}</button>
       }
     </div>
 
@@ -252,26 +248,5 @@ export class FrameworksPageComponent {
     });
     // Keep the router's history state (navigationId): Back still restores the scroll position
     this.location.replaceState(this.router.serializeUrl(url), '', this.location.getState());
-  }
-
-  /** Arrow keys, Home and End move between the tabs and select them (WAI-ARIA tabs pattern). */
-  protected onKey(e: KeyboardEvent): void {
-    const i = this.frameworks.findIndex(f => f.id === this.selected());
-    const n = this.frameworks.length;
-    const next =
-      e.key === 'ArrowRight'
-        ? (i + 1) % n
-        : e.key === 'ArrowLeft'
-          ? (i - 1 + n) % n
-          : e.key === 'Home'
-            ? 0
-            : e.key === 'End'
-              ? n - 1
-              : -1;
-    if (next < 0) return;
-    e.preventDefault();
-    this.select(this.frameworks[next].id);
-    const tabs = (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>('[role="tab"]');
-    tabs?.[next]?.focus();
   }
 }

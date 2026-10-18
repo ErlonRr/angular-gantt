@@ -2,8 +2,8 @@
  * @file arrows.ts
  * Arrows region: the dependency links crossing the virtual window (`arrowIndex.query`, O(log n + k)),
  * keyed by `link.key` in drawing order. Each link's visual is memoised in the graph
- * (`graph.arrowVisual`), so a scroll computes and builds only the links that entered the window
- * and leaves the others untouched.
+ * (`graph.arrowVisual`, which carries the dash and the lag label's font size), so a scroll
+ * computes and builds only the links that entered the window and leaves the others untouched.
  */
 
 import type { ArrowVisual } from '@gantryjs/core';
@@ -27,7 +27,6 @@ export function createArrowsLayer(ctx: LayerContext): Layer {
       const { top, bottom } = G.windowSpan();
       const links = G.arrowIndex().query(top, bottom);
       const arrowOf = G.arrowVisual();
-      const fontPx = G.metrics().fontPx;
 
       const items: Item[] = [];
       for (const link of links) {
@@ -38,8 +37,8 @@ export function createArrowsLayer(ctx: LayerContext): Layer {
         dom.arrows,
         items,
         item => item.key,
-        item => createArrow(item.a, fontPx),
-        (el, item) => patchArrow(el, item.a, fontPx),
+        item => createArrow(item.a),
+        (el, item) => patchArrow(el, item.a),
       );
     },
   };

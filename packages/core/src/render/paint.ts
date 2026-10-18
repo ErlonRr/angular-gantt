@@ -89,6 +89,19 @@ export const PAINTS: Readonly<{
   progressOverlay: themeVar('progressOverlay'),
 });
 
+/**
+ * The non-working-time hatch: a `<pattern>` of `size` × `size` user-space units rotated by
+ * `rotate` degrees, holding one line from (0, 0) to (0, `size`) stroked with `PAINTS.hatch` at
+ * `strokeWidth` and `strokeOpacity`. Both bindings build their pattern from it.
+ */
+export const HATCH_PATTERN: Readonly<{ size: number; rotate: number; strokeWidth: number; strokeOpacity: number }> =
+  Object.freeze({
+    size: 6,
+    rotate: 45,
+    strokeWidth: 1.5,
+    strokeOpacity: 0.35,
+  });
+
 /** Background of a row (timeline and task list): selection > `task.rowColor` > zebra. */
 export function rowPaint(geo: Pick<RowGeometry, 'row'>, selected: boolean): Paint {
   if (selected) return PAINTS.rowSelected;

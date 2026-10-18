@@ -69,7 +69,7 @@ describe('the splitter separator', () => {
     const { f, host } = await mount();
     const layout = f.debugElement.query(By.directive(GantryComponent)).injector.get(GanttLayoutService);
     const toggle = host.querySelector<HTMLElement>('.gantry-splitter-toggle')!;
-    expect(toggle.style.top).toBe(`${layout.totalHeaderHeight() + SPLITTER_TOGGLE_OFFSET}px`);
+    expect(toggle.style.top).toBe(`${layout.headerHeight() + SPLITTER_TOGGLE_OFFSET}px`);
   });
 });
 

@@ -5,9 +5,10 @@ Use it from plain JavaScript or any framework. React, Vue and Svelte users can i
 the thin bindings [`@gantryjs/react`](https://github.com/ErlonRr/gantryjs/tree/main/packages/react), [`@gantryjs/vue`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vue) and
 [`@gantryjs/svelte`](https://github.com/ErlonRr/gantryjs/tree/main/packages/svelte) instead; Angular users, [`@gantryjs/angular`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular).
 
-Free and MIT licensed. Interactive drag & resize, dependency arrows (FS/SS/FF/SF + lag),
-critical path, baselines, milestones, groups, virtual scrolling, sorting, lazy loading,
-light/dark theming, i18n, keyboard shortcuts and ARIA.
+Free and MIT licensed. Interactive drag & resize (mouse, touch and keyboard), dependency arrows
+(FS/SS/FF/SF + lag), critical path, baselines, milestones, groups, virtual scrolling, zoom
+gestures, sorting, lazy loading, loading / error / empty states, light/dark theming, i18n, and
+accessibility (one tab stop per pane, ARIA, debounced announcements, forced colors).
 
 ## Install
 
@@ -41,14 +42,32 @@ npm i @gantryjs/vanilla
 </script>
 ```
 
-Give the element a height (it fills its container: `display: block; height: 100%`).
+Give the element a height (it fills its container: `display: block; height: 100%`). That size
+comes from the element's own `:host` style, so it applies once the element is defined: a page that
+renders the tag before the script runs (server-side rendering, a deferred bundle) reserves the box
+with one rule of its own:
+
+```css
+gantry-element:not(:defined) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+```
 
 ## Configuration
 
 `options` accepts every `GanttOptions` field — header tiers & week formats, zoom presets,
 period delimiters, weekends / holidays / working hours, bar & arrow sizes, panel splitter,
-table view and saved state. See the full guide:
-[Configuration](https://github.com/ErlonRr/gantryjs#configuration).
+table view and saved state, the toolbar, legend and marker lane, the tooltip and the keyboard
+shortcuts. See the full guide, [Configuration](https://github.com/ErlonRr/gantryjs#configuration), and in particular:
+
+- [Toolbar, legend and markers](https://github.com/ErlonRr/gantryjs#toolbar-legend-and-markers),
+  [Tooltip](https://github.com/ErlonRr/gantryjs#tooltip) and
+  [Loading, error and empty states](https://github.com/ErlonRr/gantryjs#loading-error-and-empty-states);
+- [Keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus),
+  [Touch and pointer](https://github.com/ErlonRr/gantryjs#touch-and-pointer), [Zoom](https://github.com/ErlonRr/gantryjs#zoom),
+  [Screen readers](https://github.com/ErlonRr/gantryjs#screen-readers) and [Forced colors](https://github.com/ErlonRr/gantryjs#forced-colors).
 
 ## Properties
 
@@ -59,12 +78,14 @@ table view and saved state. See the full guide:
 | `columns`                     | `VanillaColumnDef[]`                                                          | built-in | Left-panel columns (`options.columns` wins). `render(row)` returns text; `cellTemplate(row, ctx)` a DOM `Node` or text.   |
 | `annotations`                 | `GanttAnnotation[]`                                                           | `[]`     | Highlighted date ranges / markers                                                                                         |
 | `darkMode`                    | `boolean \| 'auto'`                                                           | `false`  | `'auto'` follows `prefers-color-scheme`                                                                                   |
-| `showToolbar`                 | `boolean`                                                                     | `true`   | Zoom, view-mode pills and _Today_ button                                                                                  |
+| `showToolbar`                 | `boolean`                                                                     | `true`   | Zoom, _Fit_, zoom levels, _Today_ and the view switch (`options.toolbar`)                                                 |
 | `enableDrag` / `enableResize` | `boolean`                                                                     | `true`   | Per task: `task.draggable = false`                                                                                        |
-| `tooltipEnabled`              | `boolean`                                                                     | `true`   | Hover tooltip                                                                                                             |
-| `showLegend`                  | `boolean`                                                                     | `false`  | Legend: today marker, annotations, critical path and baseline                                                             |
+| `tooltipEnabled`              | `boolean`                                                                     | `true`   | Task tooltip on hover, keyboard focus and tap (`options.tooltip`)                                                         |
+| `showLegend`                  | `boolean`                                                                     | `false`  | Legend strip: today marker, annotations, critical path and baseline (`options.legend`)                                    |
 | `dataSource`                  | `{ fetcher(page, pageSize), pageSize?, initialPage?, retries?, retryDelay? }` | `null`   | Lazy paging (or a `GanttDataSource`); replaces `tasks` while set. A failed page shows Retry and pauses until `retry()`    |
 | `renderBar`                   | `(ctx, renderDefault) => SVGElement \| null`                                  | —        | Replace or decorate a bar's SVG                                                                                           |
+| `loading`                     | `boolean`                                                                     | `false`  | You are loading the tasks: a skeleton while there are no rows, `aria-busy` over rows already shown                        |
+| `errorMessage`                | `string \| null`                                                              | `null`   | A non-blank message shows the error state with a Retry button (`retry` event); it wins over every other state             |
 
 - Assigning `undefined` restores a property's default (`el.options = undefined`).
 - Properties set before `<gantry-element>` is defined (an element created or parsed before the
@@ -84,6 +105,8 @@ table view and saved state. See the full guide:
 | `enable-resize`   | `enableResize`   | present = `true`, `"false"` = `false`     |
 | `tooltip-enabled` | `tooltipEnabled` | present = `true`, `"false"` = `false`     |
 | `show-legend`     | `showLegend`     | present = `true`, `"false"` = `false`     |
+| `loading`         | `loading`        | present = `true`, `"false"` = `false`     |
+| `error-message`   | `errorMessage`   | the message (a blank one shows no error)  |
 | `view-mode`       | `setViewMode()`  | a `ViewMode` or a `zoomLevels` name       |
 
 Removing an attribute restores the property's default (removing `view-mode` changes nothing).
@@ -102,6 +125,11 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 | `view-mode-change`           | `{ viewMode }` — fired when the active zoom level changes                               |
 | `state-change`               | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort |
 | `load-error`                 | `{ error, page }` — a data-source page failed after its automatic retries               |
+| `retry`                      | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }`  |
+
+`retry` carries `{ source: 'error' }` for the `errorMessage` state (load again, then clear
+`errorMessage`) and `{ source: 'dataSource' }` after a failed first data-source page (the element
+also calls `dataSource.retry()`; a later page's Retry in the task-list footer only retries).
 
 `addEventListener` is typed: `gantt.addEventListener('task-dragged', e => e.detail.daysMoved)`.
 `GantryEventDetailMap` / `GantryEventMap` type the payloads, and `GANTRY_EVENTS` maps each event
@@ -112,6 +140,7 @@ to its binding callback name (`'task-dragged'` → `onTaskDragged`).
 | Method                                                                              |                                                                                      |
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `zoomIn()` / `zoomOut()` / `setViewMode(mode)`                                      | Change the zoom level (a `ViewMode` or a `zoomLevels` name)                          |
+| `fitToScreen()`                                                                     | Zoom to the finest level that shows every task, then scroll to the first one         |
 | `setView('split' \| 'table' \| 'chart')` / `togglePanel()`                          | Switch view; `togglePanel()` collapses / expands the task list (restoring its width) |
 | `scrollToToday(behavior?)` / `scrollToDate(date, behavior?)`                        | Centre a date in the timeline                                                        |
 | `scrollToTask(id, behavior?)`                                                       | Scroll a task into view (both axes)                                                  |
@@ -123,36 +152,56 @@ to its binding callback name (`'task-dragged'` → `onTaskDragged`).
 | `getBarVisual(id)`                                                                  | A bar's computed geometry (e.g. to anchor a popover), also for rows out of view      |
 | `setTheme(theme)` / `patchTheme(patch)` / `resetTheme()`                            | Replace / merge / drop the custom theme overrides (see [Theming](#theming))          |
 
+## Slots
+
+| Slot    | Content                                                                                |
+| ------- | -------------------------------------------------------------------------------------- |
+| `empty` | Shown in the empty state (no tasks and nothing loading) instead of `labels.emptyState` |
+
+```html
+<gantry-element>
+  <div slot="empty">No tasks yet. <button type="button" id="add">Add one</button></div>
+</gantry-element>
+```
+
 ## Keyboard and focus
 
 The element is not a tab stop itself: its shadow root delegates focus (`el.focus()` focuses the
 first control inside). The tab stops, in order:
 
-1. the toolbar buttons (the toolbar is named by `labels.ariaToolbar`);
-2. the task list, one row at a time (`tabindex="0"` on the focused row, else the row focused last
-   while it is mounted, else the first row in view; the others have `tabindex="-1"`). A focused row
-   stays mounted while it is scrolled out of view, so focus survives scrolling;
-3. the splitter (`.gantry-splitter-handle`, `role="separator"`, `aria-valuenow` = panel width in
-   px, `aria-valuemin` = 0 when the panel is collapsible else `panel.minWidth`, `aria-valuemax` =
-   the widest panel it allows), then its collapse toggle;
-4. the timeline viewport (`role="group"`, named by `labels.ariaChart`); arrow keys scroll it.
+1. the toolbar: one stop, `←` / `→` (wrapping) and `Home` / `End` move between its controls,
+   `Enter` / `Space` press a button or check a radio;
+2. the task list (`role="treegrid"`): one stop, row first — `↑` / `↓`, `PgUp` / `PgDn`,
+   `Home` / `End` move between rows (the header row is above the first), `→` / `←` expand or
+   collapse a group or move into the cells and back, `Enter` activates a row or sorts a column,
+   `Space` / `Shift+Space` / `Ctrl+Space` select;
+3. the splitter (`.gantry-splitter-handle`, `role="separator"`: `←` / `→` resize the panel,
+   `Enter` / `Space` collapse it), then its collapse toggle;
+4. the bars (`role="option"` in the timeline's `listbox`): one stop — `↑` / `↓`, `PgUp` /
+   `PgDn`, `Home` / `End` move between bars, `←` / `→` pan the timeline, `Space` selects, and
+   `Enter` / `F2` start **move mode** (`←` / `→` move the bar, `Shift` / `Alt` + `←` / `→`
+   resize its end / start, `Enter` commits with `task-dragged` / `task-resized`, `Escape`
+   cancels). The timeline viewport is a tab stop only while no bar is mounted.
 
-Every tab stop shows a focus ring in `--gantt-sel-border` on keyboard focus. When the focused
-control disappears (its row was removed), focus moves to the timeline viewport (in the table
-view, to the task list's tab-stop row).
+Anywhere inside: `Escape` cancels move mode or a drag, else closes the tooltip, else clears the
+selection; `Ctrl/⌘ + A` selects all; `+` / `-` zoom, `T` scrolls to today and `F` fits the tasks
+to the screen (off with `options.keyboard.characterShortcuts: false`). Shortcuts don't fire while
+typing in an input or with `Alt` / `AltGr` held. Every stop shows a ring in `--gantt-focus-ring`
+on keyboard focus; the focused bar's ring and resize grips are drawn over it. When the focused
+control disappears, focus moves to the bars' tab stop (the viewport while none is mounted; in the
+table view, the task list's tab-stop row).
 
-Shortcuts, anywhere inside the chart (not while typing in an input, nor with `Alt` / `AltGr`):
-`Escape` clears the selection (or cancels a drag), `Ctrl/⌘ + A` / `Ctrl/⌘ + Shift + A` select
-all, `+` / `-` zoom, `T` scrolls to today. `Enter` / `Space` select a focused task-list row (with
-the click modifiers) and sort a focused sortable column header. On the splitter, `Enter` /
-`Space` toggle the panel and `←` / `→` resize it.
+The full key table is in [Keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus),
+the pointer and touch gestures in [Touch and pointer](https://github.com/ErlonRr/gantryjs#touch-and-pointer)
+and [Zoom](https://github.com/ErlonRr/gantryjs#zoom).
 
 Screen readers: the host is a `region` named by `labels.ariaChart`, through `ElementInternals`
 (engines without ARIA on `ElementInternals` get `role="region"` and `aria-label` host attributes
-when the element connects; a `role` or `aria-label` you set wins). A polite live region
-(`.gantt-sr-live`, `role="status"`) announces changes of the number of selected tasks and the
-data source's load state (`labels.loading`, then `labels.announceLoaded(n)` /
-`labels.allLoaded(n)`); a failed page is announced once in `.gantt-sr-alert` (`role="alert"`).
+when the element connects; a `role` or `aria-label` you set wins), and `aria-busy` while the
+chart loads. A polite live region (`.gantt-sr-live`, `role="status"`) announces selection, load,
+zoom, expand / collapse and move-mode changes, debounced (250 ms, the last message wins);
+errors go to `.gantt-sr-alert` (`role="alert"`). See
+[Screen readers](https://github.com/ErlonRr/gantryjs#screen-readers).
 
 ## Theming
 
@@ -177,6 +226,10 @@ gantry-element {
   set the matching token too.
 - Progress parts of theme-coloured bars use `--gantt-progress-overlay` (`progressOverlay`,
   `#000000`) at `bar.progress.opacity`; `task.progressColor` and `bar.progress.color` win.
+- Every keyboard focus ring (toolbar, task list, splitter, viewport, the focused bar) is
+  `--gantt-focus-ring` (`focusRing`: `#2563EB` light, `#60A5FA` dark); `--gantt-sel-border` is
+  the outline of the selected bar and row. Light milestones are `#7C3AED` (`LegacyLightTheme`
+  keeps `#8B5CF6`).
 - `barRadius`, `fontSize` and `barTextColor` change the layout: set them with `setTheme()` /
   `options.theme`, not page CSS. With `darkMode: 'auto'` the chart re-renders when the OS colour
   scheme flips.
@@ -184,6 +237,12 @@ gantry-element {
   strings: apply them as style properties (`el.style.setProperty('fill', paint)`) or resolve them
   with `resolvePaint(paint, ctx.theme)`. The `renderDefault()` it receives paints with the
   `--gantt-*` variables, so its SVG needs them in scope (inside the element, or on an ancestor).
+  The element gives the returned node its role, name, `tabindex` and `data-*` attributes, and
+  draws its focus ring and resize grips (`ctx.visual.focusRect`, `ctx.visual.handles`) itself.
+- **Forced colors** (Windows High Contrast): under `@media (forced-colors: active)` the chart
+  paints with system colours — bars `ButtonFace` / `ButtonText`, critical bars dashed, selection,
+  today and focus rings `Highlight`, lines `GrayText`. A custom `renderBar` SVG keeps its own
+  paints unless it adds forced-colors rules of its own. See [Forced colors](https://github.com/ErlonRr/gantryjs#forced-colors).
 
 ### CSS custom properties
 
@@ -210,16 +269,19 @@ gantry-element {
 | `--gantt-text-muted`      | `textMuted`        |     | `--gantt-bar-text-on-milestone` | derived: label on a milestone    |
 | `--gantt-font`            | `fontFamily`       |     | `--gantt-bar-text-on-critical`  | derived: label on a critical bar |
 | `--gantt-font-size`       | `fontSize`         |     | `--gantt-today-label`           | derived: current-period label    |
+| `--gantt-focus-ring`      | `focusRing`        |     |                                 |                                  |
 
 ### Parts
 
-| Part       | Element                                                       |
-| ---------- | ------------------------------------------------------------- |
-| `wrapper`  | the root box (toolbar and panes)                              |
-| `toolbar`  | the toolbar                                                   |
-| `panel`    | the task-list panel                                           |
-| `splitter` | the splitter box (its handle is the `role="separator"` child) |
-| `timeline` | the timeline viewport (header + chart, scrolls on both axes)  |
+| Part       | Element                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------- |
+| `wrapper`  | the root box (toolbar and panes)                                                          |
+| `toolbar`  | the toolbar                                                                               |
+| `panel`    | the task-list panel                                                                       |
+| `splitter` | the splitter box (its handle is the `role="separator"` child)                             |
+| `timeline` | the timeline viewport (header + chart, scrolls on both axes)                              |
+| `legend`   | the legend (`showLegend`): a strip under the panes, or in the toolbar (`legend.position`) |
+| `state`    | the loading / error / empty box over the chart body, attached while it shows              |
 
 ```css
 gantry-element::part(toolbar) {
@@ -233,7 +295,7 @@ gantry-element::part(toolbar) {
 | ------------------ | ------------------------------------------------- |
 | `:state(dark)`     | the dark theme is active (`darkMode` or `'auto'`) |
 | `:state(dragging)` | a bar is dragged or resized                       |
-| `:state(loading)`  | a data-source page is loading                     |
+| `:state(loading)`  | `loading` is on, or a data-source page is loading |
 
 ```css
 gantry-element:state(dark) {

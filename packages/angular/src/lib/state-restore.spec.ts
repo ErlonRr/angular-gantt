@@ -50,9 +50,9 @@ async function mount(setup?: (host: Host) => void): Promise<ComponentFixture<Hos
 const $$ = (f: ComponentFixture<Host>, sel: string): HTMLElement[] => [
   ...(f.nativeElement as HTMLElement).querySelectorAll<HTMLElement>(sel),
 ];
-/** Zoom pill the toolbar shows as active */
+/** Zoom-level radio the toolbar shows as checked */
 const pressedLevel = (f: ComponentFixture<Host>) =>
-  $$(f, '.gantt-tb-group:not(.gantt-tb-views) > .gantt-tb-pill[aria-pressed="true"]').map(b => b.textContent?.trim());
+  $$(f, '.gantt-tb-pills:not(.gantt-tb-views) > .gantt-tb-pill[aria-checked="true"]').map(b => b.textContent?.trim());
 const rowIds = (f: ComponentFixture<Host>) => $$(f, '.gantt-tl-row').map(r => r.getAttribute('data-task-id'));
 const stored = (key: string) => JSON.parse(localStorage.getItem(`gantry:${key}`) ?? 'null') as GanttState | null;
 const debounce = () => new Promise(r => setTimeout(r, 200));

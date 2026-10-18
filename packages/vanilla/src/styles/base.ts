@@ -15,10 +15,17 @@ import { HEADER_CSS } from './header.css';
 import { TOOLBAR_CSS } from './toolbar.css';
 import { TASKLIST_CSS } from './tasklist.css';
 import { CANVAS_CSS } from './canvas.css';
+import { GESTURES_CSS } from './gestures.css';
 import { LEGEND_CSS } from './legend.css';
+import { STATES_CSS } from './states.css';
 import { TOOLTIP_CSS } from './tooltip.css';
+import { READOUT_CSS } from './readout.css';
+import { FORCED_COLORS_CSS } from './forced-colors.css';
 
-/** The element's CSS text, in cascade order (also the text of the fallback style element). */
+/**
+ * The element's CSS text, in cascade order (also the text of the fallback style element). The
+ * forced-colours sheet comes last: it overrides every region's colours.
+ */
 export const BASE_CSS = [
   HOST_CSS,
   SPLITTER_CSS,
@@ -26,8 +33,12 @@ export const BASE_CSS = [
   TOOLBAR_CSS,
   TASKLIST_CSS,
   CANVAS_CSS,
+  GESTURES_CSS,
   LEGEND_CSS,
+  STATES_CSS,
   TOOLTIP_CSS,
+  READOUT_CSS,
+  FORCED_COLORS_CSS,
 ].join('');
 
 const sheets = new WeakMap<Document, CSSStyleSheet>();

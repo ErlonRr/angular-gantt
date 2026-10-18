@@ -200,5 +200,74 @@ for (const p of PAGES) {
       await shot(page, info, p.name, 'table');
       await pills.nth(0).click();
     });
+
+    test('toolbar: one roving tab stop, 32 px controls, radios checked on activation only', async ({ chart, page }) => {
+      const controls = chart.get(SEL.toolbarControls);
+      const keys = await controls.evaluateAll(els => els.map(e => e.getAttribute('data-focus-key') ?? ''));
+      test.skip(keys.length < 2, 'no toolbar');
+      const tabStop = chart.get(`${SEL.toolbarControls}[tabindex="0"]`);
+      await expect(tabStop).toHaveCount(1);
+      // WCAG 2.5.8: every control is at least 32 × 32 px; the icons are 16 px
+      const smallest = await controls.evaluateAll(els =>
+        Math.min(...els.map(e => Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))),
+      );
+      expect(smallest).toBeGreaterThanOrEqual(31.5);
+      const icons = await chart
+        .get('.gantt-toolbar svg.gantt-tb-icon')
+        .evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().width)));
+      expect(icons.length).toBeGreaterThan(0);
+      expect([...new Set(icons)]).toEqual([16]);
+
+      // Which radio of a group is checked (index), for the zoom levels and the views
+      const checked = (group: string) =>
+        chart
+          .get(`${group} [role="radio"]`)
+          .evaluateAll(els => els.findIndex(e => e.getAttribute('aria-checked') === 'true'));
+      const LEVELS = '.gantt-tb-pills:not(.gantt-tb-views)';
+      const VIEWS = '.gantt-tb-views';
+      const before = [await checked(LEVELS), await checked(VIEWS)];
+
+      // ←/→ move along the controls and wrap, Home/End go to the ends; the tab stop follows
+      await tabStop.focus();
+      const at = keys.indexOf((await chart.focusedKey()) ?? '');
+      expect(at).toBeGreaterThanOrEqual(0);
+      await page.keyboard.press('ArrowRight');
+      expect(await chart.focusedKey()).toBe(keys[(at + 1) % keys.length]);
+      await page.keyboard.press('End');
+      expect(await chart.focusedKey()).toBe(keys.at(-1));
+      await page.keyboard.press('ArrowRight');
+      expect(await chart.focusedKey()).toBe(keys[0]);
+      await page.keyboard.press('ArrowLeft');
+      expect(await chart.focusedKey()).toBe(keys.at(-1));
+      await expect.poll(() => tabStop.getAttribute('data-focus-key')).toBe(keys.at(-1));
+      // Moving focus over the radios checked none of them
+      expect([await checked(LEVELS), await checked(VIEWS)]).toEqual(before);
+      await page.keyboard.press('Home');
+
+      // A click (or Enter / Space) checks a radio
+      const views = chart.get(`${VIEWS} [role="radio"]`);
+      if ((await views.count()) === 3 && before[1] >= 0) {
+        const other = (before[1] + 1) % 3;
+        await views.nth(other).click();
+        await expect.poll(() => checked(VIEWS)).toBe(other);
+        await views.nth(before[1]).focus();
+        await page.keyboard.press('Enter');
+        await expect.poll(() => checked(VIEWS)).toBe(before[1]);
+      }
+    });
+
+    test('legend: an in-flow strip under the panes, never over the chart', async ({ chart }) => {
+      const legend = chart.get(SEL.legend).first();
+      test.skip(!(await legend.count()), 'no legend');
+      const [box, main] = await Promise.all([chart.box(legend), chart.box(chart.get(SEL.main).first())]);
+      if ((await legend.getAttribute('class'))?.includes('gantt-legend--toolbar')) {
+        // At the end of the toolbar, above the panes
+        expect(box.y + box.height).toBeLessThanOrEqual(main.y + 0.5);
+      } else {
+        expect(await legend.getAttribute('class')).toContain('gantt-legend--bottom');
+        expect(box.y).toBeGreaterThanOrEqual(main.y + main.height - 0.5);
+        expect(Math.abs(box.width - main.width)).toBeLessThanOrEqual(1);
+      }
+    });
   });
 }

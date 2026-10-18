@@ -19,9 +19,11 @@ import {
   type TaskStatus,
 } from '../types';
 import { calendarDays, durationLabel, formatDate, toLocalDay } from '../gantt-math';
+import { formatDate as formatPattern } from '../format';
 import { taskSpan } from './timeline';
 import type { ResolvedGanttConfig } from './config';
 import { statusPaint, type Paint } from './paint';
+import { estimateTextWidth } from './bars';
 
 // ─── Default column sets ──────────────────────────────────────
 
@@ -115,14 +117,93 @@ function contextOf(ctx: ColumnContext | undefined, task: GanttTask): ColumnConte
   return ctx ?? buildColumnContext({ tasks: [task], now: new Date() });
 }
 
+// ─── Date and duration widths ─────────────────────────────────
+
+/** Room a task-list cell adds around its text (px): 8 px padding on each side and a 1 px border. */
+export const COLUMN_CELL_INSET = 17;
+
+/** Default widths of the built-in date / duration columns: the floor `buildBuiltinColumns` applies. */
+export const DATE_COLUMN_WIDTH = 112;
+export const BASELINE_DATE_COLUMN_WIDTH = 124;
+export const DURATION_COLUMN_WIDTH = 96;
+
+let sampleDates: readonly Date[] | undefined;
+
+/**
+ * Dates that bring out the longest text of a format: every month, a week of two-digit days (so
+ * every weekday name) and a two-digit 12- and 24-hour time.
+ */
+function dateSamples(): readonly Date[] {
+  if (!sampleDates) {
+    const out: Date[] = [];
+    for (let m = 0; m < 12; m++) for (let d = 22; d <= 28; d++) out.push(new Date(2026, m, d, 22, 58, 58));
+    sampleDates = out;
+  }
+  return sampleDates;
+}
+
+const dateWidths = new Map<string, number>();
+
+/**
+ * Width (px) a column needs to show dates in `format` / `locale` unclipped: the longest text
+ * of `format` over a sample of dates (estimated at `fontPx`, see `estimateTextWidth`) plus
+ * `COLUMN_CELL_INSET`, rounded up. Memoised per format, locale and font size.
+ */
+export function dateColumnWidth(format: string, locale?: string, fontPx = 12): number {
+  const key = `${fontPx}\u0000${locale ?? ''}\u0000${format}`;
+  let width = dateWidths.get(key);
+  if (width === undefined) {
+    let text = 0;
+    for (const d of dateSamples()) text = Math.max(text, estimateTextWidth(formatPattern(d, format, locale), fontPx));
+    width = Math.ceil(text + COLUMN_CELL_INSET);
+    if (dateWidths.size >= 64) dateWidths.clear();
+    dateWidths.set(key, width);
+  }
+  return width;
+}
+
+/**
+ * Width (px) the duration column needs for `labels`: the longest of its texts (less than a day,
+ * one day, 6 days, 52 weeks, 52 weeks 6 days) estimated at `fontPx`, plus `COLUMN_CELL_INSET`.
+ */
+export function durationColumnWidth(
+  labels: Pick<
+    GanttLabels,
+    'durationLessThanDay' | 'durationDay' | 'durationDays' | 'durationWeeks' | 'durationWeeksDays'
+  >,
+  fontPx = 12,
+): number {
+  const texts = [
+    labels.durationLessThanDay,
+    labels.durationDay,
+    labels.durationDays(6),
+    labels.durationWeeks(52),
+    labels.durationWeeksDays(52, 6),
+  ];
+  return Math.ceil(Math.max(...texts.map(t => estimateTextWidth(t, fontPx))) + COLUMN_CELL_INSET);
+}
+
 // ─── Built-in columns ─────────────────────────────────────────
 
 /**
  * The full catalogue of built-in columns (localised). Which ones show depends on the view:
  * see `resolveViewColumns`. Values are plain text; `computeCellVisual` adds the status dot.
+ *
+ * Date and duration columns are as wide as their default (`DATE_COLUMN_WIDTH`,
+ * `BASELINE_DATE_COLUMN_WIDTH`, `DURATION_COLUMN_WIDTH`) or as their text needs at `fontPx`
+ * (`dateColumnWidth`, `durationColumnWidth`), whichever is wider: English keeps the defaults,
+ * long locales and formats don't truncate.
  */
-export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFormat = 'MMM D, YYYY'): ColumnDef[] {
+export function buildBuiltinColumns(
+  labels: GanttLabels,
+  locale?: string,
+  dateFormat = 'MMM D, YYYY',
+  fontPx = 12,
+): ColumnDef[] {
   const fmt = (d: Date | undefined) => (d ? formatDate(d, dateFormat, locale) : '');
+  const dateWidth = dateColumnWidth(dateFormat, locale, fontPx);
+  const startEndWidth = Math.max(DATE_COLUMN_WIDTH, dateWidth);
+  const baselineWidth = Math.max(BASELINE_DATE_COLUMN_WIDTH, dateWidth);
   const span = (t: GanttTask, ctx: ColumnContext) => taskSpan(t, ctx);
   const statusLabel = (s: string) =>
     (
@@ -190,7 +271,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
     col({
       key: 'start',
       label: labels.colStart,
-      width: 112,
+      width: startEndWidth,
       minWidth: 72,
       render: r => fmt(r.task.start),
       sortValue: (r, ctx) => span(r.task, ctx).start,
@@ -198,7 +279,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
     col({
       key: 'end',
       label: labels.colEnd,
-      width: 112,
+      width: startEndWidth,
       minWidth: 72,
       render: r => fmt(r.task.end ?? r.task.start),
       sortValue: (r, ctx) => span(r.task, ctx).end,
@@ -206,7 +287,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
     col({
       key: 'duration',
       label: labels.colDuration,
-      width: 96,
+      width: Math.max(DURATION_COLUMN_WIDTH, durationColumnWidth(labels, fontPx)),
       minWidth: 60,
       render: (r, ctx) => taskDurationLabel(r.task, contextOf(ctx, r.task), labels),
       sortValue: (r, ctx) => {
@@ -241,7 +322,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
     col({
       key: 'baselineStart',
       label: labels.colBaselineStart,
-      width: 124,
+      width: baselineWidth,
       minWidth: 72,
       render: r => fmt(r.task.baseline?.start),
       sortValue: r => r.task.baseline?.start,
@@ -249,7 +330,7 @@ export function buildBuiltinColumns(labels: GanttLabels, locale?: string, dateFo
     col({
       key: 'baselineEnd',
       label: labels.colBaselineEnd,
-      width: 124,
+      width: baselineWidth,
       minWidth: 72,
       render: r => fmt(r.task.baseline?.end),
       sortValue: r => r.task.baseline?.end,

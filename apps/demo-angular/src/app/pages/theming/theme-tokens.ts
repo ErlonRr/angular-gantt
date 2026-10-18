@@ -19,8 +19,9 @@ export interface ThemePreset {
 
 /**
  * Presets over the built-in themes, one set per mode. Each keeps WCAG AA: bar labels ≥ 4.5:1
- * (the chart picks white or near-black when `barTextColor` is unreadable), bars, markers and
- * arrows ≥ 3:1 on the background, text ≥ 4.5:1.
+ * (the chart picks white or near-black when `barTextColor` is unreadable), bars, markers,
+ * arrows and the focus ring ≥ 3:1 on the background, text ≥ 4.5:1. The focus ring takes the
+ * selection colour, as in the built-in themes.
  */
 export const PRESETS: readonly ThemePreset[] = [
   { id: 'default', label: 'Default', light: {}, dark: {} },
@@ -31,6 +32,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#0E7490',
       arrowColor: '#0E7490',
       selectionBorder: '#0E7490',
+      focusRing: '#0E7490',
       selectionBg: '#ECFEFF',
       milestoneColor: '#6D28D9',
       todayColor: '#C2410C',
@@ -41,6 +43,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#0E7490',
       arrowColor: '#22D3EE',
       selectionBorder: '#22D3EE',
+      focusRing: '#22D3EE',
       selectionBg: '#083344',
       milestoneColor: '#A78BFA',
       todayColor: '#FB923C',
@@ -53,6 +56,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#15803D',
       arrowColor: '#166534',
       selectionBorder: '#15803D',
+      focusRing: '#15803D',
       selectionBg: '#F0FDF4',
       milestoneColor: '#A16207',
       todayColor: '#0369A1',
@@ -64,6 +68,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#15803D',
       arrowColor: '#4ADE80',
       selectionBorder: '#4ADE80',
+      focusRing: '#4ADE80',
       selectionBg: '#052E16',
       milestoneColor: '#FACC15',
       todayColor: '#38BDF8',
@@ -76,6 +81,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#7C3AED',
       arrowColor: '#7C3AED',
       selectionBorder: '#7C3AED',
+      focusRing: '#7C3AED',
       selectionBg: '#F5F3FF',
       milestoneColor: '#DB2777',
       rowBgAlt: '#FAF8FF',
@@ -85,6 +91,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#7C3AED',
       arrowColor: '#A78BFA',
       selectionBorder: '#A78BFA',
+      focusRing: '#A78BFA',
       selectionBg: '#2E1065',
       milestoneColor: '#F472B6',
     },
@@ -96,6 +103,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#475569',
       arrowColor: '#64748B',
       selectionBorder: '#0F172A',
+      focusRing: '#0F172A',
       selectionBg: '#F1F5F9',
       milestoneColor: '#0F172A',
       criticalColor: '#B91C1C',
@@ -104,6 +112,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#64748B',
       arrowColor: '#94A3B8',
       selectionBorder: '#E2E8F0',
+      focusRing: '#E2E8F0',
       selectionBg: '#1E293B',
       milestoneColor: '#E2E8F0',
     },
@@ -123,6 +132,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#C2410C',
       arrowColor: '#C2410C',
       selectionBorder: '#C2410C',
+      focusRing: '#C2410C',
       selectionBg: '#FFEDD5',
       todayColor: '#BE123C',
       milestoneColor: '#7E22CE',
@@ -142,6 +152,7 @@ export const PRESETS: readonly ThemePreset[] = [
       barColor: '#C2410C',
       arrowColor: '#FB923C',
       selectionBorder: '#FB923C',
+      focusRing: '#FB923C',
       selectionBg: '#431407',
       todayColor: '#FB7185',
       milestoneColor: '#C084FC',
@@ -166,6 +177,7 @@ export const COLOR_FIELDS: readonly ColorField[] = [
   { key: 'baselineColor', label: 'Baseline', hint: 'Planned dates under the bars' },
   { key: 'arrowColor', label: 'Arrows', hint: 'Dependency arrows' },
   { key: 'selectionBorder', label: 'Selection', hint: 'Outline of the selected bars and rows' },
+  { key: 'focusRing', label: 'Focus ring', hint: 'Keyboard focus on rows, bars and the toolbar (Tab into the chart)' },
   {
     key: 'backgroundColor',
     label: 'Background',

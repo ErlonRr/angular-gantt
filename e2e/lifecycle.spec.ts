@@ -64,7 +64,11 @@ test('moveBefore() keeps scroll, selection and focus and rebuilds nothing (conne
       })),
     ];
   });
-  await expect(chart.get(SEL.row).nth(15)).toBeAttached();
+  // The grid counts every row, mounted or not (rows are windowed: how many mount depends on the height)
+  await expect
+    .poll(() => chart.evalRoot(root => Number(root.querySelector('[aria-rowcount]')?.getAttribute('aria-rowcount'))))
+    .toBeGreaterThan(60);
+  await expect(chart.get(SEL.row).nth(10)).toBeAttached();
   await chart.viewport().evaluate(v => {
     v.scrollTop = 300;
     v.scrollLeft = 400;

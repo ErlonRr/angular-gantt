@@ -36,6 +36,8 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   showLegend: true,
   dataSource: { fetcher: () => Promise.resolve([]), initialPage: 0 },
   renderBar: () => null,
+  loading: true,
+  errorMessage: 'Couldn’t load the plan',
 };
 
 const proto = customElements.get('gantry-element')!.prototype as unknown as Record<string, unknown>;
@@ -76,14 +78,18 @@ afterEach(() => {
 });
 
 describe('<Gantry> (Svelte binding)', () => {
-  it('renders a <gantry-element> with the default size, the style and the other attributes', () => {
+  it('renders a <gantry-element> with the style and the other attributes', () => {
     const { el } = render({ class: 'chart', id: 'plan', 'aria-describedby': 'help', style: 'height: 400px' });
     expect(el.className).toBe('chart');
     expect(el.id).toBe('plan');
     expect(el.getAttribute('aria-describedby')).toBe('help');
-    expect(el.style.display).toBe('block');
-    expect(el.style.width).toBe('100%');
+    // Only the consumer's style: the element sizes itself (`:host`: block, 100% × 100%)
     expect(el.style.height).toBe('400px');
+    expect(el.style.display).toBe('');
+  });
+
+  it('writes no inline style of its own', () => {
+    expect(render({ class: 'chart' }).el.hasAttribute('style')).toBe(false);
   });
 
   it('forwards every GANTRY_PROPERTIES prop as an element property', () => {
@@ -97,8 +103,10 @@ describe('<Gantry> (Svelte binding)', () => {
     expect(el.showToolbar).toBe(false);
     expect(el.showLegend).toBe(true);
     expect(el.renderBar).toBe(SAMPLE.renderBar);
-    // No prop leaks into the attributes
-    expect(el.getAttributeNames().filter(a => a !== 'style' && a !== 'role' && a !== 'aria-label')).toEqual([]);
+    expect(el.loading).toBe(true);
+    expect(el.errorMessage).toBe(SAMPLE.errorMessage);
+    // No prop leaks into the attributes (and no inline style)
+    expect(el.getAttributeNames().filter(a => a !== 'role' && a !== 'aria-label')).toEqual([]);
   });
 
   it('calls every GANTRY_EVENTS callback with the event detail, reading the latest callback', () => {
@@ -213,6 +221,8 @@ describe('<Gantry> (Svelte binding)', () => {
       expect(el.showLegend).toBe(false);
       expect(el.dataSource).toBeNull();
       expect(el.renderBar).toBeUndefined();
+      expect(el.loading).toBe(false);
+      expect(el.errorMessage).toBeNull();
     });
 
     it('a prop never set leaves the element its own value (an attribute, a property set on the element)', () => {

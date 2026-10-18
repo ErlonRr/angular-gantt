@@ -116,7 +116,7 @@ describe('<gantry-element> theme sheet and paints', () => {
   it('writes every theme variable and the contrast tokens into the sheet, none into the host style', async () => {
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
     const css = themeToCss(LightTheme);
-    expect(css).toHaveLength(42);
+    expect(css).toHaveLength(43);
     for (const [name, value] of css) expect(themeValue(el, name), name).toBe(value);
     expect(el.getAttribute('style') ?? '').not.toContain('--gantt-');
     // No theme attribute on the host: the dark theme is the `:state(dark)` custom state
@@ -220,6 +220,12 @@ describe('<gantry-element> theme sheet and paints', () => {
     expect($(el, '.gantt-annotations line').style.getPropertyValue('stroke')).toBe('var(--gantt-arrow)');
     expect(paintOf(el, $(el, '.gantt-rows rect'), 'fill')).toBe(LightTheme.rowBg);
     expect($(el, '.gantt-legend-swatch--dashed > *').style.getPropertyValue('stroke')).toBe('var(--gantt-arrow)');
+    // Toolbar icons and the legend strip: colours from the stylesheet (currentColor, theme tokens)
+    const icons = $$(el, 'svg.gantt-tb-icon, svg.gantt-tb-icon > path');
+    expect(icons.length).toBeGreaterThan(7);
+    for (const icon of icons) expect(icon.getAttribute('style')).toBeNull();
+    expect($(el, '.gantt-legend.gantt-legend--bottom').getAttribute('style')).toBeNull();
+    for (const b of $$(el, '.gantt-toolbar button')) expect(b.getAttribute('style')).toBeNull();
 
     // Header: the delimiter border from headerCellBorder, band paints, no style text
     const cells = $$(el, '.g-cell') as HTMLElement[];
@@ -233,6 +239,25 @@ describe('<gantry-element> theme sheet and paints', () => {
     expect(rowEl('c').style.getPropertyValue('background-color')).toBe('var(--gantt-sel-bg)');
     expect(paintOf(el, $(el, '.gantt-tl-status-dot'), 'background-color')).toBeTruthy();
     expect($(el, '.gantt-tl-status-dot').style.getPropertyValue('background-color')).toMatch(/^var\(--gantt-status-/);
+  });
+
+  it('places the state boxes through the CSSOM, their colours from the stylesheet', async () => {
+    el = await mount({ options: { viewMode: ViewMode.Week } });
+    el.loading = true;
+    await frame();
+    const blocks = $$(el, '.gantt-skeleton-row, .gantt-skeleton-name, .gantt-skeleton-bar') as HTMLElement[];
+    expect(blocks.length).toBeGreaterThan(0);
+    const GEOMETRY = new Set(['left', 'top', 'width', 'height']);
+    for (const block of blocks) {
+      const props = [...Array(block.style.length).keys()].map(i => block.style.item(i));
+      expect(
+        props.every(p => GEOMETRY.has(p)),
+        props.join(),
+      ).toBe(true);
+    }
+    el.errorMessage = 'Offline';
+    await frame();
+    for (const node of $$(el, '.gantt-state, .gantt-state *')) expect(node.getAttribute('style')).toBeNull();
   });
 
   it('falls back to inline host variables without constructable stylesheets', async () => {

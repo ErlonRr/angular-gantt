@@ -1,8 +1,11 @@
 import { ChangeDetectionStrategy, Component, Injectable, computed, inject, input, signal } from '@angular/core';
 import { PACKAGE_MANAGERS, installCommand, type PackageManager } from 'demo-kit/site';
 import { CopyButtonComponent } from './copy-button.component';
+import { TABS } from './tabs';
 
 const PM_KEY = 'gantry-site-pm';
+/** Numbers the install blocks of a page: their panel ids must be unique. */
+let nextBlock = 0;
 
 /** The package manager the visitor picked, shared by every install block and remembered. */
 @Injectable({ providedIn: 'root' })
@@ -33,25 +36,21 @@ export class PackageManagerService {
 @Component({
   selector: 'app-install-block',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CopyButtonComponent],
+  imports: [CopyButtonComponent, TABS],
   template: `
     <div class="gs-install">
-      <div class="gs-pm-tabs" role="tablist" aria-label="Package manager">
+      <div
+        class="gs-pm-tabs"
+        aria-label="Package manager"
+        [appTabList]="pms.pm()"
+        [tabPanel]="panelId"
+        (tabSelect)="pms.set($event)"
+      >
         @for (pm of managers; track pm) {
-          <button
-            type="button"
-            role="tab"
-            class="gs-pm-tab"
-            [attr.aria-selected]="pm === pms.pm()"
-            [attr.tabindex]="pm === pms.pm() ? 0 : -1"
-            (click)="pms.set(pm)"
-            (keydown)="onKey($event)"
-          >
-            {{ pm }}
-          </button>
+          <button type="button" class="gs-pm-tab" [appTab]="pm">{{ pm }}</button>
         }
       </div>
-      <div class="gs-cmd" role="tabpanel" [attr.aria-label]="pms.pm() + ' install command'">
+      <div class="gs-cmd" role="tabpanel" [id]="panelId" [attr.aria-label]="pms.pm() + ' install command'">
         <code><span class="gs-cmd-prompt">$ </span>{{ command() }}</code>
         <app-copy-button [text]="command()" label="Copy the install command" />
       </div>
@@ -65,25 +64,5 @@ export class InstallBlockComponent {
   protected readonly pms = inject(PackageManagerService);
   protected readonly managers = PACKAGE_MANAGERS;
   protected readonly command = computed(() => installCommand(this.pms.pm(), this.pkg()));
-
-  /** Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern). */
-  protected onKey(e: KeyboardEvent): void {
-    const i = this.managers.indexOf(this.pms.pm());
-    const n = this.managers.length;
-    const next =
-      e.key === 'ArrowRight'
-        ? (i + 1) % n
-        : e.key === 'ArrowLeft'
-          ? (i - 1 + n) % n
-          : e.key === 'Home'
-            ? 0
-            : e.key === 'End'
-              ? n - 1
-              : -1;
-    if (next < 0) return;
-    e.preventDefault();
-    this.pms.set(this.managers[next]);
-    const tabs = (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>('[role="tab"]');
-    tabs?.[next]?.focus();
-  }
+  protected readonly panelId = `gs-install-${nextBlock++}`;
 }

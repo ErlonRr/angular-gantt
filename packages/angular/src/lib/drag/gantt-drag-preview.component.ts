@@ -73,6 +73,16 @@ const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMA
         font-family: var(--gantt-font);
         user-select: none;
       }
+      /* Forced colours (D25): the ghost Highlight, its label CanvasText (inline SVG paints: !important) */
+      @media (forced-colors: active) {
+        .gantt-drag-preview {
+          fill: Highlight !important;
+          stroke: Highlight !important;
+        }
+        .gantt-drag-preview-label {
+          fill: CanvasText !important;
+        }
+      }
     `,
   ],
 })

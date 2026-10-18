@@ -1,15 +1,17 @@
 // Accessibility of <gantry> (Gantry 2 phase 7, step 4.2): the Web Component's model in Angular. The host
 // is a region named by `labels.ariaChart`, never a tab stop and without `data-theme`; the internal tab
-// stops (one task-list row, the splitter's separator and its sibling toggle, the timeline viewport);
+// stops (one task-list row, the splitter's separator and its sibling toggle, the timeline's tab-stop bar
+// — the viewport only without bars, phase 9);
 // `aria-multiselectable` from the selection options; the polite live region (selection count, data-source
 // load state) and the assertive one (a failed page); focus tracking (the focused row stays mounted,
 // pinned) and the focus fallback when the focused control is removed. The keyboard path and axe run in
-// Chromium (e2e/a11y.spec.ts).
+// Chromium (e2e/a11y.spec.ts). Polite announcements are debounced (core `createAnnouncer`,
+// ANNOUNCE_DEBOUNCE): the live-region tests wait it out (`settle`).
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { DEFAULT_LABELS, TaskType, type GanttOptions, type GanttTask } from '@gantryjs/core';
+import { ANNOUNCE_DEBOUNCE, DEFAULT_LABELS, TaskType, type GanttOptions, type GanttTask } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
 import { GanttLayoutService } from './layout/gantt-layout.service';
@@ -102,6 +104,12 @@ const tabStops = (c: Chart) => c.$$('.gantt-tl-row[tabindex="0"]').map(r => r.ge
 const live = (c: Chart) => c.$('.gantt-sr-live').textContent;
 const alert = (c: Chart) => c.$('.gantt-sr-alert').textContent;
 
+/** Lets a debounced announcement reach the live region, then waits for the render. */
+async function settle(c: Chart): Promise<void> {
+  await new Promise(resolve => setTimeout(resolve, ANNOUNCE_DEBOUNCE + 20));
+  await c.f.whenStable();
+}
+
 /** Focuses `el` and waits for the render its `focusin` causes. */
 async function focus(c: Chart, el: HTMLElement): Promise<void> {
   await c.set(() => el.focus());
@@ -193,11 +201,12 @@ describe('tab stops', () => {
     expect(c.gantt.view()).toBe('chart');
   });
 
-  it('the timeline viewport is a named group and a tab stop; inert in the table view', async () => {
+  it('the timeline viewport is a named group, a tab stop only while no bar is mounted (the bars rove); inert in the table view', async () => {
     const c = await mount();
     const viewport = c.$('.gantry-canvas-viewport');
     expect(viewport.getAttribute('role')).toBe('group');
-    expect(viewport.getAttribute('tabindex')).toBe('0');
+    expect(viewport.getAttribute('tabindex')).toBe('-1');
+    expect(c.$$('.gantt-bars-layer > [tabindex="0"]').map(b => b.getAttribute('data-task-id'))).toEqual(['g']);
     expect(viewport.getAttribute('aria-label')).toBe(DEFAULT_LABELS.ariaChart);
     expect(viewport.hasAttribute('inert')).toBe(false);
     expect(viewport.firstElementChild?.classList.contains('gantry-canvas-header-sticky')).toBe(true);
@@ -208,6 +217,9 @@ describe('tab stops', () => {
     await c.set(() => c.gantt.setView('table'));
     expect(viewport.hasAttribute('inert')).toBe(true);
     expect(c.host.querySelector('.gantry-splitter')).toBeNull();
+
+    await c.set(() => c.f.componentInstance.tasks.set([]));
+    expect(viewport.getAttribute('tabindex')).toBe('0');
   });
 });
 
@@ -239,33 +251,65 @@ describe('live regions', () => {
   it('announces a change of the selection count (task list, API), not a same-count change', async () => {
     const c = await mount();
     await c.set(() => row(c, 'a').click());
+    await settle(c);
     expect(live(c)).toBe('1 task selected');
     await c.set(() => c.gantt.setSelectedTasks(['a', 'b', 'c']));
+    await settle(c);
     expect(live(c)).toBe('3 tasks selected');
     // Another selection of the same size says nothing new
     await c.set(() => c.gantt.setSelectedTasks(['b', 'c', 'd']));
+    await settle(c);
     expect(live(c)).toBe('3 tasks selected');
     await c.set(() => c.gantt.clearSelection());
+    await settle(c);
     expect(live(c)).toBe('Selection cleared');
+  });
+
+  it('debounces a burst of changes: only the last one is read, once', async () => {
+    const c = await mount();
+    await c.set(() => c.gantt.setSelectedTasks(['a']));
+    await c.set(() => c.gantt.setSelectedTasks(['a', 'b']));
+    await c.set(() => c.gantt.setSelectedTasks(['a', 'b', 'c']));
+    // Nothing yet: the debounce is still running
+    expect(live(c)).toBe('');
+    await settle(c);
+    expect(live(c)).toBe('3 tasks selected');
   });
 
   it('a sentence equal to the one shown gets a trailing no-break space (read again)', async () => {
     const c = await mount();
     await c.set(() => c.announcer.announce('3 tasks selected'));
+    await settle(c);
     await c.set(() => c.announcer.announce('3 tasks selected'));
+    await settle(c);
     expect(live(c)).toBe('3 tasks selected\u00A0');
     await c.set(() => c.announcer.announce('3 tasks selected'));
+    await settle(c);
     expect(live(c)).toBe('3 tasks selected');
   });
 
-  it('announces nothing before the first render in the browser (the starting state is the baseline)', () => {
+  it('announces nothing before the first render in the browser (the starting state is the baseline)', async () => {
     TestBed.configureTestingModule({ providers: [GanttAnnouncer, GanttI18nService] });
     const announcer = TestBed.inject(GanttAnnouncer);
     announcer.selection(2);
+    announcer.announceNow('now');
     expect(announcer.live()).toBe('');
     announcer.start();
     announcer.selection(2);
+    expect(announcer.live()).toBe('');
+    await new Promise(resolve => setTimeout(resolve, ANNOUNCE_DEBOUNCE + 20));
     expect(announcer.live()).toBe('2 tasks selected');
+    // `announceNow` skips the debounce and drops a pending message
+    announcer.selection(5);
+    announcer.announceNow('Zoom level: Week');
+    expect(announcer.live()).toBe('Zoom level: Week');
+    await new Promise(resolve => setTimeout(resolve, ANNOUNCE_DEBOUNCE + 20));
+    expect(announcer.live()).toBe('Zoom level: Week');
+    // Stopped (the chart is destroyed): a pending message is dropped
+    announcer.selection(1);
+    announcer.stop();
+    await new Promise(resolve => setTimeout(resolve, ANNOUNCE_DEBOUNCE + 20));
+    expect(announcer.live()).toBe('Zoom level: Week');
   });
 
   it('announces the data-source load state; a failed page goes to the alert, its retry is read again', async () => {
@@ -279,16 +323,18 @@ describe('live regions', () => {
     expect(live(c)).toBe('');
 
     await c.set(() => void ds.loadNext());
+    await settle(c);
     expect(live(c)).toBe(DEFAULT_LABELS.loading);
     await pages.settle(plan(2));
-    await c.f.whenStable();
+    await settle(c);
     expect(live(c)).toBe(DEFAULT_LABELS.announceLoaded(2));
 
     // A failure: nothing polite, the alert says it
     await c.set(() => void ds.loadNext());
+    await settle(c);
     expect(live(c)).toBe(DEFAULT_LABELS.loading);
     await pages.settle(new Error('offline'));
-    await c.f.whenStable();
+    await settle(c);
     expect(live(c)).toBe(DEFAULT_LABELS.loading);
     expect(alert(c)).toBe(DEFAULT_LABELS.loadError);
     // The footer holds no live region of its own
@@ -297,10 +343,54 @@ describe('live regions', () => {
     // Retry: the alert clears, "Loading…" again is still a change; the last page reads allLoaded
     await c.set(() => void ds.retry());
     expect(alert(c)).toBe('');
+    await settle(c);
     expect(live(c)).toBe(`${DEFAULT_LABELS.loading}\u00A0`);
     await pages.settle(plan(1));
-    await c.f.whenStable();
+    await settle(c);
     expect(live(c)).toBe(DEFAULT_LABELS.allLoaded(3));
+  });
+
+  it('reads every load-state transition, also one that starts and ends between two renders', async () => {
+    const pages = pagedFetcher();
+    const ds = new GanttDataSource({ fetcher: pages.fetcher, pageSize: 2, initialPage: 0, retries: 0 });
+    const c = await mount(h => {
+      h.tasks.set([]);
+      h.dataSource.set(ds);
+    });
+    // loading → loaded with no render in between: the stream still sees both transitions (the
+    // debounce reads the last one)
+    void ds.loadNext();
+    await pages.settle(plan(2));
+    await settle(c);
+    expect(live(c)).toBe(DEFAULT_LABELS.announceLoaded(2));
+  });
+
+  it('a failure drops a pending "Loading…" (the failure is read at once elsewhere)', async () => {
+    const pages = pagedFetcher();
+    const ds = new GanttDataSource({ fetcher: pages.fetcher, pageSize: 2, initialPage: 0, retries: 0 });
+    const c = await mount(h => {
+      h.tasks.set([]);
+      h.dataSource.set(ds);
+    });
+    void ds.loadNext();
+    await pages.settle(new Error('offline'));
+    await settle(c);
+    expect(live(c)).toBe('');
+  });
+
+  it('a failed first page shows the error state (role=alert) instead of the assertive region', async () => {
+    const pages = pagedFetcher();
+    const ds = new GanttDataSource({ fetcher: pages.fetcher, pageSize: 2, initialPage: 0, retries: 0 });
+    const c = await mount(h => {
+      h.tasks.set([]);
+      h.dataSource.set(ds);
+    });
+    await c.set(() => void ds.loadNext());
+    await pages.settle(new Error('offline'));
+    await c.f.whenStable();
+    expect(alert(c)).toBe('');
+    expect(c.$('.gantt-state--error .gantt-state-box').getAttribute('role')).toBe('alert');
+    expect(c.$('.gantt-state-message').textContent?.trim()).toBe(DEFAULT_LABELS.loadError);
   });
 });
 
@@ -345,14 +435,21 @@ describe('focus', () => {
     expect(document.activeElement).toBe(node);
   });
 
-  it('collapsing the group that holds the focused row moves focus to the timeline viewport', async () => {
+  it("collapsing the group that holds the focused row moves focus to the timeline's tab-stop bar", async () => {
     const c = await mount();
     await focus(c, row(c, 'a'));
     expect(document.activeElement).toBe(row(c, 'a'));
 
     await c.set(() => c.gantt.collapseAll());
     expect(c.host.querySelector('.gantt-tl-row[data-task-id="a"]')).toBeNull();
-    expect(document.activeElement).toBe(c.$('.gantry-canvas-viewport'));
+    const stop = c.$('.gantt-bars-layer > [tabindex="0"]');
+    expect(document.activeElement).toBe(stop);
+    expect(c.layout.focusedRowId()).toBe(stop.getAttribute('data-task-id'));
+
+    // Without rows the empty state covers the body (inert): the toolbar's tab stop
+    await focus(c, row(c, 'c'));
+    await c.set(() => c.f.componentInstance.tasks.set([]));
+    expect(document.activeElement?.getAttribute('data-focus-key')).toBe('zoom-out');
     expect(c.layout.focusedRowId()).toBeNull();
   });
 

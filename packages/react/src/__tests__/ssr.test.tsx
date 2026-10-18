@@ -24,9 +24,13 @@ describe('<Gantry> on the server', () => {
         onTaskDragged={() => undefined}
       />,
     );
-    expect(html).toBe(
-      '<gantry-element style="display:block;width:100%;height:400px" class="chart" id="plan"></gantry-element>',
-    );
+    expect(html).toBe('<gantry-element class="chart" id="plan" style="height:400px"></gantry-element>');
     expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('adds no style attribute of its own (strict CSP: no inline style in the markup)', () => {
+    expect(renderToString(<Gantry className="chart" tasks={TASKS} />)).toBe(
+      '<gantry-element class="chart"></gantry-element>',
+    );
   });
 });

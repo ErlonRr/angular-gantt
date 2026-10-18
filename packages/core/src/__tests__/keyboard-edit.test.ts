@@ -295,3 +295,50 @@ describe('KeyboardEditSession — combined edits, progress, commit / cancel', ()
     expect(announceKeyboardEdit(whole.commit(), 'X', undefined, whole.unit)).toBe('X moved 24 hours later');
   });
 });
+
+describe('KeyboardEditSession — preview dates (DragPreview.start / end)', () => {
+  it('the preview carries the edited task dates, like state', () => {
+    const s = new KeyboardEditSession(task, row, timing());
+    expect(s.preview()).toMatchObject({ start: task.start, end: task.end });
+    s.apply({ mode: 'move', delta: 2 });
+    s.apply({ mode: 'resizeEnd', delta: 1 });
+    expect(s.preview()).toMatchObject({ start: day(2, 12), end: day(2, 17) });
+    expect(s.preview().start).toEqual(s.state.start);
+    expect(s.preview().end).toEqual(s.state.end);
+  });
+
+  it('the dates match the events commit() emits (drag then resize)', () => {
+    const s = new KeyboardEditSession(task, row, timing());
+    s.apply({ mode: 'resizeStart', delta: -2 });
+    s.apply({ mode: 'resizeEnd', delta: 3 });
+    const { start, end } = s.preview();
+    const events = s.commit();
+    expect(start).toEqual(events[0]?.kind === 'drag' && events[0].event.newStart);
+    const lastEvent = events.at(-1);
+    expect(end).toEqual(lastEvent?.kind === 'resize' && lastEvent.event.newEnd);
+  });
+
+  it('a move gives the same dates as the pointer preview', () => {
+    const s = new KeyboardEditSession(task, row, timing('day', 'inclusive'));
+    s.apply({ mode: 'move', delta: -4 });
+    const pointer = new DragSession('a', 'bar', task.start, task.end ?? task.start, 0, row, timing('day', 'inclusive'));
+    const p = pointer.preview(-4 * 20);
+    expect(s.preview().start).toEqual(p.start);
+    expect(s.preview().end).toEqual(p.end);
+  });
+
+  it('hour scales: the dates shift by hours; cancel restores the original dates', () => {
+    const t = { id: 'h', start: day(2, 10, 9), end: day(2, 10, 12) };
+    const s = new KeyboardEditSession(t, row, timing('hour'));
+    s.apply({ mode: 'move', delta: 5 });
+    expect(s.preview()).toMatchObject({ start: day(2, 10, 14), end: day(2, 10, 17) });
+    s.cancel();
+    expect(s.preview()).toMatchObject({ start: t.start, end: t.end });
+  });
+
+  it('a milestone (no end) previews start = end', () => {
+    const s = new KeyboardEditSession({ id: 'm', start: day(2, 16) }, row, timing());
+    s.apply({ mode: 'move', delta: 1 });
+    expect(s.preview()).toMatchObject({ start: day(2, 17), end: day(2, 17) });
+  });
+});

@@ -84,12 +84,16 @@ describe('props and emits lists', () => {
 });
 
 describe('rendering', () => {
-  it('renders an upgraded <gantry-element> that fills its container', () => {
+  it('renders an upgraded <gantry-element> with no inline style of its own (`:host` sizes it)', () => {
     const { el } = mount(() => h(Gantry, { class: 'chart' }));
     expect(el).toBeInstanceOf(GantryElement);
     expect(el.classList.contains('chart')).toBe(true);
-    expect(el.style.display).toBe('block');
-    expect(el.style.height).toBe('100%');
+    expect(el.hasAttribute('style')).toBe(false);
+  });
+
+  it('passes the consumer style through as it is', () => {
+    const { el } = mount(() => h(Gantry, { style: { height: '400px' } }));
+    expect(el.getAttribute('style')).toBe('height: 400px;');
   });
 });
 

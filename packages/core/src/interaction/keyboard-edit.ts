@@ -263,7 +263,7 @@ export class KeyboardEditSession {
   /**
    * Geometry of the edited bar, in the shape painters already use for drag previews, plus the
    * edited progress. `delta` is the offset of the edge last changed (the end after a resize of
-   * the end, else the start), in `unit`s.
+   * the end, else the start), in `unit`s; `start` / `end` are the edited task dates.
    */
   preview(): KeyboardEditPreview {
     const { start, end, progress, changed } = this.state;
@@ -279,6 +279,8 @@ export class KeyboardEditSession {
       delta,
       unit: this.timing.snap,
       daysDelta: delta,
+      start,
+      end,
       progress,
       changed,
     };

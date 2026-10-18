@@ -16,6 +16,10 @@ export { provideGantt, withBars, type GanttGlobalConfig, type GanttFeature } fro
 export { provideGanttBar, type GanttBarDef } from './lib/bar-registry';
 export { GantryComponent } from './lib/gantt-component/gantry.component';
 export { GanttColumnDefDirective } from './lib/columns/gantt-column.directive';
+export {
+  GanttTooltipTemplateDirective,
+  type GanttTooltipTemplateContext,
+} from './lib/tooltip/gantt-tooltip-template.directive';
 export { GanttBarBase } from './lib/bars/bar-base';
 export { GanttTaskBarComponent } from './lib/bars/task-bar.component';
 export { GanttMilestoneComponent } from './lib/bars/milestone.component';

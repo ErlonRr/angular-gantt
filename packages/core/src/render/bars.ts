@@ -11,8 +11,26 @@ import { readableOn } from './contrast';
 import { CONTRAST_CSS_VARS } from './theme';
 import { PAINTS, themeVar, type Paint } from './paint';
 
-/** Pointer distance (px) from a bar edge that resizes instead of moving. */
-export const RESIZE_HANDLE_PX = 8;
+/** Narrowest task bar (px) that still gets resize handles. */
+export const HANDLE_MIN_BAR_WIDTH = 12;
+/** Gap (px) between a bar's box and its focus ring. */
+export const FOCUS_RING_OFFSET = 3;
+/**
+ * How far (px) a bar's focus ring reaches outside the bar's box: `FOCUS_RING_OFFSET` plus half of
+ * the ring's 2 px stroke (both painters draw `.gantt-bar-focus-ring` 2 px wide). The timeline
+ * keeps this much room around a bar it scrolls into view (`timelineScrollPadding`).
+ */
+export const FOCUS_RING_MARGIN = FOCUS_RING_OFFSET + 1;
+/** Extra pointer target (px) around a milestone's shape. */
+export const MILESTONE_HIT_PAD = 3;
+/** Width of a resize grip (px): a pill centred on the bar edge. */
+const GRIP_WIDTH = 6;
+/** Height of a resize grip: the bar height minus this inset, clamped to `GRIP_MIN`…`GRIP_MAX`. */
+const GRIP_INSET = 6;
+const GRIP_MIN = 8;
+const GRIP_MAX = 16;
+/** Largest summary-bar end cap (px below the bar). */
+const SUMMARY_CAP = 7;
 const LABEL_GAP = 6;
 const LABEL_PAD = 6;
 /** `LightTheme.barTextColor` / `DarkTheme.barTextColor` (when no `barTextColor` is passed) */
@@ -39,6 +57,28 @@ export interface BarPaint {
   label: Paint;
 }
 
+/** Axis-aligned rectangle in timeline (SVG user) coordinates. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Resize handle at one end of a task bar. */
+export interface BarHandle {
+  /**
+   * Pointer target: `bar.handles.hitSize` wide, reaching at most a third of the bar inward (the
+   * rest lies outside the edge); at least `hitSize` tall where the row allows, never past the row.
+   */
+  hit: Rect;
+  /** The visible grip (the bar overlay paints it): a pill centred on the edge */
+  grip: Rect & { rx: number };
+}
+
+/** What a pointer position hits on a bar (`hitTestBar`). */
+export type BarHit = 'left' | 'right' | 'bar';
+
 export interface BarVisual {
   kind: BarKind;
   /** Bounding box (milestones: the shape's box) */
@@ -59,8 +99,22 @@ export interface BarVisual {
   baseline: { x: number; width: number; y: number } | null;
   /** Summary-bar end caps (path), when `groupBar.style === 'summary'` */
   caps: string | null;
-  /** Resize hit zones in SVG x coordinates (task bars only) */
-  handles: { left: [number, number]; right: [number, number] } | null;
+  /**
+   * Resize handles: resizable task bars at least `HANDLE_MIN_BAR_WIDTH` wide, `null` otherwise.
+   * The two `hit` rects never overlap.
+   */
+  handles: { left: BarHandle; right: BarHandle } | null;
+  /**
+   * Focus ring: the bar's box (milestones: the shape's box; summary bars: with their end caps)
+   * inflated by `FOCUS_RING_OFFSET`, its corner radius grown to match
+   */
+  focusRect: Rect & { rx: number };
+  /**
+   * Pointer target of the bar body (custom bars are hit by it too): the bar's box; milestones
+   * `MILESTONE_HIT_PAD` larger on every side; summary bars down to the tips of their caps.
+   * Clipped to the row.
+   */
+  hitBox: Rect;
 }
 
 export interface BarVisualInput {
@@ -146,6 +200,8 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
 
   let x: number, y: number, width: number, height: number, rx: number, path: string;
   let caps: string | null = null;
+  /** Depth of the summary caps below the bar (0 without caps) */
+  let capDepth = 0;
 
   if (kind === 'milestone') {
     const size = cfg.milestone.size ?? Math.round(rh * 0.45);
@@ -165,8 +221,9 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     path = roundedRectPath(x, y, width, height, rx);
     if (isSummary) {
       // Downward end caps: the classic "bracket" summary bar
-      const c = Math.min(height, 7);
+      const c = Math.min(height, SUMMARY_CAP);
       caps = `M${x},${y + height}l0,${c}l${c},-${c}Z M${x + width},${y + height}l0,${c}l-${c},-${c}Z`;
+      capDepth = c;
     }
   }
 
@@ -198,9 +255,27 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
   }
 
   const handles: BarVisual['handles'] =
-    input.resizable && kind === 'task' && width >= RESIZE_HANDLE_PX * 3
-      ? { left: [x - 2, x + RESIZE_HANDLE_PX], right: [x + width - RESIZE_HANDLE_PX, x + width + 2] }
+    input.resizable && kind === 'task' && width >= HANDLE_MIN_BAR_WIDTH
+      ? barHandles({ x, width, height, cy }, geo, cfg.bar.handles.hitSize)
       : null;
+
+  const off = FOCUS_RING_OFFSET;
+  const boxHeight = height + capDepth;
+  const focusRect: BarVisual['focusRect'] = {
+    x: x - off,
+    y: y - off,
+    width: width + off * 2,
+    height: boxHeight + off * 2,
+    rx: (kind === 'milestone' && cfg.milestone.shape === 'circle' ? width / 2 : rx) + off,
+  };
+  const pad = kind === 'milestone' ? MILESTONE_HIT_PAD : 0;
+  const hitBox: Rect = { x: x - pad, y: y - pad, width: width + pad * 2, height: boxHeight + pad * 2 };
+  // Clipped to the row (the hit-test looks the row up from `y`)
+  if (hitBox.y < geo.y) {
+    hitBox.height -= geo.y - hitBox.y;
+    hitBox.y = geo.y;
+  }
+  if (hitBox.y + hitBox.height > geo.y + rh) hitBox.height = Math.max(0, geo.y + rh - hitBox.y);
 
   const label = computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx);
   const opt = cfg.bar.label;
@@ -237,7 +312,54 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     baseline,
     caps,
     handles,
+    focusRect,
+    hitBox,
   };
+}
+
+/**
+ * Resize handles of a task bar. Each target is `hitSize` wide: centred on its edge, except that
+ * it reaches at most a third of the bar inward (the rest lies outside the edge), so the two never
+ * overlap. Its height is the larger of `hitSize` and the bar, capped at the row height, centred
+ * on the row. The grips are pills centred on the edges.
+ */
+function barHandles(
+  bar: { x: number; width: number; height: number; cy: number },
+  geo: RowGeometry,
+  hitSize: number,
+): { left: BarHandle; right: BarHandle } {
+  const size = Math.max(0, hitSize);
+  const inward = Math.min(size / 2, bar.width / 3);
+  const outward = size - inward;
+  const hitHeight = Math.min(geo.height, Math.max(size, bar.height));
+  const hitY = geo.y + (geo.height - hitHeight) / 2;
+  const gripHeight = Math.min(geo.height, Math.max(GRIP_MIN, Math.min(GRIP_MAX, bar.height - GRIP_INSET)));
+  const gripY = bar.cy - gripHeight / 2;
+  const handle = (edge: number, hitX: number): BarHandle => ({
+    hit: { x: hitX, y: hitY, width: size, height: hitHeight },
+    grip: { x: edge - GRIP_WIDTH / 2, y: gripY, width: GRIP_WIDTH, height: gripHeight, rx: GRIP_WIDTH / 2 },
+  });
+  const right = bar.x + bar.width;
+  return { left: handle(bar.x, bar.x - outward), right: handle(right, right - inward) };
+}
+
+/** Whether `(x, y)` lies in `r` (edges included); an empty rect contains nothing. */
+function rectContains(r: Rect, x: number, y: number): boolean {
+  return r.width > 0 && r.height > 0 && x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
+}
+
+/**
+ * What a pointer at `(x, y)` (timeline coordinates, the same space as the visual) hits on a bar:
+ * a resize handle first, then the bar body (`hitBox`), else `null`. Bindings find the row from
+ * `y` and pass that row's visual, so built-in and custom bars hit the same way.
+ */
+export function hitTestBar(v: Pick<BarVisual, 'handles' | 'hitBox'>, x: number, y: number): BarHit | null {
+  const h = v.handles;
+  if (h) {
+    if (rectContains(h.left.hit, x, y)) return 'left';
+    if (rectContains(h.right.hit, x, y)) return 'right';
+  }
+  return rectContains(v.hitBox, x, y) ? 'bar' : null;
 }
 
 function computeLabel(

@@ -108,7 +108,7 @@
         </div>
       </div>
 
-      <div class="gs-card fw-chart-card">
+      <div class="gs-card gs-app-chart">
         <Gantry
           bind:element={gantt}
           class="gs-chart"
@@ -144,7 +144,7 @@
 </div>
 
 <style>
-  /* Page-local layout: the chart stays in the first viewport (1400 × 820) */
+  /* Page-local layout: the chart card (gs-app-chart) stays in the first viewport (1400 × 820) */
   .gs-main.fw-main {
     padding-top: 20px;
   }
@@ -167,8 +167,5 @@
   }
   .fw-status {
     margin: 0;
-  }
-  .fw-chart-card {
-    height: clamp(480px, calc(100vh - 300px), 760px);
   }
 </style>

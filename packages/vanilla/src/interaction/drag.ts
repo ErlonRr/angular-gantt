@@ -1,12 +1,19 @@
 /**
  * @file drag.ts
- * Drag & resize: wires Pointer Events to the framework-free `DragSession` from @gantryjs/core
- * (snapping, minimum length, preview, result). The preview goes to the engine's `dragPreview`
- * signal; the timing is read from the current timeline when a drag starts.
+ * Drag & resize: the framework-free `DragSession` from @gantryjs/core (snapping, minimum length,
+ * preview, result) behind the engine's `dragPreview` input. The timing is read from the current
+ * timeline when a drag starts.
+ *
+ * The pointer side lives in `interaction/canvas-pointer.ts` (core's gesture machine decides when
+ * a press becomes a drag, see `interaction/gestures.ts`): it calls `start` once the press drags,
+ * `move` with every pointer move and auto-scroll step, and `drop` on release. Positions are in
+ * content coordinates — the pointer's client x plus how far the timeline scrolled since the
+ * press — so a drag keeps its maths while the viewport auto-scrolls under it.
  */
 
 import {
   DragSession,
+  type BarHit,
   type DragPreview,
   type DragTiming,
   type RowGeometry,
@@ -27,9 +34,20 @@ export interface DragOptions {
 
 export interface Drag {
   readonly state: ReadonlySignal<DragState>;
-  /** Whether the last finished drag actually moved the bar (suppresses the trailing click) */
+  /**
+   * The trailing `click` of the last press belongs to a drag (it moved the bar, or it was
+   * cancelled while dragging): the canvas swallows it. The next press resets it.
+   */
   lastDragMoved: boolean;
-  start(event: PointerEvent, geo: RowGeometry, handle: 'bar' | 'left' | 'right', captureEl: Element): void;
+  /**
+   * Starts dragging `geo`'s bar by `handle` (`'bar'` moves it, `'left'` / `'right'` resize it)
+   * from content x `x` (where the press started). No-op while a drag is active.
+   */
+  start(geo: RowGeometry, handle: BarHit, x: number): void;
+  /** The pointer is at content x `x`: the preview follows. */
+  move(x: number): void;
+  /** Released at content x `x`: emits `task-dragged` / `task-resized` when the task changed. */
+  drop(x: number): void;
   /** Abort the active drag without emitting (pointercancel, Escape, the element disconnected). */
   cancel(): void;
 }
@@ -40,16 +58,12 @@ export function createDrag(opts: DragOptions): Drag {
   const state = signal<DragState>(IDLE);
   const preview = opts.preview;
   let session: DragSession | null = null;
-  /** Removes the active drag's pointer listeners */
-  let gesture: AbortController | null = null;
 
   const setPreview = (p: DragPreview): void => {
     const prev = preview.peek();
     if (!prev || prev.x !== p.x || prev.width !== p.width) preview.set(p);
   };
   const reset = (): void => {
-    gesture?.abort();
-    gesture = null;
     session = null;
     state.set(IDLE);
     preview.set(null);
@@ -58,54 +72,33 @@ export function createDrag(opts: DragOptions): Drag {
   const drag: Drag = {
     state,
     lastDragMoved: false,
-    start(event, geo, handle, captureEl) {
+    start(geo, handle, x) {
       if (session) return;
-      event.preventDefault();
-      event.stopPropagation();
-
       const task = geo.row.task;
-      const current = new DragSession(
-        task.id,
-        handle,
-        task.start,
-        task.end ?? task.start,
-        event.clientX,
-        geo,
-        opts.timing(),
-      );
+      const current = new DragSession(task.id, handle, task.start, task.end ?? task.start, x, geo, opts.timing());
       session = current;
-      try {
-        captureEl.setPointerCapture(event.pointerId);
-      } catch {
-        /* synthetic event */
-      }
-
       state.set({
         kind: handle === 'left' ? 'resizing-left' : handle === 'right' ? 'resizing-right' : 'dragging',
         taskId: task.id,
       });
-      setPreview(current.preview(event.clientX));
-
-      const onMove = (e: Event) => {
-        if (session === current) setPreview(current.preview((e as PointerEvent).clientX));
-      };
-      const onUp = (e: Event) => {
-        if (session !== current) return;
-        const result = current.finish((e as PointerEvent).clientX);
-        drag.lastDragMoved = !!result;
-        reset();
-        if (result?.kind === 'drag') opts.onDragged(result.event);
-        else if (result?.kind === 'resize') opts.onResized(result.event);
-      };
-
-      // The gesture's listeners live until it ends (`reset()`): released, cancelled or aborted
-      const { signal } = (gesture = new AbortController());
-      captureEl.addEventListener('pointermove', onMove, { passive: true, signal });
-      captureEl.addEventListener('pointerup', onUp, { signal });
-      captureEl.addEventListener('pointercancel', () => drag.cancel(), { signal });
+      setPreview(current.preview(x));
+    },
+    move(x) {
+      if (session) setPreview(session.preview(x));
+    },
+    drop(x) {
+      const current = session;
+      if (!current) return;
+      const result = current.finish(x);
+      drag.lastDragMoved = !!result;
+      reset();
+      if (result?.kind === 'drag') opts.onDragged(result.event);
+      else if (result?.kind === 'resize') opts.onResized(result.event);
     },
     cancel() {
-      drag.lastDragMoved = false;
+      if (!session) return;
+      // The release that follows (a mouse button still down) is not a click on the row
+      drag.lastDragMoved = true;
       reset();
     },
   };

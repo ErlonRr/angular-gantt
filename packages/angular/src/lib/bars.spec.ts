@@ -205,7 +205,7 @@ describe('bars', () => {
 describe('GanttBarOutletDirective on <ng-container>', () => {
   const ctxOf = (id: string) =>
     ({
-      row: { task: { id }, barType: 'task' },
+      row: { task: { id, name: id, start: day(5), end: day(6) }, barType: 'task' },
       visual: { x: 1, width: 2 },
       isSelected: false,
     }) as unknown as GanttBarContext;

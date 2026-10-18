@@ -105,7 +105,12 @@ describe('browser-only work is released with the chart', () => {
     expect(io.instances[0]?.observed).toEqual([$(f, 'gantt-load-more')]);
     expect(vi.getTimerCount()).toBe(baseline + 1);
     const scrollListeners = added.mock.calls
-      .map((args, i) => ({ target: added.mock.contexts[i] as EventTarget, type: args[0], handler: args[1] }))
+      .map((args, i) => ({
+        target: added.mock.contexts[i] as EventTarget,
+        type: args[0],
+        handler: args[1],
+        signal: typeof args[2] === 'object' ? args[2]?.signal : undefined,
+      }))
       .filter(l => l.type === 'scroll');
     expect(scrollListeners.map(l => l.target)).toEqual(expect.arrayContaining([panel, canvas]));
 
@@ -114,11 +119,12 @@ describe('browser-only work is released with the chart', () => {
     expect(ro.instances[0]?.disconnected).toBe(true);
     expect(io.instances[0]?.disconnected).toBe(true);
     expect(vi.getTimerCount()).toBe(baseline);
-    for (const { target, handler } of scrollListeners) {
+    for (const { target, handler, signal } of scrollListeners) {
+      // Removed by hand, or through the abort signal it was added with
       const match = removed.mock.calls.findIndex(
         (args, i) => removed.mock.contexts[i] === target && args[0] === 'scroll' && args[1] === handler,
       );
-      expect(match, 'scroll listener removed').toBeGreaterThanOrEqual(0);
+      expect(match >= 0 || signal?.aborted === true, 'scroll listener removed').toBe(true);
     }
   });
 

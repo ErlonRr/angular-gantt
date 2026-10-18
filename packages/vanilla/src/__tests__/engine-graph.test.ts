@@ -185,9 +185,21 @@ describe('engine graph', () => {
     const bar = el.shadowRoot!.querySelector('.gantt-bars-layer [data-task-id="t0"]')!;
     const canvas = el.shadowRoot!.querySelector('.gantry-canvas-container')!;
     const px = graph.timeline().pxPerDay;
-    bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
-    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 2 * px, pointerId: 1 }));
-    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 2 * px, pointerId: 1 }));
+    // Bars are hit by geometry: press the middle of the body (the canvas box is at 0,0 in happy-dom)
+    const v = el.getBarVisual('t0')!;
+    const x = v.x + v.width / 2;
+    bar.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        button: 0,
+        clientX: x,
+        clientY: v.cy,
+        pointerId: 1,
+        pointerType: 'mouse',
+      }),
+    );
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 2 * px, pointerId: 1, pointerType: 'mouse' }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 2 * px, pointerId: 1, pointerType: 'mouse' }));
     el.setSelectedTasks(['t1']);
     await frame();
     expect(el.tasks[0].start).toEqual(new Date(2026, 2, 4));

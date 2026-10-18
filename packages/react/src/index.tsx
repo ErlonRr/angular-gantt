@@ -7,6 +7,7 @@ import {
   useRef,
   type CSSProperties,
   type HTMLAttributes,
+  type ReactNode,
 } from 'react';
 import {
   GANTRY_EVENTS,
@@ -32,9 +33,12 @@ type NativeProps = Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | ke
 export interface GantryProps extends GantryProperties, GantryEventCallbacks, NativeProps {
   className?: string | undefined;
   style?: CSSProperties | undefined;
+  /**
+   * Light-DOM content of `<gantry-element>`, placed in its slots: `<div slot="empty">…</div>` replaces
+   * the empty-state text.
+   */
+  children?: ReactNode | undefined;
 }
-
-const DEFAULT_STYLE: CSSProperties = { display: 'block', width: '100%', height: '100%' };
 
 /**
  * `useLayoutEffect` in the browser: listeners and properties reach the element during the commit,
@@ -77,7 +81,6 @@ const OWN_PROPS: ReadonlySet<string> = new Set<string>([
   ...GANTRY_PROPERTIES,
   ...Object.values(GANTRY_EVENTS),
   'className',
-  'style',
 ]);
 
 /**
@@ -88,7 +91,8 @@ const OWN_PROPS: ReadonlySet<string> = new Set<string>([
  * Props and listeners are applied in layout effects, so the element's first frame already shows
  * the passed props; a prop that goes back to `undefined` restores the element's default. The ref
  * is the underlying `GantryElement`, exposing the imperative API (`zoomIn()`, `scrollToToday()`,
- * `getSelectedTasks()`, …).
+ * `getSelectedTasks()`, …). Children go into the element's light DOM (`<div slot="empty">`). The
+ * element sizes itself (`:host`: block, 100% × 100%); `className` / `style` override that.
  */
 export const Gantry = forwardRef<GantryElement, GantryProps>(function Gantry(props, ref) {
   const elRef = useRef<GantryElement>(null);
@@ -144,10 +148,14 @@ export const Gantry = forwardRef<GantryElement, GantryProps>(function Gantry(pro
   // The ref gets the element once its properties are set
   useImperativeHandle(ref, () => elRef.current!, []);
 
-  const { className, style } = props;
-  const native: Record<string, unknown> = { ref: elRef, style: { ...DEFAULT_STYLE, ...style } };
+  const { className } = props;
+  // No default inline style: `:host` sizes the element, and the server markup stays free of a
+  // `style` attribute (strict CSP) unless the consumer passes one
+  const native: Record<string, unknown> = { ref: elRef };
   // `class`: React 18 sets a custom element's `className` prop as a `classname` attribute
   if (className !== undefined) native['class'] = className;
+  // The rest, `style` and `children` included (as `props.children`: a list of children keeps its
+  // keys unchecked, as in the consumer's JSX)
   for (const [k, v] of Object.entries(props)) if (!OWN_PROPS.has(k)) native[k] = v;
 
   return createElement('gantry-element', native);

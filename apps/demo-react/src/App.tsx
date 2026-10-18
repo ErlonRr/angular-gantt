@@ -115,7 +115,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="gs-card fw-chart-card">
+          <div className="gs-card gs-app-chart">
             <Gantry
               ref={gantt}
               className="gs-chart"

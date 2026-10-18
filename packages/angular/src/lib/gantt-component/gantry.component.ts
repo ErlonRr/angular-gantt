@@ -11,27 +11,42 @@
 //  │   tasklist>    │p│    ├ <gantt-header> tiers (sticky top)    │
 //  │  (scrolls X,   │l│    └ <gantt-canvas>                       │
 //  │   Y mirrored)  │ │                                           │
+//  │                (div.gantt-state over the body while not ready) │
 //  ├────────────────┴─┴───────────────────────────────────────────┤
+//  │  div.gantt-legend.gantt-legend--bottom      (showLegend)     │
 //  │  <ng-content select="[ganttFooter]">                         │
 //  └──────────────────────────────────────────────────────────────┘
 //  Views: 'split' (both), 'table' (task list only), 'chart' (timeline only).
+//
+//  States (D11 of phase 9): `loading`, `errorMessage` and the data source's
+//  load state resolve to `layout.chartState` (core `resolveChartState`):
+//  the state box (`div.gantt-state[ganttChartState]`, `[ganttEmpty]`
+//  content projected into its empty state), the host's `aria-busy`, the
+//  task-list footer, and the `retry` output.
 //
 //  Geometry comes from the @gantryjs/core render model (shared with the
 //  Web Component). The component itself contains no layout math.
 //
 //  Accessibility (the Web Component's model): the host is a region named
 //  by `labels.ariaChart`, never a tab stop. Tab stops, in order: the
-//  toolbar's buttons, the sortable column headers, one task-list row
-//  (the focused one, else the one focused last while it is mounted, else
-//  the first in view), the collapse toggles, the splitter's separator
-//  (`.gantry-splitter-handle`), its collapse toggle (a sibling, not a
-//  child: a separator's children are presentational), the timeline
-//  viewport (`role=group`, arrow keys scroll it). `focusin` records the
-//  focused row (`layout.focusedRowId`, pinned in the virtual window); a
-//  focused control that is removed hands focus to the viewport (table
-//  view: the tab-stop row). Live regions: `.gantt-sr-live` (polite:
-//  selection count, data-source load state) and `.gantt-sr-alert`
-//  (a failed page).
+//  toolbar (one roving stop), the task list (one stop: a row-first
+//  treegrid whose header cells, rows and cells rove), the splitter's
+//  separator (`.gantry-splitter-handle`), its collapse toggle (a sibling,
+//  not a child: a separator's children are presentational), the
+//  timeline's tab-stop bar (the bars rove; the viewport, `role=group`, is
+//  a tab stop only while no bar is mounted: its arrow keys scroll). The
+//  keys are the `GanttKeyboardDirective` host directive (contract §3d of
+//  Gantry 2 phase 9: grid and bar navigation, selection, keyboard move
+//  mode, the global shortcuts). `focusin` records the focused row (a
+//  task-list row or cell, or a bar: `layout.focusedRowId`, pinned in the
+//  virtual window, so both panes' tab stops follow it). After every
+//  render, a control a key moved to before it was mounted is focused, and
+//  a focused control that was removed hands focus to the control with its
+//  `data-focus-key`, else the tab-stop bar, else the viewport (table view:
+//  the task list's tab stop).
+//  Live regions: `.gantt-sr-live` (polite, debounced: selection count,
+//  data-source load state, zoom level) and `.gantt-sr-alert` (a failed
+//  page while rows are shown; with none, the error state box says it).
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -56,6 +71,7 @@ import {
   DestroyRef,
   EnvironmentInjector,
   booleanAttribute,
+  contentChild,
   DOCUMENT,
 } from '@angular/core';
 
@@ -77,7 +93,8 @@ import {
 import {
   resolveConfig,
   initialScrollLeft,
-  zoomAnchorScroll,
+  anchoredScrollLeft,
+  fitScrollLeft,
   computeBarVisual,
   readStoredState,
   writeStoredState,
@@ -91,29 +108,27 @@ import {
   SPLITTER_TOGGLE_OFFSET,
   STATE_SAVE_DELAY,
   CLOCK_INTERVAL,
-  buildLegend,
-  LEGEND_SWATCH_SIZE,
-  isLegendVisible,
   themeMetrics,
   sameThemeMetrics,
   computeCriticalPath,
+  tabStopIndex,
+  timelineScrollPadding,
   type BarVisual,
   type CPMResult,
-  type LegendItem,
   type LoadStateSnapshot,
   type ResolvedGanttConfig,
+  type RetryEvent,
   type SplitterValue,
   type TimelineModel,
 } from '@gantryjs/core';
 
-import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { GanttLayoutService, type GanttScrollRequest } from '../layout/gantt-layout.service';
 import { GanttCanvasComponent, type BarVisualOf } from '../layout/gantt-canvas.component';
 import { GanttHeaderComponent } from '../header/gantt-header.component';
 import {
   GanttTaskListComponent,
   mountedRows,
   sameMountedRows,
-  tabStopRow,
   type MountedRow,
 } from '../tasklist/gantt-tasklist.component';
 import { GanttToolbarComponent } from '../annotations/gantt-toolbar.component';
@@ -128,6 +143,13 @@ import { GanttKeyboardDirective } from '../selection/gantt-keyboard.directive';
 import { GanttLoadMoreComponent } from '../datasource/gantt-load-more.component';
 import { type GanttDataSource } from '../datasource/gantt-datasource';
 import { GanttAnnouncer, loadStateOf } from '../a11y/announcer';
+import { GanttLegendComponent } from '../legend/gantt-legend.component';
+import { GanttChartStateComponent } from '../states/gantt-chart-state.component';
+import { GanttDragReadoutComponent, injectDragReadout } from '../drag/gantt-drag-readout.component';
+import { GanttBarFocusService } from '../bars/bar-focus.service';
+import { findFocusKey, focusIntoView, focusKeyOf, isInert } from '../a11y/grid-keys';
+import { GanttTooltipTemplateDirective } from '../tooltip/gantt-tooltip-template.directive';
+import { bindZoomGestures } from '../scroll/zoom-gestures';
 
 /** The control inside the chart that received focus last (focus restore when it is removed) */
 interface FocusRecord {
@@ -148,6 +170,7 @@ interface FocusRecord {
     GanttSelectionService,
     GanttDragService,
     GanttAnnouncer,
+    GanttBarFocusService,
   ],
   hostDirectives: [GanttKeyboardDirective],
   imports: [
@@ -156,6 +179,9 @@ interface FocusRecord {
     GanttTaskListComponent,
     GanttCanvasComponent,
     GanttLoadMoreComponent,
+    GanttLegendComponent,
+    GanttChartStateComponent,
+    GanttDragReadoutComponent,
   ],
   host: {
     class: 'gantry',
@@ -163,11 +189,14 @@ interface FocusRecord {
     role: 'region',
     '[attr.aria-label]': 'i18n.labels().ariaChart',
     '[attr.data-view]': 'layout.view()',
+    // Busy while loading (the skeleton, or the consumer's `loading` over shown rows)
+    '[attr.aria-busy]': "layout.chartState().busy ? 'true' : null",
     // Every --gantt-* token of the theme (rendered on the server too); chrome reads them in :host
     '[style]': 'themeSvc.style()',
     '[class.gantry-dark]': 'themeSvc.isDark()',
     '[class.gantry-dragging]': 'dragSvc.isActive()',
-    '[class.gantry-loading]': 'dataSource()?.isLoading() === true',
+    // The consumer's `loading` or a data-source page loading (the Web Component's :state(loading))
+    '[class.gantry-loading]': 'loading() || dataSource()?.isLoading() === true',
     '(focusin)': 'onFocusIn($event)',
     '(focusout)': 'onFocusOut($event)',
   },
@@ -181,6 +210,7 @@ interface FocusRecord {
         [view]="layout.view()"
         (zoomIn)="zoomIn()"
         (zoomOut)="zoomOut()"
+        (fit)="fitToScreen()"
         (viewModeChange)="setViewMode($event)"
         (scrollToToday)="scrollToToday()"
         (viewChange)="setView($event)"
@@ -196,19 +226,21 @@ interface FocusRecord {
         #panelEl
         class="gantry-panel"
         [style.width.px]="panelPx()"
+        [style.scroll-padding-top.px]="layout.headerHeight()"
         [attr.inert]="layout.view() === 'chart' ? '' : null"
         (wheel)="onPanelWheel($event)"
       >
         <gantt-tasklist
           [rows]="tlRows()"
           [tabStopId]="tabStopId()"
+          [covered]="covered()"
           [multiselectable]="multiselectable()"
           [rowCount]="layout.rowCount()"
           [columns]="activeColumns()"
           [cellContext]="layout.columnContext()"
           [rowHeight]="layout.rowHeight()"
           [selectedIds]="selSvc.selectedIds()"
-          [colHeaderHeight]="layout.totalHeaderHeight()"
+          [colHeaderHeight]="layout.headerHeight()"
           [indentSize]="cfg().indentSize"
           [paddingTop]="layout.vWindow().paddingTop"
           [paddingBottom]="layout.vWindow().paddingBottom"
@@ -223,8 +255,8 @@ interface FocusRecord {
           (sortColumn)="onSortColumn($event)"
         />
 
-        <!-- Load-more footer (lazy datasource) -->
-        @if (dataSource(); as ds) {
+        <!-- Load-more footer (lazy datasource), while the chart state keeps it (not over the states) -->
+        @if (layout.chartState().footer && dataSource(); as ds) {
           <gantt-load-more
             [isLoading]="ds.isLoading()"
             [hasMore]="ds.hasMore()"
@@ -248,6 +280,7 @@ interface FocusRecord {
         <div
           class="gantry-splitter"
           [class.is-locked]="!cfg().panel.resizable || layout.view() !== 'split'"
+          [attr.inert]="covered() ? '' : null"
           (pointerdown)="onSplitterDown($event)"
           (keydown)="onSplitterKey($event)"
         >
@@ -277,23 +310,27 @@ interface FocusRecord {
         </div>
       }
 
-      <!-- Right: one scrollport — header + bars share horizontal scroll natively. A tab stop
-           (arrow keys scroll it), hidden behind the table view. -->
+      <!-- Right: one scrollport — header + bars share horizontal scroll natively. A tab stop while no
+           bar is one (arrow keys scroll it), hidden behind the table view. -->
       <div
         #canvasEl
         class="gantry-canvas-viewport"
         role="group"
-        tabindex="0"
+        [attr.tabindex]="barFocus.viewportTabIndex()"
         [attr.aria-label]="i18n.labels().ariaChart"
-        [attr.inert]="layout.view() === 'table' ? '' : null"
+        [attr.inert]="layout.view() === 'table' || covered() ? '' : null"
+        [style.scroll-padding-top.px]="scrollPadding().top"
+        [style.scroll-padding-right.px]="scrollPadding().right"
+        [style.scroll-padding-bottom.px]="scrollPadding().bottom"
+        [style.scroll-padding-left.px]="scrollPadding().left"
       >
-        <div class="gantry-canvas-header-sticky">
+        <!-- As tall as the header with its marker lane (the task-list header has the same height) -->
+        <div class="gantry-canvas-header-sticky" [style.height.px]="layout.headerHeight()">
           <gantt-header />
         </div>
         <gantt-canvas
           [style.margin-bottom.px]="canvasBottomPad()"
           [barVisual]="barVisual()"
-          [annotations]="annotations()"
           [criticalIds]="criticalIds()"
           [floatDays]="cpm()?.floatMap"
           [tasksById]="layout.columnContext().taskById"
@@ -301,52 +338,32 @@ interface FocusRecord {
           [enableSelection]="cfg().selection.enabled"
           [multiSelect]="cfg().selection.multi"
           [tooltipEnabled]="tooltipEnabled()"
+          [tooltipTemplate]="tooltipTemplate()?.template ?? null"
           (taskDragged)="onTaskDragged($event)"
           (taskResized)="onTaskResized($event)"
           (rowClick)="onCanvasRowClick($event)"
           (rowDblClick)="rowDblClick.emit($event)"
         />
-      </div>
-    </div>
-
-    <!-- ── Legend (optional) ─────────────────────────────────── -->
-    @if (legendVisible()) {
-      <div class="gantt-legend">
-        <span class="gantt-legend-title">{{ i18n.labels().legend }}</span>
-        @for (item of legendItems(); track item.key) {
-          <span class="gantt-legend-item">
-            <svg
-              [attr.class]="'gantt-legend-swatch gantt-legend-swatch--' + item.shape"
-              [attr.width]="swatchSize.width"
-              [attr.height]="swatchSize.height"
-              aria-hidden="true"
-            >
-              @let sw = item.swatch;
-              @if (sw.kind === 'line') {
-                <svg:line
-                  [attr.x1]="sw.x"
-                  [attr.y1]="sw.y1"
-                  [attr.x2]="sw.x"
-                  [attr.y2]="sw.y2"
-                  [style.stroke]="item.paint"
-                  [attr.stroke-width]="sw.strokeWidth"
-                  [attr.stroke-dasharray]="sw.dash"
-                />
-              } @else {
-                <svg:rect
-                  [attr.x]="sw.x"
-                  [attr.y]="sw.y"
-                  [attr.width]="sw.width"
-                  [attr.height]="sw.height"
-                  [attr.rx]="sw.rx"
-                  [style.fill]="item.paint"
-                />
-              }
-            </svg>
-            <span>{{ item.label }}</span>
-          </span>
+        <!-- Drag readout chip (pointer drag and keyboard move mode), attached while it shows the new dates -->
+        @if (dragReadout(); as readout) {
+          <div ganttDragReadout [readout]="readout"></div>
         }
       </div>
+
+      <!-- Loading / error / empty state over the body, attached while the chart is not ready -->
+      @let chartState = layout.chartState();
+      @if (chartState.kind !== 'ready') {
+        <div ganttChartState [state]="chartState" [panelWidth]="panelPx()" (retry)="onRetry($event.source)">
+          <ng-content select="[ganttEmpty]"
+            ><p class="gantt-state-message">{{ chartState.message }}</p></ng-content
+          >
+        </div>
+      }
+    </div>
+
+    <!-- ── Legend (showLegend): the strip under the chart (legend.position 'toolbar': in the toolbar) ── -->
+    @if (layout.legendPlacement() === 'bottom') {
+      <div class="gantt-legend gantt-legend--bottom" ganttLegend></div>
     }
 
     <!-- ── Live regions (read by screen readers, never shown) ── -->
@@ -366,6 +383,8 @@ interface FocusRecord {
         box-sizing: border-box;
         font-family: var(--gantt-font);
         font-size: var(--gantt-font-size);
+        /* The chart's own line height, whatever the page sets */
+        line-height: normal;
         color: var(--gantt-text);
         background-color: var(--gantt-bg);
       }
@@ -398,9 +417,9 @@ interface FocusRecord {
         transition: opacity 0.25s ease;
         outline: none;
       }
-      /* Keyboard focus (a tab stop: arrow keys scroll it); inset, so the panes' clipping keeps it whole */
+      /* Keyboard focus (a tab stop while no bar is: arrow keys scroll it); inset, so the panes' clipping keeps it whole */
       .gantry-canvas-viewport:focus-visible {
-        outline: 2px solid var(--gantt-sel-border);
+        outline: 2px solid var(--gantt-focus-ring);
         outline-offset: -2px;
       }
       .gantry-canvas-header-sticky {
@@ -438,13 +457,21 @@ interface FocusRecord {
         outline: none;
       }
       .gantry-splitter:hover,
-      .gantry-splitter-handle:focus-visible,
       .is-resizing .gantry-splitter {
         background: linear-gradient(
           to right,
           transparent 1px,
           var(--gantt-sel-border) 1px,
           var(--gantt-sel-border) 4px,
+          transparent 4px
+        );
+      }
+      .gantry-splitter-handle:focus-visible {
+        background: linear-gradient(
+          to right,
+          transparent 1px,
+          var(--gantt-focus-ring) 1px,
+          var(--gantt-focus-ring) 4px,
           transparent 4px
         );
       }
@@ -476,43 +503,8 @@ interface FocusRecord {
       }
       .gantry-splitter-toggle:focus-visible {
         opacity: 1;
-        outline: 2px solid var(--gantt-sel-border);
+        outline: 2px solid var(--gantt-focus-ring);
         outline-offset: 1px;
-      }
-
-      .gantt-legend {
-        position: absolute;
-        bottom: 12px;
-        right: 12px;
-        z-index: 15;
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        padding: 6px 12px;
-        border-radius: 8px;
-        font-size: 11px;
-        background: var(--gantt-panel-bg);
-        border: 1px solid var(--gantt-border);
-        color: var(--gantt-text-sec);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        pointer-events: none;
-      }
-      .gantt-legend-title {
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        font-size: 9.5px;
-        color: var(--gantt-text-muted);
-      }
-      .gantt-legend-item {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        white-space: nowrap;
-        color: var(--gantt-text);
-      }
-      .gantt-legend-swatch {
-        flex: none;
       }
 
       .gantry-canvas-viewport,
@@ -552,6 +544,31 @@ interface FocusRecord {
           transition: none;
         }
       }
+
+      /* Forced colours (D25, the Web Component's forced-colors.css.ts): every focus ring reads the
+         token, so Highlight reaches them all (!important wins over the inline theme tokens); the
+         separator's line and its focus / hover line are drawn again (gradients are dropped) */
+      @media (forced-colors: active) {
+        :host {
+          --gantt-focus-ring: Highlight !important;
+        }
+        .gantry-splitter-handle::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 2px;
+          width: 1px;
+          background-color: CanvasText;
+        }
+        .gantry-splitter:hover > .gantry-splitter-handle::before,
+        .is-resizing .gantry-splitter-handle::before,
+        .gantry-splitter-handle:focus-visible::before {
+          left: 1px;
+          width: 3px;
+          background-color: Highlight;
+        }
+      }
     `,
   ],
 })
@@ -564,7 +581,12 @@ export class GantryComponent {
   protected readonly colSvc = inject(GanttColumnService);
   protected readonly selSvc = inject(GanttSelectionService);
   protected readonly dragSvc = inject(GanttDragService);
+  /** The drag readout chip's text and place, `null` while it shows nothing (then it is detached) */
+  protected readonly dragReadout = injectDragReadout(this.dragSvc.preview);
   protected readonly announcer = inject(GanttAnnouncer);
+  protected readonly barFocus = inject(GanttBarFocusService);
+  /** The chart's keyboard (host directive): bound in the constructor, connected after the first render */
+  private readonly keyboard = inject(GanttKeyboardDirective, { self: true });
   private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -576,6 +598,8 @@ export class GantryComponent {
 
   /** `<ng-template ganttColumn>` definitions of the content (inside `@if` / `<ng-container>` too) */
   private readonly columnDefs = contentChildren(GanttColumnDefDirective, { descendants: true });
+  /** The `<ng-template ganttTooltip>` of the content: custom tooltip content (wins over `options.tooltip.render`) */
+  protected readonly tooltipTemplate = contentChild(GanttTooltipTemplateDirective, { descendants: true });
 
   // ── Inputs ────────────────────────────────────────────────
   readonly series = input<GanttTask[]>([]);
@@ -589,8 +613,18 @@ export class GantryComponent {
   readonly enableDrag = input(true, { transform: booleanAttribute });
   readonly enableResize = input(true, { transform: booleanAttribute });
   readonly tooltipEnabled = input(true, { transform: booleanAttribute });
-  /** Show a floating legend explaining the vertical markers (today + annotations) */
+  /** Show the legend explaining the vertical markers (today, annotations, critical path, baseline) */
   readonly showLegend = input(false, { transform: booleanAttribute });
+  /**
+   * The consumer is loading the tasks: while the chart has no rows it shows the loading state (a
+   * skeleton); over shown rows only the host's `aria-busy` says it. Default false.
+   */
+  readonly loading = input(false, { transform: booleanAttribute });
+  /**
+   * Show the error state with this message and a Retry button (which emits `retry` with
+   * `{ source: 'error' }`); `null`, `undefined` or a blank string shows none. Default null.
+   */
+  readonly errorMessage = input<string | null | undefined>(null);
   /**
    * Zoom level (a `ViewMode` or a custom `zoomLevels` name), two-way: `[(viewMode)]`. Unset:
    * `options.viewMode`, else `'Month'`. Its `viewModeChange` output fires when the level changes
@@ -612,6 +646,13 @@ export class GantryComponent {
   readonly rowDblClick = output<GanttFlatRow>();
   /** Panel width / collapsed, view, zoom, column widths, collapsed rows or sort changed */
   readonly stateChange = output<GanttState>();
+  /**
+   * Retry was pressed on the error state: `{ source: 'error' }` for `errorMessage` (load again, then
+   * clear it), `{ source: 'dataSource' }` after a failed first data-source page (the chart calls
+   * `dataSource.retry()`). The task-list footer's Retry (a failed later page) retries the data
+   * source without this output.
+   */
+  readonly retry = output<RetryEvent>();
 
   // ── Resolved configuration (shared render model) ─────────
   /** Resolved theme: only its metrics enter the config (colours reach the chart through the host's `--gantt-*` tokens) */
@@ -672,7 +713,21 @@ export class GantryComponent {
     { equal: (a, b) => a.now === b.now && a.min === b.min && a.max === b.max },
   );
   /** Vertical centre of the splitter's collapse toggle (px): below the header */
-  protected readonly toggleTop = computed(() => this.layout.totalHeaderHeight() + SPLITTER_TOGGLE_OFFSET);
+  protected readonly toggleTop = computed(() => this.layout.headerHeight() + SPLITTER_TOGGLE_OFFSET);
+  /**
+   * The timeline's scroll padding (core `timelineScrollPadding`): what the browser scrolls into view
+   * stays below the sticky header, a bar with its whole focus ring (WCAG 2.4.11). The panel keeps
+   * `scroll-padding-top` at the header height.
+   */
+  protected readonly scrollPadding = computed(() => timelineScrollPadding(this.layout.headerHeight()), {
+    equal: (a, b) => a.top === b.top && a.right === b.right && a.bottom === b.bottom && a.left === b.left,
+  });
+  /**
+   * The state box covers the body (the chart is not ready): the timeline, the splitter and the task-list
+   * rows under it are inert (out of the tab order and the accessibility tree); the task-list header row
+   * stays above the box and keeps the list's tab stop.
+   */
+  protected readonly covered = computed(() => this.layout.chartState().kind !== 'ready');
 
   // ── Task list: mounted rows and the tab stop ──────────────
   /**
@@ -689,13 +744,21 @@ export class GantryComponent {
     source: this.layout.focusedRowId,
     computation: (id, prev) => id ?? prev?.value ?? null,
   });
-  /** Task id of the task list's one tab-stop row (`tabStopRow`) */
+  /**
+   * Task id of the task list's tab-stop row (core `tabStopIndex`): the focused row, else the one
+   * focused last while it is mounted, else the first row of the window in view.
+   */
   protected readonly tabStopId = computed(() => {
     const mounted = this.tlRows();
     const preferred = [this.layout.focusedRowId(), this.lastFocusedRowId()];
     // Read, not tracked: the window (so `tlRows`) changes whenever a row crosses the top
-    const firstInView = untracked(() => Math.ceil(Math.max(0, this.scrollSvc.scrollTop()) / this.layout.rowHeight()));
-    return tabStopRow(mounted, preferred, firstInView)?.row.task.id ?? null;
+    const firstInView = Math.ceil(untracked(this.scrollSvc.scrollTop) / this.layout.rowHeight());
+    const stop = tabStopIndex(
+      mounted.map(m => m.row.task.id),
+      preferred,
+      mounted.findIndex(m => m.pinnedTop === null && m.row.visibleIndex >= firstInView),
+    );
+    return mounted[stop]?.row.task.id ?? null;
   });
   /** `aria-multiselectable` of the task list: selection and multi-select are both on */
   protected readonly multiselectable = computed(() => {
@@ -704,10 +767,14 @@ export class GantryComponent {
   });
 
   // ── Live regions ──────────────────────────────────────────
-  /** Assertive `.gantt-sr-alert`: `labels.loadError` while the data source's last page failed */
+  /**
+   * Assertive `.gantt-sr-alert`: `labels.loadError` while the data source's last page failed under
+   * shown rows (with no rows the error state box, `role=alert`, says it: read once, not twice)
+   */
   protected readonly srAlert = computed(() => {
     const error = this.dataSource()?.error();
-    return error === null || error === undefined ? '' : this.i18n.labels().loadError;
+    if (error === null || error === undefined || this.layout.chartState().kind === 'error') return '';
+    return this.i18n.labels().loadError;
   });
 
   // ── Focus ─────────────────────────────────────────────────
@@ -720,7 +787,7 @@ export class GantryComponent {
   /** Timeline the canvas was last rendered with — anchors the scroll when it changes */
   private _paintedTimeline?: TimelineModel;
 
-  private _stateTimer?: ReturnType<typeof setTimeout>;
+  private _stateTimer?: number;
   /** `stateKey` whose saved state was restored (each key is restored once) */
   private _restoredStateKey?: string;
   /** Zoom level already reported through `viewModeChange` (undefined before the first render) */
@@ -782,23 +849,6 @@ export class GantryComponent {
     };
   });
 
-  // ── Legend items (today, annotations, critical path, baseline — @gantryjs/core) ──
-  protected readonly swatchSize = LEGEND_SWATCH_SIZE;
-  protected readonly legendItems = computed<LegendItem[]>(() => {
-    const cfg = this.cfg();
-    return buildLegend({
-      showToday: cfg.showToday,
-      todayVisible: this.layout.todayX() !== null,
-      annotations: this.annotations(),
-      labels: this.i18n.labels(),
-      criticalPath: cfg.criticalPath,
-      baseline: cfg.baseline,
-    });
-  });
-  protected readonly legendVisible = computed(() =>
-    isLegendVisible(this.showLegend(), this.layout.view(), this.legendItems()),
-  );
-
   constructor() {
     // Bind the inputs into the services once: everything downstream is computed / linkedSignal
     this.themeSvc.bind({ options: this.options, darkMode: this.darkMode });
@@ -814,8 +864,38 @@ export class GantryComponent {
       () => this.colSvc.columns(),
       () => this.colSvc.builtins(),
     );
+    this.layout.bindChart({
+      annotations: () => this.annotations(),
+      fontPx: () => this.themeMetrics().fontPx,
+      loading: () => this.loading(),
+      errorMessage: () => this.errorMessage(),
+      loadState: () => loadStateOf(this.dataSource()),
+      showLegend: () => this.showLegend(),
+      toolbarShown: () => this.showToolbar() && !!this.cfg().toolbar,
+    });
     // Every selection change — canvas, task list, keyboard or API — reaches the output
     this.selSvc.onChange = e => this.selectionChange.emit(e);
+    // The bar overlay paints the bars' focus rings and grips from the chart's visuals
+    this.barFocus.bindVisuals(() => this.barVisual());
+    // What the keys do to the chart (the keyboard directive's handlers call back into it)
+    this.keyboard.bind({
+      element: this.hostEl.nativeElement,
+      viewport: () => this.canvasEl()?.nativeElement ?? null,
+      columns: () => this.activeColumns(),
+      barVisual: geo => this.barVisual()(geo),
+      dragEnabled: () => this.dragEnabled(),
+      resizeEnabled: () => this.resizeEnabled(),
+      rowClick: (row, event) => this.onTaskListRowClick({ row, event }),
+      sort: key => this.onSortColumn(key),
+      saveState: () => this.saveState(),
+      selectAll: () => this.selectAll(),
+      zoomIn: () => this.zoomIn(),
+      zoomOut: () => this.zoomOut(),
+      scrollToToday: () => this.scrollToToday(),
+      fitToScreen: () => this.fitToScreen(),
+      taskDragged: e => this.onTaskDragged(e),
+      taskResized: e => this.onTaskResized(e),
+    });
 
     // Zoom level changes → [(viewMode)] + viewModeChange (unless the parent set it) + persisted state.
     // The first render reports nothing. Created BEFORE the stateKey restore below, so its first run
@@ -829,6 +909,7 @@ export class GantryComponent {
         this._shownLevel = level;
         if (first) return;
         if (this.viewMode() !== level) this.viewMode.set(level);
+        this.announcer.zoom(this.layout.levelLabel());
         this.saveState();
       });
     });
@@ -852,33 +933,47 @@ export class GantryComponent {
     });
 
     // Data-source load state → the polite live region ("Loading…", "30 tasks loaded", "All 42 tasks
-    // loaded"); the state found at the first render is the baseline and is not announced
+    // loaded"), from the source's own change stream: every previous → next transition, whenever an
+    // effect runs. Tracks the `dataSource` input only: a new source is compared with the last state
+    // of the old one. The state found at the first render is the baseline and is not announced.
     let load: LoadStateSnapshot | null | undefined;
-    effect(() => {
-      const next = loadStateOf(this.dataSource());
+    effect(onCleanup => {
+      const ds = this.dataSource();
       untracked(() => {
-        const prev = load;
+        const next = loadStateOf(ds);
+        if (load !== undefined) this.announcer.loadState(load, next);
         load = next;
-        if (prev !== undefined) this.announcer.loadState(prev, next);
+        if (!ds) return;
+        onCleanup(
+          ds.ɵsubscribe((prev, state) => {
+            load = state;
+            this.announcer.loadState(prev, state);
+          }),
+        );
       });
     });
 
-    // A drag (pointer-down on a draggable bar) takes keyboard focus to the timeline: Escape cancels it
+    // A pointer drag (pointer-down on a draggable bar) takes keyboard focus to the timeline: Escape
+    // cancels it there (a keyboard move keeps focus on its bar)
     afterRenderEffect(() => {
-      if (this.dragSvc.isActive()) untracked(() => this.canvasEl()?.nativeElement.focus({ preventScroll: true }));
+      if (this.dragSvc.isPointerDrag()) {
+        untracked(() => this.canvasEl()?.nativeElement.focus({ preventScroll: true }));
+      }
     });
 
     // After every render: a focused control that went away hands focus back to the chart
     // (nothing tracks every node a render can remove: consumer cells and toolbar content too)
     afterEveryRender(() => this.restoreFocus());
 
-    // After each render: apply `initialScroll` once rows exist, then keep the anchor date in place
+    // After each render: apply `initialScroll` once rows exist, keep the anchor date in place, then
+    // apply a scroll request (`fitToScreen`) on the timeline it targets
     afterRenderEffect(() => {
       const tl = this.layout.timeline();
       const hasRows = this.hasRows();
       const view = this.layout.view();
       const pending = this.layout.initialScrollPending();
-      untracked(() => this.syncHorizontalScroll(tl, hasRows, view, pending));
+      const request = this.layout.scrollRequest();
+      untracked(() => this.syncHorizontalScroll(tl, hasRows, view, pending, request));
     });
 
     // Browser only (never on the server): sizes, scroll sync and the clock, released with the chart.
@@ -889,7 +984,7 @@ export class GantryComponent {
     // outputs are gone with the chart: no `stateChange`)
     this.destroyRef.onDestroy(() => {
       if (this._stateTimer === undefined) return;
-      clearTimeout(this._stateTimer);
+      this.doc.defaultView?.clearTimeout(this._stateTimer);
       this._stateTimer = undefined;
       this.storeState(this.getState());
     });
@@ -901,6 +996,9 @@ export class GantryComponent {
   private connectBrowser(): void {
     // Live-region announcements start now: the state the chart rendered with is the baseline
     this.announcer.start();
+    // Input modality (the bars' focus ring) and the pointer press that ends keyboard move mode
+    this.barFocus.connect(this.hostEl.nativeElement);
+    this.keyboard.connect();
     const win = this.doc.defaultView;
     const canvas = this.canvasEl()?.nativeElement;
     const panel = this.panelEl()?.nativeElement;
@@ -929,21 +1027,35 @@ export class GantryComponent {
     }
     // Keep "today" fresh in long-lived sessions
     const clock = setInterval(() => this.layout.now.set(Date.now()), CLOCK_INTERVAL);
+    // Ctrl / ⌘ + wheel and pinch zoom, anchored at the pointer
+    const unbindZoom = canvas
+      ? bindZoomGestures(canvas, {
+          zoom: (steps, anchorX) => this.layout.zoomBy(steps, anchorX),
+          level: () => this.layout.level(),
+          // A bar is moved by the pointer or in keyboard move mode: its maths is in the timeline it started on
+          busy: () => this.dragSvc.isActive(),
+        })
+      : null;
 
     this.destroyRef.onDestroy(() => {
       observer?.disconnect();
       clearInterval(clock);
+      unbindZoom?.();
       if (frame !== undefined) win?.cancelAnimationFrame(frame);
     });
   }
 
   // ── Focus ─────────────────────────────────────────────────
 
-  /** Focus moved inside the chart: remember the control, record the task-list row holding it (pinned). */
+  /**
+   * Focus moved inside the chart: remember the control, record the row holding it (a task-list row
+   * or one of its cells or buttons, or a bar: pinned in the virtual window), `null` elsewhere.
+   */
   protected onFocusIn(event: FocusEvent): void {
     const target = event.target as Element;
     this.focusRecord = { el: target, footer: target.closest('gantt-load-more') };
-    this.layout.focusedRowId.set(target.closest('.gantt-tl-row')?.getAttribute('data-task-id') ?? null);
+    const row = target.closest('.gantt-tl-row, .gantt-bars-layer > [data-task-id]');
+    this.layout.focusedRowId.set(row?.getAttribute('data-task-id') ?? null);
   }
 
   /** Focus left the chart for another control (a removed, moved or clicked-away control has no related target). */
@@ -956,33 +1068,72 @@ export class GantryComponent {
   }
 
   /**
-   * After a render: when the control that held focus was removed and nothing holds focus now, focus
-   * the rebuilt control with the same `data-focus-key`, else the timeline viewport, else (table view)
-   * the task list's tab-stop row — so the keyboard shortcuts keep working. A control still in the
-   * page lost focus to a click outside any control: nothing to restore.
+   * After a render:
+   * - a keyboard move to a control that was not mounted yet (a row or bar beyond the virtual window:
+   *   PageDown, End) focuses it now and scrolls it into view, else the focus fallback;
+   * - when the control that held focus was removed or became inert (the table view hides the
+   *   timeline, the state box covers the body) and nothing else holds focus now, the rebuilt control
+   *   with the same `data-focus-key` takes it, else the focus fallback — so the keyboard shortcuts
+   *   keep working. A control still in the page lost focus to a click outside any control: nothing
+   *   to restore.
    */
   private restoreFocus(): void {
+    const host = this.hostEl.nativeElement;
+    const request = this.keyboard.takeFocusRequest();
+    if (request !== null) {
+      this.focusRecord = null;
+      const active = this.doc.activeElement;
+      const el =
+        active && host.contains(active) && focusKeyOf(active) === request
+          ? (active as HTMLElement)
+          : findFocusKey(host, request);
+      if (el && !isInert(el)) focusIntoView(el);
+      else this.focusFallback();
+      return;
+    }
     const record = this.focusRecord;
     if (!record) return;
     const active = this.doc.activeElement;
-    if (active && active !== this.doc.body && active.isConnected) return;
+    // Focus on a control that just turned inert: the browser drops it at its next update
+    const covered = !!active && host.contains(active) && isInert(active);
+    if (active && active !== this.doc.body && active.isConnected && !covered) return;
     this.focusRecord = null;
+    if (covered || (record.el.isConnected && isInert(record.el))) {
+      this.focusFallback();
+      return;
+    }
     // The load-more footer keeps focus on its own buttons (`GanttLoadMoreComponent`)
     if (record.el.isConnected || record.footer?.isConnected) return;
+    const key = focusKeyOf(record.el);
+    const same = key === null ? null : findFocusKey(host, key);
+    if (same) same.focus({ preventScroll: true });
+    else this.focusFallback();
+  }
+
+  /**
+   * Focus for a chart whose focused control is gone or inert: while the state box covers the body,
+   * its Retry, else the toolbar's tab stop, else the task list's (a header cell, above the box);
+   * otherwise the timeline's tab stop (the bar with `tabindex=0`, else the viewport when no bar is
+   * mounted), else (table view, where the timeline is inert) the task list's tab stop — a row, a
+   * cell or a header cell.
+   */
+  private focusFallback(): void {
     const host = this.hostEl.nativeElement;
-    const key = record.el.getAttribute('data-focus-key');
-    const same =
-      key === null
-        ? undefined
-        : [...host.querySelectorAll<HTMLElement>('[data-focus-key]')].find(
-            el => el.getAttribute('data-focus-key') === key,
-          );
-    const target =
-      same ??
-      (this.layout.view() === 'table'
-        ? host.querySelector<HTMLElement>('.gantt-tl-row[tabindex="0"]')
-        : this.canvasEl()?.nativeElement);
-    target?.focus({ preventScroll: true });
+    const stop = '[tabindex="0"]';
+    let target: HTMLElement | SVGElement | null | undefined;
+    if (this.covered()) {
+      target =
+        host.querySelector<HTMLElement>('.gantt-state-retry') ??
+        host.querySelector<HTMLElement>(`.gantt-toolbar ${stop}`) ??
+        host.querySelector<HTMLElement>(`gantt-tasklist ${stop}`);
+    } else {
+      target =
+        this.layout.view() === 'table'
+          ? host.querySelector<HTMLElement>(`gantt-tasklist ${stop}`)
+          : (host.querySelector<HTMLElement | SVGElement>(`.gantt-bars-layer ${stop}`) ??
+            this.canvasEl()?.nativeElement);
+    }
+    if (target && !isInert(target)) target.focus({ preventScroll: true });
   }
 
   // ── Event handlers ────────────────────────────────────────
@@ -1017,9 +1168,18 @@ export class GantryComponent {
     this.taskResized.emit(event);
   }
 
-  /** The panel only scrolls horizontally: forward vertical wheel to the timeline. */
+  /** Retry of the error state: the `retry` output, then (data-source failure) the data source's own retry. */
+  protected onRetry(source: RetryEvent['source']): void {
+    this.retry.emit({ source });
+    if (source === 'dataSource') void this.dataSource()?.retry();
+  }
+
+  /**
+   * The panel only scrolls horizontally: forward vertical wheel to the timeline. Ctrl/⌘ + wheel (and a
+   * trackpad pinch) is a zoom: over the timeline the chart zooms, over the panel the browser keeps it.
+   */
   protected onPanelWheel(e: WheelEvent): void {
-    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    if (e.ctrlKey || e.metaKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
     const canvas = this.canvasEl()?.nativeElement;
     if (!canvas) return;
     canvas.scrollTop += e.deltaY;
@@ -1056,8 +1216,13 @@ export class GantryComponent {
     el.addEventListener('pointercancel', end);
   }
 
+  /**
+   * Keys on the splitter box (the handle and the toggle), as the Web Component's: Enter / Space
+   * collapse or expand the panel, ←/→ resize it. The keys go on to the chart's keyboard directive,
+   * which leaves the handle's alone (a handled key is `defaultPrevented`): a shortcut on the toggle
+   * (`+`, Ctrl/⌘+A…) works as anywhere else in the chart.
+   */
   protected onSplitterKey(e: KeyboardEvent): void {
-    e.stopPropagation();
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       this.togglePanel();
@@ -1074,8 +1239,18 @@ export class GantryComponent {
     }
   }
 
-  /** First render with data → `initialScroll`; later timeline changes keep the anchor date in place. */
-  private syncHorizontalScroll(tl: TimelineModel, hasRows: boolean, view: GanttView, pending: boolean): void {
+  /**
+   * First render with data → `initialScroll`; later timeline changes keep the anchor date in place
+   * (`anchoredScrollLeft`: the zoom anchor, else the centre; a new range start keeps the left edge);
+   * then a pending scroll request (`fitToScreen` → `fitScrollLeft`).
+   */
+  private syncHorizontalScroll(
+    tl: TimelineModel,
+    hasRows: boolean,
+    view: GanttView,
+    pending: boolean,
+    request: GanttScrollRequest | null,
+  ): void {
     const canvas = this.canvasEl()?.nativeElement;
     if (!canvas || view === 'table') return;
     const prev = this._paintedTimeline;
@@ -1092,12 +1267,17 @@ export class GantryComponent {
       if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
       return;
     }
-    if (!prev || prev === tl) return;
-    const zoomed = prev.pxPerDay !== tl.pxPerDay;
-    if (!zoomed && prev.start.getTime() === tl.start.getTime()) return;
-    // Zoom keeps the centre date; a new range start keeps the left-edge date
-    const anchorX = zoomed ? canvas.clientWidth / 2 : 0;
-    this.scrollSvc.scrollToX(zoomAnchorScroll(prev, tl, this.scrollSvc.scrollLeft(), anchorX), 'instant');
+    if (prev && prev !== tl) {
+      const anchorX = this.layout.zoomAnchorX();
+      this.layout.zoomAnchorX.set(null);
+      const left = anchoredScrollLeft(prev, tl, this.scrollSvc.scrollLeft(), canvas.clientWidth, anchorX);
+      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+    }
+    if (request === 'fit') {
+      this.layout.scrollRequest.set(null);
+      const left = fitScrollLeft(tl, canvas.clientWidth);
+      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+    }
   }
 
   // ── Public API ────────────────────────────────────────────
@@ -1110,6 +1290,16 @@ export class GantryComponent {
   }
   zoomOut(): void {
     this.layout.zoomOut();
+  }
+
+  /**
+   * Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest when
+   * none does; core `fitZoomLevel`), then scroll to the first task, and announce the level. The
+   * levels are the chart's: those of `options.zoomLevels`, or the built-in presets when it is unset.
+   * Nothing happens without tasks or before the viewport is measured.
+   */
+  fitToScreen(): void {
+    if (this.layout.fitToScreen() !== null) this.announcer.zoom(this.layout.levelLabel());
   }
 
   /** Switch the zoom level: a `ViewMode` or a custom `zoomLevels` name (reported through `viewModeChange`). */
@@ -1251,8 +1441,10 @@ export class GantryComponent {
 
   /** Debounced: emit `stateChange` and persist under `options.stateKey` (a pending save is written on destroy). */
   protected saveState(): void {
-    clearTimeout(this._stateTimer);
-    this._stateTimer = setTimeout(() => {
+    // Timers go through the document's window (none on the server: nothing to save there)
+    const win = this.doc.defaultView;
+    if (this._stateTimer !== undefined) win?.clearTimeout(this._stateTimer);
+    this._stateTimer = win?.setTimeout(() => {
       this._stateTimer = undefined;
       const state = this.getState();
       this.stateChange.emit(state);

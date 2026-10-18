@@ -6,6 +6,8 @@
 //  is not at local midnight, as on hour scales.
 //  Level, expanded and selected state are not part of the name:
 //  bindings expose them as aria-level / aria-expanded / aria-selected.
+//  `barRoleDescription` names the shape a bar is drawn as (its
+//  aria-roledescription: "task bar", "milestone", "summary bar").
 // ─────────────────────────────────────────────────────────────
 
 import { formatDate, toLocalDay } from '../gantt-math';
@@ -153,4 +155,40 @@ export function taskAccessibleName(row: DescribeRow, options: TaskAccessibleName
   const milestone = type === TaskType.Milestone || row.barType === TaskType.Milestone;
   if (options.baseline && !milestone) parts.push(labels.ariaBaseline);
   return parts.join(labels.ariaListSeparator);
+}
+
+// ─── Bar role description ─────────────────────────────────────
+
+/** Strings `barRoleDescription` reads (part of `GanttLabels`). */
+export type BarRoleLabels = Pick<GanttLabels, 'ariaTask' | 'ariaMilestone' | 'ariaGroup' | 'ariaBarRole'>;
+
+export const DEFAULT_BAR_ROLE_LABELS: BarRoleLabels = {
+  ariaTask: DEFAULT_LABELS.ariaTask,
+  ariaMilestone: DEFAULT_LABELS.ariaMilestone,
+  ariaGroup: DEFAULT_LABELS.ariaGroup,
+  ariaBarRole: DEFAULT_LABELS.ariaBarRole,
+};
+
+/**
+ * The `aria-roledescription` of a bar (`role=option`), from the bar type it is drawn as
+ * (`GanttFlatRow.barType`; without one, `task.barType`, then `task.type`): `ariaTask` for task
+ * bars, `ariaMilestone` for milestones, `ariaGroup` for group (summary) bars and `ariaBarRole`
+ * for custom bar types. A parent row drawn as a task bar is a task bar; its name still says "Group".
+ */
+export function barRoleDescription(
+  row: Pick<DescribeRow, 'task' | 'barType'>,
+  labels?: Partial<BarRoleLabels>,
+): string {
+  // Read key by key: bindings call this per bar with their whole label set
+  const type = row.barType ?? row.task.barType ?? row.task.type ?? TaskType.Task;
+  switch (type) {
+    case TaskType.Task:
+      return labels?.ariaTask ?? DEFAULT_BAR_ROLE_LABELS.ariaTask;
+    case TaskType.Milestone:
+      return labels?.ariaMilestone ?? DEFAULT_BAR_ROLE_LABELS.ariaMilestone;
+    case TaskType.Group:
+      return labels?.ariaGroup ?? DEFAULT_BAR_ROLE_LABELS.ariaGroup;
+    default:
+      return labels?.ariaBarRole ?? DEFAULT_BAR_ROLE_LABELS.ariaBarRole;
+  }
 }

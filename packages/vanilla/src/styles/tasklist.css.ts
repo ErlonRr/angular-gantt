@@ -13,9 +13,9 @@
  * Pinned rows: a focused row kept mounted outside the virtual window is positioned absolutely
  * at its row offset (`top` is set through the CSSOM).
  *
- * Focus: rows, sortable headers, collapse toggles and the footer show an inset ring (cells and
- * the panel clip anything outside them), the load-more button an outer one; keyboard focus only
- * (`:focus-visible`).
+ * Focus (`--gantt-focus-ring`): rows, cells, header cells, collapse toggles and the footer show an
+ * inset ring (cells and the panel clip anything outside them), the load-more button an outer one;
+ * keyboard focus only (`:focus-visible`).
  */
 
 export const TASKLIST_CSS = `
@@ -64,9 +64,9 @@ export const TASKLIST_CSS = `
     .gantt-tl-row:hover { filter: brightness(0.97); }
     .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border); }
     .gantt-tl-row--pinned { position: absolute; left: 0; right: 0; z-index: 1; }
-    .gantt-tl-row:focus-visible, .gantt-tl-col-header:focus-visible, .gantt-tl-load-more:focus-visible,
-    .gantt-collapse-btn:focus-visible {
-      outline: 2px solid var(--gantt-sel-border); outline-offset: -2px;
+    .gantt-tl-row:focus-visible, .gantt-tl-cell:focus-visible, .gantt-tl-col-header:focus-visible,
+    .gantt-tl-load-more:focus-visible, .gantt-collapse-btn:focus-visible {
+      outline: 2px solid var(--gantt-focus-ring); outline-offset: -2px;
     }
-    .gantt-load-more-btn:focus-visible { outline: 2px solid var(--gantt-sel-border); outline-offset: 1px; }
+    .gantt-load-more-btn:focus-visible { outline: 2px solid var(--gantt-focus-ring); outline-offset: 1px; }
 `;

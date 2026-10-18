@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { BarVisual } from './render/bars';
+import type { TooltipModel } from './state/tooltip';
 
 // ─── Enums ───────────────────────────────────────────────────
 
@@ -144,6 +145,12 @@ export interface GanttFlatRow {
   hidden: boolean;
   /** Resolved bar type (task.barType ?? TaskType.Task) */
   barType: string;
+  /** 1-based position among the visible rows that share its parent (`aria-posinset`); set by `reindexVisible` */
+  posInSet?: number | undefined;
+  /** Number of visible rows that share its parent (`aria-setsize`); set by `reindexVisible` */
+  setSize?: number | undefined;
+  /** `visibleIndex` of its parent row; `undefined` for a root row. Set by `reindexVisible` */
+  parentIndex?: number | undefined;
 }
 
 // ─── Geometry (computed by GanttLayoutService) ────────────────
@@ -333,6 +340,8 @@ export interface GanttTheme {
    * (`task.progressColor` and `bar.progress.color` win, at full opacity). Default `'#000000'`.
    */
   progressOverlay?: string;
+  /** Keyboard focus rings (bars, task list, toolbar). Default `'#2563EB'` (light), `'#60A5FA'` (dark) */
+  focusRing?: string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -353,13 +362,20 @@ export interface GanttLabels {
   /** A page of the data source failed to load */
   loadError: string;
   retry: string;
+  // Chart states
+  /** Empty state when there are no tasks (and no `empty` slot / `[ganttEmpty]` content) */
+  emptyState: string;
+  /** Title of the error state; the `errorMessage` is shown under it */
+  errorTitle: string;
   // Toolbar
   zoomIn: string;
   zoomOut: string;
+  /** Toolbar button: the finest zoom level that shows every task */
+  fitToScreen: string;
   todayButton: string;
   /** Toolbar labels per zoom level (built-in `ViewMode`s and custom level names) */
   viewModes: Partial<Record<ViewMode | (string & {}), string>>;
-  /** Toolbar: split / table / chart view toggle */
+  /** Toolbar: split / table / chart view toggle (accessible name and tooltip of the icon buttons) */
   viewSplit: string;
   viewTable: string;
   viewChart: string;
@@ -420,6 +436,20 @@ export interface GanttLabels {
   ariaTaskList: string;
   /** Accessible name of the toolbar */
   ariaToolbar: string;
+  /** Accessible name of the toolbar's zoom-level radio group */
+  ariaZoomLevels: string;
+  /** Accessible name of the toolbar's view radio group */
+  ariaViews: string;
+  /** Accessible name of the timeline's bar list */
+  ariaBars: string;
+  /** Role description of a task bar (`aria-roledescription`) */
+  ariaTask: string;
+  /** Role description of a milestone */
+  ariaMilestone: string;
+  /** Role description of a group's summary bar */
+  ariaGroup: string;
+  /** Role description of a bar of a custom `barType` */
+  ariaBarRole: string;
   ariaExpand: (name: string) => string;
   ariaCollapse: (name: string) => string;
   // Accessible names of bars (`taskAccessibleName`)
@@ -464,6 +494,8 @@ export interface GanttLabels {
   announceLinkCancel: string;
   /** Movement shown above the drag ghost, e.g. "+3d" / "-2h" (`amount` in snap units) */
   dragDelta: (amount: number, unit: AnnounceUnit) => string;
+  /** Readout next to a dragged bar: its formatted date range and duration, e.g. "3 Mar – 6 Mar · 3 days" */
+  dragReadout: (range: string, duration: string) => string;
   // Tooltip rows
   /** Label of the critical-path row */
   ttCritical: string;
@@ -489,8 +521,11 @@ export const DEFAULT_LABELS: GanttLabels = {
   allLoaded: n => `All ${n} tasks loaded`,
   loadError: 'Couldn’t load tasks',
   retry: 'Retry',
+  emptyState: 'No tasks to show',
+  errorTitle: 'Couldn’t show the chart',
   zoomIn: 'Zoom in',
   zoomOut: 'Zoom out',
+  fitToScreen: 'Fit to screen',
   todayButton: 'Today',
   viewModes: {
     [ViewMode.Hour]: 'Hour',
@@ -500,9 +535,9 @@ export const DEFAULT_LABELS: GanttLabels = {
     [ViewMode.Quarter]: 'Quarter',
     [ViewMode.Year]: 'Year',
   },
-  viewSplit: 'Gantt',
-  viewTable: 'Table',
-  viewChart: 'Chart',
+  viewSplit: 'Table and chart',
+  viewTable: 'Table only',
+  viewChart: 'Chart only',
   showPanel: 'Show task list',
   hidePanel: 'Hide task list',
   week: 'Week',
@@ -549,6 +584,13 @@ export const DEFAULT_LABELS: GanttLabels = {
   ariaChart: 'Gantt chart timeline',
   ariaTaskList: 'Tasks',
   ariaToolbar: 'Chart toolbar',
+  ariaZoomLevels: 'Zoom level',
+  ariaViews: 'View',
+  ariaBars: 'Task bars',
+  ariaTask: 'task bar',
+  ariaMilestone: 'milestone',
+  ariaGroup: 'summary bar',
+  ariaBarRole: 'bar',
   ariaExpand: name => `Expand ${name}`,
   ariaCollapse: name => `Collapse ${name}`,
   ariaProgress: p => `${p}% complete`,
@@ -568,7 +610,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   announceZoom: level => `Zoom: ${level}`,
   announceEditStart: name =>
     `Editing ${name}. Arrow keys move, Shift+Arrow resizes the end, Alt+Arrow resizes the start, ` +
-    `Up and Down change progress, Enter saves, Escape cancels.`,
+    `Enter saves, Escape cancels.`,
   announceEditCancel: name => `Edit of ${name} cancelled`,
   announceEditNoChange: name => `${name} unchanged`,
   announceExpanded: name => `${name} expanded`,
@@ -577,6 +619,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   announceLinkCreated: (from, to) => `Linked ${from} to ${to}`,
   announceLinkCancel: 'Linking cancelled',
   dragDelta: (amount, unit) => `${amount > 0 ? '+' : ''}${amount}${unit === 'hour' ? 'h' : 'd'}`,
+  dragReadout: (range, duration) => `${range} · ${duration}`,
   ttCritical: 'Critical path',
   ttCriticalValue: 'Yes',
   ttFloat: 'Float',
@@ -733,6 +776,16 @@ export interface GanttBarOptions {
         color?: string | undefined;
       }
     | undefined;
+  /** Resize handles at the bar's ends */
+  handles?:
+    | {
+        /**
+         * Width of each pointer target in px, centred on the bar edge (default 24, WCAG 2.5.8).
+         * A target never reaches more than a third of the bar inward and the two never overlap.
+         */
+        hitSize?: number | undefined;
+      }
+    | undefined;
 }
 
 export interface GanttMilestoneOptions {
@@ -794,6 +847,60 @@ export interface GanttToolbarOptions {
   today?: boolean | undefined;
   /** Split / table / chart switch */
   viewToggle?: boolean | undefined;
+  /** "Fit to screen" button: the finest zoom level that shows every task (default true) */
+  fit?: boolean | undefined;
+}
+
+export interface GanttKeyboardOptions {
+  /**
+   * Single-character shortcuts anywhere in the chart: `+` / `-` zoom, `T` scrolls to today,
+   * `F` fits the tasks to the screen. Turn them off when they clash with the page (WCAG 2.1.4).
+   * Default true.
+   */
+  characterShortcuts?: boolean | undefined;
+}
+
+/** What `tooltip.render` receives: the built-in tooltip model and the hovered / focused task. */
+export interface GanttTooltipRenderContext {
+  /** The content the built-in tooltip would show (title, rows, progress…) */
+  model: TooltipModel;
+  task: GanttTask;
+  row: GanttFlatRow;
+}
+
+export interface GanttTooltipOptions {
+  /**
+   * What opens the tooltip: `'hover'` (pointer only), `'focus'` (keyboard focus only) or
+   * `'auto'` (both, and a tap on touch screens). Default `'auto'`.
+   */
+  trigger?: 'auto' | 'hover' | 'focus' | undefined;
+  /** How long the pointer rests on a bar before the tooltip opens, in ms (default 320). Focus opens it at once. */
+  showDelay?: number | undefined;
+  /** How long the tooltip stays open after the pointer leaves the bar, in ms (default 120) */
+  hideDelay?: number | undefined;
+  /**
+   * Custom tooltip content, replacing the built-in title and rows: return a string (shown as
+   * text) or a DOM node. Angular's `<ng-template ganttTooltip>` takes precedence over it.
+   * Typed `unknown` because `@gantryjs/core` has no DOM types.
+   */
+  render?: ((ctx: GanttTooltipRenderContext) => unknown) | undefined;
+}
+
+export interface GanttLegendOptions {
+  /**
+   * Where the legend sits when `showLegend` is on: `'bottom'` (a strip under the chart) or
+   * `'toolbar'` (at the end of the toolbar; falls back to the bottom when the toolbar is hidden).
+   * Default `'bottom'`.
+   */
+  position?: 'bottom' | 'toolbar' | undefined;
+}
+
+export interface GanttMarkerOptions {
+  /**
+   * A lane under the header tiers for the today marker and the annotation labels, so labels
+   * never cover bars. `'auto'` (default) shows it when at least one annotation has a label.
+   */
+  lane?: 'auto' | boolean | undefined;
 }
 
 /** UI state that can be persisted (`stateKey`) or restored (`setState`). */
@@ -898,8 +1005,18 @@ export interface GanttOptions {
   table?: GanttTableOptions | undefined;
   view?: GanttView | undefined;
   toolbar?: GanttToolbarOptions | false | undefined;
+  /** Legend placement (`showLegend` turns it on) */
+  legend?: GanttLegendOptions | undefined;
+  /** Today and annotation markers */
+  markers?: GanttMarkerOptions | undefined;
   /** Persist UI state (panel width, view, zoom, column widths…) in localStorage */
   stateKey?: string | undefined;
+
+  // ── Interaction ──
+  /** Keyboard shortcuts */
+  keyboard?: GanttKeyboardOptions | undefined;
+  /** Tooltip trigger, timing and custom content (`tooltipEnabled` turns it on) */
+  tooltip?: GanttTooltipOptions | undefined;
 }
 
 // ─── Events emitted by the component ─────────────────────────
@@ -932,6 +1049,11 @@ export interface DependencyChangeEvent {
   toId: string;
   type: DependencyType;
   lag: number;
+}
+
+/** The user pressed Retry: on the error state (`'error'`) or after a failed data-source page (`'dataSource'`). */
+export interface RetryEvent {
+  source: 'error' | 'dataSource';
 }
 
 // ─── Bar registry ─────────────────────────────────────────────

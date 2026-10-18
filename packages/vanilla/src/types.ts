@@ -13,6 +13,7 @@ import type {
   TaskDragEvent,
   TaskResizeEvent,
   SelectionChangeEvent,
+  RetryEvent,
   PagedLoaderConfig,
   ColumnContext,
   GanttBarContext,
@@ -50,6 +51,12 @@ export interface GantryEventDetailMap {
   'state-change': GanttState;
   /** A data-source page failed after its automatic retries (`dataSource.retry()` tries again) */
   'load-error': { error: unknown; page: number };
+  /**
+   * The user pressed Retry on the chart's error state: `source: 'error'` for the `errorMessage`
+   * state (load again yourself), `'dataSource'` after a failed first data-source page (the element
+   * also calls `dataSource.retry()`)
+   */
+  retry: RetryEvent;
 }
 
 export type GantryEventMap = {
@@ -73,6 +80,8 @@ export interface GantryProperties {
   showLegend?: boolean | undefined;
   dataSource?: GanttDataSourceConfig | GanttDataSource | null | undefined;
   renderBar?: GanttBarRenderer | undefined;
+  loading?: boolean | undefined;
+  errorMessage?: string | null | undefined;
 }
 
 /** Settable properties of `<gantry-element>`, in order (from the property table, `engine/props.ts`). */
@@ -88,6 +97,7 @@ export const GANTRY_EVENTS = {
   'view-mode-change': 'onViewModeChange',
   'state-change': 'onStateChange',
   'load-error': 'onLoadError',
+  retry: 'onRetry',
 } as const satisfies Record<keyof GantryEventDetailMap, string>;
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */

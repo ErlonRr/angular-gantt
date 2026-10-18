@@ -38,12 +38,26 @@
 //  keeps its node (and keyboard focus) across scrolls, selections and
 //  collapses.
 //
-//  Keyboard: the list is one tab stop. One mounted row has `tabindex=0`
-//  (`tabStopId`: the focused row, else the row focused last while it is
-//  mounted, else the first row in view; see `tabStopRow`), the others
-//  `-1`. Rows, collapse toggles and sortable headers carry the Web
-//  Component's `data-focus-key` (`row:<id>`, `collapse:<id>`, `sort:<key>`)
-//  for the chart's focus restore.
+//  Static ARIA (the Web Component's): header cells and cells carry
+//  `aria-colindex` (1-based), rows `aria-posinset` / `aria-setsize` among
+//  their visible siblings (core `reindexVisible`) besides `aria-level`,
+//  `aria-rowindex`, `aria-selected` and `aria-expanded`.
+//
+//  Keyboard (row-first treegrid, D6 of Gantry 2 phase 9): the whole grid
+//  is one tab stop. Header cells, rows and cells are focusable with the
+//  Web Component's `data-focus-key` (`head:<column>`, `row:<id>`,
+//  `cell:<id>:<column>`) and `tabindex=-1`, except one with `tabindex=0`
+//  (core `gridTabStop`): the header cell or the cell focused last in the
+//  list (a cell only while its row is the tab-stop row), else the tab-stop
+//  row (`tabStopId`: the focused row — in either pane — else the one
+//  focused last while it is mounted, else the first row in view; core
+//  `tabStopIndex`), else, without rows, the first header cell, so the
+//  scrollable list always keeps a keyboard stop. While the chart's state
+//  box covers the rows (`covered`) they are `inert` and the header row
+//  (above the box) holds the tab stop. Collapse toggles (`collapse:<id>`)
+//  are `tabindex=-1` (the row expands with →). The keys themselves are the
+//  chart's keyboard directive (`a11y/grid-keys.ts`); this list only
+//  records where its tab stop goes (`focusin`).
 //
 //  Column resize is the Web Component's gesture (`interaction/column-resize.ts`):
 //  the handle captures the pointer and listens for one gesture, never on
@@ -60,10 +74,13 @@ import {
   clampColumnWidth,
   columnsGridTemplate,
   computeCellVisual,
+  gridTabStop,
   rowPaint,
+  sameGridSpot,
   virtualIndexes,
   type CellVisual,
   type ColumnContext,
+  type GridFocusSpot,
   type VirtualWindow,
 } from '@gantryjs/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -80,6 +97,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     '[attr.aria-colcount]': 'visibleColumns().length',
     '[attr.aria-label]': 'i18n.labels().ariaTaskList',
     '[style.user-select]': 'resizingCol() ? "none" : null',
+    '(focusin)': 'onFocusIn($event)',
   },
   template: `
     <!-- ── Column header row ──────────────────────────────── -->
@@ -90,17 +108,19 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       [style.grid-template-columns]="gridTemplate()"
       [style.height.px]="colHeaderHeight()"
     >
-      @for (col of visibleColumns(); track col.key) {
+      <!-- Every header cell is in the grid navigation (the header row is above row 1); Enter / Space
+           sort through the chart's keyboard directive -->
+      @for (col of visibleColumns(); track col.key; let c = $index) {
+        <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
         <div
           class="gantt-tl-col-header"
           role="columnheader"
+          [attr.aria-colindex]="c + 1"
           [style.justify-content]="justify(col.align)"
           [attr.aria-sort]="col.sortable ? ariaSort(col.key) : null"
-          [attr.tabindex]="col.sortable ? 0 : null"
-          [attr.data-focus-key]="col.sortable ? 'sort:' + col.key : null"
+          [attr.tabindex]="col.key === headStop() ? 0 : -1"
+          [attr.data-focus-key]="'head:' + col.key"
           (click)="onHeaderClick(col)"
-          (keydown.enter)="col.sortable && sortColumn.emit(col.key)"
-          (keydown.space)="$event.preventDefault(); col.sortable && sortColumn.emit(col.key)"
         >
           <span class="gantt-tl-ellipsis" [attr.title]="col.label">{{ col.label }}</span>
           @if (col.sortable) {
@@ -124,13 +144,16 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     </div>
 
     <!-- ── Task rows ──────────────────────────────────────── -->
-    <div class="gantt-tl-rows" role="rowgroup">
+    <div class="gantt-tl-rows" role="rowgroup" [attr.inert]="covered() ? '' : null">
       <!-- Spacer top (virtual scroll) -->
       <div aria-hidden="true" [style.height.px]="paddingTop()"></div>
 
-      <!-- The window's rows and the pinned ones (out of the flow, at their row offset) -->
+      <!-- The window's rows and the pinned ones (out of the flow, at their row offset). Their keys are
+           the chart's keyboard directive (one listener on the chart) -->
       @for (m of rows(); track m.row.task.id) {
         @let row = m.row;
+        @let rowId = row.task.id;
+        <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
         <div
           class="gantt-tl-row"
           role="row"
@@ -139,9 +162,11 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [class.gantt-tl-row--pinned]="m.pinnedTop !== null"
           [attr.data-task-id]="row.task.id"
           [attr.data-focus-key]="'row:' + row.task.id"
-          [attr.tabindex]="row.task.id === tabStopId() ? 0 : -1"
+          [attr.tabindex]="rowId === rowStop() ? 0 : -1"
           [attr.aria-rowindex]="row.visibleIndex + 2"
           [attr.aria-level]="row.level + 1"
+          [attr.aria-posinset]="row.posInSet ?? null"
+          [attr.aria-setsize]="row.setSize ?? null"
           [attr.aria-selected]="isSelected(row)"
           [attr.aria-expanded]="row.hasChildren ? !row.isCollapsed : null"
           [style.top.px]="m.pinnedTop"
@@ -149,14 +174,16 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row)"
           (click)="onRowClick($event, row)"
-          (keydown)="onRowKey($event, row)"
           (dblclick)="rowDblClick.emit(row)"
         >
-          @for (col of visibleColumns(); track col.key) {
+          @for (col of visibleColumns(); track col.key; let c = $index) {
             @let cell = cellVisual(col, row);
             <div
               class="gantt-tl-cell"
               role="gridcell"
+              [attr.aria-colindex]="c + 1"
+              [attr.tabindex]="rowId === tabStopId() && col.key === cellStop() ? 0 : -1"
+              [attr.data-focus-key]="'cell:' + rowId + ':' + col.key"
               [attr.data-status]="cell?.status ?? null"
               [attr.title]="cell?.title ?? null"
               [style.justify-content]="justify(col.align)"
@@ -171,6 +198,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                     <button
                       type="button"
                       class="gantt-collapse-btn"
+                      tabindex="-1"
                       [attr.data-focus-key]="'collapse:' + row.task.id"
                       [attr.aria-expanded]="!row.isCollapsed"
                       [attr.aria-label]="collapseAriaLabel(row)"
@@ -359,12 +387,43 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       .gantt-collapse-btn:hover {
         opacity: 0.75;
       }
-      /* Keyboard focus only: inset rings (cells and the panel clip anything outside them) */
+      /* Keyboard focus only (--gantt-focus-ring): inset rings (cells and the panel clip anything outside them) */
       .gantt-tl-row:focus-visible,
+      .gantt-tl-cell:focus-visible,
       .gantt-tl-col-header:focus-visible,
       .gantt-collapse-btn:focus-visible {
-        outline: 2px solid var(--gantt-sel-border);
+        outline: 2px solid var(--gantt-focus-ring);
         outline-offset: -2px;
+      }
+
+      /* Forced colours (D25): the selected row Highlight / HighlightText over its inline background,
+         opting out of forcing (the Canvas text backplate would hide HighlightText), so its subtree's
+         colours are set here (its focus rings HighlightText); status dots CanvasText */
+      @media (forced-colors: active) {
+        .gantt-tl-row--selected {
+          forced-color-adjust: none;
+          background-color: Highlight !important;
+          box-shadow: none;
+        }
+        .gantt-tl-row--selected,
+        .gantt-tl-row--selected * {
+          color: HighlightText !important;
+          border-color: CanvasText !important;
+        }
+        .gantt-tl-status-dot {
+          background-color: CanvasText !important;
+        }
+        .gantt-tl-row--selected .gantt-tl-status-dot {
+          background-color: HighlightText !important;
+        }
+        .gantt-tl-row--selected:focus-visible,
+        .gantt-tl-row--selected .gantt-tl-cell:focus-visible,
+        .gantt-tl-row--selected .gantt-collapse-btn:focus-visible {
+          outline-color: HighlightText;
+        }
+        .gantt-col-resize:hover {
+          background-color: Highlight;
+        }
       }
     `,
   ],
@@ -378,8 +437,10 @@ export class GanttTaskListComponent {
   // ── Inputs ────────────────────────────────────────────────
   /** Rows to mount, in DOM order: the virtual window plus the pinned rows (`mountedRows`) */
   readonly rows = input.required<readonly MountedRow[]>();
-  /** Task id of the row that takes the list's tab stop (`tabStopRow`); `null` while no row is mounted */
+  /** Task id of the tab-stop row (core `tabStopIndex` over the mounted rows); `null` while no row is mounted */
   readonly tabStopId = input<string | null>(null);
+  /** The chart's state box covers the rows (not ready): they are inert, the header row keeps the tab stop */
+  readonly covered = input<boolean>(false);
   /** `aria-multiselectable`: selection and multi-select are both on */
   readonly multiselectable = input<boolean>(true);
   readonly columns = input.required<ColumnDef[]>();
@@ -398,7 +459,7 @@ export class GanttTaskListComponent {
 
   // ── Outputs ───────────────────────────────────────────────
   readonly collapseToggle = output<string>(); // taskId
-  readonly rowClick = output<{ row: GanttFlatRow; event: MouseEvent | KeyboardEvent }>();
+  readonly rowClick = output<{ row: GanttFlatRow; event: MouseEvent }>();
   readonly rowDblClick = output<GanttFlatRow>();
   /** Live column resize (while dragging the header edge) */
   readonly columnWidthChange = output<{ key: string; width: number }>();
@@ -409,6 +470,38 @@ export class GanttTaskListComponent {
   // ── Internal state ────────────────────────────────────────
   /** Key of the column being resized (no text selection meanwhile) */
   protected readonly resizingCol = signal<string | null>(null);
+
+  /** Where focus was last inside the list: the header cell or cell that keeps the tab stop */
+  private readonly focusSpot = signal<GridFocusSpot | null>(null, { equal: sameGridSpot });
+
+  /** The list's one tab stop (core `gridTabStop`); covered rows can't hold it */
+  private readonly tabStop = computed(
+    () =>
+      gridTabStop(
+        this.focusSpot(),
+        this.covered() ? null : this.tabStopId(),
+        this.visibleColumns().map(c => c.key),
+      ),
+    { equal: sameGridSpot },
+  );
+
+  /** Key of the header cell that is the tab stop (focused last, its column still shown; the first without rows), else `null` */
+  protected readonly headStop = computed(() => {
+    const stop = this.tabStop();
+    return stop?.kind === 'head' ? stop.key : null;
+  });
+
+  /** Column key of the tab-stop row's cell that is the tab stop (focused last in that row), else `null` */
+  protected readonly cellStop = computed(() => {
+    const stop = this.tabStop();
+    return stop?.kind === 'cell' ? stop.key : null;
+  });
+
+  /** Task id of the row that is the tab stop: the tab-stop row unless a header cell or a cell is */
+  protected readonly rowStop = computed(() => {
+    const stop = this.tabStop();
+    return stop?.kind === 'row' ? stop.id : null;
+  });
 
   /** The column-resize gesture (pointer capture on the handle) */
   private readonly colResize = createColumnResize({
@@ -491,11 +584,22 @@ export class GanttTaskListComponent {
     this.rowClick.emit({ row, event });
   }
 
-  /** Enter / Space on a focused row select it like a click (Ctrl / Shift modifiers included) */
-  protected onRowKey(event: KeyboardEvent, row: GanttFlatRow): void {
-    if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return;
-    event.preventDefault();
-    this.rowClick.emit({ row, event });
+  /** Focus moved inside the list: a header cell, a row or one of its cells keeps the tab stop. */
+  protected onFocusIn(event: FocusEvent): void {
+    const target = event.target as Element;
+    const cols = this.visibleColumns();
+    const keyOf = (el: Element) => cols[Number(el.getAttribute('aria-colindex')) - 1]?.key;
+    const head = target.closest('.gantt-tl-col-header');
+    if (head) {
+      const key = keyOf(head);
+      if (key !== undefined) this.focusSpot.set({ kind: 'head', key });
+      return;
+    }
+    const id = target.closest('.gantt-tl-row')?.getAttribute('data-task-id');
+    if (id == null) return;
+    const cell = target.closest('.gantt-tl-cell');
+    const key = cell ? keyOf(cell) : undefined;
+    this.focusSpot.set(key !== undefined ? { kind: 'cell', id, key } : { kind: 'row', id });
   }
 
   protected onHeaderClick(col: ColumnDef): void {
@@ -534,24 +638,6 @@ export function mountedRows(rows: readonly GanttFlatRow[], vw: VirtualWindow, ro
 /** Same rows (by object) at the same pin offsets: a scroll inside the overscan keeps the list. */
 export function sameMountedRows(a: readonly MountedRow[], b: readonly MountedRow[]): boolean {
   return a.length === b.length && a.every((m, i) => m.row === b[i]?.row && m.pinnedTop === b[i]?.pinnedTop);
-}
-
-/**
- * The row that takes the list's tab stop: the first of `preferred` (task ids) that is mounted,
- * else the first row of the window at or below `firstInView` (a visible index), else the first
- * row of the window, else the first mounted row.
- */
-export function tabStopRow(
-  mounted: readonly MountedRow[],
-  preferred: readonly (string | null)[],
-  firstInView: number,
-): MountedRow | undefined {
-  for (const id of preferred) {
-    const m = id === null ? undefined : mounted.find(r => r.row.task.id === id);
-    if (m) return m;
-  }
-  const windowed = mounted.filter(m => m.pinnedTop === null);
-  return windowed.find(m => m.row.visibleIndex >= firstInView) ?? windowed[0] ?? mounted[0];
 }
 
 // ── Column-resize gesture (port of the Web Component's `interaction/column-resize.ts`) ──

@@ -1107,15 +1107,6 @@ a.gs-card:hover {
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * The charts don't inherit the page's line height (it crosses the Web Component's shadow root and
- * reaches Angular's light DOM): their toolbar and legend keep the size they were designed at.
- * Zero specificity, so a page can still set it.
- */
-:where(gantry, gantry-element) {
-  line-height: normal;
-}
-
 /* A chart inside a card or a stage: give it a height, the card clips the corners */
 .gs-chart {
   display: block;
@@ -1130,6 +1121,17 @@ a.gs-card:hover {
 .gs-stage > .gs-chart {
   border-radius: var(--gs-radius-sm);
   overflow: hidden;
+}
+
+/*
+ * A card holding a page's main chart (the framework demos): as tall as the first viewport allows
+ * under a page head and one control row, at least 480 px; the chart fills it.
+ */
+.gs-app-chart {
+  height: clamp(480px, calc(100vh - 300px), 760px);
+}
+.gs-app-chart > .gs-chart {
+  height: 100%;
 }
 
 /* ── Code ─────────────────────────────────────────────────── */

@@ -33,6 +33,14 @@ export interface PlaygroundState {
   stateKey: boolean;
   panelCols: string;
   tableCols: string;
+  legendPosition: string;
+  tooltipTrigger: string;
+  tooltipShowDelay: number;
+  tooltipHideDelay: number;
+  characterShortcuts: boolean;
+  handleHitSize: number;
+  markerLane: string;
+  toolbarFit: boolean;
 }
 
 export type PlaygroundKey = keyof PlaygroundState;
@@ -62,6 +70,15 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   stateKey: false,
   panelCols: 'default',
   tableCols: 'default',
+  // The core defaults (resolveConfig): at these values the options below are left out of the code
+  legendPosition: 'bottom',
+  tooltipTrigger: 'auto',
+  tooltipShowDelay: 320,
+  tooltipHideDelay: 120,
+  characterShortcuts: true,
+  handleHitSize: 24,
+  markerLane: 'auto',
+  toolbarFit: true,
 };
 
 interface ControlBase {
@@ -309,6 +326,90 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
     ],
   },
   {
+    title: 'Interaction & accessibility',
+    controls: [
+      {
+        kind: 'select',
+        key: 'tooltipTrigger',
+        label: 'Tooltip opens on',
+        option: 'tooltip.trigger',
+        choices: [
+          ['auto', 'Hover, focus and tap'],
+          ['hover', 'Hover only'],
+          ['focus', 'Keyboard focus only'],
+        ],
+      },
+      {
+        kind: 'range',
+        key: 'tooltipShowDelay',
+        label: 'Tooltip delay',
+        option: 'tooltip.showDelay',
+        min: 0,
+        max: 1000,
+        step: 40,
+        unit: 'ms',
+        hint: 'How long the pointer rests on a bar first. Focus opens it at once.',
+      },
+      {
+        kind: 'range',
+        key: 'tooltipHideDelay',
+        label: 'Tooltip close delay',
+        option: 'tooltip.hideDelay',
+        min: 0,
+        max: 1000,
+        step: 20,
+        unit: 'ms',
+        hint: 'How long it stays after the pointer leaves, so the pointer can move onto it.',
+      },
+      {
+        kind: 'check',
+        key: 'characterShortcuts',
+        label: 'Character shortcuts',
+        option: 'keyboard.characterShortcuts',
+        hint: '+ and − zoom, T goes to today, F fits. Turn off when they clash with the page.',
+      },
+      {
+        kind: 'range',
+        key: 'handleHitSize',
+        label: 'Resize target',
+        option: 'bar.handles.hitSize',
+        min: 16,
+        max: 40,
+        unit: 'px',
+        hint: 'Pointer target at each end of a bar (24 meets WCAG 2.5.8).',
+      },
+      {
+        kind: 'select',
+        key: 'markerLane',
+        label: 'Marker lane',
+        option: 'markers.lane',
+        choices: [
+          ['auto', 'Auto'],
+          ['on', 'On'],
+          ['off', 'Off'],
+        ],
+        hint: 'A header lane for today and the annotation labels. Auto shows it when an annotation has a label.',
+      },
+      {
+        kind: 'select',
+        key: 'legendPosition',
+        label: 'Legend',
+        option: 'legend.position',
+        choices: [
+          ['bottom', 'Under the chart'],
+          ['toolbar', 'In the toolbar'],
+        ],
+      },
+      {
+        kind: 'check',
+        key: 'toolbarFit',
+        label: 'Fit button',
+        option: 'toolbar.fit',
+        hint: 'Picks the finest zoom that shows every task.',
+      },
+    ],
+  },
+  {
     title: 'State',
     controls: [
       {
@@ -321,6 +422,18 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
     ],
   },
 ];
+
+/** `markers.lane` for the `markerLane` choice. */
+const MARKER_LANE: Record<string, 'auto' | boolean> = { auto: 'auto', on: true, off: false };
+
+/**
+ * `value` when it differs from the playground default of `key`, else `undefined`: the
+ * "Interaction & accessibility" options appear in the printed code only once they are changed
+ * (an `undefined` option prints nothing and the chart takes the core default, the same value).
+ */
+function ifChanged<K extends PlaygroundKey, V>(s: PlaygroundState, key: K, value: V): V | undefined {
+  return s[key] === PLAYGROUND_DEFAULTS[key] ? undefined : value;
+}
 
 /** The options the preview runs for `state` (`today` places the sample holiday). */
 export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions {
@@ -347,13 +460,27 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       intensiveHours: s.intensive ? [{ start: 10, end: 12, label: 'Focus' }] : [],
       style: s.nwStyle as 'shade' | 'hatch' | 'disabled',
     },
-    bar: { height: `${s.barHeight}%`, radius: s.radius, label: { position: s.label as 'auto' } },
+    bar: {
+      height: `${s.barHeight}%`,
+      radius: s.radius,
+      label: { position: s.label as 'auto' },
+      handles: { hitSize: ifChanged(s, 'handleHitSize', s.handleHitSize) },
+    },
     milestone: { shape: s.milestone as 'diamond' },
     groupBar: { style: s.groupStyle as 'summary' },
     arrows: { radius: s.arrowRadius },
     stateKey: s.stateKey ? 'playground' : undefined,
     panel: { columns: PANEL_COLUMNS[s.panelCols] },
     table: { columns: TABLE_COLUMNS[s.tableCols] },
+    toolbar: { fit: ifChanged(s, 'toolbarFit', s.toolbarFit) },
+    legend: { position: ifChanged(s, 'legendPosition', s.legendPosition as 'bottom' | 'toolbar') },
+    markers: { lane: ifChanged(s, 'markerLane', MARKER_LANE[s.markerLane] ?? 'auto') },
+    keyboard: { characterShortcuts: ifChanged(s, 'characterShortcuts', s.characterShortcuts) },
+    tooltip: {
+      trigger: ifChanged(s, 'tooltipTrigger', s.tooltipTrigger as 'auto' | 'hover' | 'focus'),
+      showDelay: ifChanged(s, 'tooltipShowDelay', s.tooltipShowDelay),
+      hideDelay: ifChanged(s, 'tooltipHideDelay', s.tooltipHideDelay),
+    },
   };
 }
 

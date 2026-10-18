@@ -6,7 +6,8 @@
  *
  * The host is not focusable itself (the shadow root delegates focus to the internal tab stops)
  * and carries no theme attribute: the dark theme is the `:state(dark)` custom state, which needs
- * no rule here because every colour comes from the theme variables.
+ * no rule here because every colour comes from the theme variables. It sets its own line height,
+ * so the page's does not reach the toolbar, the legend or the state boxes.
  */
 
 export const HOST_CSS = `
@@ -18,6 +19,7 @@ export const HOST_CSS = `
       box-sizing: border-box;
       font-family: var(--gantt-font, system-ui, -apple-system, sans-serif);
       font-size: var(--gantt-font-size, 13px);
+      line-height: normal;
       color: var(--gantt-text, #1E293B);
       background-color: var(--gantt-bg, #FFFFFF);
     }
@@ -51,7 +53,7 @@ export const HOST_CSS = `
       outline: none;
     }
     /* Keyboard focus (a tab stop: arrow keys scroll it); inset, so the panes' clipping keeps it whole */
-    .gantry-canvas-viewport:focus-visible { outline: 2px solid var(--gantt-sel-border); outline-offset: -2px; }
+    .gantry-canvas-viewport:focus-visible { outline: 2px solid var(--gantt-focus-ring); outline-offset: -2px; }
     .gantry-canvas-header-sticky { position: sticky; top: 0; z-index: 10; background: var(--gantt-header-bg); width: max-content; }
 
     .gantry-wrapper[data-view="table"] .gantry-canvas-viewport { opacity: 0; pointer-events: none; }

@@ -264,6 +264,13 @@ export interface ScaleCell {
   className?: string | undefined;
   /** The period contains "now" */
   isCurrent: boolean;
+  /**
+   * The period runs past the timeline range (only the first or last cell of a tier), so the cell
+   * shows part of it. Its `label` is `''` when the cell is also narrower than the estimated label
+   * plus `HEADER_LABEL_PADDING` (see `partialLabelHidden`); a wider one keeps its label, which
+   * sticks to the viewport edge. Set only on such cells.
+   */
+  partial?: boolean | undefined;
 }
 
 export interface ScaleTier {
@@ -291,6 +298,25 @@ export interface BuildTiersInput {
    * passes `false` because its bounds are already local.
    */
   normalizeDateOnly?: boolean | undefined;
+  /** Font size (px) the labels of partial cells are estimated at (default 12) */
+  labelFontPx?: number | undefined;
+}
+
+/** Horizontal padding of a header label (6 px each side), added to its estimated width. */
+export const HEADER_LABEL_PADDING = 12;
+
+/**
+ * Average glyph width in em: the estimate of `estimateTextWidth` (render/bars.ts), repeated here
+ * because importing bars from scales would close an import cycle (bars → timeline → scales).
+ */
+const GLYPH_EM = 0.56;
+
+/**
+ * A partial cell (clipped by the range) hides its label when it is narrower than the estimated
+ * label plus `HEADER_LABEL_PADDING`: a sliver at the edge of the range would only show "2…".
+ */
+export function partialLabelHidden(label: string, width: number, fontPx = 12): boolean {
+  return label !== '' && width < label.length * fontPx * GLYPH_EM + HEADER_LABEL_PADDING;
 }
 
 /**
@@ -309,7 +335,7 @@ export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: num
 }
 
 export function buildTiers(input: BuildTiersInput): ScaleTier[] {
-  const { scales, pxPerDay, weekStart = 1, locale, now = new Date() } = input;
+  const { scales, pxPerDay, weekStart = 1, locale, now = new Date(), labelFontPx = 12 } = input;
   const local = (d: Date) => (input.normalizeDateOnly === false ? d : toLocalDay(d));
   const start = local(input.start);
   const end = local(input.end);
@@ -336,17 +362,23 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
 
     for (const cellStart of unitBoundaries(start, end, scale.unit, step, weekStart)) {
       const cellEnd = periodNext(cellStart, scale.unit, step);
-      const x0 = Math.max(0, xOf(cellStart));
-      const x1 = Math.min(totalWidth, xOf(cellEnd));
+      const from = xOf(cellStart);
+      const to = xOf(cellEnd);
+      const x0 = Math.max(0, from);
+      const x1 = Math.min(totalWidth, to);
       if (x1 <= x0) continue;
+      const width = x1 - x0;
+      const label = formatScaleLabel(scale, cellStart, cellEnd, ctx);
+      const partial = from < 0 || to > totalWidth;
       cells.push({
         start: cellStart,
         end: cellEnd,
         x: x0,
-        width: x1 - x0,
-        label: formatScaleLabel(scale, cellStart, cellEnd, ctx),
+        width,
+        label: partial && partialLabelHidden(label, width, labelFontPx) ? '' : label,
         className: scale.className?.(cellStart, cellEnd),
         isCurrent: now >= cellStart && now < cellEnd,
+        ...(partial && { partial: true }),
       });
     }
 

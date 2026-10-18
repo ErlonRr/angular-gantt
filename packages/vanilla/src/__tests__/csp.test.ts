@@ -120,7 +120,8 @@ describe('shadow tree', () => {
     const el = mount({ tasks: plan(3) });
     const root = el.shadowRoot!;
     const top = [...root.children].map(c => `${c.tagName.toLowerCase()}.${c.className}`);
-    expect(top.slice(0, 3)).toEqual(['div.gantry-wrapper', 'div.gantt-legend', 'div.gantt-sr-alert']);
+    expect(top.slice(0, 3)).toEqual(['div.gantry-wrapper', 'div.gantt-sr-alert', 'div.gantt-sr-live']);
+    // The legend is attached only while it shows (D9, D27): not with the default `showLegend: false`
     expect([...root.querySelectorAll('[part]')].map(n => n.getAttribute('part'))).toEqual([
       'wrapper',
       'toolbar',
@@ -139,9 +140,9 @@ describe('shadow tree', () => {
     expect(splitter.getAttribute('aria-orientation')).toBe('vertical');
     expect(splitter.getAttribute('tabindex')).toBe('0');
     expect($(el, '.gantry-splitter-toggle').getAttribute('type')).toBe('button');
-    expect($(el, '.gantt-legend').hidden).toBe(true);
+    expect(root.querySelector('.gantt-legend')).toBeNull();
     expect($(el, '.gantt-sr-alert').getAttribute('role')).toBe('alert');
-    expect($(el, '.gantry-canvas-container > svg').getAttribute('role')).toBe('list');
+    expect($(el, '.gantry-canvas-container > svg').getAttribute('role')).toBe('listbox');
   });
 
   it('never parses HTML nor writes style text while building, rendering and re-theming', () => {
@@ -240,11 +241,11 @@ describe('style attributes', () => {
     });
     el.setSelectedTasks(['t2']);
     flush(el);
-    // Open the tooltip on a task (its progress paint and position are CSSOM writes too)
+    // Open the tooltip on a task, hovering its bar (its progress paint and position are CSSOM writes too)
     const row = getEngine(el)
       .graph.allRows.peek()
       .find((r: GanttFlatRow) => r.task.id === 't3')!;
-    getEngine(el).layers.tooltip.enter(row, new PointerEvent('pointermove', { clientX: 120, clientY: 80 }));
+    getEngine(el).layers.tooltip.hover(row, $(el, '.gantt-bars-layer [data-task-id="t3"]'), 120);
     vi.advanceTimersByTime(TOOLTIP_SHOW_DELAY);
     expect($(el, '.gantt-tooltip').hidden).toBe(false);
 
@@ -277,25 +278,46 @@ describe('style attributes', () => {
   });
 });
 
-describe('resize cursor', () => {
+describe('bar cursors', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('is a data attribute styled by the stylesheet, not an inline cursor', () => {
+  it('are a data attribute styled by the stylesheet, not an inline cursor', () => {
     const el = mount({ tasks: plan(3) });
     const canvas = $(el, '.gantry-canvas-container');
     const body = $(el, '.gantt-bars-layer [data-task-id="t1"] .gantt-bar-body');
-    const handles = el.getBarVisual('t1')!.handles!;
+    // Hit by geometry: the row from y, then the handle rects (the canvas box is at 0,0 in happy-dom)
+    const v = el.getBarVisual('t1')!;
+    const { left, right } = v.handles!;
     const move = (clientX: number) =>
-      body.dispatchEvent(new PointerEvent('pointermove', { clientX, clientY: 1, bubbles: true }));
+      body.dispatchEvent(new PointerEvent('pointermove', { clientX, clientY: v.cy, bubbles: true }));
 
-    move((handles.right[0] + handles.right[1]) / 2);
+    move(right.hit.x + right.hit.width / 2);
     expect(canvas.getAttribute('data-cursor')).toBe('ew-resize');
     expect(canvas.style.getPropertyValue('cursor')).toBe('');
     expect(BASE_CSS).toMatch(/\.gantry-canvas-container\[data-cursor="ew-resize"\][^{]*\{\s*cursor: ew-resize;/);
 
-    move((handles.left[1] + handles.right[0]) / 2);
+    // The body of a draggable bar: grab (Angular's hover cursor)
+    move((left.hit.x + left.hit.width + right.hit.x) / 2);
+    expect(canvas.getAttribute('data-cursor')).toBe('grab');
+    expect(BASE_CSS).toMatch(/\.gantry-canvas-container\[data-cursor="grab"\][^{]*\{\s*cursor: grab;/);
+    expect(BASE_CSS).toMatch(/\.gantry-canvas-container\[data-cursor="grabbing"\][^{]*\{\s*cursor: grabbing;/);
+    // The resize zone reaches past the bar's edge (hitSize 24, centred on it)
+    move(v.x - 6);
+    expect(canvas.getAttribute('data-cursor')).toBe('ew-resize');
+    // Off the bars, and over a bar that can't be dragged: no cursor of ours
+    move(v.x - 40);
     expect(canvas.hasAttribute('data-cursor')).toBe(false);
+    el.enableDrag = false;
+    move(v.x + v.width / 2);
+    expect(canvas.hasAttribute('data-cursor')).toBe(false);
+    expect(canvas.style.getPropertyValue('cursor')).toBe('');
+  });
+
+  it('the canvas pans with touch until a long press drags, with no callout or text selection', () => {
+    expect(BASE_CSS).toMatch(/\.gantry-canvas-container \{[^}]*touch-action: pan-x pan-y;/);
+    expect(BASE_CSS).toMatch(/\.gantry-canvas-container \{[^}]*-webkit-touch-callout: none;/);
+    expect(BASE_CSS).toMatch(/\.gantry-canvas-container \{[^}]*user-select: none;/);
   });
 });

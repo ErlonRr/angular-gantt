@@ -4,12 +4,17 @@
  * which rows are mounted (the virtual window plus the pinned rows). Each one compares by value,
  * so a scroll that keeps the window, or a timeline change that keeps the header height,
  * re-runs nothing that reads them.
+ *
+ * The header height is the timeline's header tiers plus the marker lane under them
+ * (`graph/markers.ts`): the timeline header, the task-list column header, the sticky offsets
+ * (`scroll-padding-top`), the splitter toggle and the vertical window all use it.
  */
 
 import { resolvePanelWidth, splitterValue, virtualIndexes, type RowGeometry, type SplitterValue } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ConfigGraph } from './config';
+import type { MarkersGraph } from './markers';
 import type { NodeFactory } from './node';
 import type { RowsGraph } from './rows';
 import type { TimelineGraph } from './timeline';
@@ -26,7 +31,7 @@ export interface LayoutGraph {
   readonly panelPx: ReadonlySignal<number>;
   /** The splitter separator's `aria-valuenow` / `aria-valuemin` / `aria-valuemax`: the panel width (px) and its range */
   readonly splitter: ReadonlySignal<SplitterValue>;
-  /** Height of the timeline header (the task-list column header matches it) */
+  /** Height of the timeline header: the header tiers plus the marker lane (the task-list column header matches it) */
   readonly headerHeight: ReadonlySignal<number>;
   /** Height of every visible row together: the canvas height */
   readonly totalHeight: ReadonlySignal<number>;
@@ -37,7 +42,7 @@ export interface LayoutGraph {
 
 export function layoutGraph(
   I: Inputs,
-  g: ConfigGraph & RowsGraph & TimelineGraph & WindowsGraph,
+  g: ConfigGraph & RowsGraph & TimelineGraph & WindowsGraph & MarkersGraph,
   node: NodeFactory,
 ): LayoutGraph {
   const panelPx = node('panelPx', () =>
@@ -50,7 +55,7 @@ export function layoutGraph(
       splitterValue({ view: I.viewOverride(), panel: g.config().panel, userWidth: I.panelW(), hostWidth: I.mainW() }),
     { equals: (a, b) => a.now === b.now && a.min === b.min && a.max === b.max },
   );
-  const headerHeight = node('headerHeight', () => g.timeline().headerHeight);
+  const headerHeight = node('headerHeight', () => g.timeline().headerHeight + g.laneHeight());
   const totalHeight = node('totalHeight', () => g.visibleRows().length * g.config().rowHeight);
   const mountedGeometries = node('mountedGeometries', () => {
     const geos = g.geometries();

@@ -32,13 +32,18 @@
  * shared constructable sheet plus a per-instance theme sheet (`styles/base.ts`,
  * `styles/theme-sheet.ts`), every style is a CSSOM write, and the host gets no `style` attribute.
  *
- * Accessibility (D15): the host is a `region` named by `labels.ariaChart` and exposes the custom
- * states `dark`, `dragging` and `loading` (`gantry-element:state(dark)`), all through
- * `ElementInternals`, so it carries no attribute of ours; an engine without ARIA on
- * `ElementInternals` gets `role` / `aria-label` host attributes when the element connects. The
- * host is not a tab stop: the shadow root delegates focus to the internal ones (toolbar, task
- * list, splitter, timeline viewport; see `layers/skeleton.ts`), and `.gantt-sr-live` announces
- * selection and load-state changes (`engine/announce.ts`).
+ * Accessibility (D15): the host is a `region` named by `labels.ariaChart`, busy (`aria-busy`)
+ * while the chart loads, and exposes the custom states `dark`, `dragging` and `loading`
+ * (`gantry-element:state(dark)`), all through `ElementInternals`, so it carries no attribute of
+ * ours; an engine without ARIA on `ElementInternals` gets `role` / `aria-label` / `aria-busy`
+ * host attributes once the element is connected. The host is not a tab stop: the shadow root
+ * delegates focus to the internal ones (toolbar, task list, splitter and its toggle, the
+ * timeline's tab-stop bar; see `layers/skeleton.ts`), and `.gantt-sr-live` announces selection, zoom and load-state changes
+ * (`engine/announce.ts`, debounced).
+ *
+ * Chart states (Phase 9): `loading` and `errorMessage` (and the data source's first page) decide
+ * whether the body shows the chart, a loading skeleton, an error with Retry (`retry` event) or the
+ * empty state (`slot="empty"` content, else `labels.emptyState`); see core `resolveChartState`.
  */
 
 import {
@@ -50,6 +55,9 @@ import {
   type GanttView,
   type ViewMode,
   zoomStep,
+  fitZoomLevel,
+  fitScrollLeft,
+  announceZoom,
   flattenTree,
   type BarVisual,
   readStoredState,
@@ -65,6 +73,7 @@ import { setAttr } from './dom/patch';
 import { createEngine, type Engine } from './engine/engine';
 import type { Inputs } from './engine/inputs';
 import { registerEngine } from './engine/registry';
+import { zoomLevelLabel } from './engine/announce';
 import {
   OBSERVED_ATTRIBUTES,
   PROPERTY_TABLE,
@@ -181,6 +190,8 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @attr {boolean} enable-resize - Sets `enableResize`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
  * @attr {boolean} tooltip-enabled - Sets `tooltipEnabled`: present = `true`, `"false"` = `false`. Removing it restores the default (`true`).
  * @attr {boolean} show-legend - Sets `showLegend`: present = `true`, `"false"` = `false`. Removing it restores the default (`false`).
+ * @attr {boolean} loading - Sets `loading`: present = `true`, `"false"` = `false`. Removing it restores the default (`false`).
+ * @attr {string} error-message - Sets `errorMessage`: its text (a blank one shows no error). Removing it restores the default (`null`).
  * @attr {string} view-mode - The zoom level, through `setViewMode()`: a `ViewMode` or a `zoomLevels` name. Removing it changes nothing.
  *
  * @fires {CustomEvent<TaskDragEvent>} task-dragged - A bar was moved: `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`.
@@ -191,16 +202,21 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @fires {CustomEvent<{ viewMode: string }>} view-mode-change - The active zoom level changed.
  * @fires {CustomEvent<GanttState>} state-change - The UI state changed (panel width or view, zoom, column widths, collapsed rows, sort); debounced, persisted under `options.stateKey`.
  * @fires {CustomEvent<{ error: unknown; page: number }>} load-error - A data-source page failed after its automatic retries (`dataSource.retry()` tries again).
+ * @fires {CustomEvent<RetryEvent>} retry - Retry was pressed on the error state: `{ source: 'error' }` for `errorMessage` (load again, then clear it), `{ source: 'dataSource' }` after a failed first data-source page (the element calls `dataSource.retry()`).
+ *
+ * @slot empty - Shown in the empty state (no tasks and nothing loading); `labels.emptyState` when nothing is slotted.
  *
  * @csspart wrapper - The root box (toolbar and panes).
  * @csspart toolbar - The toolbar.
  * @csspart panel - The task-list panel.
  * @csspart splitter - The splitter box between the panes (its handle is the `role="separator"` child).
  * @csspart timeline - The timeline viewport (header and chart; scrolls on both axes).
+ * @csspart legend - The legend of the timeline markers (`showLegend`).
+ * @csspart state - The box over the chart body while it loads, failed or is empty.
  *
  * @cssstate dark - The dark theme is active (`darkMode` is `true`, or `'auto'` with a dark colour scheme).
  * @cssstate dragging - A bar is being dragged or resized.
- * @cssstate loading - A data-source page is loading.
+ * @cssstate loading - `loading` is on, or a data-source page is loading.
  *
  * @cssprop [--gantt-bg=#FFFFFF] - Chart background (theme `backgroundColor`). Defaults are the light theme's.
  * @cssprop [--gantt-header-bg=#F8FAFC] - Header background (`headerBackground`).
@@ -209,7 +225,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-bar=#2563EB] - Bar fill (`barColor`); set `--gantt-bar-text-on-bar` with it.
  * @cssprop [--gantt-bar-text=#FFFFFF] - Preferred bar label colour (`barTextColor`).
  * @cssprop [--gantt-bar-radius=4px] - Bar corner radius (`barRadius`; change it through the theme API, it shapes the layout).
- * @cssprop [--gantt-milestone=#8B5CF6] - Milestone fill (`milestoneColor`); set `--gantt-bar-text-on-milestone` with it.
+ * @cssprop [--gantt-milestone=#7C3AED] - Milestone fill (`milestoneColor`); set `--gantt-bar-text-on-milestone` with it.
  * @cssprop [--gantt-baseline=#64748B] - Baseline bars (`baselineColor`).
  * @cssprop [--gantt-critical=#DC2626] - Critical-path bars and arrows (`criticalColor`); set `--gantt-bar-text-on-critical` with it.
  * @cssprop [--gantt-panel-bg=#FFFFFF] - Task-list background (`panelBg`).
@@ -228,7 +244,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-tooltip-bdr=#E2E8F0] - Tooltip border (`tooltipBorder`).
  * @cssprop [--gantt-tooltip-txt=#1E293B] - Tooltip text (`tooltipText`).
  * @cssprop [--gantt-sel-bg=#EFF6FF] - Selected row background (`selectionBg`).
- * @cssprop [--gantt-sel-border=#2563EB] - Selection outline and focus rings (`selectionBorder`).
+ * @cssprop [--gantt-sel-border=#2563EB] - Selection outline (selected bar and row) and the splitter / column-resize hover (`selectionBorder`).
  * @cssprop [--gantt-scrollbar-track=#F1F5F9] - Scrollbar track (`scrollbarTrack`).
  * @cssprop [--gantt-scrollbar-thumb=#CBD5E1] - Scrollbar thumb (`scrollbarThumb`).
  * @cssprop [--gantt-weekend-bg=rgba(100, 116, 139, 0.08)] - Weekend bands (`weekendBg`).
@@ -240,6 +256,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-status-overdue=#DC2626] - Status dot: overdue (`statusOverdue`).
  * @cssprop [--gantt-status-done=#15803D] - Status dot: done (`statusDone`).
  * @cssprop [--gantt-progress-overlay=#000000] - Progress fill inside theme-coloured bars, drawn at `bar.progress.opacity` (`progressOverlay`).
+ * @cssprop [--gantt-focus-ring=#2563EB] - Keyboard focus rings (`focusRing`).
  * @cssprop [--gantt-bar-text-on-bar=#FFFFFF] - Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-milestone=#FFFFFF] - Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-critical=#FFFFFF] - Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).
@@ -256,6 +273,10 @@ export class GantryElement extends BaseElement {
   readonly #aria: ElementInternals | null;
   /** The `aria-label` this element wrote on the host (attribute fallback; a page-set label wins) */
   #hostLabel: string | undefined;
+  /** The host region is busy (written by the host region, `ctx.setBusy`) */
+  #busy = false;
+  /** `tasks` assigned while a data source owns the list: applied when the data source is cleared */
+  #pendingTasks: GanttTask[] | undefined;
 
   /** The `options` last assigned (the engine keeps an earlier, structurally equal object) */
   #options: GanttOptions = {};
@@ -268,6 +289,7 @@ export class GantryElement extends BaseElement {
     const engine = (this.#engine = createEngine(this, shadow, {
       emit: (type, detail) => this.#emit(type, detail),
       saveState: () => this.#saveState(),
+      setBusy: busy => this.#setBusy(busy),
     }));
     registerEngine(this, engine);
     const { graph: G, inputs: I, dom } = engine;
@@ -287,7 +309,7 @@ export class GantryElement extends BaseElement {
         setState('dragging', dragging);
       });
       effect(() => setState('dark', G.isDark()));
-      effect(() => setState('loading', I.loadState()?.isLoading === true));
+      effect(() => setState('loading', I.loading() || I.loadState()?.isLoading === true));
       // The chart's name: the host region and the timeline viewport, kept in sync with the labels
       effect(() => {
         const label = G.i18n().labels.ariaChart;
@@ -329,6 +351,18 @@ export class GantryElement extends BaseElement {
     // Attributes may only be added once connected (not in the constructor)
     if (!this.#aria) this.#hostAria(this.#engine.graph.i18n.peek().labels.ariaChart);
     this.#engine.connect();
+  }
+
+  /**
+   * `aria-busy` of the host region: through `ElementInternals`, else a host attribute (written by
+   * the host region, so only while connected). Not busy removes it.
+   */
+  #setBusy(busy: boolean): void {
+    if (busy === this.#busy) return;
+    this.#busy = busy;
+    if (this.#aria) this.#aria.ariaBusy = busy ? 'true' : null;
+    else if (busy) this.setAttribute('aria-busy', 'true');
+    else this.removeAttribute('aria-busy');
   }
 
   /** Without ARIA on `ElementInternals`: the region's role and name as host attributes (the page's own win). */
@@ -489,6 +523,30 @@ export class GantryElement extends BaseElement {
     this.#set('renderBar', v);
   }
 
+  /**
+   * You are loading the tasks: the body shows a loading skeleton while there are no rows, and the
+   * chart is `aria-busy` (rows already shown stay).
+   * @attr loading
+   */
+  get loading(): boolean {
+    return this.#engine.inputs.loading.peek();
+  }
+  set loading(v: boolean | undefined) {
+    this.#set('loading', v);
+  }
+
+  /**
+   * Shows the error state with this message (under `labels.errorTitle`) and a Retry button that
+   * fires `retry`; `null` or a blank string shows none. It wins over every other state.
+   * @attr error-message
+   */
+  get errorMessage(): string | null {
+    return this.#engine.inputs.errorMessage.peek();
+  }
+  set errorMessage(v: string | null | undefined) {
+    this.#set('errorMessage', v);
+  }
+
   /** Writes a property into the engine (`undefined` = the default). */
   #set<K extends PropertyName>(name: K, value: GantryProperties[K] | null): void {
     const v = orDefault(name, value);
@@ -496,7 +554,9 @@ export class GantryElement extends BaseElement {
     const I = engine.inputs;
     switch (name) {
       case 'tasks':
-        if (!I.dataSource.peek()) engine.setTasks((v as GanttTask[] | null) ?? []);
+        // While a data source owns the list, keep the tasks for when it is cleared
+        if (I.dataSource.peek()) this.#pendingTasks = (v as GanttTask[] | null) ?? [];
+        else engine.setTasks((v as GanttTask[] | null) ?? []);
         return;
       case 'columns':
         // options.columns, when set, keeps priority
@@ -508,6 +568,11 @@ export class GantryElement extends BaseElement {
       case 'dataSource': {
         const ds = v as GanttDataSource | GanttDataSourceConfig | null;
         engine.setDataSource(ds === null ? null : ds instanceof GanttDataSource ? ds : new GanttDataSource(ds));
+        // Cleared: the tasks assigned meanwhile take over (else the loaded items stay)
+        if (ds === null && this.#pendingTasks !== undefined) {
+          engine.setTasks(this.#pendingTasks);
+          this.#pendingTasks = undefined;
+        }
         return;
       }
       case 'annotations':
@@ -556,7 +621,37 @@ export class GantryElement extends BaseElement {
   }
   #zoom(dir: 1 | -1): void {
     const { inputs: I, graph: G } = this.#engine;
+    // API, toolbar and keyboard zooms keep the viewport's centre (gestures set `zoomAnchor` themselves)
+    I.zoomAnchor.set(null);
     I.viewModeOverride.set(zoomStep(G.config.peek().zoomLevels, G.viewMode.peek(), dir));
+  }
+
+  /**
+   * Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest
+   * when none does), then scroll the first task into view. The levels are the chart's: those of
+   * `options.zoomLevels`, or the built-in presets when it is unset. Nothing happens without tasks
+   * or before the chart is laid out.
+   */
+  fitToScreen(): void {
+    const { inputs: I, graph: G, layers, dom, ctx } = this.#engine;
+    const level = fitZoomLevel({
+      levels: G.config.peek().zoomLevels,
+      extent: G.timeline.peek().extent,
+      viewportWidth: I.canvasW.peek(),
+    });
+    if (level === null) return;
+    I.zoomAnchor.set(null);
+    if (level !== G.viewMode.peek()) I.viewModeOverride.set(level);
+    // After the new level is painted: the scroll is in its coordinates
+    layers['scroll-commands'].request(() => {
+      const tl = G.timeline.peek();
+      const left = fitScrollLeft(tl, dom.viewport.clientWidth);
+      if (left === null) return;
+      scrollToX(dom.viewport, left, 'instant', { inputs: I, maxLeft: tl.totalWidth - I.canvasW.peek() });
+    });
+    // Also when the level stays: the user hears where the fit landed (one sentence with the zoom change)
+    const { labels } = G.i18n.peek();
+    ctx.announce.say(announceZoom(zoomLevelLabel(G.config.peek().level, labels), labels));
   }
 
   /** Active zoom level (a `ViewMode` or a custom `zoomLevels` name). */
@@ -565,7 +660,9 @@ export class GantryElement extends BaseElement {
   }
   /** Switch the zoom level: a `ViewMode` or a custom `zoomLevels` name (also the `view-mode` attribute). */
   setViewMode(mode: ViewMode | (string & {})): void {
-    this.#engine.inputs.viewModeOverride.set(mode);
+    const { inputs: I } = this.#engine;
+    I.zoomAnchor.set(null);
+    I.viewModeOverride.set(mode);
   }
 
   /** Current view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). */

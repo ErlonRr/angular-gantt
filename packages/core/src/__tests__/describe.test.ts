@@ -4,8 +4,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { taskAccessibleName, taskDateRange } from '../a11y/describe';
-import { TaskType, type GanttTask } from '../types';
+import { DEFAULT_BAR_ROLE_LABELS, barRoleDescription, taskAccessibleName, taskDateRange } from '../a11y/describe';
+import { filterVisible, flattenTree, reindexVisible } from '../gantt-data';
+import { DEFAULT_LABELS, TaskType, type GanttTask } from '../types';
 
 const day = (y: number, m: number, d: number) => new Date(y, m, d);
 const task = (extra: Partial<GanttTask> = {}): GanttTask => ({
@@ -117,5 +118,55 @@ describe('taskAccessibleName', () => {
     expect(taskAccessibleName({ task: task({ progress: 140 }) })).toMatch(/100% complete$/);
     expect(taskAccessibleName({ task: task({ progress: undefined }) })).toMatch(/0% complete$/);
     expect(taskAccessibleName({ task: task() }, { progress: false })).toBe('Backend, Task, 10 Feb – 20 Mar 2026');
+  });
+});
+
+describe('barRoleDescription', () => {
+  it('names the bar shape from the resolved bar type', () => {
+    expect(barRoleDescription({ task: task(), barType: 'task' })).toBe('task bar');
+    expect(barRoleDescription({ task: task(), barType: 'milestone' })).toBe('milestone');
+    expect(barRoleDescription({ task: task(), barType: 'group' })).toBe('summary bar');
+    expect(barRoleDescription({ task: task(), barType: 'risk' })).toBe('bar');
+  });
+
+  it('defaults are the ariaTask / ariaMilestone / ariaGroup / ariaBarRole labels', () => {
+    expect(DEFAULT_BAR_ROLE_LABELS).toEqual({
+      ariaTask: DEFAULT_LABELS.ariaTask,
+      ariaMilestone: DEFAULT_LABELS.ariaMilestone,
+      ariaGroup: DEFAULT_LABELS.ariaGroup,
+      ariaBarRole: DEFAULT_LABELS.ariaBarRole,
+    });
+  });
+
+  it('without a resolved type, reads task.barType, then task.type', () => {
+    expect(barRoleDescription({ task: task({ barType: 'milestone' }) })).toBe('milestone');
+    expect(barRoleDescription({ task: task({ type: TaskType.Group }) })).toBe('summary bar');
+    expect(barRoleDescription({ task: task({ barType: 'custom', type: TaskType.Milestone }) })).toBe('bar');
+    expect(barRoleDescription({ task: task() })).toBe('task bar');
+  });
+
+  it('follows the rows of flattenTree: a parent drawn as a task bar is a task bar', () => {
+    const tasks: GanttTask[] = [
+      task({ id: 'p', name: 'Phase' }),
+      task({ id: 'c', name: 'Child', parentId: 'p' }),
+      task({ id: 'm', name: 'Launch', type: TaskType.Milestone }),
+      task({ id: 'g', name: 'Group', type: TaskType.Group }),
+    ];
+    const rows = reindexVisible(filterVisible(flattenTree(tasks)));
+    const role = (id: string) => barRoleDescription(rows.find(r => r.task.id === id)!);
+    expect(role('p')).toBe('task bar');
+    expect(role('c')).toBe('task bar');
+    expect(role('m')).toBe('milestone');
+    expect(role('g')).toBe('summary bar');
+  });
+
+  it('uses translated labels, key by key (a whole label set works)', () => {
+    const it = { ariaTask: 'barra attività', ariaMilestone: 'traguardo', ariaGroup: 'barra di riepilogo' };
+    expect(barRoleDescription({ task: task(), barType: 'task' }, it)).toBe('barra attività');
+    expect(barRoleDescription({ task: task(), barType: 'milestone' }, it)).toBe('traguardo');
+    expect(barRoleDescription({ task: task(), barType: 'group' }, it)).toBe('barra di riepilogo');
+    expect(barRoleDescription({ task: task(), barType: 'risk' }, it)).toBe('bar');
+    const all = { ...DEFAULT_LABELS, ariaBarRole: 'elemento' };
+    expect(barRoleDescription({ task: task(), barType: 'risk' }, all)).toBe('elemento');
   });
 });

@@ -117,6 +117,42 @@ test.describe('site (Angular showcase)', () => {
     await expect(page).toHaveTitle(/API/);
   });
 
+  test('tabs: one tab stop; arrow keys, Home and End select and focus', async ({ page }) => {
+    await open(page, `${SITE}/frameworks`);
+    const tabs = page.getByRole('tablist', { name: 'Framework' }).getByRole('tab');
+    const selected = async (i: number) => {
+      await expect(tabs.nth(i)).toBeFocused();
+      await expect(tabs.nth(i)).toHaveAttribute('aria-selected', 'true');
+      await expect(tabs.nth(i)).toHaveAttribute('tabindex', '0');
+      await expect(tabs.nth(i)).toHaveAttribute('aria-controls', 'fw-panel');
+    };
+    const last = (await tabs.count()) - 1;
+    await expect(tabs.and(page.locator('[tabindex="0"]'))).toHaveCount(1);
+    await tabs.first().focus();
+    await page.keyboard.press('ArrowRight');
+    await selected(1);
+    await expect(page).toHaveURL(/[?&]f=js\b/);
+    await expect(tabs.first()).toHaveAttribute('tabindex', '-1');
+    await page.keyboard.press('End');
+    await selected(last);
+    await page.keyboard.press('ArrowRight');
+    await selected(0);
+    await page.keyboard.press('ArrowLeft');
+    await selected(last);
+    await page.keyboard.press('Home');
+    await selected(0);
+    await expect(page.locator('#fw-panel')).toHaveAttribute('aria-labelledby', 'fw-tab-html');
+
+    // The install block's package-manager tabs share the pattern
+    const pm = page.getByRole('tablist', { name: 'Package manager' });
+    await pm.getByRole('tab', { selected: true }).focus();
+    await page.keyboard.press('End');
+    const bun = pm.getByRole('tab', { name: 'bun', exact: true });
+    await expect(bun).toBeFocused();
+    await expect(bun).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: 'bun install command' })).toContainText('bun add @gantryjs/');
+  });
+
   test('phone width: no horizontal page scroll', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     for (const r of ROUTES) {

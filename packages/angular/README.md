@@ -70,18 +70,28 @@ bootstrapApplication(AppComponent, {
 
 - Groups, milestones, collapse/expand, per-row styling
 - Dependencies (`FS` / `FF` / `SS` / `SF` + lag) and full **critical path**
-- Baselines, progress, one native-popover tooltip per chart
-- Drag & resize via Pointer Events (per-task opt-out)
+- Baselines, progress, one native-popover tooltip per chart: on hover, keyboard focus and tap,
+  anchored to its bar, custom content with `<ng-template ganttTooltip>` or `options.tooltip.render`
+- Drag & resize via Pointer Events (per-task opt-out): a 3 px mouse threshold, a 350 ms touch
+  long-press, auto-scroll at the edges, 24 px resize targets (`bar.handles.hitSize`)
+- Keyboard: one tab stop each for the toolbar, the task list (row-first treegrid) and the bars;
+  keyboard move / resize mode (`Enter` / `F2`); `+` `-` `T` `F` shortcuts
+  (`keyboard.characterShortcuts`)
+- Zoom with the toolbar, the keys, Ctrl/⌘ + wheel or a pinch (anchored at the pointer), and
+  `fitToScreen()` / the Fit button
+- Chart states: `[loading]` skeleton, `[errorMessage]` with Retry (`(retry)`), `[ganttEmpty]`
+  content
 - Selection: single / Ctrl-click / Shift-range / keyboard
 - Custom bars (`GanttBarBase` + `provideGanttBar` at application, route or component level) and
   custom panel columns (`<ng-template ganttColumn>`)
 - Lazy loading (`GanttDataSource`: paging, automatic retries, error state with Retry, `loadError` output)
 - Views: Hour / Day / Week / Month / Quarter / Year with zoom, two-way `[(viewMode)]`
 - Rows windowed vertically, header cells, bands and grid lines horizontally
-- Annotations, today marker, optional legend
+- Annotations, today marker, a marker lane for their labels (`markers.lane`), an optional legend
+  strip (`legend.position`)
 - Light / dark / auto theming via CSS custom properties
-- Accessible: a `region` landmark with internal tab stops, `treegrid` task list, live regions,
-  WCAG 2.2 AA palette
+- Accessible: a `region` landmark with internal tab stops, `treegrid` task list, bars as a
+  `listbox` (custom bars too), debounced live regions, forced-colors support, WCAG 2.2 AA palette
 - SSR-safe: no browser globals, browser work starts after the first render
 - **i18n** — localisable UI strings + any BCP 47 `locale` (via `Intl`) + custom date/header formats
 
@@ -102,10 +112,15 @@ The Angular API:
 - [Custom bars](https://github.com/ErlonRr/gantryjs#custom-bar-component) and
   [custom columns](https://github.com/ErlonRr/gantryjs#custom-columns-left-panel)
 - [Lazy loading](https://github.com/ErlonRr/gantryjs#lazy-load-with-ganttdatasource)
-- [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs) and the
-  [public API](https://github.com/ErlonRr/gantryjs#public-api)
+- [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs), the
+  [public API](https://github.com/ErlonRr/gantryjs#public-api) and the
+  [content slots](https://github.com/ErlonRr/gantryjs#ng-content-slots)
+- [Tooltip](https://github.com/ErlonRr/gantryjs#tooltip) and
+  [loading, error and empty states](https://github.com/ErlonRr/gantryjs#loading-error-and-empty-states)
 - [Theming](https://github.com/ErlonRr/gantryjs#theming-1),
-  [keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus) and
+  [keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus),
+  [touch and pointer](https://github.com/ErlonRr/gantryjs#touch-and-pointer), [zoom](https://github.com/ErlonRr/gantryjs#zoom),
+  [screen readers](https://github.com/ErlonRr/gantryjs#screen-readers), [forced colors](https://github.com/ErlonRr/gantryjs#forced-colors) and
   [server-side rendering](https://github.com/ErlonRr/gantryjs#server-side-rendering)
 - [Coming from ngx-gantry 1.x](https://github.com/ErlonRr/gantryjs#coming-from-ngx-gantry-1x)
 

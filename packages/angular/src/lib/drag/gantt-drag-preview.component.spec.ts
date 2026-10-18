@@ -320,4 +320,42 @@ describe('GanttCanvasComponent drag ghost', () => {
     expect(dom).toEqual(previousGhost(p, c));
     expect(dom?.rect).toMatchObject({ rx: '7', height: '12' });
   });
+
+  it('draws the ghost of a real pointer drag (3 px to start, then the pointer in content coordinates)', async () => {
+    const f = await mountChart();
+    const el = f.nativeElement as HTMLElement;
+    const canvasDe = f.debugElement.query(By.directive(GanttCanvasComponent));
+    const layout = canvasDe.injector.get(GanttLayoutService);
+    const dragSvc = canvasDe.injector.get(GanttDragService);
+    const c: Chart = { cfg: layout.cfg(), tl: layout.timeline(), geos: layout.rowGeometries() };
+    const v = f.componentInstance.gantt().getBarVisual('a')!;
+    // The test DOM puts the canvas at 0,0: client and canvas coordinates are the same
+    const svg = el.querySelector<SVGSVGElement>('gantt-canvas svg')!;
+    const send = (type: string, x: number) =>
+      svg.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          pointerId: 1,
+          pointerType: 'mouse',
+          clientX: x,
+          clientY: v.cy,
+        }),
+      );
+    const x0 = v.x + v.width / 2;
+    send('pointerdown', x0);
+    send('pointermove', x0 + 2);
+    await f.whenStable();
+    expect(readGhost(el)).toBeNull();
+
+    send('pointermove', x0 + 2 * c.cfg.pxPerDay);
+    await f.whenStable();
+    const p = dragSvc.preview()!;
+    expect(p).toMatchObject({ taskId: 'a', delta: 2 });
+    expect(readGhost(el)).toEqual(previousGhost(p, c));
+
+    send('pointerup', x0 + 2 * c.cfg.pxPerDay);
+    await f.whenStable();
+    expect(readGhost(el)).toBeNull();
+  });
 });

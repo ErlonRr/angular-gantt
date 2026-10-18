@@ -26,7 +26,7 @@ import { BrowserTestingModule, platformBrowserTesting } from '@angular/platform-
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { TaskType, type GanttOptions, type GanttTask } from '@gantryjs/core';
+import { TaskType, type GanttAnnotation, type GanttOptions, type GanttTask } from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 4, d);
 const TASKS: GanttTask[] = [
@@ -40,12 +40,21 @@ const TASKS: GanttTask[] = [
   selector: 'app-root',
   imports: [GantryComponent],
   template: `
-    <gantry style="height: 420px" [series]="tasks" [options]="options" [showLegend]="true" />
+    <gantry
+      id="laned"
+      style="height: 420px"
+      [series]="tasks"
+      [annotations]="annotations"
+      [options]="options"
+      [showLegend]="true"
+    />
     <gantry id="paged" style="height: 300px" [dataSource]="dataSource" [options]="options" />
   `,
 })
 class SsrHost {
   readonly tasks = TASKS;
+  /** A labelled annotation: the marker lane shows (and takes the label off the canvas) */
+  readonly annotations: GanttAnnotation[] = [{ x1: day(18), label: { text: 'Freeze' } }];
   readonly options: GanttOptions = { initialScroll: false, criticalPath: true };
   readonly dataSource = new GanttDataSource({ data: TASKS });
 }
@@ -147,11 +156,27 @@ describe('server-side rendering', () => {
       expect(chart.querySelectorAll('.g-cell').length).toBeGreaterThan(0);
       expect(chart.querySelectorAll('.gantt-tl-row')).toHaveLength(TASKS.length);
       expect(chart.getAttribute('style')).toContain('--gantt-bar:');
+      // The bars' ARIA is stamped on the server too: a listbox of options with names
+      expect(chart.querySelector('gantt-canvas svg')?.getAttribute('role')).toBe('listbox');
+      const bars = [...chart.querySelectorAll('.gantt-bars-layer > [data-task-id]')];
+      expect(bars.every(b => b.getAttribute('role') === 'option' && !!b.getAttribute('aria-label'))).toBe(true);
+      expect(bars.every(b => b.hasAttribute('aria-posinset') && b.hasAttribute('aria-roledescription'))).toBe(true);
     }
+    // The ready charts render no state box, and the host is not busy
+    expect(doc.querySelectorAll('.gantt-state')).toHaveLength(0);
+    expect(doc.querySelectorAll('gantry[aria-busy]')).toHaveLength(0);
     // The lazy footer of the data-source chart rendered without observing anything
     expect(doc.querySelector('#paged gantt-load-more')).not.toBeNull();
-    // Tooltips are created on the first hover, never on the server
+    // The marker lane renders on the server too, under the tiers, with the annotation's label
+    const laned = doc.querySelector('#laned')!;
+    const lane = laned.querySelector('.g-header > .g-marker-lane');
+    expect(lane?.previousElementSibling?.classList.contains('g-tier')).toBe(true);
+    expect([...laned.querySelectorAll('.g-marker-lane .g-marker-label')].map(l => l.textContent)).toContain('Freeze');
+    expect(laned.querySelectorAll('.gantt-annotation-labels text')).toHaveLength(0);
+    expect(doc.querySelector('#paged .g-marker-lane')).toBeNull();
+    // Tooltips are created on the first hover, never on the server; no readout chip, no described bar
     expect(doc.querySelectorAll('.gantt-tooltip')).toHaveLength(0);
+    expect(doc.querySelectorAll('.gantt-drag-readout, [aria-describedby]')).toHaveLength(0);
     expect(doc.body.querySelector(':scope > .gantt-tooltip')).toBeNull();
   });
 

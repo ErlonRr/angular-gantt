@@ -3,7 +3,8 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { isGridEdgeJump, logicalArrow, resolveKey, type KeyLike } from '../interaction/keymap';
+import { isGridEdgeJump, logicalArrow, resolveKey, type KeyArea, type KeyLike } from '../interaction/keymap';
+import { resolveConfig } from '../render/config';
 
 const k = (key: string, mods: Omit<KeyLike, 'key'> = {}): KeyLike => ({ key, ...mods });
 
@@ -135,5 +136,47 @@ describe('resolveKey — toolbar and the global area', () => {
     expect(resolveKey(k('ArrowDown'), 'any')).toBeNull();
     expect(resolveKey(k('Enter'), 'any')).toBeNull();
     expect(resolveKey(k('Delete'), 'any')).toBeNull();
+  });
+});
+
+describe('resolveKey — character shortcuts (+ − T F) and the keyboard option', () => {
+  const areas: KeyArea[] = ['any', 'grid', 'timeline', 'toolbar'];
+  const shortcuts: [KeyLike, string][] = [
+    [k('+', { shiftKey: true }), 'zoomIn'],
+    [k('='), 'zoomIn'],
+    [k('-'), 'zoomOut'],
+    [k('t'), 'today'],
+    [k('T', { shiftKey: true }), 'today'],
+    [k('f'), 'fit'],
+    [k('F', { shiftKey: true }), 'fit'],
+  ];
+
+  it('+ − T F resolve in every area, so a binding can dispatch them wherever focus is', () => {
+    for (const area of areas) for (const [key, command] of shortcuts) expect(resolveKey(key, area)).toBe(command);
+  });
+
+  it('characterShortcuts: false turns all of them off in every area (WCAG 2.1.4)', () => {
+    for (const area of areas) {
+      for (const [key] of shortcuts) expect(resolveKey(key, area, { characterShortcuts: false })).toBeNull();
+    }
+  });
+
+  it('the resolved `keyboard` option is a valid ResolveKeyOptions (default on)', () => {
+    expect(resolveConfig().keyboard).toEqual({ characterShortcuts: true });
+    expect(resolveKey(k('f'), 'any', resolveConfig().keyboard)).toBe('fit');
+    const off = resolveConfig({ keyboard: { characterShortcuts: false } }).keyboard;
+    expect(resolveKey(k('f'), 'any', off)).toBeNull();
+    expect(resolveKey(k('+'), 'timeline', off)).toBeNull();
+    expect(resolveKey(k('t'), 'grid', off)).toBeNull();
+    // Escape, Ctrl+A and navigation stay
+    expect(resolveKey(k('Escape'), 'any', off)).toBe('clearSelection');
+    expect(resolveKey(k('a', { ctrlKey: true }), 'any', off)).toBe('selectAll');
+    expect(resolveKey(k('Home'), 'timeline', off)).toBe('move.home');
+  });
+
+  it('character shortcuts never fire with Ctrl/Cmd or Alt (browser zoom, find…)', () => {
+    for (const mods of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+      for (const key of ['+', '=', '-', 't', 'f']) expect(resolveKey(k(key, mods), 'any')).toBeNull();
+    }
   });
 });

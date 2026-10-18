@@ -72,6 +72,8 @@ calling UI work done.
   ESLint enforces it; colours are `Paint`s applied through the CSSOM. After changing its public
   properties, events or JSDoc, run `pnpm --filter @gantryjs/vanilla cem` (CI checks the manifest).
 - Angular renders in the light DOM: SVG `id`s must be unique per instance (use the canvas `uid`).
+- New optional DOM nodes are built detached and attached by their region only while shown, in both bindings (paint snapshots rely on it).
+- In Chromium an SVG element with focus/blur/focusin/focusout listeners becomes a Tab stop: listen on an HTML ancestor.
 - Workspace packages export a `@gantryjs/source` condition; demos, tests and typecheck read the
   TypeScript sources. Published packages are ESM-only with bundled `.d.ts`.
 - `@gantryjs/angular` publishes from `dist/gantryjs-angular` (`publishConfig.directory`);

@@ -102,6 +102,9 @@ describe('<gantry-element> properties and lifecycle', () => {
         'showLegend',
         'dataSource',
         'renderBar',
+        // Appended in Phase 9 (the chart states)
+        'loading',
+        'errorMessage',
       ]);
       expect(Object.keys(DEFAULTS)).toEqual(names);
     });
@@ -117,6 +120,8 @@ describe('<gantry-element> properties and lifecycle', () => {
           'enable-resize',
           'tooltip-enabled',
           'show-legend',
+          'loading',
+          'error-message',
         ].sort(),
       );
     });
@@ -136,6 +141,8 @@ describe('<gantry-element> properties and lifecycle', () => {
         showLegend: true,
         dataSource: { fetcher: () => new Promise<GanttTask[]>(() => {}) },
         renderBar: () => null,
+        loading: true,
+        errorMessage: 'Server unreachable',
       };
       const I = getEngine(el).inputs;
       const value = (name: PropertyName): unknown =>
@@ -182,17 +189,25 @@ describe('<gantry-element> properties and lifecycle', () => {
       el.setAttribute('show-legend', '');
       el.setAttribute('dark-mode', 'auto');
       el.setAttribute('view-mode', 'Week');
+      el.setAttribute('loading', '');
+      el.setAttribute('error-message', 'Server unreachable');
       expect(el.showToolbar).toBe(false);
       expect(el.showLegend).toBe(true);
       expect(el.darkMode).toBe('auto');
       expect(el.viewMode).toBe('Week');
+      expect(el.loading).toBe(true);
+      expect(el.errorMessage).toBe('Server unreachable');
       el.removeAttribute('show-toolbar');
       el.removeAttribute('show-legend');
       el.removeAttribute('dark-mode');
       el.removeAttribute('view-mode');
+      el.removeAttribute('loading');
+      el.removeAttribute('error-message');
       expect(el.showToolbar).toBe(true);
       expect(el.showLegend).toBe(false);
       expect(el.darkMode).toBe(false);
+      expect(el.loading).toBe(false);
+      expect(el.errorMessage).toBeNull();
       expect(el.viewMode).toBe('Week'); // removing view-mode keeps the zoom level
     });
   });
@@ -373,7 +388,12 @@ describe('<gantry-element> properties and lifecycle', () => {
       const { drag, inputs, dom } = getEngine(el);
       const live = trackListeners();
       const bar = $(el, '.gantt-bars-layer [data-task-id="a"]');
-      bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
+      // Bars are hit by geometry: press the middle of the body (the canvas box is at 0,0 in happy-dom)
+      const v = el.getBarVisual('a')!;
+      const press = { bubbles: true, composed: true, button: 0, clientY: v.cy, pointerId: 1, pointerType: 'mouse' };
+      bar.dispatchEvent(new PointerEvent('pointerdown', { ...press, clientX: v.x + v.width / 2 }));
+      // A mouse drag starts once the pointer has moved past the core threshold (3 px)
+      bar.dispatchEvent(new PointerEvent('pointermove', { ...press, clientX: v.x + v.width / 2 + 6 }));
       expect(drag.state.peek().kind).toBe('dragging');
       dom.splitter.dispatchEvent(
         new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 300, pointerId: 2 }),
@@ -538,6 +558,43 @@ describe('<gantry-element> properties and lifecycle', () => {
       expect(sheetsOf(el)).toHaveLength(2);
       expect(el.shadowRoot!.querySelector('style')).toBeNull();
       expect(el.style.getPropertyValue('--gantt-bar')).toBe('');
+    });
+  });
+  describe('toolbar, legend and states across connections (Phase 9 step 4.3)', () => {
+    it('keeps one listener per control and the optional nodes in place across reconnects', () => {
+      const el = mount({ tasks: [], errorMessage: 'Offline', showLegend: true, options: { initialScroll: false } });
+      el.annotations = [{ x1: new Date(2026, 2, 5), label: { text: 'Release' } }];
+      flush(el);
+      const { dom } = getEngine(el);
+      for (let i = 0; i < 3; i++) {
+        el.remove();
+        document.body.append(el);
+        flush(el);
+      }
+      // The state box, the legend strip and the toolbar are the same nodes, at their places
+      expect(dom.stateBox.parentNode).toBe(dom.main);
+      expect(dom.legend.parentNode).toBe(dom.wrapper);
+      const retries: unknown[] = [];
+      el.addEventListener('retry', e => retries.push((e as CustomEvent).detail));
+      $<HTMLButtonElement>(el, '.gantt-state-retry').click();
+      expect(retries).toEqual([{ source: 'error' }]);
+      const zoomIn = $<HTMLButtonElement>(el, '[data-focus-key="zoom-in"]');
+      const views: string[] = [];
+      el.addEventListener('view-mode-change', () => views.push(el.viewMode));
+      zoomIn.click();
+      expect(views).toHaveLength(1);
+      // Roving focus still works
+      zoomIn.focus();
+      zoomIn.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      expect((el.shadowRoot!.activeElement as HTMLElement | null)?.dataset['focusKey']).toBe('fit');
+      // Disconnected: nothing is attached or detached behind its back; it catches up when back
+      el.remove();
+      el.errorMessage = null;
+      el.showLegend = false;
+      document.body.append(el);
+      flush(el);
+      expect(dom.legend.isConnected).toBe(false);
+      expect(dom.stateBox.className).toBe('gantt-state gantt-state--empty');
     });
   });
 });

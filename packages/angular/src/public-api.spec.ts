@@ -14,6 +14,7 @@ const ANGULAR_VALUES = [
   'GanttGroupBarComponent',
   'GanttMilestoneComponent',
   'GanttTaskBarComponent',
+  'GanttTooltipTemplateDirective',
   'createGanttDataSource',
   'provideGantt',
   'provideGanttBar',
@@ -85,5 +86,12 @@ describe('@gantryjs/angular public API', () => {
     expectTypeOf<api.ColumnDef['cellTemplate']>().toEqualTypeOf<TemplateRef<api.ColumnCellContext> | undefined>();
     expectTypeOf<api.GanttDataSourceConfig>().not.toHaveProperty('injector');
     expectTypeOf(api.provideGantt).returns.toEqualTypeOf<Provider[]>();
+  });
+
+  it('the tooltip template context: the model as $implicit and by name, the task and its row', () => {
+    expectTypeOf<api.GanttTooltipTemplateContext['$implicit']>().toEqualTypeOf<api.TooltipModel>();
+    expectTypeOf<api.GanttTooltipTemplateContext['model']>().toEqualTypeOf<api.TooltipModel>();
+    expectTypeOf<api.GanttTooltipTemplateContext['task']>().toEqualTypeOf<api.GanttTask>();
+    expectTypeOf<api.GanttTooltipTemplateContext['row']>().toEqualTypeOf<api.GanttFlatRow>();
   });
 });

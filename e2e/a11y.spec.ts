@@ -1,7 +1,9 @@
 // Accessibility of both bindings in Chromium (Gantry 2: phase 6 step 4.2 for <gantry-element>, phase 7
 // step 4.2 for Angular's <gantry>):
 // - axe (WCAG 2.0–2.2, levels A and AA) on the split, table, chart-only and dark views;
-// - the keyboard path through the internal tab stops: toolbar → task-list row → splitter → timeline;
+// - the keyboard path through the internal tab stops (phase 9, D5–D7): toolbar → task-list row →
+//   splitter → its toggle → the timeline's tab-stop bar, one stop each for the toolbar, the task list
+//   and the bars (they rove with the arrow keys);
 // - focus kept on a selected row while it scrolls away, pinned once it leaves the virtual window;
 // - the host: a region named by `labels.ariaChart` (ElementInternals for the Web Component, host
 //   attributes for Angular), the dark theme as `:state(dark)` / `.gantry-dark`, and no `tabindex` /
@@ -153,8 +155,10 @@ function focusedKind(chart: Chart): Promise<string | null> {
       if (a === host) return 'host';
     }
     if (a.closest('.gantt-toolbar')) return 'toolbar';
+    if (a.parentElement?.classList.contains('gantt-bars-layer')) return 'bar';
     const kinds: Record<string, string> = {
       'gantt-tl-col-header': 'column-header',
+      'gantt-tl-cell': 'cell',
       'gantt-tl-row': 'row',
       'gantt-collapse-btn': 'collapse',
       'gantt-load-more-btn': 'load-more',
@@ -206,7 +210,7 @@ for (const target of TARGET_LIST) {
       });
     }
 
-    test('keyboard: Tab goes toolbar → one task-list row → splitter → timeline viewport', async ({ chart, page }) => {
+    test('keyboard: Tab goes toolbar → one task-list row → splitter → toggle → one bar', async ({ chart, page }) => {
       await open(chart, target, { dark: false, view: 'split' });
       // Start from a control just before the chart
       await chart.host().evaluate(el => {
@@ -228,25 +232,38 @@ for (const target of TARGET_LIST) {
       test.info().annotations.push({ type: 'tab order', description: `${target}: ${order.join(' → ')}` });
 
       expect(stops.length, 'focus left the chart').toBeLessThan(150);
-      expect(order[0]).toBe('toolbar');
-      expect(order.filter(k => ['toolbar', 'row', 'splitter', 'viewport'].includes(k))).toEqual([
-        'toolbar',
-        'row',
-        'splitter',
-        'viewport',
-      ]);
-      // The task list is one tab stop, and the chart host is never one
-      expect(stops.filter(k => k === 'row')).toHaveLength(1);
-      expect(stops).not.toContain('host');
+      expect(order).toEqual(['toolbar', 'row', 'splitter', 'toggle', 'bar']);
+      // The toolbar, the task list and the bars are one tab stop each (they rove with the arrow keys);
+      // sort headers, collapse toggles and the viewport (bars are mounted) are none, nor the host
+      for (const kind of ['toolbar', 'row', 'bar'])
+        expect(
+          stops.filter(k => k === kind),
+          kind,
+        ).toHaveLength(1);
+      for (const kind of ['host', 'viewport', 'column-header', 'collapse', 'cell']) expect(stops).not.toContain(kind);
 
-      // The focused timeline scrolls with the arrow keys (no shortcut takes them)
+      // The tab-stop bar
+      await chart.get('.gantt-bars-layer > [tabindex="0"]').focus();
+      expect(await focusedKind(chart)).toBe('bar');
+
+      // On a bar, ←/→ pan the timeline by one header cell (focus stays) and ↓ moves to the next bar
       const viewport = chart.get(SEL.viewport).first();
-      await viewport.focus();
+      await viewport.evaluate(v => (v.scrollLeft = 0));
       const left = await viewport.evaluate(v => v.scrollLeft);
       await page.keyboard.press('ArrowRight');
       await expect.poll(() => viewport.evaluate(v => v.scrollLeft)).toBeGreaterThan(left);
+      expect(await focusedKind(chart)).toBe('bar');
+      const barId = () =>
+        chart.evalRoot(root => {
+          const a = root instanceof ShadowRoot ? root.activeElement : document.activeElement;
+          return a?.getAttribute('data-task-id') ?? null;
+        });
+      const first = await barId();
+      await page.keyboard.press('ArrowDown');
+      await expect.poll(barId).not.toBe(first);
+      expect(await focusedKind(chart)).toBe('bar');
 
-      // Shift+Tab walks back from the viewport to the splitter's toggle
+      // Shift+Tab walks back from the bar to the splitter's toggle
       await page.keyboard.press('Shift+Tab');
       expect(await focusedKind(chart)).toBe('toggle');
     });

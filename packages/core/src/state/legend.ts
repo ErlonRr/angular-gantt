@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · state/legend.ts
-//  Items of the floating legend (today marker, annotations, and the
-//  critical-path bar / baseline strip when enabled). Both painters draw
-//  these items as is, so they always list the same entries.
+//  Items of the legend (today marker, annotations, and the critical-path
+//  bar / baseline strip when enabled) and where it sits (`legendPlacement`:
+//  an in-flow strip under the chart or the end of the toolbar). Both
+//  painters draw these items as is, so they always list the same entries.
 // ─────────────────────────────────────────────────────────────
 
 import { DEFAULT_LABELS, type GanttAnnotation, type GanttLabels, type GanttView } from '../types';
@@ -118,4 +119,30 @@ export function buildLegend(input: LegendInput): LegendItem[] {
 /** The legend shows when enabled, has entries, and the timeline is on screen (not the table view). */
 export function isLegendVisible(showLegend: boolean, view: GanttView, items: readonly LegendItem[]): boolean {
   return showLegend && items.length > 0 && view !== 'table';
+}
+
+/** Where the legend is drawn: the strip under the chart, the end of the toolbar, or nowhere. */
+export type LegendPlacement = 'bottom' | 'toolbar' | null;
+
+export interface LegendPlacementInput {
+  /** `showLegend` option (the on/off switch) */
+  showLegend: boolean;
+  /** Resolved `legend.position` */
+  position: 'bottom' | 'toolbar';
+  view: GanttView;
+  /** `buildLegend()` result */
+  items: readonly LegendItem[];
+  /** The toolbar is on screen (`showToolbar` and `toolbar !== false`) */
+  toolbarShown: boolean;
+}
+
+/**
+ * Where to attach the legend node (`div.gantt-legend.gantt-legend--bottom` after `.gantry-main`,
+ * or `div.gantt-legend.gantt-legend--toolbar` at the end of the toolbar), or `null` to leave it
+ * detached: when `isLegendVisible` is false (off, no entries, or the table view). `'toolbar'`
+ * falls back to `'bottom'` while the toolbar is hidden.
+ */
+export function legendPlacement(input: LegendPlacementInput): LegendPlacement {
+  if (!isLegendVisible(input.showLegend, input.view, input.items)) return null;
+  return input.position === 'toolbar' && input.toolbarShown ? 'toolbar' : 'bottom';
 }

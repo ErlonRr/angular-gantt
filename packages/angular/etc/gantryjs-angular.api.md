@@ -4,13 +4,17 @@
 
 ```ts
 
+import { BarHit } from '@gantryjs/core';
 import { BarVisual } from '@gantryjs/core';
+import { ChartState } from '@gantryjs/core';
 import { ColumnCellContext } from '@gantryjs/core';
 import { ColumnContext } from '@gantryjs/core';
 import { ColumnDef as ColumnDef_2 } from '@gantryjs/core';
 import { ColumnRenderer } from '@gantryjs/core';
 import { CPMResult } from '@gantryjs/core';
 import { DragPreview } from '@gantryjs/core';
+import { DragReadoutPlacement } from '@gantryjs/core';
+import { DragResult } from '@gantryjs/core';
 import { DragTiming } from '@gantryjs/core';
 import { GanttAnnotation } from '@gantryjs/core';
 import { GanttBarContext } from '@gantryjs/core';
@@ -29,14 +33,19 @@ import * as i0 from '@angular/core';
 import { InputSignal } from '@angular/core';
 import { InputSignalWithTransform } from '@angular/core';
 import { LegendItem } from '@gantryjs/core';
+import { LegendPlacement } from '@gantryjs/core';
 import { LinesWindow } from '@gantryjs/core';
 import { LoadStateSnapshot } from '@gantryjs/core';
+import { MarkerLane } from '@gantryjs/core';
 import { ModelSignal } from '@angular/core';
 import { OutputEmitterRef } from '@angular/core';
 import { PAINTS } from '@gantryjs/core';
 import { Provider } from '@angular/core';
+import { Rect } from '@gantryjs/core';
 import { ResolvedGanttConfig } from '@gantryjs/core';
+import { RetryEvent } from '@gantryjs/core';
 import { RowGeometry } from '@gantryjs/core';
+import { ScrollPadding } from '@gantryjs/core';
 import { SelectionAction } from '@gantryjs/core';
 import { SelectionChangeEvent } from '@gantryjs/core';
 import { SelectionModifierSource } from '@gantryjs/core';
@@ -51,6 +60,7 @@ import { TemplateRef } from '@angular/core';
 import { TierWindow } from '@gantryjs/core';
 import { TimeBand } from '@gantryjs/core';
 import { TimelineModel } from '@gantryjs/core';
+import { TooltipModel } from '@gantryjs/core';
 import { Type } from '@angular/core';
 import { ViewMode } from '@gantryjs/core';
 import { VirtualWindow } from '@gantryjs/core';
@@ -74,6 +84,10 @@ export class GantryComponent {
     protected readonly announcer: GanttAnnouncer;
     // (undocumented)
     appendTasks(tasks: GanttTask[]): void;
+    // Warning: (ae-forgotten-export) The symbol "GanttBarFocusService" needs to be exported by the entry point gantryjs-angular.d.ts
+    //
+    // (undocumented)
+    protected readonly barFocus: GanttBarFocusService;
     // Warning: (ae-forgotten-export) The symbol "BarVisualOf" needs to be exported by the entry point gantryjs-angular.d.ts
     protected readonly barVisual: Signal<BarVisualOf>;
     // (undocumented)
@@ -90,6 +104,7 @@ export class GantryComponent {
     protected readonly colSvc: GanttColumnService;
     // (undocumented)
     readonly columns: InputSignal<ColumnDef[]>;
+    protected readonly covered: Signal<boolean>;
     protected readonly cpm: Signal<CPMResult | null>;
     // (undocumented)
     readonly criticalIds: Signal<ReadonlySet<string>>;
@@ -98,6 +113,8 @@ export class GantryComponent {
     readonly dataSource: InputSignal<GanttDataSource<GanttTask> | null>;
     // (undocumented)
     protected readonly dragEnabled: Signal<boolean>;
+    // Warning: (ae-forgotten-export) The symbol "DragReadout" needs to be exported by the entry point gantryjs-angular.d.ts
+    protected readonly dragReadout: Signal<DragReadout | null>;
     // Warning: (ae-forgotten-export) The symbol "GanttDragService" needs to be exported by the entry point gantryjs-angular.d.ts
     //
     // (undocumented)
@@ -106,8 +123,10 @@ export class GantryComponent {
     readonly enableDrag: InputSignalWithTransform<boolean, unknown>;
     // (undocumented)
     readonly enableResize: InputSignalWithTransform<boolean, unknown>;
+    readonly errorMessage: InputSignal<string | null | undefined>;
     // (undocumented)
     expandAll(): void;
+    fitToScreen(): void;
     getBarVisual(id: string): BarVisual | undefined;
     // (undocumented)
     getSelectedTasks(): GanttTask[];
@@ -120,14 +139,11 @@ export class GantryComponent {
     //
     // (undocumented)
     protected readonly layout: GanttLayoutService;
-    // (undocumented)
-    protected readonly legendItems: Signal<LegendItem[]>;
-    // (undocumented)
-    protected readonly legendVisible: Signal<boolean>;
     readonly loadError: OutputEmitterRef<    {
     error: unknown;
     page: number;
     }>;
+    readonly loading: InputSignalWithTransform<boolean, unknown>;
     protected readonly multiselectable: Signal<boolean>;
     // (undocumented)
     protected onCanvasRowClick(geo: RowGeometry): void;
@@ -136,11 +152,11 @@ export class GantryComponent {
     protected onFocusIn(event: FocusEvent): void;
     protected onFocusOut(event: FocusEvent): void;
     protected onPanelWheel(e: WheelEvent): void;
+    protected onRetry(source: RetryEvent['source']): void;
     // (undocumented)
     protected onSortColumn(key: string): void;
     // (undocumented)
     protected onSplitterDown(e: PointerEvent): void;
-    // (undocumented)
     protected onSplitterKey(e: KeyboardEvent): void;
     // (undocumented)
     protected onTaskDragged(event: TaskDragEvent): void;
@@ -163,11 +179,13 @@ export class GantryComponent {
     resetTheme(): void;
     // (undocumented)
     protected readonly resizeEnabled: Signal<boolean>;
+    readonly retry: OutputEmitterRef<RetryEvent>;
     // (undocumented)
     readonly rowClick: OutputEmitterRef<RowGeometry>;
     // (undocumented)
     readonly rowDblClick: OutputEmitterRef<GanttFlatRow>;
     protected saveState(): void;
+    protected readonly scrollPadding: Signal<ScrollPadding>;
     // Warning: (ae-forgotten-export) The symbol "GanttScrollService" needs to be exported by the entry point gantryjs-angular.d.ts
     //
     // (undocumented)
@@ -201,12 +219,7 @@ export class GantryComponent {
     protected readonly splitterDragging: WritableSignal<boolean>;
     protected readonly srAlert: Signal<string>;
     readonly stateChange: OutputEmitterRef<GanttState>;
-    // (undocumented)
-    protected readonly swatchSize: {
-        readonly width: 18;
-        readonly height: 12;
-    };
-    protected readonly tabStopId: Signal<string | null>;
+    protected readonly tabStopId: Signal<string>;
     // (undocumented)
     readonly taskDragged: OutputEmitterRef<TaskDragEvent>;
     // (undocumented)
@@ -222,6 +235,7 @@ export class GantryComponent {
     protected readonly toggleTop: Signal<number>;
     // (undocumented)
     readonly tooltipEnabled: InputSignalWithTransform<boolean, unknown>;
+    protected readonly tooltipTemplate: Signal<GanttTooltipTemplateDirective | undefined>;
     // (undocumented)
     updateTask(id: string, patch: Partial<GanttTask>): void;
     readonly view: Signal<GanttView>;
@@ -287,6 +301,16 @@ export class GantryComponent {
             "required": false;
             "isSignal": true;
         };
+        "loading": {
+            "alias": "loading";
+            "required": false;
+            "isSignal": true;
+        };
+        "errorMessage": {
+            "alias": "errorMessage";
+            "required": false;
+            "isSignal": true;
+        };
         "viewMode": {
             "alias": "viewMode";
             "required": false;
@@ -301,7 +325,8 @@ export class GantryComponent {
         "rowClick": "rowClick";
         "rowDblClick": "rowDblClick";
         "stateChange": "stateChange";
-    }, ["columnDefs"], ["[ganttToolbar]", "[tlFooter]", "[ganttFooter]"], true, [{
+        "retry": "retry";
+    }, ["columnDefs", "tooltipTemplate"], ["[ganttToolbar]", "[tlFooter]", "[ganttEmpty]", "[ganttFooter]"], true, [{
         directive: typeof ɵGanttKeyboardDirective;
         inputs: {};
         outputs: {};
@@ -411,6 +436,7 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
     reset(): Promise<void>;
     retry(): Promise<void>;
     setStatic(items: T[]): void;
+    ɵsubscribe(listener: (prev: LoadStateSnapshot, next: LoadStateSnapshot) => void): () => void;
 }
 
 // @public (undocumented)
@@ -466,6 +492,24 @@ export class GanttTaskBarComponent extends GanttBuiltinBar {
 }
 
 // @public
+export interface GanttTooltipTemplateContext {
+    readonly $implicit: TooltipModel;
+    readonly model: TooltipModel;
+    readonly row: GanttFlatRow;
+    readonly task: GanttTask;
+}
+
+// @public
+export class GanttTooltipTemplateDirective {
+    static ngTemplateContextGuard(_directive: GanttTooltipTemplateDirective, _context: unknown): _context is GanttTooltipTemplateContext;
+    readonly template: TemplateRef<GanttTooltipTemplateContext>;
+    // (undocumented)
+    static ɵdir: i0.ɵɵDirectiveDeclaration<GanttTooltipTemplateDirective, "ng-template[ganttTooltip]", never, {}, {}, never, never, true, never>;
+    // (undocumented)
+    static ɵfac: i0.ɵɵFactoryDeclaration<GanttTooltipTemplateDirective, never>;
+}
+
+// @public
 export function provideGantt(config?: GanttGlobalConfig, ...features: GanttFeature[]): Provider[];
 
 // @public
@@ -476,8 +520,14 @@ export function withBars(...defs: GanttBarDef[]): GanttFeature;
 
 // @public (undocumented)
 export class ɵGanttKeyboardDirective {
+    constructor();
+    // Warning: (ae-forgotten-export) The symbol "GanttKeyboardHost" needs to be exported by the entry point gantryjs-angular.d.ts
+    bind(chart: GanttKeyboardHost): void;
+    connect(): void;
+    protected onFocusOut(event: FocusEvent): void;
     // (undocumented)
     onKeyDown(event: KeyboardEvent): void;
+    takeFocusRequest(): string | null;
     // (undocumented)
     static ɵdir: i0.ɵɵDirectiveDeclaration<ɵGanttKeyboardDirective, "[ganttKeyboard]", never, {}, {}, never, never, true, never>;
     // (undocumented)

@@ -1,22 +1,32 @@
 /**
  * @file legend.ts
- * Legend region: the floating legend of the timeline markers (today, annotations, critical path,
- * baseline) from `buildLegend`, patched in place: the title is one persistent node and the items
- * are keyed by `LegendItem.key`, so a label, colour or option change patches text and paints only.
- * Hidden in the table view and when there is nothing to explain; while hidden it holds no
- * children (they come back on the next show).
+ * Legend region: the legend of the timeline markers (today, annotations, critical path,
+ * baseline) from `buildLegend`, placed per core `legendPlacement` (`legend.position`, D9):
  *
- *   div.gantt-legend
+ *   'bottom'  → div.gantt-legend.gantt-legend--bottom: an in-flow strip after `.gantry-main`,
+ *               the wrapper's last child (the panes give it its height)
+ *   'toolbar' → div.gantt-legend.gantt-legend--toolbar: the toolbar's last child (after its
+ *               groups; back to 'bottom' while the toolbar is hidden)
+ *   null      → detached: off (`showLegend`), nothing to explain, or the table view (D27)
+ *
+ *   div.gantt-legend[part=legend]
  *     span.gantt-legend-title
  *     span.gantt-legend-item  ×n   svg.gantt-legend-swatch > line | rect · span (label)
+ *
+ * Patched in place: the title is one persistent node and the items are keyed by
+ * `LegendItem.key`, so a label, colour, option or placement change patches text and paints only
+ * (the node moves, its children stay). Flushed after the toolbar region, so the toolbar it may
+ * join is already in place.
  */
 
-import { buildLegend, isLegendVisible, LEGEND_SWATCH_SIZE, type LegendItem } from '@gantryjs/core';
+import { buildLegend, legendPlacement, LEGEND_SWATCH_SIZE, type LegendItem } from '@gantryjs/core';
 import { computed } from '../reactive';
 import { h, s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
-import { setAttr, setStyleProp, setText } from '../dom/patch';
+import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
+import { showNode } from './skeleton';
+import { toolbarElement } from './toolbar';
 
 /** An item's inner nodes. */
 interface ItemParts {
@@ -85,14 +95,31 @@ export function createLegendLayer(ctx: LayerContext): Layer {
         criticalPath: cfg.criticalPath,
         baseline: cfg.baseline,
       });
-      // The legend explains timeline markers: nothing to explain in the table view
-      const visible = isLegendVisible(I.showLegend(), I.viewOverride(), items);
-      setAttr(legend, 'hidden', !visible);
-      if (visible) {
-        setText(title, labels.legend);
-        if (title.parentNode !== legend) legend.prepend(title);
-      } else title.remove();
-      reconcile(legend, visible ? items : [], item => item.key, createItem, updateItem);
+      const toolbar = toolbarElement(dom);
+      // Same switch as the toolbar region's: the toolbar is attached when this one runs
+      const toolbarShown = !!toolbar && I.showToolbar() && cfg.toolbar !== false;
+      const placement = legendPlacement({
+        showLegend: I.showLegend(),
+        position: cfg.legend.position,
+        view: I.viewOverride(),
+        items,
+        toolbarShown,
+      });
+      if (placement === null) {
+        // Off, nothing to explain, or the table view (no timeline): detached (D27)
+        legend.remove();
+        return;
+      }
+
+      // Built hidden (detached until now): shown whenever attached
+      setAttr(legend, 'hidden', false);
+      toggleClass(legend, 'gantt-legend--bottom', placement === 'bottom');
+      toggleClass(legend, 'gantt-legend--toolbar', placement === 'toolbar');
+      setText(title, labels.legend);
+      if (title.parentNode !== legend) legend.prepend(title);
+      reconcile(legend, items, item => item.key, createItem, updateItem);
+      if (placement === 'toolbar') showNode(toolbar!, legend, true);
+      else showNode(dom.wrapper, legend, true);
     },
   };
 }

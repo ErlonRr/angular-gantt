@@ -2,7 +2,9 @@
 //  gantry · interaction/announce.ts
 //  Screen-reader announcements (aria-live text). Every sentence
 //  comes from a translatable label; bindings only put the string
-//  into their live region.
+//  into their live region, through `createAnnouncer` (250 ms
+//  trailing debounce, last message wins, a repeated sentence is
+//  marked so screen readers read it again).
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -190,4 +192,80 @@ export function announceLoadState(
   if (next.isLoading) return l.loading;
   if (next.error !== undefined && next.error !== null && next.error !== false) return null;
   return next.hasMore ? l.announceLoaded(next.loadedCount) : l.allLoaded(next.loadedCount);
+}
+
+// ─── Debounced live region ────────────────────────────────────
+
+/** Trailing debounce of `Announcer.say` (ms): a burst of changes is read once, as its last message. */
+export const ANNOUNCE_DEBOUNCE = 250;
+
+/**
+ * Appended to a sentence equal to the one in the live region (a no-break space), so screen
+ * readers announce it again; the next repeat drops it (the text alternates).
+ */
+export const REPEAT_MARK = '\u00A0';
+
+/** The timer functions an announcer uses (`setTimeout` / `clearTimeout` of the page; fakes in tests). */
+export interface AnnouncerTimers<H = unknown> {
+  set(fn: () => void, ms: number): H;
+  clear(handle: H): void;
+}
+
+/** A polite live region that does not flood screen readers. */
+export interface Announcer {
+  /** Announce after the debounce; a newer `say` / `now` replaces a pending one (last message wins). */
+  say(text: string): void;
+  /** Announce at once, dropping a pending `say`. */
+  now(text: string): void;
+  /** Drop a pending `say` (the binding is torn down). */
+  cancel(): void;
+}
+
+/**
+ * The live-region writer of every binding: `write` puts the text into the region (the Web
+ * Component's `srLive`, Angular's announcer element). `say` debounces by `delay` ms (default
+ * `ANNOUNCE_DEBOUNCE`; 0 or less writes at once), `now` skips the debounce. A sentence equal to
+ * the last one written gets `REPEAT_MARK`, so it is read again. Errors are not announced here: they
+ * go to the binding's assertive alert region, undebounced.
+ */
+export function createAnnouncer<H = unknown>(
+  write: (text: string) => void,
+  timers: AnnouncerTimers<H>,
+  delay: number = ANNOUNCE_DEBOUNCE,
+): Announcer {
+  let last: string | null = null;
+  let pending: { handle: H } | null = null;
+  const drop = () => {
+    if (!pending) return;
+    const { handle } = pending;
+    pending = null;
+    timers.clear(handle);
+  };
+  const emit = (text: string) => {
+    const out = text !== '' && text === last ? text + REPEAT_MARK : text;
+    last = out;
+    write(out);
+  };
+  return {
+    say(text) {
+      drop();
+      if (!(delay > 0)) {
+        emit(text);
+        return;
+      }
+      const entry: { handle: H } = { handle: undefined as H };
+      pending = entry;
+      entry.handle = timers.set(() => {
+        // A cleared timer that fires anyway (some fakes) must not write a dropped message
+        if (pending !== entry) return;
+        pending = null;
+        emit(text);
+      }, delay);
+    },
+    now(text) {
+      drop();
+      emit(text);
+    },
+    cancel: drop,
+  };
 }

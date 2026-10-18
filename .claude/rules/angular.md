@@ -26,19 +26,32 @@ paths:
   `focusedRowId`) → computeds with the **same** core calls and equality cut-offs (`sameVirtualWindow`,
   `sameHorizontalWindow`, `quantizeNow` + `getTime`): `timeline`, `todayX`, `rowGeometries` / `geometryById`,
   `vWindow` (focused and dragged rows pinned), `mountedGeometries`, `hWindow` (`HORIZONTAL_WINDOW_QUANTUM`),
-  `tierWindows` / `bandWindow` / `lineWindow`. Header, canvas and task list inject it; keep the windows equal to
-  the WC's for the same scroll and size (the paint parity test compares them).
+  `tierWindows` / `bandWindow` / `lineWindow`, `markerLane` / `headerHeight` (tiers + marker lane: use it for
+  everything below the header, never `timeline().headerHeight`), `chartState`, `legendItems` / `legendPlacement`,
+  `levelLabel`. The interaction inputs mirror the WC's too: `focusedRowId`, `hoveredBarId`, `focusVisibleBarId`,
+  `zoomAnchorX` (consumed once by core `anchoredScrollLeft`) and `scrollRequest` (`fitToScreen`). Header, canvas
+  and task list inject it; keep the windows equal to the WC's for the same scroll and size (the paint parity test
+  compares them).
 - Consumer-seeded state the user can change is a `linkedSignal` (`tasks`, `collapsedIds`, `level`, `view`,
   `panelWidthPx`, `initialScrollPending`). `viewMode` is a `model()`: the shown `level` is whichever of
   `[viewMode]` / `options.viewMode` changed last, else the user's zoom.
-- **Effects whitelist:** the `viewModeChange` emission (model sync + `saveState`), the `loadError` emission, the
-  `options.stateKey` restore, the load-state announcement, the bar outlet (component type changes) and
-  `afterRenderEffect` / `afterEveryRender` for DOM work (scroll sync and anchoring, tooltip placement, focus
-  restore). Each reads its other inputs in `untracked()`. Anything else is a `computed` / `linkedSignal`. Order
-  matters: the `viewModeChange` effect is created before the `stateKey` restore, so a restored zoom level emits.
+- **Effects whitelist:** the `viewModeChange` emission (model sync + zoom announcement + `saveState`), the
+  `loadError` emission, the `options.stateKey` restore, the load-state announcement (subscribed to the data source's
+  `ɵsubscribe`, not inferred from signals), the bar outlet (component type changes, the host attributes it stamps)
+  and `afterRenderEffect` / `afterEveryRender` for DOM work (scroll sync, zoom anchoring and `fitToScreen`'s scroll
+  request, the viewport focus of a pointer drag, focus restore, tooltip placement and the tooltip triggers in
+  `tooltip/tooltip-state.ts`: keyboard focus, drag start, rule changes, row gone). Each reads its other inputs in
+  `untracked()`. Anything else is a `computed` / `linkedSignal`. Order matters: the `viewModeChange` effect is
+  created before the `stateKey` restore, so a restored zoom level emits.
 - Shared rules and numbers come from core, never a local copy: `seedCollapsed` (collapse seeding),
   `clampColumnWidth`, `VIRTUAL_OVERSCAN_ROWS`, `splitterValue` / `SPLITTER_KEY_STEP` / `SPLITTER_TOGGLE_OFFSET`,
-  `STATE_SAVE_DELAY`, `CLOCK_INTERVAL`, `TOOLTIP_SHOW_DELAY` / `TOOLTIP_HIDE_DELAY`.
+  `STATE_SAVE_DELAY`, `CLOCK_INTERVAL`; the tooltip's timing from `cfg().tooltip` through `reduceTooltip` and its
+  position from `placeTooltip`; `hitTestBar`, the gesture machine (`startGesture`…, `DRAG_THRESHOLD_PX`,
+  `LONG_PRESS_MS`), `autoScrollDelta`, `wheelZoom` / `pinchZoomSteps`, `fitZoomLevel` / `fitScrollLeft`,
+  `anchoredScrollLeft`; `resolveKey`, `navigateGrid` / `navigateTimeline`, `tabStopIndex`, `gridTabStop`,
+  `KeyboardEditSession`, `createAnnouncer`, `createScrollMirror` (scroll sync), `timelineScrollPadding`, `bodyHeight` /
+  `pageRowCount`; `buildToolbar`, `resolveChartState` / `skeletonRows`, `legendPlacement`, `computeMarkerLane`,
+  `computeAnnotationVisuals`, `formatDragReadout` / `placeDragReadout`, `HATCH_PATTERN`.
 - Theme: the host binds `[style]="themeSvc.style()"` (`themeToCss`) and the classes `gantry-dark`,
   `gantry-dragging`, `gantry-loading` (no `data-theme`, no DOM writes from services). Chrome is stylesheet rules on
   `var(--gantt-*)`; paints are bound as `[style.fill]` / `[style.stroke]` / `[style.background-color]`, never as
@@ -50,8 +63,10 @@ paths:
   `localStorage`, `matchMedia`, `requestAnimationFrame`, `ResizeObserver`, `IntersectionObserver`…). Use
   `inject(DOCUMENT)`, `Renderer2`, `doc.defaultView`.
 - Browser work (observers, listeners, timers, `matchMedia`, animation frames, the popover API, focus) starts in
-  `afterNextRender` (`GantryComponent` uses `{ earlyRead: () => this.connectBrowser() }`) or in event handlers,
-  and is released through `DestroyRef`. No `ngOnInit` / `ngAfterViewInit` / `ngOnDestroy`.
+  `afterNextRender` (`GantryComponent` uses `{ earlyRead: () => this.connectBrowser() }`; the canvas binds its
+  pointer, touch and zoom listeners in `connectPointer()`) or in event handlers, and is released through
+  `DestroyRef`. No `ngOnInit` / `ngAfterViewInit` / `ngOnDestroy`. Timers go through `DOCUMENT.defaultView`
+  (e.g. the announcer's), never on the server.
 - `ssr.spec.ts` renders two charts with `renderApplication` while the browser APIs throw: keep it green.
 
 ## Bars and providers
@@ -62,8 +77,12 @@ paths:
 - The canvas renders bars with `[ganttBarOutlet]` on an `<ng-container>` (`bars/bar-outlet.directive.ts`): an SVG
   `<g>` host made with `Renderer2`, `createComponent(type, { hostElement, bindings: [inputBinding('ctx', …)] })`,
   inserted into the container's `ViewContainerRef` (so bars are direct children of `g.gantt-bars-layer`); it stamps
-  `data-task-id` and dims the dragged bar. The canvas reuses an unchanged row's `ctx` object (`contexts`
-  `linkedSignal`): keep it, or every bar re-renders.
+  every bar, custom ones included, as an `option` of the svg `listbox` (`data-task-id`, `data-bar-type`,
+  `data-focus-key`, `role`, `aria-label`, `aria-roledescription`, `aria-selected`, `aria-posinset` /
+  `aria-setsize`, the roving `tabindex` from `GanttBarFocusService`, `aria-describedby` while its tooltip shows)
+  after the component's own host attributes, and dims the dragged bar. Built-in bars bind no role or name of their
+  own. The focus ring and grips are `g[ganttBarOverlay]` (one per chart), not part of a bar. The canvas reuses an
+  unchanged row's `ctx` object (`contexts` `linkedSignal`): keep it, or every bar re-renders.
 - `provideGantt(config?, ...features)`, `withBars(...defs)` and `provideGanttBar(...defs)` return `Provider[]`
   for application, route and component `providers`. `GANTT_GLOBAL_CONFIG` merges each level over its parent
   (`skipSelf`, `mergeGanttConfig`); `global-config.ts` is a leaf module so `provide.ts` stays off the services'
@@ -74,15 +93,26 @@ paths:
 
 - Same option names, CSS classes, DOM structure and behaviour as `<gantry-element>`: panes `.gantry-panel`,
   `.gantry-canvas-viewport`, `.gantry-canvas-header-sticky`; `.gantry-splitter` > `.gantry-splitter-handle`
-  (`role=separator`) + `.gantry-splitter-toggle`; `g.gantt-bars-layer > g[data-task-id]`; the `gantt-tl-*`
-  task-list spans; `div.gantt-tooltip` with `dl.gantt-tooltip-rows`; `.gantt-sr-live` / `.gantt-sr-alert`. When
-  you change one painter, change the other (the `gantry-reviewer` agent checks this).
+  (`role=separator`) + `.gantry-splitter-toggle`; `g.gantt-bars-layer > g[data-task-id]` + `g.gantt-bar-overlay`;
+  the `gantt-tl-*` task-list spans; the `gantt-tb-*` toolbar; `div.gantt-legend`; `div.gantt-state`;
+  `div.gantt-drag-readout`; `.g-header` tiers + `div.g-marker-lane`; `div.gantt-tooltip` with
+  `dl.gantt-tooltip-rows`; `.gantt-sr-live` / `.gantt-sr-alert`. New components use attribute selectors on the
+  element the WC renders (`div[ganttLegend]`, `div[ganttChartState]`, `div[ganttDragReadout]`, `g[ganttBarOverlay]`,
+  `g[ganttAnnotations]`, `svg[ganttIcon]`), never a wrapper element (D26), and optional nodes are attached with
+  `@if` only while shown (D27). When you change one painter, change the other (the `gantry-reviewer` agent checks
+  this).
 - `e2e/paint.spec.ts` compares the colours both bindings paint. Its keys are the first non-`ng-` class plus the
   sibling index: adding a class to a class-less element, reordering children or adding a wrapper changes keys.
-- Accessibility follows the WC's model: the host is `role=region` with `aria-label` (`labels.ariaChart`) and no
-  `tabindex`; tab stops toolbar → sortable headers → one task-list row (roving `tabindex`, `data-focus-key`) →
-  splitter handle → toggle → timeline viewport (`role=group`, `tabindex=0`); `focusin` writes
-  `layout.focusedRowId` (pinned in the window); announcements go through `GanttAnnouncer` (core announce helpers).
+- Accessibility follows the WC's model: the host is `role=region` with `aria-label` (`labels.ariaChart`),
+  `aria-busy` from `chartState.busy`, and no `tabindex`; tab stops toolbar (one roving stop) → task list (one stop:
+  row-first treegrid, header cells / rows / cells with `data-focus-key`) → splitter handle → toggle → the bars' tab
+  stop (`GanttBarFocusService`, core `tabStopIndex`; the viewport `role=group` is `tabindex=0` only while no bar is
+  mounted). Keys go through `ɵGanttKeyboardDirective` (`a11y/grid-keys.ts`, `a11y/timeline-keys.ts`,
+  `drag/keyboard-edit.ts`); `focusin` writes `layout.focusedRowId` (pinned in the window), keyboard modality
+  `layout.focusVisibleBarId`; announcements go through `GanttAnnouncer` (core `createAnnouncer`, debounced). Never
+  bind `focus` / `blur` / `focusin` / `focusout` on an SVG element (Chromium makes it a Tab stop): the canvas
+  listens on its host. Focus rings use `--gantt-focus-ring`, and every component's `styles` carry its
+  `@media (forced-colors: active)` rules (custom bars don't get the built-in bars' ones).
 - Light DOM: SVG `id`s must be unique per instance (use the canvas `uid`).
 
 ## Public API

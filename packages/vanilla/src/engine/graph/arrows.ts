@@ -3,7 +3,8 @@
  * Dependency links indexed by their vertical span (`buildArrowIndex`), built once per
  * (tasks, geometries): a scroll queries the window's links instead of scanning every task.
  * Each link's `ArrowVisual` is memoised per link and per bar-visual memo, so a scroll computes
- * only the links that entered the window.
+ * only the links that entered the window. The visual carries its dash and its lag label's font
+ * size (core: the chart font size − 2), so the painter adds no geometry of its own.
  */
 
 import {
@@ -32,11 +33,12 @@ export function arrowsGraph(_I: Inputs, g: CoreGraph & VisualsGraph, node: NodeF
   const arrowIndex = node('arrowIndex', () => buildArrowIndex(g.tasks(), g.geoById()));
   const arrowVisual = node('arrowVisual', (): ArrowVisualOf => {
     // Every input of an arrow: the bar visuals of both ends (their memo restarts with the config,
-    // the timeline, the critical path and the metrics), the rows and the critical path
+    // the timeline, the critical path and the metrics), the rows, the critical path and the font size
     const visualOf = g.barVisual();
     const geoById = g.geoById();
     const cfg = g.config();
     const critical = g.critical()?.criticalIds;
+    const fontPx = g.metrics().fontPx;
     const memo = new WeakMap<ArrowLink, ArrowVisual | null>();
     return link => {
       let a = memo.get(link);
@@ -52,6 +54,7 @@ export function arrowsGraph(_I: Inputs, g: CoreGraph & VisualsGraph, node: NodeF
                 cfg,
                 { fromTop: from.y, fromBottom: from.y + from.height },
                 !!critical?.has(link.from) && critical.has(link.to),
+                fontPx,
               )
             : null;
         memo.set(link, a);

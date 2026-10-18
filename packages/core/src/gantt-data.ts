@@ -151,12 +151,41 @@ export function filterVisible(rows: GanttFlatRow[]): GanttFlatRow[] {
 // ─── Re-index visible rows ────────────────────────────────────
 
 /**
- * After filtering, re-assign visibleIndex sequentially.
- * Needed when collapsedIds change between renders.
+ * After filtering, re-assign visibleIndex sequentially (needed when collapsedIds change between
+ * renders) and set every row's place in the tree of the visible rows:
+ * - `parentIndex`: the parent row's `visibleIndex` (`undefined` for a root row);
+ * - `posInSet` / `setSize`: 1-based position among, and number of, the rows sharing that parent
+ *   (`aria-posinset` / `aria-setsize`).
+ *
+ * `rows` must be in tree order (`flattenTree`, `sortTree`): a row's parent is the nearest earlier
+ * row of a lower level (in a filtered list without the real parent, the same row `sortTree` puts
+ * it under), or none for a root. O(N).
  */
 export function reindexVisible(rows: GanttFlatRow[]): GanttFlatRow[] {
-  let i = 0;
-  return rows.map(r => ({ ...r, visibleIndex: i++ }));
+  // Sibling counts: [0] = the roots, [i + 1] = the children of row i
+  const counts = new Array<number>(rows.length + 1).fill(0);
+  const groups = new Array<number>(rows.length);
+  // Open ancestors of the current row: their indexes and levels
+  const openIndex: number[] = [];
+  const openLevel: number[] = [];
+  const out = rows.map((r, i): GanttFlatRow => {
+    while (openLevel.length > 0 && (openLevel.at(-1) ?? 0) >= r.level) {
+      openLevel.pop();
+      openIndex.pop();
+    }
+    const parentIndex = openIndex.at(-1);
+    openIndex.push(i);
+    openLevel.push(r.level);
+    const group = parentIndex === undefined ? 0 : parentIndex + 1;
+    const posInSet = (counts[group] ?? 0) + 1;
+    counts[group] = posInSet;
+    groups[i] = group;
+    return { ...r, visibleIndex: i, posInSet, setSize: posInSet, parentIndex };
+  });
+  out.forEach((row, i) => {
+    row.setSize = counts[groups[i] ?? 0] ?? row.setSize;
+  });
+  return out;
 }
 
 // ─── Sorting helpers ──────────────────────────────────────────

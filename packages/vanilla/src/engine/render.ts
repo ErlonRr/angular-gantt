@@ -4,14 +4,17 @@
  * its own effect, queued on the per-element frame scheduler and flushed once per frame in this
  * order:
  *
- *   host → toolbar → legend → header → static → rows → bars → arrows → overlay → tasklist
- *        → scroll-commands → focus-restore → lazy-load
+ *   host → toolbar → legend → header → static → rows → bars → arrows → overlay → readout
+ *        → tasklist → states → scroll-commands → focus-restore → lazy-load
  *
  * A region re-runs only when a signal its layer read changed: a vertical scroll re-runs the
  * windowed regions (rows, bars, arrows, overlay, task list), not the toolbar, legend, header or
  * static layer; a horizontal scroll re-runs header and static only when it crosses a 256 px
  * chunk of the horizontal window; a selection re-runs rows, bars and the task list only. Every
  * run is counted in `runs` (tests and the perf page read it).
+ *
+ * `readout` (the drag readout chip, after the canvas overlay) and `states` (the loading, error
+ * and empty boxes over the chart body, after the task list) paint the Phase 9 chrome.
  */
 
 import { effect, type FrameScheduler } from '../reactive';
@@ -25,7 +28,9 @@ import { createRowsLayer } from '../layers/rows';
 import { createBarsLayer } from '../layers/bars';
 import { createArrowsLayer } from '../layers/arrows';
 import { createOverlayLayer } from '../layers/overlay';
+import { createReadoutLayer } from '../layers/readout';
 import { createTasklistLayer } from '../layers/tasklist';
+import { createStatesLayer } from '../layers/states';
 import { createScrollCommandsLayer, type ScrollCommands } from '../layers/scroll-commands';
 import { createFocusRestoreLayer } from '../layers/focus-restore';
 import { createLazyLoadLayer } from '../layers/lazy-load';
@@ -43,7 +48,9 @@ export const REGIONS = [
   'bars',
   'arrows',
   'overlay',
+  'readout',
   'tasklist',
+  'states',
   'scroll-commands',
   'focus-restore',
   'lazy-load',
@@ -69,7 +76,9 @@ export function createLayers(ctx: LayerContext): Layers {
     bars: createBarsLayer(ctx),
     arrows: createArrowsLayer(ctx),
     overlay: createOverlayLayer(ctx),
+    readout: createReadoutLayer(ctx),
     tasklist: createTasklistLayer(ctx),
+    states: createStatesLayer(ctx),
     'scroll-commands': createScrollCommandsLayer(ctx),
     'focus-restore': createFocusRestoreLayer(ctx),
     'lazy-load': createLazyLoadLayer(ctx),

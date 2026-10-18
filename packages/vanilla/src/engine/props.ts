@@ -27,6 +27,9 @@ export interface PropertySpec {
 /** Boolean attribute: present → `true`, `"false"` → `false`, removed → the default. */
 const flag = (v: string | null): boolean | undefined => (v === null ? undefined : v !== 'false');
 
+/** Text attribute: its value as is, removed → the default. */
+const text = (v: string | null): string | undefined => v ?? undefined;
+
 /** Names missing from the table make the table a type error. */
 type Complete<T extends readonly PropertySpec[]> = [Exclude<PropertyName, T[number]['name']>] extends [never]
   ? T
@@ -54,6 +57,9 @@ export const PROPERTY_TABLE = table([
   { name: 'showLegend', default: false, attr: 'show-legend', parse: flag },
   { name: 'dataSource', default: null },
   { name: 'renderBar', default: undefined },
+  // The chart states (core `resolveChartState`): consumer-driven loading and error
+  { name: 'loading', default: false, attr: 'loading', parse: flag },
+  { name: 'errorMessage', default: null, attr: 'error-message', parse: text },
 ]);
 
 const names = <const T extends readonly PropertySpec[]>(specs: T) =>

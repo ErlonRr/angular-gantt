@@ -17,6 +17,9 @@
 //   visibleRows + timeline            ──► rowGeometries, geometryById (computeRowGeometries)
 //   scrollTop + viewport height + focused / dragged row ──► vWindow ──► mountedGeometries, windowSpan
 //   scrollLeft + viewport width + timeline ──► hWindow ──► tierWindows, bandWindow, lineWindow
+//   annotations + timeline + todayX   ──► markerLane (computeMarkerLane) ──► headerHeight (tiers + lane)
+//   loading / errorMessage / data-source load state + rows ──► chartState (resolveChartState)
+//   annotations + todayX + config     ──► legendItems (buildLegend) ──► legendPlacement
 //
 //  Angular's counterpart of the Web Component's engine graph
 //  (`packages/vanilla/src/engine/graph/*.ts`): the same core calls and the
@@ -26,9 +29,14 @@
 //  the overscan or inside one 256 px chunk changes no downstream signal.
 //
 //  GantryComponent binds its inputs once (`bindTasks`, `bindState`,
-//  `bindConfig`, `bindColumns`) and writes the measured viewport and the
-//  clock; the scroll service writes the scroll offsets; user actions write
-//  the linkedSignals. Nothing in this service touches the DOM.
+//  `bindConfig`, `bindColumns`, `bindChart`) and writes the measured
+//  viewport and the clock; the scroll service writes the scroll offsets;
+//  user actions write the linkedSignals. Interaction state written by the
+//  chart's handlers: `zoomAnchorX` (a zoom gesture's anchor, consumed by
+//  the chart's scroll sync through core `anchoredScrollLeft`),
+//  `scrollRequest` (`fitToScreen`'s scroll, applied once the new timeline
+//  painted), `hoveredBarId` and `focusVisibleBarId` (the bar overlay).
+//  Nothing in this service touches the DOM.
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, computed, linkedSignal, inject } from '@angular/core';
@@ -41,7 +49,10 @@ import {
   type RowGeometry,
   type GanttView,
   type GanttI18n,
+  type GanttLabels,
+  type GanttAnnotation,
   type ColumnDef,
+  DEFAULT_LABELS,
 } from '../types';
 
 import {
@@ -74,6 +85,19 @@ import {
   HORIZONTAL_WINDOW_QUANTUM,
   VIEWPORT_FALLBACK_HEIGHT,
   VIRTUAL_OVERSCAN_ROWS,
+  computeMarkerLane,
+  zoomLevelLabel,
+  resolveChartState,
+  buildLegend,
+  legendPlacement,
+  fitZoomLevel,
+  themeMetrics,
+  LightTheme,
+  type ChartState,
+  type LegendItem,
+  type LegendPlacement,
+  type LoadStateSnapshot,
+  type MarkerLane,
   type CollapseSeed,
   type ColumnContext,
   type ResolvedGanttConfig,
@@ -103,6 +127,27 @@ interface StateSources {
 /** The `viewMode` model and `options.viewMode` (a linkedSignal recomputes on every change of its source) */
 type LevelSources = readonly [model: string | undefined, option: string | undefined];
 
+/** The chart inputs beyond tasks and options that the graph reads (`bindChart`) */
+export interface ChartSources {
+  /** The `annotations` input: the marker lane, the canvas annotations and the legend */
+  readonly annotations: () => readonly GanttAnnotation[];
+  /** The theme's label font size (`themeMetrics(theme).fontPx`) */
+  readonly fontPx: () => number;
+  /** The `loading` input */
+  readonly loading: () => boolean;
+  /** The `errorMessage` input */
+  readonly errorMessage: () => string | null | undefined;
+  /** The data source's load state (`null` without a data source) */
+  readonly loadState: () => LoadStateSnapshot | null;
+  /** The `showLegend` input */
+  readonly showLegend: () => boolean;
+  /** The toolbar is on screen (`showToolbar` and `options.toolbar !== false`) */
+  readonly toolbarShown: () => boolean;
+}
+
+/** A horizontal scroll the chart applies once the timeline it targets has painted */
+export type GanttScrollRequest = 'fit';
+
 /** Vertical pixel range of the virtual window (`first` to `last` row, pinned rows excluded) */
 export interface WindowSpan {
   readonly top: number;
@@ -116,6 +161,18 @@ interface PanelWidthOptions {
 }
 
 const NO_OPTIONS: GanttOptions = {};
+const NO_ANNOTATIONS: readonly GanttAnnotation[] = [];
+/** Label font size of a graph without `bindChart` (the default theme's) */
+const DEFAULT_FONT_PX = themeMetrics(LightTheme).fontPx;
+
+/** Same chart state, field by field: a new row count or load page keeps it */
+const sameChartState = (a: ChartState, b: ChartState): boolean =>
+  a.kind === b.kind &&
+  a.busy === b.busy &&
+  a.title === b.title &&
+  a.message === b.message &&
+  a.retry === b.retry &&
+  a.footer === b.footer;
 /** Zoom level without `[viewMode]` and `options.viewMode` */
 const DEFAULT_LEVEL = 'Month';
 
@@ -142,6 +199,13 @@ export class GanttLayoutService {
   /** The chart's `options` and its `viewMode` model: the sources of the UI state below */
   bindState(options: () => GanttOptions, viewMode: () => string | undefined): void {
     this.stateSources.set({ options, viewMode });
+  }
+
+  private readonly chartSources = signal<ChartSources | null>(null);
+
+  /** Annotations, font size, loading / error / load state, legend switch and toolbar presence */
+  bindChart(sources: ChartSources): void {
+    this.chartSources.set(sources);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -231,8 +295,24 @@ export class GanttLayoutService {
    */
   readonly viewportHeight = signal<number>(0);
 
-  /** Row that holds the keyboard focus: it stays mounted while scrolled away (`null` = none) */
+  /** Row that holds the keyboard focus (task-list row or bar): it stays mounted while scrolled away (`null` = none) */
   readonly focusedRowId = signal<string | null>(null);
+
+  /** Task id of the bar under a fine pointer (`null` = none): its grips show in the bar overlay */
+  readonly hoveredBarId = signal<string | null>(null);
+
+  /** Task id of the bar focused from the keyboard (`null` = none, or focused by a pointer): its focus ring shows */
+  readonly focusVisibleBarId = signal<string | null>(null);
+
+  /**
+   * x (px from the viewport's left edge) whose date the next zoom keeps in place: a Ctrl+wheel or
+   * pinch anchor (`zoomBy`). `null`: the viewport's centre. The chart's scroll sync consumes it
+   * (core `anchoredScrollLeft`) and clears it.
+   */
+  readonly zoomAnchorX = signal<number | null>(null);
+
+  /** A scroll to apply once the timeline it targets has painted (`fitToScreen`), cleared by the chart */
+  readonly scrollRequest = signal<GanttScrollRequest | null>(null);
 
   /** Resolved options (set directly, or derived from `bindConfig`) */
   readonly config = signal<ResolvedGanttConfig | null>(null);
@@ -339,11 +419,104 @@ export class GanttLayoutService {
   readonly pxPerDay = computed(() => this.timeline().pxPerDay);
   readonly totalWidth = computed(() => this.timeline().totalWidth);
   readonly totalHeight = computed(() => this.rowCount() * this.rowHeight());
-  readonly totalHeaderHeight = computed(() => this.timeline().headerHeight);
   readonly showBaseline = computed(() => this.cfg().baseline);
   readonly showCriticalPath = computed(() => this.cfg().criticalPath);
   readonly showToday = computed(() => this.cfg().showToday);
   readonly panelVisible = computed(() => this.view() === 'split');
+
+  // ══════════════════════════════════════════════════════════
+  //  Derived: chart inputs, marker lane, header height, state, legend
+  // ══════════════════════════════════════════════════════════
+
+  /** Effective labels (the bound i18n bundle, else the defaults) */
+  private readonly labels = computed<GanttLabels>(
+    () => (this.i18nSource()?.() ?? this.i18n())?.labels ?? DEFAULT_LABELS,
+  );
+
+  /** The `annotations` input */
+  readonly annotations = computed<readonly GanttAnnotation[]>(
+    () => this.chartSources()?.annotations() ?? NO_ANNOTATIONS,
+  );
+
+  /** The theme's label font size (`themeMetrics(theme).fontPx`) */
+  readonly fontPx = computed(() => this.chartSources()?.fontPx() ?? DEFAULT_FONT_PX);
+
+  /**
+   * The marker lane under the header tiers (core `computeMarkerLane`): 18 px with the today and
+   * annotation markers while `markers.lane` shows it (`'auto'`: an annotation has a label), else 0.
+   */
+  readonly markerLane = computed<MarkerLane>(() =>
+    computeMarkerLane({
+      config: this.cfg(),
+      timeline: this.timeline(),
+      annotations: this.annotations(),
+      todayX: this.todayX(),
+      labels: this.labels(),
+      fontPx: this.fontPx(),
+      view: this.view(),
+    }),
+  );
+
+  /**
+   * Height of the timeline header, marker lane included (px): the task-list header, the sticky
+   * header box, `scroll-padding-top`, the splitter toggle and the vertical window use it.
+   */
+  readonly headerHeight = computed(() => this.timeline().headerHeight + this.markerLane().height);
+
+  /** The data source's load state (`null` without one) */
+  private readonly loadState = computed(() => this.chartSources()?.loadState() ?? null);
+
+  /**
+   * What the chart body shows (core `resolveChartState`): ready, loading, empty or error, the
+   * host's `aria-busy`, Retry's target and whether the task-list footer is rendered.
+   */
+  readonly chartState = computed<ChartState>(
+    () => {
+      const src = this.chartSources();
+      return resolveChartState({
+        loading: src?.loading() ?? false,
+        errorMessage: src?.errorMessage() ?? null,
+        rowCount: this.rowCount(),
+        source: this.loadState(),
+        labels: this.labels(),
+      });
+    },
+    { equal: sameChartState },
+  );
+
+  /** The today line is drawn (the legend only cares whether, not where) */
+  private readonly todayShown = computed(() => this.todayX() !== null);
+
+  /** Legend entries (core `buildLegend`): today, annotations, critical path, baseline */
+  readonly legendItems = computed<LegendItem[]>(() => {
+    const cfg = this.cfg();
+    return buildLegend({
+      showToday: cfg.showToday,
+      todayVisible: this.todayShown(),
+      annotations: this.annotations(),
+      labels: this.labels(),
+      criticalPath: cfg.criticalPath,
+      baseline: cfg.baseline,
+    });
+  });
+
+  /** Where the legend is attached (core `legendPlacement`): under the chart, in the toolbar, or nowhere */
+  readonly legendPlacement = computed<LegendPlacement>(() => {
+    const src = this.chartSources();
+    return legendPlacement({
+      showLegend: src?.showLegend() ?? false,
+      position: this.cfg().legend.position,
+      view: this.view(),
+      items: this.legendItems(),
+      toolbarShown: src?.toolbarShown() ?? false,
+    });
+  });
+
+  /**
+   * Toolbar label of the shown zoom level (the resolved `config.level`): its `label`, else
+   * `labels.viewModes[name]`, else the name — the Web Component's `zoomLevelLabel`.
+   */
+  readonly levelLabel = computed(() => zoomLevelLabel(this.cfg().level, this.labels()));
 
   // ══════════════════════════════════════════════════════════
   //  Derived: what is mounted (vertical and horizontal windows)
@@ -362,7 +535,7 @@ export class GanttLayoutService {
         const geo = id === null ? undefined : this.geometryById().get(id);
         if (geo) pinned.push(geo.row.visibleIndex);
       }
-      const viewportH = Math.max(rh, (this.viewportHeight() || VIEWPORT_FALLBACK_HEIGHT) - this.totalHeaderHeight());
+      const viewportH = Math.max(rh, (this.viewportHeight() || VIEWPORT_FALLBACK_HEIGHT) - this.headerHeight());
       return computeVirtualWindow(
         Math.max(0, this.scroll.scrollTop()),
         rh,
@@ -463,11 +636,44 @@ export class GanttLayoutService {
   }
 
   zoomIn(): void {
-    this.level.update(v => zoomStep(this.cfg().zoomLevels, v, -1));
+    this.zoomBy(1);
   }
 
   zoomOut(): void {
-    this.level.update(v => zoomStep(this.cfg().zoomLevels, v, 1));
+    this.zoomBy(-1);
+  }
+
+  /**
+   * Zoom by `steps` levels (> 0 in, < 0 out), keeping the date under `anchorX` (px from the
+   * viewport's left edge; `null`: its centre) in place. Nothing changes at the first / last level.
+   */
+  zoomBy(steps: number, anchorX: number | null = null): void {
+    const levels = this.cfg().zoomLevels;
+    const from = this.level();
+    let to = from;
+    for (let i = Math.abs(Math.trunc(steps)); i > 0; i--) to = zoomStep(levels, to, steps > 0 ? -1 : 1);
+    if (to === from) return;
+    this.zoomAnchorX.set(anchorX);
+    this.level.set(to);
+  }
+
+  /**
+   * "Fit to screen": the finest zoom level at which every task fits the viewport (core
+   * `fitZoomLevel`), then — once that timeline has painted — a scroll to the first task
+   * (`scrollRequest`, core `fitScrollLeft`). Returns the level, or `null` when there is nothing to
+   * fit (no task, viewport not measured).
+   */
+  fitToScreen(): string | null {
+    const level = fitZoomLevel({
+      levels: this.cfg().zoomLevels,
+      extent: this.timeline().extent,
+      viewportWidth: this.viewportWidth(),
+    });
+    if (level === null) return null;
+    this.zoomAnchorX.set(null);
+    this.level.set(level);
+    this.scrollRequest.set('fit');
+    return level;
   }
 
   /** Update a single task in-place (no full re-render of unrelated rows) */

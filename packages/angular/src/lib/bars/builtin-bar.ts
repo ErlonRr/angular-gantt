@@ -5,12 +5,16 @@
 //  render model in `ctx.visual` — identical to the Web Component.
 //  Colours are `Paint`s (`var(--gantt-*)` or an explicit task colour)
 //  bound as CSS properties, never as presentation attributes.
+//
+//  The host's classes are the Web Component's (`paint/bars.ts`):
+//  `gantt-bar` first (the paint-snapshot key), then `gantt-bar--<kind>`,
+//  `gantt-bar--critical` on the critical path (forced-colors mode dashes
+//  it), `task.className` and `gantt-bar-draggable`.
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, computed, inject } from '@angular/core';
-import { taskAccessibleName, themeMetrics, PAINTS } from '@gantryjs/core';
+import { Directive, computed } from '@angular/core';
+import { themeMetrics, PAINTS } from '@gantryjs/core';
 import { GanttBarBase } from './bar-base';
-import { GanttI18nService } from '../services/gantt-i18n.service';
 
 /** Template shared by the built-in task / group / milestone bars. */
 export const BUILTIN_BAR_TEMPLATE = `
@@ -40,11 +44,21 @@ export const BUILTIN_BAR_TEMPLATE = `
 `;
 
 export const BUILTIN_BAR_STYLES = `
-  :host(.gantt-bar-draggable) .gantt-bar-body,
-  :host(.gantt-bar-draggable) .gantt-bar-caps { cursor: grab; }
-  :host(.gantt-bar-draggable:active) .gantt-bar-body { cursor: grabbing; }
+  :host(.gantt-bar-draggable) { cursor: grab; }
   .gantt-bar-label { user-select: none; font-family: var(--gantt-font); }
   .gantt-bar-label--outside { font-weight: 500; }
+  /* Forced colours (D25), over the inline paints: ButtonFace bars outlined in ButtonText, caps and
+     inside labels ButtonText, progress ButtonText at 0.45 (the inside label stays readable),
+     outside labels CanvasText, the critical path dashed, the selected bar's outline Highlight */
+  @media (forced-colors: active) {
+    .gantt-bar-body { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1.5px; }
+    .gantt-bar-caps, .gantt-bar-label { fill: ButtonText !important; }
+    .gantt-bar-progress { fill: ButtonText !important; fill-opacity: 0.45; }
+    .gantt-bar-label--outside { fill: CanvasText !important; }
+    .gantt-bar-baseline { stroke: GrayText !important; }
+    :host(.gantt-bar--critical) .gantt-bar-body { stroke-dasharray: 4 2; stroke-width: 2px; }
+    :host([aria-selected='true']) .gantt-bar-body { stroke: Highlight !important; stroke-width: 2.5px; }
+  }
 `;
 
 /** Base for the built-in bars: template helpers on top of `GanttBarBase`'s `ctx` input. */
@@ -59,27 +73,24 @@ export abstract class GanttBuiltinBar extends GanttBarBase {
    */
   protected readonly paints: typeof PAINTS = PAINTS;
 
-  /** Optional: a bar rendered outside `<gantry>` falls back to the English labels */
-  private readonly i18n = inject(GanttI18nService, { optional: true });
-
-  /** Name, type, dates, progress, critical and baseline state (shared with the Web Component) */
-  protected readonly ariaLabel = computed(() => {
-    const { row, isCritical, showBaseline } = this.ctx();
-    return taskAccessibleName(row, {
-      labels: this.i18n?.labels(),
-      locale: this.i18n?.locale(),
-      critical: isCritical,
-      baseline: showBaseline && !!row.task.baseline,
-    });
+  /** The host's classes: `gantt-bar gantt-bar--<kind>[ gantt-bar--critical][ className][ gantt-bar-draggable]` */
+  protected readonly barClass = computed(() => {
+    const { visual, isCritical, row, draggable } = this.ctx();
+    let cls = `gantt-bar gantt-bar--${visual.kind}`;
+    if (isCritical) cls += ' gantt-bar--critical';
+    if (row.task.className) cls += ` ${row.task.className}`;
+    if (draggable) cls += ' gantt-bar-draggable';
+    return cls;
   });
 }
 
-/** Host bindings shared by the built-in bars. */
+/**
+ * Host bindings shared by the built-in bars. The role, accessible name, role description,
+ * selection and position in the set are stamped by the bar outlet on every bar, custom ones too.
+ */
 export const BUILTIN_BAR_HOST = {
   '[attr.data-task-id]': 'ctx().row.task.id',
   '[attr.data-bar-type]': 'ctx().row.barType',
-  role: 'listitem',
-  '[attr.aria-label]': 'ariaLabel()',
-  '[class.gantt-bar-draggable]': 'ctx().draggable !== false',
-  '[class]': "ctx().row.task.className ?? ''",
+  // The whole class attribute, in the Web Component's order (`gantt-bar` first)
+  '[attr.class]': 'barClass()',
 };

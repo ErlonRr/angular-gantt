@@ -19,10 +19,14 @@
 //  as pages load. Paging, resets, errors and retries come from the
 //  framework-free `PagedLoader` in @gantryjs/core (shared with the Web
 //  Component); this class only exposes its state as signals.
+//
+//  `ɵsubscribe` (private API) hands the chart every load-state change as
+//  it happens (previous → next snapshot), so the live-region announcement
+//  never depends on when an effect gets to read the signals.
 // ─────────────────────────────────────────────────────────────
 
-import { signal, computed, type Signal } from '@angular/core';
-import { PagedLoader } from '@gantryjs/core';
+import { signal, computed, untracked, type Signal } from '@angular/core';
+import { PagedLoader, type LoadStateSnapshot } from '@gantryjs/core';
 
 import { type GanttTask } from '../types';
 
@@ -63,6 +67,10 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
   private readonly _version = signal(0);
   /** Static items (`data`, or `setStatic()` without a fetcher) */
   private readonly _static = signal<T[]>([]);
+  /** `ɵsubscribe` listeners */
+  private readonly _listeners = new Set<(prev: LoadStateSnapshot, next: LoadStateSnapshot) => void>();
+  /** Load state after the last change (`ɵsubscribe`'s previous snapshot) */
+  private _state: LoadStateSnapshot;
 
   // ── Public API signals ──────────────────────────────────────
 
@@ -99,6 +107,7 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
       this.page = signal(0).asReadonly();
       this.nextPage = signal(1).asReadonly();
       this.error = signal<unknown>(null).asReadonly();
+      this._state = this._snapshot();
       return;
     }
 
@@ -110,7 +119,11 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
       retryDelay: config.retryDelay,
     });
     this._loader = loader;
-    loader.subscribe(() => this._version.update(v => v + 1));
+    this._state = this._snapshot();
+    loader.subscribe(() => {
+      this._version.update(v => v + 1);
+      this._notify();
+    });
 
     const read = <R>(get: () => R): Signal<R> =>
       computed(() => {
@@ -154,7 +167,44 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
    */
   setStatic(items: T[]): void {
     if (this._loader) this._loader.replace(items);
-    else this._static.set(items);
+    else {
+      this._static.set(items);
+      this._notify();
+    }
+  }
+
+  /**
+   * ɵ — private API, not covered by semver: the chart's load-state announcement. `listener` runs
+   * synchronously on every change of the items, the loading flag, `hasMore` or the error, with the
+   * load state before and after that change. Returns the function that unsubscribes it.
+   */
+  ɵsubscribe(listener: (prev: LoadStateSnapshot, next: LoadStateSnapshot) => void): () => void {
+    this._listeners.add(listener);
+    return () => {
+      this._listeners.delete(listener);
+    };
+  }
+
+  /** The load state now, read from the loader (or the static items) without tracking any signal. */
+  private _snapshot(): LoadStateSnapshot {
+    const loader = this._loader;
+    if (!loader) {
+      return { isLoading: false, hasMore: false, error: null, loadedCount: untracked(this._static).length };
+    }
+    return {
+      isLoading: loader.isLoading,
+      hasMore: loader.hasMore,
+      error: loader.error,
+      loadedCount: loader.loadedCount,
+    };
+  }
+
+  /** Hands the change from the last known state to the current one to every listener. */
+  private _notify(): void {
+    const prev = this._state;
+    const next = this._snapshot();
+    this._state = next;
+    for (const listener of [...this._listeners]) listener(prev, next);
   }
 }
 

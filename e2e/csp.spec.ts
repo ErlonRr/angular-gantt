@@ -126,19 +126,26 @@ test.describe('strict CSP + Trusted Types', () => {
     const bar = await visibleBar(chart);
     await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
     await expect(chart.get('.gantt-tooltip')).toBeVisible();
-    // Resize cursor over the bar's right handle: a data attribute + stylesheet rule
+    // Cursors from the bar part under the pointer: a data attribute + stylesheet rule (resize on
+    // the handles, grab on the body, Angular's hover cursors)
     await page.mouse.move(bar.x + bar.width - 2, bar.y + bar.height / 2);
     await expect(chart.get('.gantry-canvas-container')).toHaveAttribute('data-cursor', 'ew-resize');
     await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
-    await expect(chart.get('.gantry-canvas-container')).not.toHaveAttribute('data-cursor', /./);
+    await expect(chart.get('.gantry-canvas-container')).toHaveAttribute('data-cursor', 'grab');
+    await expect
+      .poll(() => chart.get('.gantry-canvas-container').evaluate(el => getComputedStyle(el).cursor))
+      .toBe('grab');
     // Leave the canvas: the tooltip hides
     await page.mouse.move(4, 4);
     await expect(chart.get('.gantt-tooltip')).toBeHidden();
 
-    // Drag a bar (ghost, movement label, dimmed bar)
+    // Drag a bar (ghost, movement label, dimmed bar). A mouse press drags once it has moved 3 px:
+    // a press that moves less is a click and drags nothing
     const grab = { x: bar.x + Math.min(20, bar.width / 3), y: bar.y + bar.height / 2 };
     await page.mouse.move(grab.x, grab.y);
     await page.mouse.down();
+    await page.mouse.move(grab.x + 2, grab.y);
+    await expect(chart.get('.gantt-drag-preview')).toHaveCount(0);
     await page.mouse.move(grab.x + 60, grab.y, { steps: 6 });
     await expect(chart.get('.gantt-drag-preview')).toHaveCount(1);
     await page.mouse.up();
@@ -255,6 +262,49 @@ test.describe('strict CSP + Trusted Types', () => {
     await page.mouse.up();
     await expect.poll(() => width(chart, chart.panel())).toBeGreaterThan(panelWidth + 30);
 
+    await frames(page);
+    expect(await violations(page)).toEqual([]);
+  });
+});
+
+test.describe('zoom gestures under the strict CSP', () => {
+  test('Ctrl + wheel zooms at the pointer: the date under it stays, the page does not zoom', async ({
+    page,
+    chart,
+  }) => {
+    await withPolicy(page);
+    await page.goto(URL);
+    await expect(chart.get(SEL.row).first()).toBeVisible();
+    await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeAttached();
+    await frames(page);
+    const host = chart.host();
+    const viewMode = () => host.evaluate(el => (el as HTMLElement & { viewMode: string }).viewMode);
+    const before = await viewMode();
+    const pageZoom = () =>
+      page.evaluate(() => [window.devicePixelRatio, window.innerWidth, window.visualViewport?.scale]);
+    const zoom0 = await pageZoom();
+
+    // The pointer on a bar, a third of the way in: that point of the bar stays under the pointer
+    const bar = await visibleBar(chart);
+    const at = { x: bar.x + bar.width / 3, y: bar.y + bar.height / 2 };
+    const body = chart.get(`.gantt-bars-layer [data-task-id="${bar.id}"] .gantt-bar-body`);
+    await page.mouse.move(at.x, at.y);
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, -100);
+    await page.keyboard.up('Control');
+    await expect.poll(viewMode).not.toBe(before);
+    await frames(page);
+    const zoomed = await chart.box(body);
+    expect(zoomed.width).toBeGreaterThan(bar.width);
+    expect(Math.abs(zoomed.x + zoomed.width / 3 - at.x)).toBeLessThanOrEqual(3);
+    // The wheel was the chart's: no page zoom
+    expect(await pageZoom()).toEqual(zoom0);
+
+    // And back out
+    await page.keyboard.down('Control');
+    await page.mouse.wheel(0, 100);
+    await page.keyboard.up('Control');
+    await expect.poll(viewMode).toBe(before);
     await frames(page);
     expect(await violations(page)).toEqual([]);
   });

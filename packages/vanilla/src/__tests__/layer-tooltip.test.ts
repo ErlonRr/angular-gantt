@@ -1,9 +1,21 @@
-// The tooltip layer (Gantry 2 phase 6, step 2.4): one popover built once, its `<dl>` rows written
-// through textContent and keyed by kind, the critical path as a class, progress and position
-// through the CSSOM, and both timers cleared on hide() / destroy(). The layer is driven directly
-// (as `interaction/canvas-pointer.ts` does), so these tests never depend on the bar painter.
+// The tooltip layer (Gantry 2 phase 6 step 2.4, Phase 9 step 4.4): one popover built once, its
+// `<dl>` rows written through textContent and keyed by kind, the critical path as a class and the
+// progress through the CSSOM; opened and closed by core's tooltip machine (`reduceTooltip`, with
+// the resolved `options.tooltip`), anchored to its bar by core `placeTooltip` (one measurement per
+// opening), `aria-describedby` on that bar while it shows, custom content from
+// `options.tooltip.render`, one timer cleared on hide() / destroy(). The layer is driven directly
+// (as `interaction/canvas-pointer.ts` and `interaction/tooltip-triggers.ts` do).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DEFAULT_LABELS, TaskType, themeVar, type GanttFlatRow, type GanttTask } from '@gantryjs/core';
+import {
+  DEFAULT_LABELS,
+  TaskType,
+  placeTooltip,
+  themeVar,
+  type GanttFlatRow,
+  type GanttOptions,
+  type GanttTask,
+  type GanttTooltipRenderContext,
+} from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { TOOLTIP_HIDE_DELAY, TOOLTIP_SHOW_DELAY } from '../layers/tooltip';
@@ -39,19 +51,22 @@ const rowOf = (el: GantryElement, id: string): GanttFlatRow =>
   getEngine(el)
     .graph.allRows.peek()
     .find(r => r.task.id === id)!;
-const at = (x: number, y: number) => new PointerEvent('pointermove', { clientX: x, clientY: y });
+const barOf = (el: GantryElement, id: string) =>
+  el.shadowRoot!.querySelector<SVGGElement>(`.gantt-bars-layer [data-task-id="${id}"]`)!;
 
-/** Hovers `id`'s bar and waits for the tooltip to open. */
-function open(el: GantryElement, id: string, x = 100, y = 100): HTMLElement {
-  layerOf(el).enter(rowOf(el, id), at(x, y));
+/** Hovers `id`'s bar at `x` and waits for the tooltip to open. */
+function open(el: GantryElement, id: string, x = 100): HTMLElement {
+  layerOf(el).hover(rowOf(el, id), barOf(el, id), x);
   vi.advanceTimersByTime(TOOLTIP_SHOW_DELAY);
   return tipOf(el);
 }
 
 const texts = (tip: HTMLElement, sel: string) => [...tip.querySelectorAll(sel)].map(n => n.textContent);
+const children = (tip: HTMLElement) => [...tip.children].map(c => `${c.tagName.toLowerCase()}.${c.className}`);
 
 describe('tooltip layer', () => {
   let el: GantryElement;
+  let other: GantryElement | undefined;
 
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -59,10 +74,13 @@ describe('tooltip layer', () => {
   });
   afterEach(() => {
     el?.remove();
+    other?.remove();
+    other = undefined;
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it('builds one hidden popover once, with a title and a <dl>', () => {
+  it('builds one hidden popover once, with its own id, a title and a <dl>', () => {
     el = mount({ tasks: PLAN() });
     const tips = el.shadowRoot!.querySelectorAll('.gantt-tooltip');
     expect(tips).toHaveLength(1);
@@ -70,11 +88,11 @@ describe('tooltip layer', () => {
     expect(tip.tagName).toBe('DIV');
     expect(tip.getAttribute('popover')).toBe('manual');
     expect(tip.getAttribute('role')).toBe('tooltip');
+    expect(tip.id).toMatch(/^gantt-tooltip-\d+$/);
     expect(tip.hidden).toBe(true);
-    expect([...tip.children].map(c => `${c.tagName.toLowerCase()}.${c.className}`)).toEqual([
-      'div.gantt-tooltip-title',
-      'dl.gantt-tooltip-rows',
-    ]);
+    expect(children(tip)).toEqual(['div.gantt-tooltip-title', 'dl.gantt-tooltip-rows']);
+    other = mount({ tasks: PLAN() });
+    expect(tipOf(other).id).not.toBe(tip.id);
 
     const title = tip.querySelector('.gantt-tooltip-title');
     const list = tip.querySelector('dl');
@@ -88,10 +106,10 @@ describe('tooltip layer', () => {
     expect(tip.querySelector('dl')).toBe(list);
   });
 
-  it('opens after the hover delay and lists the model rows as dt / dd text', () => {
+  it('opens after the show delay and lists the model rows as dt / dd text', () => {
     el = mount({ tasks: PLAN() });
     const tip = tipOf(el);
-    layerOf(el).enter(rowOf(el, 'a'), at(100, 100));
+    layerOf(el).hover(rowOf(el, 'a'), barOf(el, 'a'), 100);
     vi.advanceTimersByTime(TOOLTIP_SHOW_DELAY - 1);
     expect(tip.hidden).toBe(true);
     vi.advanceTimersByTime(1);
@@ -114,18 +132,43 @@ describe('tooltip layer', () => {
     expect(tip.querySelector('.gantt-tooltip-row--progress dt')!.textContent).toBe(DEFAULT_LABELS.ttProgress);
   });
 
+  it('takes its delays from options.tooltip, and the hover intent restarts the show delay', () => {
+    el = mount({ tasks: PLAN(), options: { tooltip: { showDelay: 100, hideDelay: 40 } } });
+    const layer = layerOf(el);
+    const tip = tipOf(el);
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 100);
+    vi.advanceTimersByTime(80);
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 110); // still moving over the bar
+    vi.advanceTimersByTime(80);
+    expect(tip.hidden).toBe(true);
+    vi.advanceTimersByTime(20);
+    expect(tip.hidden).toBe(false);
+    layer.unhover();
+    vi.advanceTimersByTime(39);
+    expect(tip.hidden).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(tip.hidden).toBe(true);
+
+    // A zero delay opens at once
+    el.options = { tooltip: { showDelay: 0 } };
+    flush(el);
+    layer.hover(rowOf(el, 'b'), barOf(el, 'b'), 100);
+    expect(tip.hidden).toBe(false);
+  });
+
   it('keeps row nodes from one task to the next (keyed by kind) and drops the rows a task lacks', () => {
     el = mount({ tasks: PLAN() });
     const tip = open(el, 'a');
     const firstDate = tip.querySelector('dl > div')!;
     expect(tip.querySelectorAll('dl > div')).toHaveLength(5);
 
-    open(el, 'm');
+    // Another bar while it shows: switches at once
+    layerOf(el).hover(rowOf(el, 'm'), barOf(el, 'm'), 100);
     expect(texts(tip, 'dl > div > dt')).toEqual([DEFAULT_LABELS.ttMilestone]);
     expect(tip.querySelector('dl > div')).toBe(firstDate);
     expect(tip.querySelector('.gantt-tooltip-fill')).toBeNull();
 
-    open(el, 'c');
+    layerOf(el).hover(rowOf(el, 'c'), barOf(el, 'c'), 100);
     expect(tip.querySelector('dl > div')).toBe(firstDate);
     expect(tip.querySelectorAll('dl > div')).toHaveLength(4);
   });
@@ -153,7 +196,7 @@ describe('tooltip layer', () => {
     expect(fill.style.getPropertyValue('background-color')).toBe(themeVar('criticalColor'));
     expect(fill.style.getPropertyValue('width')).toBe('');
 
-    open(el, 'c');
+    layerOf(el).hover(rowOf(el, 'c'), barOf(el, 'c'), 100);
     expect(tip.classList.contains('gantt-tooltip--critical')).toBe(false);
     fill = tip.querySelector<HTMLElement>('.gantt-tooltip-fill')!;
     expect(fill.style.getPropertyValue('--gantt-tt-progress')).toBe('25');
@@ -162,47 +205,173 @@ describe('tooltip layer', () => {
     expect(TOOLTIP_CSS).toContain('inline-size: calc(var(--gantt-tt-progress, 0) * 1%)');
   });
 
-  it('follows the pointer with a CSSOM translate and flips at the viewport edges', () => {
+  it('sits by its bar (core placeTooltip): on the pointer while hovering, centred on focus; one measurement per opening', () => {
     el = mount({ tasks: PLAN() });
     const tip = tipOf(el);
     const measure = vi.spyOn(tip, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 200, 100));
-    open(el, 'a', 100, 100);
-    expect(tip.style.getPropertyValue('translate')).toBe('112px 108px');
+    const box = new DOMRect(300, 120, 240, 24);
+    const anchor = vi.spyOn(barOf(el, 'a'), 'getBoundingClientRect').mockReturnValue(box);
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const size = { width: 200, height: 100 };
 
-    const x = window.innerWidth - 50;
-    const y = window.innerHeight - 20;
-    layerOf(el).move(at(x, y));
-    expect(tip.style.getPropertyValue('translate')).toBe(`${x - 200 - 12}px ${y - 100 - 8}px`);
-    // Never closer than 8px to the top-left corner
-    layerOf(el).move(at(-40, -40));
-    expect(tip.style.getPropertyValue('translate')).toBe('8px 8px');
-    // Measured once when it opened, not on every move
+    open(el, 'a', 500);
+    const hovered = placeTooltip({ anchor: box, pointerX: 500, size, viewport });
+    expect(tip.style.getPropertyValue('translate')).toBe(`${hovered.x}px ${hovered.y}px`);
+    expect(hovered.y).toBe(120 + 24 + 8); // below the bar
+    // Moving over the same bar does not move it, nor measure again
+    layerOf(el).hover(rowOf(el, 'a'), barOf(el, 'a'), 320);
+    expect(tip.style.getPropertyValue('translate')).toBe(`${hovered.x}px ${hovered.y}px`);
     expect(measure).toHaveBeenCalledTimes(1);
+
+    // Keyboard focus: centred on the bar, at once
+    layerOf(el).hide();
+    layerOf(el).focus(rowOf(el, 'a'), barOf(el, 'a'));
+    const focused = placeTooltip({ anchor: box, size, viewport });
+    expect(tip.style.getPropertyValue('translate')).toBe(`${focused.x}px ${focused.y}px`);
+    expect(focused.x).toBe(300 + 120 - 100);
+    expect(measure).toHaveBeenCalledTimes(2);
+
+    // A scroll re-reads the bar only
+    anchor.mockReturnValue(new DOMRect(300, 60, 240, 24));
+    layerOf(el).reposition();
+    expect(tip.style.getPropertyValue('translate')).toBe(`${focused.x}px ${60 + 24 + 8}px`);
+    expect(measure).toHaveBeenCalledTimes(2);
     for (const prop of ['left', 'top', 'display']) expect(tip.style.getPropertyValue(prop)).toBe('');
   });
 
-  it('hides after the leave delay unless the pointer comes back', () => {
+  it('describes its bar while it shows: aria-describedby follows the open tooltip', () => {
+    el = mount({ tasks: PLAN() });
+    const tip = tipOf(el);
+    const [a, b] = [barOf(el, 'a'), barOf(el, 'b')];
+    expect(a.hasAttribute('aria-describedby')).toBe(false);
+    layerOf(el).hover(rowOf(el, 'a'), a, 100);
+    expect(a.hasAttribute('aria-describedby')).toBe(false); // still waiting for the show delay
+    vi.advanceTimersByTime(TOOLTIP_SHOW_DELAY);
+    expect(a.getAttribute('aria-describedby')).toBe(tip.id);
+    layerOf(el).hover(rowOf(el, 'b'), b, 100);
+    expect(a.hasAttribute('aria-describedby')).toBe(false);
+    expect(b.getAttribute('aria-describedby')).toBe(tip.id);
+    // Closing (after the hide delay) removes it
+    layerOf(el).unhover();
+    expect(b.getAttribute('aria-describedby')).toBe(tip.id);
+    vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY);
+    expect(b.hasAttribute('aria-describedby')).toBe(false);
+    // A child of the bar anchors to the bar itself
+    layerOf(el).focus(rowOf(el, 'a'), a.firstElementChild!);
+    expect(a.getAttribute('aria-describedby')).toBe(tip.id);
+    expect(layerOf(el).visibleId()).toBe('a');
+    layerOf(el).dismiss();
+    expect(a.hasAttribute('aria-describedby')).toBe(false);
+    expect(layerOf(el).visibleId()).toBeNull();
+  });
+
+  it('stays open while the pointer rests on it, and closes after the hide delay once it leaves', () => {
     el = mount({ tasks: PLAN() });
     const layer = layerOf(el);
     const tip = open(el, 'a');
-    layer.leave();
+    layer.unhover();
+    vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY - 1);
+    layer.enterTooltip();
+    vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY * 5);
+    expect(tip.hidden).toBe(false);
+    layer.leaveTooltip();
     vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY - 1);
     expect(tip.hidden).toBe(false);
-    layer.enter(rowOf(el, 'a'), at(100, 100));
-    vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY + TOOLTIP_SHOW_DELAY);
+    // Back on the bar before the deadline: it stays
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 100);
+    vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY * 2);
     expect(tip.hidden).toBe(false);
-    layer.leave();
-    layer.leave();
+    layer.unhover();
+    layer.unhover(); // a second move off the bars keeps the first deadline
     vi.advanceTimersByTime(TOOLTIP_HIDE_DELAY);
+    expect(tip.hidden).toBe(true);
+    expect(TOOLTIP_CSS).toMatch(/\.gantt-tooltip \{[^}]*pointer-events: auto/);
+  });
+
+  it('follows options.tooltip.trigger: hover only, focus only, and taps only with auto', () => {
+    const at = (trigger: NonNullable<GanttOptions['tooltip']>['trigger']) => {
+      el?.remove();
+      el = mount({ tasks: PLAN(), options: { tooltip: { trigger } } });
+      return { layer: layerOf(el), tip: tipOf(el) };
+    };
+    let { layer, tip } = at('hover');
+    layer.focus(rowOf(el, 'a'), barOf(el, 'a'));
+    layer.tap(rowOf(el, 'a'), barOf(el, 'a'));
+    expect(tip.hidden).toBe(true);
+    open(el, 'a');
+    expect(tip.hidden).toBe(false);
+
+    ({ layer, tip } = at('focus'));
+    open(el, 'a');
+    layer.tap(rowOf(el, 'a'), barOf(el, 'a'));
+    expect(tip.hidden).toBe(true);
+    layer.focus(rowOf(el, 'a'), barOf(el, 'a'));
+    expect(tip.hidden).toBe(false);
+
+    ({ layer, tip } = at('auto'));
+    layer.tap(rowOf(el, 'a'), barOf(el, 'a'));
+    expect(tip.hidden).toBe(false);
+    // A tapped tooltip stays until another tap
+    vi.advanceTimersByTime(10_000);
+    expect(tip.hidden).toBe(false);
+    layer.tap(rowOf(el, 'a'), barOf(el, 'a'));
     expect(tip.hidden).toBe(true);
   });
 
-  it('clears both timers on hide() and destroy()', () => {
+  it('shows options.tooltip.render content instead of the title and rows: text or a DOM node', () => {
+    const render = vi.fn((ctx: GanttTooltipRenderContext): unknown => {
+      if (ctx.task.id === 'a') return `<b>${ctx.task.name}</b>`;
+      if (ctx.task.id === 'b') {
+        const node = document.createElement('strong');
+        node.textContent = 'B!';
+        return node;
+      }
+      return null; // the built-in content
+    });
+    el = mount({ tasks: PLAN(), options: { tooltip: { render } } });
+    const tip = open(el, 'a');
+    expect(children(tip)).toEqual(['div.gantt-tooltip-custom']);
+    const custom = tip.querySelector('.gantt-tooltip-custom')!;
+    expect(custom.textContent).toBe('<b>Task a</b>');
+    expect(custom.querySelector('b')).toBeNull();
+    const ctx = render.mock.calls[0][0];
+    expect(ctx.model.title).toBe('Task a');
+    expect(ctx.row).toBe(rowOf(el, 'a'));
+
+    layerOf(el).hover(rowOf(el, 'b'), barOf(el, 'b'), 100);
+    expect(custom.children).toHaveLength(1);
+    expect(custom.firstElementChild!.tagName).toBe('STRONG');
+    expect(custom.textContent).toBe('B!');
+
+    layerOf(el).hover(rowOf(el, 'c'), barOf(el, 'c'), 100);
+    expect(children(tip)).toEqual(['div.gantt-tooltip-title', 'dl.gantt-tooltip-rows']);
+    expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task c');
+  });
+
+  it('falls back to the built-in content when render throws', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    el = mount({
+      tasks: PLAN(),
+      options: {
+        tooltip: {
+          render: () => {
+            throw new Error('boom');
+          },
+        },
+      },
+    });
+    const tip = open(el, 'a');
+    expect(children(tip)).toEqual(['div.gantt-tooltip-title', 'dl.gantt-tooltip-rows']);
+    expect(error).toHaveBeenCalledWith('[gantry] tooltip render error:', expect.any(Error));
+  });
+
+  it('keeps one timer, cleared on hide() and destroy()', () => {
     el = mount({ tasks: PLAN() });
     const layer = layerOf(el);
     const idle = vi.getTimerCount();
 
-    layer.enter(rowOf(el, 'a'), at(10, 10));
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 10);
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 20);
     expect(vi.getTimerCount()).toBe(idle + 1);
     layer.hide();
     expect(vi.getTimerCount()).toBe(idle);
@@ -210,24 +379,23 @@ describe('tooltip layer', () => {
     expect(tipOf(el).hidden).toBe(true);
 
     open(el, 'a');
-    layer.leave();
+    expect(vi.getTimerCount()).toBe(idle);
+    layer.unhover();
     expect(vi.getTimerCount()).toBe(idle + 1);
     layer.hide();
     expect(vi.getTimerCount()).toBe(idle);
     expect(tipOf(el).hidden).toBe(true);
 
     open(el, 'a');
-    layer.leave();
-    layer.enter(rowOf(el, 'b'), at(10, 10));
+    layer.unhover();
     const tip = tipOf(el);
     layer.destroy();
     expect(vi.getTimerCount()).toBe(idle);
     expect(tip.isConnected).toBe(false);
     expect(tip.hidden).toBe(true);
     // A destroyed layer ignores the pointer
-    layer.enter(rowOf(el, 'a'), at(10, 10));
-    layer.move(at(20, 20));
-    layer.leave();
+    layer.hover(rowOf(el, 'a'), barOf(el, 'a'), 10);
+    layer.unhover();
     expect(vi.getTimerCount()).toBe(idle);
   });
 
@@ -251,9 +419,13 @@ describe('tooltip layer', () => {
     const tip = open(el, 'a');
     el.tooltipEnabled = false;
     expect(tip.hidden).toBe(true);
+    expect(barOf(el, 'a').hasAttribute('aria-describedby')).toBe(false);
+    // Off: nothing opens
+    layerOf(el).focus(rowOf(el, 'a'), barOf(el, 'a'));
+    expect(tip.hidden).toBe(true);
     // Disabled while a show was pending: it never opens
     el.tooltipEnabled = true;
-    layerOf(el).enter(rowOf(el, 'a'), at(10, 10));
+    layerOf(el).hover(rowOf(el, 'a'), barOf(el, 'a'), 10);
     el.tooltipEnabled = false;
     vi.advanceTimersByTime(TOOLTIP_SHOW_DELAY);
     expect(tip.hidden).toBe(true);
@@ -261,7 +433,7 @@ describe('tooltip layer', () => {
     el.tooltipEnabled = true;
     open(el, 'a');
     const idle = vi.getTimerCount();
-    layerOf(el).leave();
+    layerOf(el).unhover();
     el.remove();
     expect(tip.hidden).toBe(true);
     expect(vi.getTimerCount()).toBe(idle);
@@ -272,8 +444,8 @@ describe('tooltip layer', () => {
     const { regionRuns } = getEngine(el);
     const before = { ...regionRuns };
     open(el, 'a');
-    layerOf(el).move(at(300, 200));
-    open(el, 'm');
+    layerOf(el).reposition();
+    layerOf(el).hover(rowOf(el, 'm'), barOf(el, 'm'), 300);
     layerOf(el).hide();
     flush(el);
     expect(regionRuns).toEqual(before);

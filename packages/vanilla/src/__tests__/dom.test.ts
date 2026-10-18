@@ -2,6 +2,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { h, s, SVG_NS } from '../dom/h';
 import { setAttr, setStyleProp, setText, toggleClass, forgetPatches } from '../dom/patch';
 import { reconcile, createPool } from '../dom/keyed';
+import { toolbarIcon } from '../dom/icons';
+import {
+  TOOLBAR_ICON_SIZE,
+  TOOLBAR_ICON_STROKE,
+  TOOLBAR_ICON_VIEWBOX,
+  TOOLBAR_ICONS,
+  type ToolbarIcon,
+} from '@gantryjs/core';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -409,5 +417,44 @@ describe('createPool()', () => {
     expect(pool.size()).toBe(0);
     pool.acquire();
     expect(create).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('toolbarIcon()', () => {
+  it('builds every core toolbar icon as SVG nodes: one path per entry, stroke geometry, no colours', () => {
+    const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')!;
+    const set = vi.fn();
+    Object.defineProperty(Element.prototype, 'innerHTML', { ...desc, set });
+    try {
+      for (const icon of Object.keys(TOOLBAR_ICONS) as ToolbarIcon[]) {
+        const svg = toolbarIcon(icon);
+        expect(svg.namespaceURI).toBe(SVG_NS);
+        expect(svg.getAttribute('class')).toBe('gantt-tb-icon');
+        expect(svg.getAttribute('viewBox')).toBe(TOOLBAR_ICON_VIEWBOX);
+        expect(svg.getAttribute('width')).toBe(String(TOOLBAR_ICON_SIZE));
+        expect(svg.getAttribute('height')).toBe(String(TOOLBAR_ICON_SIZE));
+        expect(svg.getAttribute('aria-hidden')).toBe('true');
+        expect(svg.getAttribute('focusable')).toBe('false');
+        expect(svg.getAttribute('stroke-width')).toBe(String(TOOLBAR_ICON_STROKE.width));
+        expect(svg.getAttribute('stroke-linecap')).toBe(TOOLBAR_ICON_STROKE.linecap);
+        expect(svg.getAttribute('stroke-linejoin')).toBe(TOOLBAR_ICON_STROKE.linejoin);
+        const paths = [...svg.children];
+        expect(paths.map(p => p.namespaceURI === SVG_NS && p.tagName)).toEqual(TOOLBAR_ICONS[icon].map(() => 'path'));
+        expect(paths.map(p => p.getAttribute('d'))).toEqual(TOOLBAR_ICONS[icon]);
+        // Colours come from the stylesheet (currentColor), never from presentation attributes
+        for (const node of [svg, ...paths]) {
+          expect(node.hasAttribute('fill')).toBe(false);
+          expect(node.hasAttribute('stroke')).toBe(false);
+          expect(node.hasAttribute('style')).toBe(false);
+        }
+      }
+      expect(set).not.toHaveBeenCalled();
+    } finally {
+      Object.defineProperty(Element.prototype, 'innerHTML', desc);
+    }
+  });
+
+  it('builds a new node each call', () => {
+    expect(toolbarIcon('fit')).not.toBe(toolbarIcon('fit'));
   });
 });

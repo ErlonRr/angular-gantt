@@ -1,7 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_LABELS, DependencyType, TaskType, type GanttTask } from '../types';
 import { formatDate } from '../gantt-math';
-import { baselineVarianceDays, buildTooltipModel, type TooltipInput } from '../state/tooltip';
+import {
+  TOOLTIP_EDGE,
+  TOOLTIP_GAP,
+  baselineVarianceDays,
+  buildTooltipModel,
+  placeTooltip,
+  type TooltipInput,
+  type TooltipPlacementInput,
+} from '../state/tooltip';
 
 const FMT = 'MMM D, YYYY';
 const exclusive = { endDateMode: 'exclusive', normalizeDateOnly: true } as const;
@@ -276,5 +284,88 @@ describe('buildTooltipModel', () => {
   it('is pure: the same input gives the same model', () => {
     const i = input({ criticalIds: new Set(['a']) });
     expect(buildTooltipModel(i)).toEqual(buildTooltipModel(i));
+  });
+});
+
+describe('placeTooltip', () => {
+  const viewport = { width: 1000, height: 800 };
+  const size = { width: 160, height: 80 };
+  const bar = { left: 100, top: 50, width: 200, height: 20 };
+  const place = (over: Partial<TooltipPlacementInput> = {}) => placeTooltip({ anchor: bar, size, viewport, ...over });
+
+  it('shares the gap and edge constants', () => {
+    expect(TOOLTIP_GAP).toBe(8);
+    expect(TOOLTIP_EDGE).toBe(8);
+  });
+
+  it('goes below the bar, centred on it (focus, tap)', () => {
+    expect(place()).toEqual({ x: 200 - 80, y: 50 + 20 + 8, side: 'below' });
+  });
+
+  it('centres on the pointer while hovering, kept within the bar', () => {
+    expect(place({ pointerX: 150 }).x).toBe(150 - 80);
+    expect(place({ pointerX: 900 }).x).toBe(300 - 80);
+    expect(place({ pointerX: 20 }).x).toBe(100 - 80);
+    expect(place({ pointerX: Number.NaN }).x).toBe(200 - 80);
+  });
+
+  it('flips above the bar when it would cross the bottom edge', () => {
+    const anchor = { left: 100, top: 700, width: 200, height: 20 };
+    expect(place({ anchor })).toEqual({ x: 120, y: 700 - 8 - 80, side: 'above' });
+    // Exactly fits below: stays below
+    const fits = { left: 100, top: 800 - 8 - 80 - 8 - 20, width: 200, height: 20 };
+    expect(place({ anchor: fits }).side).toBe('below');
+  });
+
+  it('keeps the edge distance on the left and the right', () => {
+    expect(place({ anchor: { left: 0, top: 50, width: 20, height: 20 } }).x).toBe(TOOLTIP_EDGE);
+    expect(place({ anchor: { left: 980, top: 50, width: 20, height: 20 } }).x).toBe(1000 - 8 - 160);
+  });
+
+  it('centres on the visible part of a bar that reaches past the viewport', () => {
+    expect(place({ anchor: { left: -500, top: 50, width: 1000, height: 20 } }).x).toBe(250 - 80);
+    expect(place({ anchor: { left: 600, top: 50, width: 2000, height: 20 } }).x).toBe(800 - 80);
+  });
+
+  it('a bar entirely off screen still gives a tooltip inside the viewport', () => {
+    const p = place({ anchor: { left: -400, top: 50, width: 100, height: 20 } });
+    expect(p.x).toBe(TOOLTIP_EDGE);
+  });
+
+  it('fits on neither side: takes the roomier side and is clamped into the viewport', () => {
+    const tall = { width: 160, height: 500 };
+    const nearTop = placeTooltip({ anchor: { left: 100, top: 300, width: 200, height: 20 }, size: tall, viewport });
+    expect(nearTop.side).toBe('below');
+    expect(nearTop.y).toBe(800 - 8 - 500);
+    const nearBottom = placeTooltip({ anchor: { left: 100, top: 480, width: 200, height: 20 }, size: tall, viewport });
+    expect(nearBottom.side).toBe('above');
+    expect(nearBottom.y).toBe(TOOLTIP_EDGE);
+  });
+
+  it('larger than the viewport: sticks to the top-left edge', () => {
+    const p = placeTooltip({ anchor: bar, size: { width: 2000, height: 2000 }, viewport });
+    expect(p).toMatchObject({ x: TOOLTIP_EDGE, y: TOOLTIP_EDGE });
+  });
+
+  it('rounds to whole pixels', () => {
+    const p = place({ anchor: { left: 100.3, top: 50.4, width: 200.5, height: 20.2 } });
+    expect(Number.isInteger(p.x)).toBe(true);
+    expect(Number.isInteger(p.y)).toBe(true);
+    expect(p).toMatchObject({ x: Math.round(100.3 + 200.5 / 2 - 80), y: Math.round(50.4 + 20.2 + 8) });
+  });
+
+  it('takes a DOMRect-like box as is, and custom gap / edge', () => {
+    const rect = { x: 100, y: 50, left: 100, top: 50, right: 300, bottom: 70, width: 200, height: 20 };
+    expect(placeTooltip({ anchor: rect, size, viewport, gap: 4, edge: 16 })).toEqual({ x: 120, y: 74, side: 'below' });
+    expect(place({ anchor: { left: 0, top: 50, width: 20, height: 20 }, edge: 16 }).x).toBe(16);
+  });
+
+  it('covers the old pointer-following math: a point anchor is the pointer, 8 px below, flipped up at the bottom', () => {
+    const at = (x: number, y: number) =>
+      placeTooltip({ anchor: { left: x, top: y, width: 0, height: 0 }, size, viewport });
+    expect(at(400, 300).y).toBe(300 + 8);
+    expect(at(400, 760)).toMatchObject({ y: 760 - 80 - 8, side: 'above' });
+    expect(at(995, 300).x).toBe(1000 - 8 - 160);
+    expect(at(2, 300).x).toBe(TOOLTIP_EDGE);
   });
 });

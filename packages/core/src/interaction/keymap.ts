@@ -24,6 +24,11 @@
 //  Alt (and AltGr, which browsers report as Ctrl+Alt) disables every
 //  shortcut except Escape, so OS menus and typed characters win.
 //
+//  Bindings dispatch zoomIn / zoomOut / today / fit (`fitToScreen()`),
+//  selectAll and clearSelection / cancel from any area. undo / redo,
+//  link and delete resolve but have no action until Phase 11: leave
+//  the key's default action alone for them.
+//
 //  Left/right are logical: `move.left` is towards the inline start
 //  ("previous"), so in RTL ArrowLeft resolves to `move.right`.
 // ─────────────────────────────────────────────────────────────
@@ -75,6 +80,8 @@ export interface ResolveKeyOptions {
   /**
    * Single-character shortcuts (`+` `=` `-` `t` `f` `l`). Turn off when they clash with
    * assistive technology or typing (WCAG 2.1.4 Character Key Shortcuts). Default `true`.
+   * Bindings pass `resolveConfig().keyboard.characterShortcuts` (the resolved `keyboard` object
+   * itself is a valid `ResolveKeyOptions`).
    */
   characterShortcuts?: boolean | undefined;
   /**

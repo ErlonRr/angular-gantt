@@ -3,19 +3,25 @@
  * Scroll-commands region, after every painting region: scrolls the timeline for the model just
  * painted. A requested scroll (`scrollToDate`, `scrollToTask` made before the model was painted)
  * wins; otherwise the first render with data applies `initialScroll`; otherwise a new timeline
- * (zoom, new range start) keeps the date under the viewport's centre / left edge in place.
+ * keeps its place (core `anchoredScrollLeft`): a zoom keeps the date under the zoom anchor — the
+ * pointer's x for a Ctrl/⌘ + wheel or pinch zoom (`zoomAnchor`, written with the zoom by
+ * `interaction/zoom.ts`), the viewport's centre otherwise — and a new range start keeps the date
+ * at the left edge.
  *
  * Centring needs the viewport width the painted model produces (its scrollbars included), so
  * the initial scroll and a requested scroll read `clientWidth` once, after the painting
  * regions — like the tooltip, a D9 exception: it happens once per command, never on a scroll.
- * The zoom anchor uses the measured `canvasW`.
+ * The zoom anchoring uses the measured `canvasW`.
  *
- * The zoom anchor needs the scroll offset in the coordinates of the timeline painted so far:
+ * The anchoring needs the scroll offset in the coordinates of the timeline painted so far:
  * `captureAnchor` reads it at the start of the flush (host priority, before any region writes
- * the DOM), and only when the timeline changed — never on a plain scroll.
+ * the DOM), and only when the timeline changed — never on a plain scroll. `zoomAnchor` is read
+ * with `peek()` (an anchor alone repaints nothing) and serves one new timeline: once that is
+ * painted the anchor is cleared in a microtask, after the flush (a region never writes a signal
+ * while painting), so a later zoom from the options or a restored state keeps the centre.
  */
 
-import { initialScrollLeft, zoomAnchorScroll, type RowGeometry, type TimelineModel } from '@gantryjs/core';
+import { anchoredScrollLeft, initialScrollLeft, type RowGeometry, type TimelineModel } from '@gantryjs/core';
 import { scrollToX } from '../interaction/scroll';
 import type { Layer, LayerContext } from './context';
 
@@ -43,14 +49,19 @@ export function createScrollCommandsLayer(ctx: LayerContext): ScrollCommands {
 
   const sync = (tl: TimelineModel) => ({ inputs: I, maxLeft: tl.totalWidth - I.canvasW.peek() });
 
-  /** Keep the date at the viewport centre (zoom) or left edge (new range start) in place. */
+  /** Keep the date under the zoom anchor (zoom) or at the left edge (new range start) in place. */
   const keepAnchor = (tl: TimelineModel): void => {
-    const prev = painted;
-    if (!prev || prev === tl) return;
-    const zoomed = prev.pxPerDay !== tl.pxPerDay;
-    if (!zoomed && prev.start.getTime() === tl.start.getTime()) return;
-    const anchorX = zoomed ? I.canvasW.peek() / 2 : 0;
-    scrollToX(dom.viewport, zoomAnchorScroll(prev, tl, anchorLeft, anchorX), 'instant', sync(tl));
+    if (!painted) return;
+    const x = anchoredScrollLeft(painted, tl, anchorLeft, I.canvasW.peek(), I.zoomAnchor.peek());
+    if (x !== null) scrollToX(dom.viewport, x, 'instant', sync(tl));
+  };
+  /** The zoom anchor served the timeline just painted: cleared after the flush */
+  const releaseAnchor = (): void => {
+    const anchor = I.zoomAnchor.peek();
+    if (anchor === null) return;
+    queueMicrotask(() => {
+      if (I.zoomAnchor.peek() === anchor) I.zoomAnchor.set(null);
+    });
   };
 
   const isPending = (): boolean =>
@@ -95,7 +106,10 @@ export function createScrollCommandsLayer(ctx: LayerContext): ScrollCommands {
       } else if (view !== 'table') {
         keepAnchor(tl);
       }
-      if (view !== 'table') painted = tl;
+      if (view !== 'table') {
+        if (painted !== tl) releaseAnchor();
+        painted = tl;
+      }
     },
   };
 }

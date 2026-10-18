@@ -9,22 +9,48 @@
 //    │  (left)      │◄─────────►│  (right, scrolls X + Y)     │
 //    └──────────────┘           └─────────────────────────────┘
 //
-//  Technique: native `addEventListener('scroll', fn, {passive:true})`
-//  with a `requestAnimationFrame` gate — one write per frame,
-//  no debounce timeout, no Subject, no Observable.
-//
-//  The rAF gate prevents the "ping-pong" scroll feedback loop
-//  (panel A sets scrollTop → fires scroll on A → would set B again).
+//  Technique: native `addEventListener('scroll', fn, {passive:true})`;
+//  each scroll event mirrors the pane's vertical offset into the other
+//  pane at once, as the Web Component's `interaction/scroll.ts` does,
+//  through core `createScrollMirror`: the event that only echoes the
+//  mirror's own write is not mirrored back, so keyboard moves at
+//  key-repeat speed (each scrolls the timeline in its keydown) are never
+//  undone by the previous move's echo. Scroll events are dispatched once
+//  per frame per pane, so this writes at most once per frame.
 //
 //  Browser only: GantryComponent registers the panes after the first
 //  render (`afterNextRender`), so nothing here runs on the server. The
-//  window comes from `DOCUMENT` (no globals); listeners, the pending
-//  frame and the settle timeout are released with the chart.
+//  window comes from `DOCUMENT` (no globals); the listeners are released
+//  with the chart.
 //
 //  Timeline header is inside the same scroll element as the chart (see GantryComponent).
+//
+//  Auto-scroll while a bar is dragged near the viewport's left or right
+//  edge (D13 of Gantry 2 phase 9, the Web Component's
+//  `interaction/autoscroll.ts`): one core `autoScrollDelta` step per
+//  animation frame (up to `AUTO_SCROLL_MAX_STEP` px within
+//  `AUTO_SCROLL_EDGE` px of an edge, and beyond it). The viewport's box is
+//  measured once, when the drag starts; the loop runs only while the
+//  pointer is in an edge zone and the viewport can still scroll that way.
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, DestroyRef, inject, DOCUMENT } from '@angular/core';
+import { autoScrollDelta, createScrollMirror, type ScrollPane } from '@gantryjs/core';
+
+/** Auto-scroll of one drag (`GanttScrollService.autoScroll`) */
+export interface AutoScroll {
+  /** The pointer is at `clientX`: starts the loop when it is in an edge zone. */
+  update(clientX: number): void;
+  /** Stops the loop (the drag ended). */
+  stop(): void;
+}
+
+export interface AutoScrollOptions {
+  /** The largest `scrollLeft` (the model's scroll range: `totalWidth − viewport width`) */
+  readonly maxLeft: () => number;
+  /** Called after each step: the drag recomputes its preview (content coordinates) */
+  readonly onScroll: () => void;
+}
 
 @Injectable()
 export class GanttScrollService {
@@ -39,18 +65,11 @@ export class GanttScrollService {
   private _panel: HTMLElement | null = null;
   private _canvas: HTMLElement | null = null;
 
-  /** Pending frame (one per scroll burst) */
-  private _rafId: number | undefined;
+  /** Vertical mirroring of the two panes (core: ignores the echo of its own writes) */
+  private readonly _mirror = createScrollMirror();
 
   private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
-
-  constructor() {
-    this.destroyRef.onDestroy(() => {
-      this._cancelFrame();
-      clearTimeout(this._scrollTimeout);
-    });
-  }
 
   // ── Registration ──────────────────────────────────────────
 
@@ -60,7 +79,7 @@ export class GanttScrollService {
    */
   registerPanel(el: HTMLElement): void {
     this._panel = el;
-    this._listen(el, () => this._onPanelScroll());
+    this._listen(el, 'panel');
   }
 
   /**
@@ -69,80 +88,36 @@ export class GanttScrollService {
    */
   registerCanvas(el: HTMLElement): void {
     this._canvas = el;
-    this._listen(el, () => this._onCanvasScroll());
+    this._listen(el, 'timeline');
   }
 
-  // ── Listener setup ────────────────────────────────────────
+  // ── Scroll mirroring ──────────────────────────────────────
 
   /** A passive `scroll` listener, removed when the chart is destroyed */
-  private _listen(el: HTMLElement, handler: () => void): void {
+  private _listen(el: HTMLElement, pane: ScrollPane): void {
+    const handler = (): void => this._onScroll(pane);
     el.addEventListener('scroll', handler, { passive: true });
     this.destroyRef.onDestroy(() => el.removeEventListener('scroll', handler));
   }
 
-  /** Runs `write` on the next frame, replacing a frame still pending (no rAF: right away) */
-  private _frame(write: () => void): void {
-    this._cancelFrame();
-    const win = this.doc.defaultView;
-    if (typeof win?.requestAnimationFrame !== 'function') {
-      write();
-      return;
-    }
-    this._rafId = win.requestAnimationFrame(() => {
-      this._rafId = undefined;
-      write();
-    });
+  private _pane(pane: ScrollPane): HTMLElement | null {
+    return pane === 'timeline' ? this._canvas : this._panel;
   }
 
-  private _cancelFrame(): void {
-    if (this._rafId !== undefined) this.doc.defaultView?.cancelAnimationFrame(this._rafId);
-    this._rafId = undefined;
-  }
-
-  // ── Scroll handlers ───────────────────────────────────────
-
-  private _scrollSource: 'panel' | 'canvas' | null = null;
-  private _scrollTimeout?: ReturnType<typeof setTimeout>;
-
-  private _onPanelScroll(): void {
-    if (this._scrollSource === 'canvas') return;
-    this._scrollSource = 'panel';
-
-    const top = this._panel!.scrollTop;
-
-    this._frame(() => {
-      if (this._canvas && this._canvas.scrollTop !== top) {
-        this._canvas.scrollTop = top;
-      }
-      this.scrollTop.set(top);
-      this._settle();
-    });
-  }
-
-  private _onCanvasScroll(): void {
-    if (this._scrollSource === 'panel') return;
-    this._scrollSource = 'canvas';
-
-    const el = this._canvas!;
-    const top = el.scrollTop;
-    const left = el.scrollLeft;
-
-    this._frame(() => {
-      if (this._panel && this._panel.scrollTop !== top) {
-        this._panel.scrollTop = top;
-      }
-      this.scrollTop.set(top);
-      this.scrollLeft.set(left);
-      this._settle();
-    });
-  }
-
-  /** The mirrored write's own scroll event is ignored until the source settles */
-  private _settle(): void {
-    clearTimeout(this._scrollTimeout);
-    this._scrollTimeout = setTimeout(() => {
-      this._scrollSource = null;
-    }, 60);
+  /** `pane` scrolled: mirror its vertical offset into the other pane, then publish the timeline's offsets */
+  private _onScroll(pane: ScrollPane): void {
+    this._mirror.scrolled(
+      pane,
+      p => this._pane(p)?.scrollTop ?? 0,
+      (p, top) => {
+        const el = this._pane(p);
+        if (el) el.scrollTop = top;
+      },
+    );
+    const canvas = this._canvas;
+    if (!canvas) return;
+    this.scrollTop.set(canvas.scrollTop);
+    this.scrollLeft.set(canvas.scrollLeft);
   }
 
   // ── Programmatic scroll ───────────────────────────────────
@@ -154,6 +129,51 @@ export class GanttScrollService {
     this._canvas.scrollTo({ left: Math.max(0, x), behavior: b });
     // An instant scroll is applied synchronously: keep the offset current for anchoring
     if (b !== 'smooth') this.scrollLeft.set(this._canvas.scrollLeft);
+  }
+
+  /**
+   * Starts auto-scrolling the timeline for a drag (an event handler: measures the viewport's box
+   * now); its owner stops it when the drag ends or is cancelled (the canvas cancels a press when
+   * the chart is destroyed). Without a registered viewport or animation frames it does nothing.
+   */
+  autoScroll(opts: AutoScrollOptions): AutoScroll {
+    const scroller = this._canvas;
+    const win = this.doc.defaultView;
+    if (!scroller || typeof win?.requestAnimationFrame !== 'function') {
+      return { update: () => undefined, stop: () => undefined };
+    }
+    const box = scroller.getBoundingClientRect();
+    const start = box.left + scroller.clientLeft;
+    const end = start + scroller.clientWidth;
+    let x = Number.NaN;
+    let frame: number | null = null;
+
+    const tick = (): void => {
+      frame = null;
+      const delta = autoScrollDelta(x, start, end);
+      if (delta === 0) return;
+      const left = scroller.scrollLeft;
+      const max = Math.max(0, opts.maxLeft());
+      const next = Math.max(0, Math.min(max, left + delta));
+      // At the end of the range: wait for the pointer to move back
+      if (next === left) return;
+      // An instant jump: the windowed header and grid follow at once (no layout read)
+      scroller.scrollTo({ left: next, behavior: 'instant' });
+      this.scrollLeft.set(next);
+      opts.onScroll();
+      frame = win.requestAnimationFrame(tick);
+    };
+    const stop = (): void => {
+      if (frame !== null) win.cancelAnimationFrame(frame);
+      frame = null;
+    };
+    return {
+      update(clientX) {
+        x = clientX;
+        if (frame === null && autoScrollDelta(x, start, end) !== 0) frame = win.requestAnimationFrame(tick);
+      },
+      stop,
+    };
   }
 
   /** Current viewport width of the timeline. */

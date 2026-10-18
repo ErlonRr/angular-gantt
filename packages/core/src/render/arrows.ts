@@ -17,10 +17,17 @@ export interface ArrowVisual {
   /** `var(--gantt-critical)` on the critical path, else `arrows.color`, else `var(--gantt-arrow)` */
   paint: Paint;
   width: number;
+  /** The link has a lag or lead (drawn dashed) */
   dashed: boolean;
+  /** `stroke-dasharray` of the line: `ARROW_DASH` when `dashed`, else `null` */
+  dash: typeof ARROW_DASH | null;
   critical: boolean;
-  lagLabel: { text: string; x: number; y: number } | null;
+  /** "+2d" / "-1d" next to the vertical segment; `fontPx` is the chart font size − 2 */
+  lagLabel: { text: string; x: number; y: number; fontPx: number } | null;
 }
+
+/** Dash pattern of a link with a lag or lead. */
+export const ARROW_DASH = '5 3';
 
 type Pt = [number, number];
 
@@ -60,6 +67,8 @@ export function computeArrowVisual(
   cfg: ResolvedGanttConfig,
   rowBoundary: { fromTop: number; fromBottom: number },
   isCritical = false,
+  /** Chart font size (`themeMetrics(theme).fontPx`; default 12): the lag label is 2 px smaller */
+  fontPx = 12,
 ): ArrowVisual {
   const type = dep.type ?? DependencyType.FS;
   const lag = dep.lag ?? 0;
@@ -129,7 +138,11 @@ export function computeArrowVisual(
     paint: isCritical ? themeVar('criticalColor') : (cfg.arrows.color ?? themeVar('arrowColor')),
     width: isCritical ? width + 0.5 : width,
     dashed: lag !== 0,
+    dash: lag !== 0 ? ARROW_DASH : null,
     critical: isCritical,
-    lagLabel: lag && vertical ? { text: lag > 0 ? `+${lag}d` : `${lag}d`, x: vertical[0] + 4, y: (ey + ty) / 2 } : null,
+    lagLabel:
+      lag && vertical
+        ? { text: lag > 0 ? `+${lag}d` : `${lag}d`, x: vertical[0] + 4, y: (ey + ty) / 2, fontPx: fontPx - 2 }
+        : null,
   };
 }

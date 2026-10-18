@@ -145,12 +145,19 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
       }
       /* Keyboard focus only: an inset ring on the footer (the panel clips), an outer one on its buttons */
       :host(:focus-visible) {
-        outline: 2px solid var(--gantt-sel-border);
+        outline: 2px solid var(--gantt-focus-ring);
         outline-offset: -2px;
       }
       .gantt-load-more-btn:focus-visible {
-        outline: 2px solid var(--gantt-sel-border);
+        outline: 2px solid var(--gantt-focus-ring);
         outline-offset: 1px;
+      }
+      /* Forced colours (D25): the spinner's track GrayText, its arc Highlight */
+      @media (forced-colors: active) {
+        .gantt-spinner {
+          border-color: GrayText;
+          border-top-color: Highlight;
+        }
       }
     `,
   ],

@@ -16,7 +16,7 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   barColor: '#2563EB',
   barTextColor: '#FFFFFF',
   barRadius: '4px',
-  milestoneColor: '#8B5CF6',
+  milestoneColor: '#7C3AED',
   baselineColor: '#64748B',
   criticalColor: '#DC2626',
   panelBg: '#FFFFFF',
@@ -47,6 +47,7 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   statusOverdue: '#DC2626',
   statusDone: '#15803D',
   progressOverlay: '#000000',
+  focusRing: '#2563EB',
 };
 
 export const DarkTheme: Readonly<Required<GanttTheme>> = {
@@ -88,6 +89,7 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   statusOverdue: '#F87171',
   statusDone: '#4ADE80',
   progressOverlay: '#000000',
+  focusRing: '#60A5FA',
 };
 
 /**
@@ -97,12 +99,14 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
 export const LegacyLightTheme: Readonly<Required<GanttTheme>> = {
   ...LightTheme,
   barColor: '#3B82F6',
+  milestoneColor: '#8B5CF6',
   baselineColor: '#94A3B8',
   criticalColor: '#EF4444',
   todayColor: '#F59E0B',
   textMuted: '#94A3B8',
   arrowColor: '#3B82F6',
   selectionBorder: '#3B82F6',
+  focusRing: '#3B82F6',
 };
 
 export const LegacyDarkTheme: Readonly<Required<GanttTheme>> = {
@@ -163,6 +167,7 @@ export const THEME_CSS_VARS: ReadonlyArray<readonly [keyof GanttTheme, string]> 
   ['statusOverdue', '--gantt-status-overdue'],
   ['statusDone', '--gantt-status-done'],
   ['progressOverlay', '--gantt-progress-overlay'],
+  ['focusRing', '--gantt-focus-ring'],
 ];
 
 /** Parse a CSS length like `'4px'` / `'6'` to px (fallback when not numeric). */

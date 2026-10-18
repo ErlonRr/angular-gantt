@@ -12,7 +12,7 @@
  * persistent nodes and caches; `disconnect()` runs when the element leaves the document.
  */
 
-import type { GanttFlatRow, GanttView } from '@gantryjs/core';
+import type { Announcer, GanttFlatRow, GanttView } from '@gantryjs/core';
 import type { Graph } from '../engine/engine';
 import type { Inputs } from '../engine/inputs';
 import type { Columns } from '../interaction/columns';
@@ -30,6 +30,8 @@ export interface HostApi extends HTMLElement {
   setView(view: GanttView): void;
   togglePanel(): void;
   scrollToToday(behavior?: ScrollBehavior): void;
+  /** Zoom so every task fits the timeline viewport, then scroll to the first one (toolbar Fit, the F key). */
+  fitToScreen(): void;
   selectAll(): void;
 }
 
@@ -54,6 +56,13 @@ export interface LayerContext {
   readonly emit: Emit;
   /** Debounced `state-change` + persistence under `options.stateKey` */
   readonly saveState: () => void;
+  /**
+   * The polite live region (`.gantt-sr-live`) through core `createAnnouncer`: `say()` is
+   * debounced (250 ms, the last message wins), `now()` is not. Errors go to `dom.srAlert` instead.
+   */
+  readonly announce: Announcer;
+  /** Marks the host region busy (`aria-busy`, through `ElementInternals` when available) */
+  readonly setBusy: (busy: boolean) => void;
   /** A row clicked (or Enter / Space) in either pane: selection rules, then `row-click` */
   readonly rowClick: (row: GanttFlatRow, event: MouseEvent | KeyboardEvent) => void;
 }

@@ -11,7 +11,14 @@
  *         div.gantt-tl-cell (name)                 span.gantt-tl-name > button.gantt-collapse-btn |
  *                                                  span.gantt-tl-indent · span.gantt-tl-icon · span.gantt-tl-ellipsis
  *         div.gantt-tl-cell (other columns)        span.gantt-tl-status-dot? · span.gantt-tl-ellipsis
- *     div.gantt-tl-load-more                       attached while a data source is set
+ *     div.gantt-tl-load-more                       attached while a data source feeds rows
+ *                                                  (`graph.chartState.footer`)
+ *
+ * ARIA (treegrid): the header row is `aria-rowindex=1`; header cells and cells carry
+ * `aria-colindex` (1-based column position); rows carry `aria-rowindex`, `aria-level`,
+ * `aria-posinset` / `aria-setsize` (their place among their siblings, core `reindexVisible`),
+ * `aria-selected` and, for groups, `aria-expanded`. Without rows, or while the first data-source
+ * page loads or failed, the chart's state box (`layers/states.ts`) shows instead of the footer.
  *
  * Rows are keyed by task id, so a row keeps its node (and keyboard focus) across scrolls,
  * selections, sorts and collapses; rows leaving the window go to a pool the next new rows come
@@ -20,13 +27,21 @@
  * patches the row attributes only. Pinned rows (the focused row kept mounted outside the virtual
  * window) are taken out of the flow and positioned at their row offset (`.gantt-tl-row--pinned`).
  *
- * Keyboard: the list is one tab stop. One mounted row has `tabindex=0`, the others `-1`: the
- * focused row, else the row focused last (while it is mounted), else the first row in view.
- * Moving between rows with the arrow keys (roving focus) comes with the keyboard model.
+ * Keyboard (row-first treegrid, D6): the whole grid is one tab stop. Header cells, rows and cells
+ * are focusable (`data-focus-key` `head:<column>`, `row:<id>`, `cell:<id>:<column>`) with
+ * `tabindex=-1`, except one with `tabindex=0` (core `gridTabStop`): the header cell or the cell
+ * focused last in the list (a cell only while its row is the tab-stop row), else the tab-stop row —
+ * the focused row (in either pane: `focusedRowId`), else the one focused last while it is mounted,
+ * else the first row in view (core `tabStopIndex`) — else, without rows, the first header cell, so
+ * the scrollable list always keeps a keyboard stop. While the chart is not ready the state box
+ * covers the rows: they are `inert` and the header row (above the box) holds the tab stop.
+ * Collapse toggles are `tabindex=-1` (the row expands with →). The keys themselves are
+ * `interaction/grid-keys.ts`.
  *
- * Listeners are delegated: one click / dblclick / keydown on the rows group, one click / keydown
- * / pointerdown on the header row, one click on the footer. Column resizing captures the pointer
- * on the handle (`interaction/column-resize.ts`) and is aborted when the element disconnects.
+ * Listeners are delegated: one click / dblclick on the rows group, one click / pointerdown on the
+ * header row, one focusin on the list (where its tab stop goes), one click on the footer. Column
+ * resizing captures the pointer on the handle (`interaction/column-resize.ts`) and is aborted when
+ * the element disconnects.
  *
  * Class names and element order are the paint-snapshot keys and the e2e contract, shared with
  * Angular's task list: keep them. Styles and text colours live in `styles/tasklist.css.ts`; what
@@ -34,13 +49,25 @@
  * icon colour of a task with `barColor`) goes through the CSSOM.
  */
 
-import { computeCellVisual, rowPaint, type ColumnContext, type GanttFlatRow, type GanttLabels } from '@gantryjs/core';
+import {
+  computeCellVisual,
+  gridTabStop,
+  rowPaint,
+  sameGridSpot,
+  tabStopIndex,
+  type ColumnContext,
+  type GanttFlatRow,
+  type GanttLabels,
+  type GridFocusSpot,
+} from '@gantryjs/core';
 import { h } from '../dom/h';
 import { createPool, reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { MountedRow } from '../engine/graph/tasklist';
 import type { GanttLoadMoreState, SortState } from '../engine/inputs';
 import { createColumnResize } from '../interaction/column-resize';
+import { cycleSort, setCollapsed } from '../interaction/grid-keys';
+import { signal } from '../reactive';
 import type { VanillaColumnDef } from '../types';
 import type { Layer, LayerContext } from './context';
 import { showNode } from './skeleton';
@@ -92,24 +119,6 @@ function justify(align: VanillaColumnDef['align']): string {
   return align === 'center' ? 'center' : align === 'end' ? 'flex-end' : 'flex-start';
 }
 
-/**
- * The row that takes the list's tab stop: the first of `preferred` (task ids) that is mounted,
- * else the first row of the window at or below `firstInView` (a visible index), else the first
- * row of the window, else the first mounted row.
- */
-function tabStopRow(
-  mounted: readonly MountedRow[],
-  preferred: readonly (string | null)[],
-  firstInView: number,
-): MountedRow | undefined {
-  for (const id of preferred) {
-    const m = id === null ? undefined : mounted.find(r => r.row.task.id === id);
-    if (m) return m;
-  }
-  const windowed = mounted.filter(m => m.pinnedTop === null);
-  return windowed.find(m => m.row.visibleIndex >= firstInView) ?? windowed[0] ?? mounted[0];
-}
-
 /** Keys from `key`, made unique within one render (`id`, `id#1`, …): duplicates still render. */
 function uniqueKeys<T>(key: (item: T) => string): (item: T) => string {
   const seen = new Map<string, number>();
@@ -127,6 +136,8 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   const rowState = new WeakMap<Element, RowState>();
   const cellParts = new WeakMap<Element, CellParts>();
   const headParts = new WeakMap<Element, HeadParts>();
+  /** Column key of each cell */
+  const cellKeys = new WeakMap<Element, string>();
 
   // ── Persistent nodes ─────────────────────────────────────
   setAttr(root, 'class', 'gantt-tasklist gantry-tasklist-container');
@@ -148,6 +159,10 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   let footerKind: FooterKind | null = null;
   /** The row that held focus last: it keeps the tab stop while mounted, so Tab returns to it */
   let lastFocusedId: string | null = null;
+  /** Where focus was last inside the list (the header cell or cell that keeps the tab stop) */
+  const focusSpot = signal<GridFocusSpot | null>(null, { equals: sameGridSpot });
+  /** The cell that has `tabindex=0` (`null`: a row or a header cell has it) */
+  let stopCell: HTMLElement | null = null;
   root.append(head, body);
 
   const pool = createPool(() => h('div', { class: 'gantt-tl-row', attrs: { role: 'row', tabindex: -1 } }), POOL_SIZE);
@@ -164,22 +179,12 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     return el ? rowState.get(el)?.row : undefined;
   };
 
-  const toggleCollapsed = (id: string): void => {
-    I.collapsedIds.update(ids => {
-      const next = new Set(ids);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-    ctx.saveState();
-  };
-
   body.addEventListener('click', e => {
     const row = rowOf(e.target);
     if (!row) return;
     if ((e.target as Element).closest('.gantt-collapse-btn')) {
       e.stopPropagation();
-      toggleCollapsed(row.task.id);
+      setCollapsed(ctx, row, !I.collapsedIds.peek().has(row.task.id));
       return;
     }
     ctx.rowClick(row, e);
@@ -188,13 +193,21 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     const row = rowOf(e.target);
     if (row) ctx.emit('row-dblclick', row);
   });
-  // Enter / Space on a focused row select it like a click (modifiers included)
-  body.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const row = (e.target as Element).classList.contains('gantt-tl-row') ? rowOf(e.target) : undefined;
-    if (!row) return;
-    e.preventDefault();
-    ctx.rowClick(row, e);
+  // The keys are `interaction/grid-keys.ts`; this only records where the list's tab stop goes
+  root.addEventListener('focusin', e => {
+    const target = e.target as Element;
+    const headCell = target.closest('.gantt-tl-col-header');
+    const key = headCell && headParts.get(headCell)?.col?.key;
+    if (key != null) {
+      focusSpot.set({ kind: 'head', key });
+      return;
+    }
+    const rowEl = target.closest('.gantt-tl-row');
+    const id = rowEl && rowState.get(rowEl)?.row.task.id;
+    if (id == null) return;
+    const cell = target.closest('.gantt-tl-cell');
+    const col = cell && cellKeys.get(cell);
+    focusSpot.set(col != null ? { kind: 'cell', id, key: col } : { kind: 'row', id });
   });
 
   /** The sortable column of the header cell an event happened in. */
@@ -204,12 +217,6 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     return col?.sortable ? col : undefined;
   };
 
-  // Cycle a column's sort: ascending → descending → original order
-  const sortBy = (key: string): void => {
-    I.sort.update(cur => (cur?.key !== key ? { key, dir: 'asc' } : cur.dir === 'asc' ? { key, dir: 'desc' } : null));
-    ctx.saveState();
-  };
-
   head.addEventListener('click', e => {
     // The click that ends a resize belongs to the handle, never to the sort
     if ((e.target as Element).closest('.gantt-col-resize')) {
@@ -217,14 +224,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
       return;
     }
     const col = sortableOf(e.target);
-    if (col && !resize.active()) sortBy(col.key);
-  });
-  head.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    const col = sortableOf(e.target);
-    if (!col) return;
-    e.preventDefault();
-    sortBy(col.key);
+    if (col && !resize.active()) cycleSort(ctx, col.key);
   });
   head.addEventListener('pointerdown', e => {
     const handle = (e.target as Element).closest<HTMLElement>('.gantt-col-resize');
@@ -247,9 +247,19 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     return el;
   };
 
-  const updateHead = (el: HTMLElement, col: VanillaColumnDef, sort: SortState | null): void => {
+  const updateHead = (
+    el: HTMLElement,
+    col: VanillaColumnDef,
+    sort: SortState | null,
+    colIndex: number,
+    tabStop: boolean,
+  ): void => {
     const p = headParts.get(el)!;
     p.col = col;
+    setAttr(el, 'aria-colindex', colIndex);
+    // Every header cell is in the grid navigation (the header row is above row 1)
+    setAttr(el, 'tabindex', tabStop ? 0 : -1);
+    setAttr(el, 'data-focus-key', `head:${col.key}`);
     setStyleProp(el, 'justify-content', justify(col.align));
     setText(p.label, col.label);
     setAttr(p.label, 'title', col.label);
@@ -257,8 +267,6 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     const sortable = !!col.sortable;
     const dir = sortable && sort?.key === col.key ? sort.dir : null;
     setAttr(el, 'aria-sort', sortable ? (dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none') : null);
-    setAttr(el, 'tabindex', sortable ? 0 : null);
-    setAttr(el, 'data-focus-key', sortable ? `sort:${col.key}` : null);
     if (sortable) {
       const arrow = (p.arrow ??= h('span', { class: 'gantt-tl-sort-icon', attrs: { 'aria-hidden': 'true' } }));
       if (arrow.parentNode !== el) p.label.after(arrow);
@@ -273,7 +281,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   };
 
   // ── Cells ────────────────────────────────────────────────
-  const createCell = (): HTMLElement => h('div', { class: 'gantt-tl-cell', attrs: { role: 'gridcell' } });
+  const createCell = (): HTMLElement => h('div', { class: 'gantt-tl-cell', attrs: { role: 'gridcell', tabindex: -1 } });
 
   const nameParts = (): CellParts => {
     const pad = h('span', { class: 'gantt-tl-indent' });
@@ -283,7 +291,16 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     return { kind: 'name', wrap, pad, toggle: null, icon, text };
   };
 
-  const updateCell = (cell: HTMLElement, col: VanillaColumnDef, row: GanttFlatRow, env: CellEnv): void => {
+  const updateCell = (
+    cell: HTMLElement,
+    col: VanillaColumnDef,
+    colIndex: number,
+    row: GanttFlatRow,
+    env: CellEnv,
+  ): void => {
+    setAttr(cell, 'aria-colindex', colIndex);
+    setAttr(cell, 'data-focus-key', `cell:${row.task.id}:${col.key}`);
+    cellKeys.set(cell, col.key);
     setStyleProp(cell, 'justify-content', justify(col.align));
     const template = col.cellTemplate;
     const kind = template ? 'template' : col.key === 'name' ? 'name' : 'text';
@@ -312,7 +329,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
       const text = !col.builtin && col.render ? col.render(row, env.ctx) : row.task.name;
       setStyleProp(p.wrap, 'padding-left', `${row.level * env.indent}px`);
       const lead = row.hasChildren
-        ? (p.toggle ??= h('button', { class: 'gantt-collapse-btn', attrs: { type: 'button' } }))
+        ? (p.toggle ??= h('button', { class: 'gantt-collapse-btn', attrs: { type: 'button', tabindex: -1 } }))
         : p.pad;
       if (p.wrap.firstChild !== lead) {
         p.wrap.firstChild?.remove();
@@ -360,6 +377,8 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     setAttr(el, 'tabindex', tabStop ? 0 : -1);
     setAttr(el, 'aria-rowindex', row.visibleIndex + 2);
     setAttr(el, 'aria-level', row.level + 1);
+    setAttr(el, 'aria-posinset', row.posInSet);
+    setAttr(el, 'aria-setsize', row.setSize);
     setAttr(el, 'aria-selected', String(isSelected));
     setAttr(el, 'aria-expanded', row.hasChildren ? String(!row.isCollapsed) : null);
     toggleClass(el, 'gantt-tl-row--selected', isSelected);
@@ -377,7 +396,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         env.cols,
         uniqueKeys((c: VanillaColumnDef) => c.key),
         createCell,
-        (cell, col) => updateCell(cell, col, row, env),
+        (cell, col, i) => updateCell(cell, col, i + 1, row, env),
       );
     }
     rowState.set(el, { row, env });
@@ -422,7 +441,25 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
       if (focusedId !== null) lastFocusedId = focusedId;
       // The scroll offset is current here: the window (read above) changes whenever a row crosses the top
       const firstInView = Math.ceil(I.scrollTop.peek() / cfg.rowHeight);
-      const stop = tabStopRow(mounted, [focusedId, lastFocusedId], firstInView);
+      const stopIndex = tabStopIndex(
+        mounted.map(m => m.row.task.id),
+        [focusedId, lastFocusedId],
+        mounted.findIndex(m => m.pinnedTop === null && m.row.visibleIndex >= firstInView),
+      );
+      const stop = mounted[stopIndex];
+      // The state box covers the rows: inert, and the header row keeps the list's tab stop
+      const covered = G.chartState().kind !== 'ready';
+      // The tab stop: a header cell or a cell of the tab-stop row focused last, else that row, else
+      // (no row) the first header cell
+      const tab = gridTabStop(
+        focusSpot(),
+        covered ? null : (stop?.row.task.id ?? null),
+        cols.map(c => c.key),
+      );
+      const headStop = tab?.kind === 'head' ? tab.key : null;
+      const cellStop = tab?.kind === 'cell' ? cols.findIndex(c => c.key === tab.key) : -1;
+      const rowStop = tab?.kind === 'row' ? stop : undefined;
+      let stopRowEl: HTMLElement | null = null;
 
       // A row or button that moves or goes away loses focus: the focus-restore region gives it back
       ctx.focus.capture();
@@ -439,9 +476,10 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         cols,
         uniqueKeys((c: VanillaColumnDef) => c.key),
         createHead,
-        (el, col) => updateHead(el, col, sort),
+        (el, col, i) => updateHead(el, col, sort, i + 1, col.key === headStop),
       );
 
+      body.inert = covered;
       setStyleProp(top, 'height', `${vw.paddingTop}px`);
       setStyleProp(bottom, 'height', `${vw.paddingBottom}px`);
       reconcile(
@@ -449,13 +487,24 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         mounted,
         uniqueKeys((m: MountedRow) => m.row.task.id),
         () => pool.acquire(),
-        (el, m) => updateRow(el, m, grid, cfg.rowHeight, selected, env, m === stop),
+        (el, m) => {
+          updateRow(el, m, grid, cfg.rowHeight, selected, env, m === rowStop);
+          if (m === stop) stopRowEl = el;
+        },
         bottom,
         pool.release,
       );
+      // Cells are -1 when built: only the previous and the new tab-stop cell change
+      const cell =
+        cellStop >= 0 ? ((stopRowEl as HTMLElement | null)?.children[cellStop] as HTMLElement | undefined) : undefined;
+      if (stopCell && stopCell !== cell) setAttr(stopCell, 'tabindex', -1);
+      stopCell = cell ?? null;
+      if (stopCell) setAttr(stopCell, 'tabindex', 0);
 
-      showNode(root, footer, !!ds && !!loadState);
-      if (ds && loadState) paintFooter(loadState, labels, cfg.rowHeight);
+      // Only under rows (or "Load more" before the first page): the state box covers the others
+      const showFooter = !!ds && !!loadState && G.chartState().footer;
+      showNode(root, footer, showFooter);
+      if (showFooter && loadState) paintFooter(loadState, labels, cfg.rowHeight);
     },
     disconnect() {
       resize.abort();

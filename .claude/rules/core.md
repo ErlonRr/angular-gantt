@@ -15,10 +15,21 @@ paths:
   shape), and the code that reads the resolved value. Bindings never read raw `GanttOptions`
   for rendering.
 - Geometry goes in `src/render/`: `scales.ts` (tiers, formats, zoom presets), `timeline.ts`
-  (range, delimiters, bands, row geometry), `bars.ts`, `arrows.ts`, `drag.ts`, `theme.ts`.
-- New theme key: add it to `GanttTheme`, both palettes in `render/theme.ts`, `THEME_CSS_VARS`,
-  the README theming tables, and the `@cssprop` list of `<gantry-element>` (then
-  `pnpm --filter @gantryjs/vanilla cem`).
+  (range, delimiters, bands, row geometry), `bars.ts` (with handles, `focusRect`, `hitBox`,
+  `hitTestBar`), `arrows.ts`, `drag.ts`, `markers.ts` (marker lane, annotations), `zoom.ts`,
+  `viewport.ts`, `readout.ts`, `columns.ts`, `paint.ts`, `theme.ts`. UI state machines and models go
+  in `src/state/` (`tooltip.ts`, `toolbar.ts`, `chart-state.ts`, `legend.ts`, `selection.ts`, …),
+  input reducers in `src/interaction/` (`keymap.ts`, `grid-nav.ts`, `timeline-nav.ts`, `roving.ts`,
+  `key-selection.ts`, `keyboard-edit.ts`, `gesture.ts`, `autoscroll.ts`, `announce.ts`).
+- Core owns no timers: a machine returns what to schedule (`reduceTooltip` → `timer` ms, the
+  gesture machine → the long-press is the binding's timer) or takes them injected
+  (`createAnnouncer(write, { set, clear })`). Numbers both bindings need (`DRAG_THRESHOLD_PX`,
+  `LONG_PRESS_MS`, `MARKER_LANE_HEIGHT`, `ANNOUNCE_DEBOUNCE`, …) are exported constants.
+- New theme key: add it to `GanttTheme`, both palettes (and the legacy ones) in `render/theme.ts`,
+  `THEME_CSS_VARS` (the counts in `__tests__/theme-css.test.ts`), the README theming tables, and
+  the `@cssprop` list of `<gantry-element>` (then `pnpm --filter @gantryjs/vanilla cem`).
+- New label: `GanttLabels` + `DEFAULT_LABELS` (a required member: `options.labels` stays partial,
+  but objects typed as a full `GanttLabels` need it — say so in the changeset).
 - Dates: x positions via `calendarDays` / `dateToPixel` / `toX`; date-only UTC values are local
   days (`toLocalDay`); `addDays` keeps date-only values date-only. Normalise user dates once at
   the input boundary; dates core generates itself (scale cells, bands, `now`) are already local

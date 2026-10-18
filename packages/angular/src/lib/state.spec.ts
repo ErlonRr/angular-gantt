@@ -94,9 +94,9 @@ const hostOf = (f: ComponentFixture<Host>): HTMLElement => {
   if (!host) throw new Error('no <gantry>');
   return host;
 };
-/** Zoom pill the toolbar shows as active (the view pills are another group) */
+/** Zoom-level radio the toolbar shows as checked (the view radios are another group) */
 const pressedLevel = (f: ComponentFixture<Host>) =>
-  $$(f, '.gantt-tb-group:not(.gantt-tb-views) > .gantt-tb-pill[aria-pressed="true"]').map(b => b.textContent?.trim());
+  $$(f, '.gantt-tb-pills:not(.gantt-tb-views) > .gantt-tb-pill[aria-checked="true"]').map(b => b.textContent?.trim());
 const rowIds = (f: ComponentFixture<Host>) => $$(f, '.gantt-tl-row').map(r => r.getAttribute('data-task-id'));
 const barLabel = (f: ComponentFixture<Host>, id: string) =>
   $$(f, `.gantt-bars-layer [data-task-id="${id}"]`)[0]?.getAttribute('aria-label');

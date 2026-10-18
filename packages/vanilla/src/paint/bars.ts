@@ -7,6 +7,10 @@
  * group keeps its identity, optional parts (caps, progress, baseline, label) are added or removed
  * in their painting order, and every write goes through the `dom/patch.ts` caches. A patch with
  * the same visual and options as the last one returns at once.
+ *
+ * The group's classes: `gantt-bar` first (the paint-snapshot key), then `gantt-bar--<kind>`,
+ * `gantt-bar--critical` on the critical path (forced-colors mode dashes it), `task.className`
+ * and `gantt-bar-draggable`.
  */
 
 import { PAINTS, type BarVisual } from '@gantryjs/core';
@@ -21,6 +25,8 @@ export interface BarPaintOptions {
   readonly className?: string | undefined;
   /** Adds `gantt-bar-draggable` (grab cursor; the pointer handler only drags such bars) */
   readonly draggable?: boolean | undefined;
+  /** On the critical path: adds `gantt-bar--critical` */
+  readonly critical?: boolean | undefined;
 }
 
 /** The optional parts of a bar, in painting order (the body always comes first). */
@@ -41,7 +47,11 @@ interface BarState {
 const bars = new WeakMap<SVGGElement, BarState>();
 
 const sameOptions = (a: BarPaintOptions, b: BarPaintOptions) =>
-  a.fontPx === b.fontPx && a.selected === b.selected && a.className === b.className && !!a.draggable === !!b.draggable;
+  a.fontPx === b.fontPx &&
+  a.selected === b.selected &&
+  a.className === b.className &&
+  !!a.draggable === !!b.draggable &&
+  !!a.critical === !!b.critical;
 
 /** Builds the SVG group of a bar. */
 export function createBar(v: BarVisual, opts: BarPaintOptions): SVGGElement {
@@ -63,6 +73,7 @@ export function patchBar(g: SVGGElement, v: BarVisual, opts: BarPaintOptions): v
   st.opts = opts;
 
   let cls = `gantt-bar gantt-bar--${v.kind}`;
+  if (opts.critical) cls += ' gantt-bar--critical';
   if (opts.className) cls += ` ${opts.className}`;
   if (opts.draggable) cls += ' gantt-bar-draggable';
   setAttr(g, 'class', cls);

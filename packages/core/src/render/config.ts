@@ -15,6 +15,7 @@ import type {
   GanttTimeHighlight,
   GanttView,
   GanttTask,
+  GanttTooltipRenderContext,
   TimeUnit,
   GanttI18n,
 } from '../types';
@@ -57,6 +58,8 @@ export interface ResolvedToolbar {
   viewModes: string[] | false;
   today: boolean;
   viewToggle: boolean;
+  /** "Fit to screen" button */
+  fit: boolean;
 }
 
 /**
@@ -96,6 +99,8 @@ export interface ResolvedGanttConfig {
       template?: ((task: GanttTask) => string) | undefined;
       color?: string | undefined;
     };
+    /** Resize handles: width of each pointer target in px */
+    handles: { hitSize: number };
   };
   milestone: { size?: number | undefined; shape: 'diamond' | 'circle' | 'square' };
   groupBar: { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
@@ -119,10 +124,28 @@ export interface ResolvedGanttConfig {
   criticalPath: boolean;
   /** `enableSelection` / `multiSelect` (both default true) */
   selection: { enabled: boolean; multi: boolean };
+  keyboard: { characterShortcuts: boolean };
+  /** Delays in ms; the defaults are `TOOLTIP_SHOW_DELAY` / `TOOLTIP_HIDE_DELAY` */
+  tooltip: {
+    trigger: 'auto' | 'hover' | 'focus';
+    showDelay: number;
+    hideDelay: number;
+    render?: ((ctx: GanttTooltipRenderContext) => unknown) | undefined;
+  };
+  legend: { position: 'bottom' | 'toolbar' };
+  markers: { lane: 'auto' | boolean };
 }
 
 /** `LightTheme.barRadius` / `DarkTheme.barRadius` in px (when no metrics are passed). */
 const DEFAULT_BAR_RADIUS = 4;
+
+/**
+ * Default tooltip delays in ms: the values of `TOOLTIP_SHOW_DELAY` / `TOOLTIP_HIDE_DELAY`
+ * (`state/tooltip.ts`), repeated here so this module does not import the tooltip model; a test
+ * keeps them equal.
+ */
+const DEFAULT_TOOLTIP_SHOW_DELAY = 320;
+const DEFAULT_TOOLTIP_HIDE_DELAY = 120;
 
 const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine): ResolvedLine | null =>
   style === false
@@ -231,6 +254,7 @@ export function resolveConfig(
         template: options.bar?.label?.template,
         color: options.bar?.label?.color,
       },
+      handles: { hitSize: options.bar?.handles?.hitSize ?? 24 },
     },
     milestone: { size: options.milestone?.size, shape: options.milestone?.shape ?? 'diamond' },
     groupBar: {
@@ -264,11 +288,21 @@ export function resolveConfig(
             viewModes: toolbar?.viewModes ?? zoomLevels.map(l => l.name),
             today: toolbar?.today ?? true,
             viewToggle: toolbar?.viewToggle ?? true,
+            fit: toolbar?.fit ?? true,
           },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
     criticalPath: options.criticalPath ?? false,
     selection: { enabled: options.enableSelection ?? true, multi: options.multiSelect ?? true },
+    keyboard: { characterShortcuts: options.keyboard?.characterShortcuts ?? true },
+    tooltip: {
+      trigger: options.tooltip?.trigger ?? 'auto',
+      showDelay: options.tooltip?.showDelay ?? DEFAULT_TOOLTIP_SHOW_DELAY,
+      hideDelay: options.tooltip?.hideDelay ?? DEFAULT_TOOLTIP_HIDE_DELAY,
+      render: options.tooltip?.render,
+    },
+    legend: { position: options.legend?.position ?? 'bottom' },
+    markers: { lane: options.markers?.lane ?? 'auto' },
   };
 }
 

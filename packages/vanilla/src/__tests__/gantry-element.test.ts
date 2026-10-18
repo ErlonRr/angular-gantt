@@ -110,9 +110,14 @@ describe('<gantry-element>', () => {
     const bar = $(el, '.gantt-bars-layer [data-task-id="a"]')!;
     const canvas = $(el, '.gantry-canvas-container')!;
     const px = getEngine(el).graph.timeline().pxPerDay;
-    bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
-    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 3 * px, pointerId: 1 }));
-    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 3 * px, pointerId: 1 }));
+    // Bars are hit by geometry: press the middle of the body (the canvas box is at 0,0 in happy-dom)
+    const v = el.getBarVisual('a')!;
+    const x = v.x + v.width / 2;
+    bar.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: x, clientY: v.cy, pointerId: 1 }),
+    );
+    canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 3 * px, pointerId: 1 }));
+    canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 3 * px, pointerId: 1 }));
 
     expect(onDragged).toHaveBeenCalledOnce();
     const detail = onDragged.mock.calls[0][0].detail;
@@ -158,9 +163,13 @@ describe('<gantry-element>', () => {
   it('leaves keys it does not handle (and Alt combinations) to the browser', async () => {
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-10')] });
     const zoom = el.viewMode;
-    const fit = new KeyboardEvent('keydown', { key: 'f', cancelable: true });
-    el.dispatchEvent(fit);
-    expect(fit.defaultPrevented).toBe(false);
+    const other = new KeyboardEvent('keydown', { key: 'q', cancelable: true });
+    el.dispatchEvent(other);
+    expect(other.defaultPrevented).toBe(false);
+    // L (link) waits for Phase 11
+    const link = new KeyboardEvent('keydown', { key: 'l', cancelable: true });
+    el.dispatchEvent(link);
+    expect(link.defaultPrevented).toBe(false);
     const altPlus = new KeyboardEvent('keydown', { key: '+', altKey: true, cancelable: true });
     el.dispatchEvent(altPlus);
     expect(altPlus.defaultPrevented).toBe(false);
@@ -240,9 +249,10 @@ describe('<gantry-element>', () => {
 
   it('stops at a failed page: one load-error, a Retry button, no request storm', async () => {
     let fail = true;
+    // The first page loads; the second (asked for by the lazy-load region) fails until retried
     const fetcher = vi.fn(async (page: number, size: number) => {
-      if (fail) throw new Error('offline');
-      return Array.from({ length: size }, (_, i) => task(`p${page}-${i}`, '2026-01-01', '2026-01-05'));
+      if (page === 2 && fail) throw new Error('offline');
+      return page > 2 ? [] : Array.from({ length: size }, (_, i) => task(`p${page}-${i}`, '2026-01-01', '2026-01-05'));
     });
     const errors: unknown[] = [];
     el = await mount();
@@ -250,8 +260,8 @@ describe('<gantry-element>', () => {
     el.dataSource = { fetcher, pageSize: 5, retries: 0 };
     await vi.waitFor(() => expect(el.dataSource?.error).not.toBeNull());
     for (let i = 0; i < 5; i++) await frame();
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(errors).toEqual([{ error: expect.any(Error), page: 1 }]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(errors).toEqual([{ error: expect.any(Error), page: 2 }]);
 
     // Announced once through the persistent alert region, not by the rebuilt footer
     expect($(el, '.gantt-sr-alert')?.textContent).toBe('Couldn’t load tasks');
@@ -261,12 +271,29 @@ describe('<gantry-element>', () => {
     fail = false;
     retry.focus();
     retry.click();
-    await vi.waitFor(() => expect(el.tasks.length).toBeGreaterThanOrEqual(5));
+    await vi.waitFor(() => expect(el.tasks.length).toBeGreaterThanOrEqual(10));
     expect(el.tasks[0].id).toBe('p1-0');
     expect(el.dataSource?.error).toBeNull();
     expect($(el, '.gantt-sr-alert')?.textContent).toBe('');
     // Focus stayed in the footer while Retry turned into "Loading…" and back
     expect((el.shadowRoot!.activeElement as HTMLElement | null)?.dataset['focusKey']).toBe('load-more');
+  });
+
+  it('leaves a failed first page to the chart state: no footer, one load-error, a data-source Retry', async () => {
+    const fetcher = vi.fn(() => Promise.reject(new Error('offline')));
+    const errors: unknown[] = [];
+    el = await mount();
+    el.addEventListener('load-error', e => errors.push((e as CustomEvent).detail));
+    el.dataSource = { fetcher, pageSize: 5, retries: 0 };
+    await vi.waitFor(() => expect(el.dataSource?.error).not.toBeNull());
+    for (let i = 0; i < 3; i++) await frame();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(errors).toEqual([{ error: expect.any(Error), page: 1 }]);
+    expect(getEngine(el).graph.chartState()).toMatchObject({ kind: 'error', retry: 'dataSource', footer: false });
+    expect($(el, '.gantt-tl-load-more')).toBeNull();
+    // The error box is the alert (the assertive region stays empty, as in Angular)
+    expect($(el, '.gantt-state--error [role="alert"]')).not.toBeNull();
+    expect($(el, '.gantt-sr-alert')?.textContent).toBe('');
   });
 
   it('reports a failure that happened while disconnected once reconnected', async () => {
@@ -429,7 +456,8 @@ describe('<gantry-element>', () => {
       el.setView('table');
       await frame();
       expect(($(el, '.gantry-canvas-viewport') as HTMLElement).inert).toBe(true);
-      expect(($(el, '.gantt-legend') as HTMLElement).hidden).toBe(true);
+      // Detached in the table view (D27)
+      expect($(el, '.gantt-legend')).toBeNull();
       el.setView('split');
       await frame();
       expect(($(el, '.gantry-canvas-viewport') as HTMLElement).inert).toBe(false);
@@ -446,7 +474,8 @@ describe('<gantry-element>', () => {
       el.tasks = [task('a', '2020-01-01', '2020-01-10')];
       await frame();
       expect(document.activeElement).toBe(el);
-      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantry-canvas-viewport'));
+      // The timeline's tab stop: its one bar
+      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantt-bars-layer > [data-task-id="a"]'));
     });
 
     it('sorts by a built-in column listed next to custom columns', async () => {
@@ -627,7 +656,7 @@ describe('<gantry-element>', () => {
       expect(active(el)?.dataset['focusKey']).toBe('zoom-in');
       expect(active(el)).toBe(zoomIn); // patched in place: the same button keeps focus
 
-      const header = $(el, '[data-focus-key^="sort:"]') as HTMLElement;
+      const header = $(el, '[data-focus-key^="head:"][aria-sort]') as HTMLElement;
       header.focus();
       header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       await frame();

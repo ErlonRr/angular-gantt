@@ -7,52 +7,85 @@
 //  (packages/vanilla/src/layers/tooltip.ts, styles/tooltip.css.ts);
 //  the component's host is the popover itself:
 //
-//    div.gantt-tooltip[popover=manual][role=tooltip](.gantt-tooltip--critical)[hidden while closed]
+//    div.gantt-tooltip[popover=manual][role=tooltip][id](.gantt-tooltip--critical)[hidden while closed]
 //      div.gantt-tooltip-title
 //      dl.gantt-tooltip-rows
 //        div.gantt-tooltip-row(.gantt-tooltip-row--progress)
 //          dt.gantt-tooltip-label · dd.gantt-tooltip-value
 //          (dd.gantt-tooltip-track[aria-hidden] > div.gantt-tooltip-fill)
+//      div.gantt-tooltip-custom          instead of both, for custom content
 //
-//  The content is `buildTooltipModel()` of the open row (GanttTooltipState),
-//  written as text only (`[textContent]`: a task name never becomes markup).
-//  Rows are keyed by kind + occurrence, so they keep their nodes from one
-//  task to the next; the closed popover keeps its last content. The
-//  progress (`--gantt-tt-progress`) and the fill's paint are style
-//  bindings. Opening, closing and placement are DOM work in an
-//  afterRenderEffect: showPopover() / hidePopover() once per opening (the
-//  `hidden` attribute alone where the Popover API is missing), one size
-//  measurement per content, then a `translate` per pointer move.
+//  When it shows is the chart's GanttTooltipState (core `reduceTooltip`).
+//  The content is `buildTooltipModel()` of the row that shows, written as
+//  text only (`[textContent]`: a task name never becomes markup). Rows
+//  are keyed by kind + occurrence, so they keep their nodes from one task
+//  to the next; the closed popover keeps its last content. The progress
+//  (`--gantt-tt-progress`) and the fill's paint are style bindings.
+//  Custom content replaces the title and the rows: the consumer's
+//  `<ng-template ganttTooltip>` (it wins), else `options.tooltip.render`
+//  — a returned DOM node is appended, a string (or a number) is shown as
+//  text; `null` / `undefined` / `false` keep the built-in content, and so
+//  does a `render` that throws (reported on the console).
+//
+//  Where it goes is core's `placeTooltip`: below its bar (above it
+//  without room), centred on the pointer while hovering, on the visible
+//  part of the bar otherwise, kept 8 px from the viewport edges, written
+//  as a `translate`. DOM work in after-render effects: showPopover() /
+//  hidePopover() once per opening (the `hidden` attribute alone where the
+//  Popover API is missing), one size measurement per opening, the bar's
+//  box read when it opens and on every scroll or resize.
+//
+//  Its listeners (the Web Component's tooltip triggers), bound after the
+//  first render and released with it: the pointer resting on it keeps it
+//  open (`pointer-events: auto`, WCAG 1.4.13); Escape on the chart, in the
+//  capture phase, dismisses it and consumes the key (D24: before the
+//  selection is cleared) unless a drag or move mode owns Escape or a text
+//  input has focus; Escape elsewhere in the page closes it without
+//  consuming the key; a press outside it and off the bars dismisses it;
+//  the timeline's, the page's scrolls and window resizes move it with
+//  its bar.
 // ─────────────────────────────────────────────────────────────
 
 import {
   ChangeDetectionStrategy,
   Component,
   DOCUMENT,
+  DestroyRef,
   ElementRef,
   Renderer2,
   RendererStyleFlags2,
+  afterNextRender,
   afterRenderEffect,
   computed,
   inject,
   input,
   linkedSignal,
+  untracked,
+  viewChild,
+  type TemplateRef,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   buildTooltipModel,
+  hitTestBar,
+  placeTooltip,
+  type GanttFlatRow,
   type GanttTask,
   type Paint,
   type ResolvedGanttConfig,
   type TooltipModel,
 } from '@gantryjs/core';
 
+import { GanttDragService } from '../drag/gantt-drag.service';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
-import { GanttTooltipState } from './tooltip-state';
+import { type GanttTooltipTemplateContext } from './gantt-tooltip-template.directive';
+import { GanttTooltipState, type ShownTooltip } from './tooltip-state';
 
 /** What the tooltip reads besides the row: how dates are read, the clock, the critical path and the task index */
 export interface TooltipContext {
-  /** Date reading (`endDateMode`, `normalizeDateOnly`) and the baseline rows (`baseline`) */
-  readonly config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline'>;
+  /** Date reading (`endDateMode`, `normalizeDateOnly`), the baseline rows (`baseline`) and `tooltip.render` */
+  readonly config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline' | 'tooltip'>;
   /** Clock for the status (the timeline's `now`) */
   readonly now: Date;
   /** Critical task ids — adds the critical-path row */
@@ -74,41 +107,86 @@ interface TooltipRowView {
   readonly paint: Paint;
 }
 
-/** Distance from the pointer (px), as in the Web Component */
-const OFFSET_X = 12;
-const OFFSET_Y = 8;
-/** Smallest gap kept to the viewport edges (px) */
-const EDGE = 8;
+/** The row the popover shows and its model */
+interface TooltipView {
+  readonly row: GanttFlatRow;
+  readonly model: TooltipModel;
+}
+
+/** Custom content: the consumer's template (with its context), or what `options.tooltip.render` returned */
+type TooltipContent =
+  | {
+      readonly template: TemplateRef<GanttTooltipTemplateContext>;
+      readonly context: GanttTooltipTemplateContext;
+      readonly value?: undefined;
+    }
+  | { readonly template?: undefined; readonly value: Node | string };
+
+/**
+ * What `options.tooltip.render` returned, as tooltip content: a DOM node (from any realm) as is,
+ * a string or a number as text, anything else (`null`, `undefined`, `false`…) `null`: the
+ * built-in content.
+ */
+function customContent(v: unknown): Node | string | null {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number') return String(v);
+  return typeof v === 'object' && v !== null && typeof (v as Partial<Node>).nodeType === 'number' ? (v as Node) : null;
+}
+
+/** Typing into an input or an editable cell keeps its own Escape. */
+function isEditable(target: EventTarget | undefined): boolean {
+  const el = target as Partial<HTMLElement> | undefined;
+  return (
+    !!el &&
+    typeof el.tagName === 'string' &&
+    (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable === true)
+  );
+}
 
 @Component({
   selector: 'div[ganttTooltip]',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
   host: {
     class: 'gantt-tooltip',
     popover: 'manual',
     role: 'tooltip',
+    '[attr.id]': 'state.elementId()',
     '[attr.hidden]': "open() ? null : ''",
     '[class.gantt-tooltip--critical]': 'model()?.critical === true',
+    '(pointerenter)': 'state.enterTooltip()',
+    '(pointerleave)': 'state.leaveTooltip()',
   },
   template: `
-    <div class="gantt-tooltip-title" [textContent]="model()?.title ?? ''"></div>
-    <dl class="gantt-tooltip-rows">
-      @for (r of rows(); track r.key) {
-        <div class="gantt-tooltip-row" [class.gantt-tooltip-row--progress]="r.progress !== null">
-          <dt class="gantt-tooltip-label" [textContent]="r.label"></dt>
-          <dd class="gantt-tooltip-value" [textContent]="r.value"></dd>
-          @if (r.progress !== null) {
-            <dd class="gantt-tooltip-track" aria-hidden="true">
-              <div
-                class="gantt-tooltip-fill"
-                [style.--gantt-tt-progress]="r.progress"
-                [style.background-color]="r.paint"
-              ></div>
-            </dd>
-          }
+    @let custom = content();
+    @if (custom) {
+      @if (custom.template; as template) {
+        <div class="gantt-tooltip-custom">
+          <ng-container [ngTemplateOutlet]="template" [ngTemplateOutletContext]="custom.context" />
         </div>
+      } @else {
+        <div #customHost class="gantt-tooltip-custom"></div>
       }
-    </dl>
+    } @else {
+      <div class="gantt-tooltip-title" [textContent]="model()?.title ?? ''"></div>
+      <dl class="gantt-tooltip-rows">
+        @for (r of rows(); track r.key) {
+          <div class="gantt-tooltip-row" [class.gantt-tooltip-row--progress]="r.progress !== null">
+            <dt class="gantt-tooltip-label" [textContent]="r.label"></dt>
+            <dd class="gantt-tooltip-value" [textContent]="r.value"></dd>
+            @if (r.progress !== null) {
+              <dd class="gantt-tooltip-track" aria-hidden="true">
+                <div
+                  class="gantt-tooltip-fill"
+                  [style.--gantt-tt-progress]="r.progress"
+                  [style.background-color]="r.paint"
+                ></div>
+              </dd>
+            }
+          </div>
+        }
+      </dl>
+    }
   `,
   // The Web Component's tooltip stylesheet (styles/tooltip.css.ts), `.gantt-tooltip` being the host
   styles: [
@@ -118,7 +196,7 @@ const EDGE = 8;
         inset: 0 auto auto 0;
         margin: 0;
         z-index: 9999;
-        pointer-events: none;
+        pointer-events: auto;
         padding: 8px 12px;
         border-radius: 6px;
         border: 1px solid var(--gantt-tooltip-bdr);
@@ -171,25 +249,52 @@ const EDGE = 8;
         border-radius: 2px;
         inline-size: calc(var(--gantt-tt-progress, 0) * 1%);
       }
+      .gantt-tooltip-custom {
+        overflow-wrap: anywhere;
+      }
+
+      /* Forced colours (D25): Canvas / CanvasText with a CanvasText border, labels at full
+         opacity; the progress track outlined, its fill CanvasText (inline paint: !important) */
+      @media (forced-colors: active) {
+        :host {
+          background-color: Canvas;
+          color: CanvasText;
+          border-color: CanvasText;
+        }
+        .gantt-tooltip-label {
+          opacity: 1;
+        }
+        .gantt-tooltip-track {
+          background-color: Canvas;
+          outline: 1px solid CanvasText;
+        }
+        .gantt-tooltip-fill {
+          background-color: CanvasText !important;
+        }
+      }
     `,
   ],
 })
 export class GanttTooltipComponent {
-  /** Date reading, clock, critical path and task index of the chart */
+  /** Date reading, clock, critical path, task index and `tooltip.render` of the chart */
   readonly context = input.required<TooltipContext>();
 
-  private readonly state = inject(GanttTooltipState);
+  protected readonly state = inject(GanttTooltipState);
   private readonly i18n = inject(GanttI18nService);
+  private readonly layout = inject(GanttLayoutService);
+  private readonly drag = inject(GanttDragService);
   private readonly doc = inject(DOCUMENT);
   private readonly renderer = inject(Renderer2);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  private readonly customHost = viewChild<ElementRef<HTMLElement>>('customHost');
 
-  /** The open row's model; `null` while closed */
-  private readonly openModel = computed<TooltipModel | null>(() => {
+  /** The row that shows and its model; `null` while closed */
+  private readonly openView = computed<TooltipView | null>(() => {
     const row = this.state.row();
     if (!row) return null;
     const ctx = this.context();
-    return buildTooltipModel({
+    const model = buildTooltipModel({
       task: row.task,
       hasChildren: row.hasChildren,
       barType: row.barType,
@@ -202,14 +307,36 @@ export class GanttTooltipComponent {
       floatDays: ctx.floatDays,
       tasksById: ctx.tasksById,
     });
+    return { row, model };
   });
 
-  protected readonly open = computed(() => this.openModel() !== null);
+  protected readonly open = computed(() => this.openView() !== null);
 
-  /** What the popover shows: the open row's model, kept while closed (the rows keep their nodes) */
-  protected readonly model = linkedSignal<TooltipModel | null, TooltipModel | null>({
-    source: this.openModel,
+  /** What the popover shows: the open row and its model, kept while closed (the rows keep their nodes) */
+  private readonly view = linkedSignal<TooltipView | null, TooltipView | null>({
+    source: this.openView,
     computation: (next, previous) => next ?? previous?.value ?? null,
+  });
+
+  protected readonly model = computed<TooltipModel | null>(() => this.view()?.model ?? null);
+
+  /** Custom content instead of the title and rows: the template, else `render`'s result (`null`: built-in) */
+  protected readonly content = computed<TooltipContent | null>(() => {
+    const view = this.view();
+    if (!view) return null;
+    const { row, model } = view;
+    const template = this.state.template();
+    if (template) return { template, context: { $implicit: model, model, task: row.task, row } };
+    const render = this.context().config.tooltip.render;
+    if (!render) return null;
+    try {
+      // Consumer code: none of the signals it reads belongs to the tooltip
+      const value = customContent(untracked(() => render({ model, task: row.task, row })));
+      return value === null ? null : { value };
+    } catch (err) {
+      console.error('[gantry] tooltip render error:', err);
+      return null;
+    }
   });
 
   /** The model rows, keyed by kind and occurrence */
@@ -232,22 +359,35 @@ export class GanttTooltipComponent {
   });
 
   /** The popover is showing (Popover API) */
-  private shown = false;
-  /** Content measured last, and its border-box size */
-  private measured: TooltipModel | null = null;
+  private popoverOpen = false;
+  /** The opening measured last, and the popover's border-box size then */
+  private measured: ShownTooltip | null = null;
   private width = 0;
   private height = 0;
 
   constructor() {
-    // DOM work after the render: open / close the popover, measure it once per content, place it
-    afterRenderEffect(() => this.place(this.open() ? this.model() : null, this.state.pointer()));
+    // `render`'s node or text, written into div.gantt-tooltip-custom (a string becomes a text node,
+    // never markup) before the popover is measured
+    afterRenderEffect({
+      write: () => {
+        const el = this.customHost()?.nativeElement;
+        const value = this.content()?.value;
+        if (el && value !== undefined) el.replaceChildren(value);
+      },
+    });
+    // Open / close the popover, measure it once per opening, place it by its bar
+    afterRenderEffect(() => {
+      const shown = this.state.shown();
+      untracked(() => this.follow(shown));
+    });
+    afterNextRender(() => this.connect());
   }
 
-  private place(model: TooltipModel | null, pointer: { x: number; y: number }): void {
+  private follow(shown: ShownTooltip | null): void {
     const el = this.host;
-    if (!model) {
-      if (this.shown) {
-        this.shown = false;
+    if (!shown) {
+      if (this.popoverOpen) {
+        this.popoverOpen = false;
         try {
           el.hidePopover();
         } catch {
@@ -257,33 +397,114 @@ export class GanttTooltipComponent {
       this.measured = null;
       return;
     }
-    if (!this.shown) {
-      this.shown = true;
+    if (!this.popoverOpen) {
+      this.popoverOpen = true;
       try {
         el.showPopover();
       } catch {
         // No Popover API (or not connected): removing `hidden` alone shows it
       }
     }
-    // One layout read per content; moves only write `translate`
-    if (this.measured !== model) {
+    // One layout read per opening; scrolls only re-read the bar's box
+    if (this.measured !== shown) {
       const box = el.getBoundingClientRect();
       this.width = box.width;
       this.height = box.height;
-      this.measured = model;
+      this.measured = shown;
     }
+    const anchor = this.state.anchor();
+    if (anchor) this.place(shown, anchor);
+  }
+
+  /** Writes core's placement by `anchor`'s box as the popover's `translate`. */
+  private place(shown: ShownTooltip, anchor: Element): void {
     const view = this.doc.defaultView;
-    const vw = view?.innerWidth ?? this.doc.documentElement.clientWidth;
-    const vh = view?.innerHeight ?? this.doc.documentElement.clientHeight;
-    let x = pointer.x + OFFSET_X;
-    let y = pointer.y + OFFSET_Y;
-    if (x + this.width > vw - EDGE) x = pointer.x - this.width - OFFSET_X;
-    if (y + this.height > vh - EDGE) y = pointer.y - this.height - OFFSET_Y;
-    this.renderer.setStyle(
-      el,
-      'translate',
-      `${Math.round(Math.max(EDGE, x))}px ${Math.round(Math.max(EDGE, y))}px`,
-      RendererStyleFlags2.DashCase,
-    );
+    const p = placeTooltip({
+      anchor: anchor.getBoundingClientRect(),
+      pointerX: shown.pointerX,
+      size: { width: this.width, height: this.height },
+      viewport: {
+        width: view?.innerWidth ?? this.doc.documentElement.clientWidth,
+        height: view?.innerHeight ?? this.doc.documentElement.clientHeight,
+      },
+    });
+    this.renderer.setStyle(this.host, 'translate', `${p.x}px ${p.y}px`, RendererStyleFlags2.DashCase);
+  }
+
+  /** Scrolls and resizes: the open tooltip moves with its bar (closed when the bar is gone). */
+  private readonly reposition = (): void => {
+    const shown = this.state.shown();
+    if (!shown || this.measured !== shown) return;
+    const anchor = this.state.reanchor();
+    if (anchor) this.place(shown, anchor);
+  };
+
+  /** Escape on the chart (capture phase): closes the tooltip that shows and consumes the key. */
+  private readonly onChartKeydown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || this.state.visibleId() === null) return;
+    // A drag or move mode cancels on Escape (it dismissed the tooltip when it started anyway)
+    if (this.drag.isActive() || this.drag.preview() !== null) return;
+    if (isEditable(e.composedPath()[0])) return;
+    this.state.dismiss();
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  /** A press outside the tooltip and off the bars dismisses it (a press on a bar is the canvas'). */
+  private onPointerDown(e: PointerEvent, svg: Element | null): void {
+    if (this.state.visibleId() === null) return;
+    const path = e.composedPath();
+    if (path.includes(this.host)) return;
+    if (svg && path.includes(svg) && this.onBar(e, svg)) return;
+    this.state.dismiss();
+  }
+
+  /** A bar under the pointer, by geometry (the canvas pointer handler's hit test, core `hitTestBar`). */
+  private onBar(e: PointerEvent, svg: Element): boolean {
+    const visualOf = this.state.barVisual();
+    if (!visualOf) {
+      // Bar visuals not bound: the bar elements themselves
+      const target = e.target as Partial<Element> | null;
+      return !!target?.closest?.('.gantt-bars-layer > [data-task-id]');
+    }
+    const box = svg.getBoundingClientRect();
+    const y = e.clientY - box.top;
+    const geo = this.layout.rowGeometries()[Math.floor(y / this.layout.cfg().rowHeight)];
+    return !!geo && hitTestBar(visualOf(geo), e.clientX - box.left, y) !== null;
+  }
+
+  /** Binds the listeners on the chart, the page and the window; released with the component. */
+  private connect(): void {
+    const doc = this.doc;
+    const win = doc.defaultView;
+    const chart = this.host.closest<HTMLElement>('.gantry') ?? this.host;
+    const viewport = this.host.closest('.gantry-canvas-viewport');
+    // The timeline <svg>: bar coordinates start at its top-left corner
+    const svg = this.host.parentElement?.querySelector('svg') ?? null;
+
+    const onDocKeydown = (e: KeyboardEvent): void => {
+      // A hover tooltip while keyboard focus is elsewhere in the page: Escape still closes it, but the
+      // key stays the page's (it may close a dialog too)
+      if (e.key !== 'Escape' || e.isComposing || this.state.visibleId() === null) return;
+      if (!e.composedPath().includes(chart)) this.state.dismiss();
+    };
+    const onDocPointerDown = (e: PointerEvent): void => this.onPointerDown(e, svg);
+
+    chart.addEventListener('keydown', this.onChartKeydown, { capture: true });
+    doc.addEventListener('keydown', onDocKeydown, { capture: true });
+    doc.addEventListener('pointerdown', onDocPointerDown, { capture: true, passive: true });
+    viewport?.addEventListener('scroll', this.reposition, { passive: true });
+    // Scrolls of the page and of the chart's scrolling ancestors (scroll events don't bubble)
+    win?.addEventListener('scroll', this.reposition, { capture: true, passive: true });
+    win?.addEventListener('resize', this.reposition, { passive: true });
+
+    this.destroyRef.onDestroy(() => {
+      chart.removeEventListener('keydown', this.onChartKeydown, { capture: true });
+      doc.removeEventListener('keydown', onDocKeydown, { capture: true });
+      doc.removeEventListener('pointerdown', onDocPointerDown, { capture: true });
+      viewport?.removeEventListener('scroll', this.reposition);
+      win?.removeEventListener('scroll', this.reposition, { capture: true });
+      win?.removeEventListener('resize', this.reposition);
+    });
   }
 }

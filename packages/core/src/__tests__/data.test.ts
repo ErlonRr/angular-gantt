@@ -3,10 +3,19 @@
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
-import { normalizeTasks, flattenTree, sortRoots, columnComparator, buildDefaultColumns } from '../gantt-data';
+import {
+  normalizeTasks,
+  flattenTree,
+  filterVisible,
+  reindexVisible,
+  sortRoots,
+  sortTree,
+  columnComparator,
+  buildDefaultColumns,
+} from '../gantt-data';
 import { snapRange } from '../gantt-math';
 import { computeCriticalPath, longestChain } from '../gantt-cpm';
-import { DEFAULT_LABELS, type GanttTask } from '../types';
+import { DEFAULT_LABELS, type GanttFlatRow, type GanttTask } from '../types';
 
 const day = (d: number) => new Date(2026, 0, d);
 const task = (id: string, extra: Partial<GanttTask> = {}): GanttTask => ({
@@ -171,5 +180,94 @@ describe('computeCriticalPath — end date modes', () => {
     ];
     expect(longestChain(chainable)).toEqual(['z', 'w']);
     expect(longestChain(chainable, { endDateMode: 'inclusive' })).toEqual(['x', 'y', 'w']);
+  });
+});
+
+// ─── reindexVisible: tree position (aria-posinset / setsize) ─
+
+describe('reindexVisible', () => {
+  // a ─┬─ a1 ─── a1x
+  //    └─ a2
+  // b
+  // c ─── c1
+  const tree = (): GanttTask[] => [
+    task('a', { start: day(1) }),
+    task('a1', { parentId: 'a', start: day(2) }),
+    task('a1x', { parentId: 'a1', start: day(3) }),
+    task('a2', { parentId: 'a', start: day(4) }),
+    task('b', { start: day(5) }),
+    task('c', { start: day(6) }),
+    task('c1', { parentId: 'c', start: day(7) }),
+  ];
+  const place = (rows: GanttFlatRow[]) =>
+    rows.map(r => [r.task.id, r.visibleIndex, r.posInSet, r.setSize, r.parentIndex] as const);
+
+  it('sets visibleIndex, posInSet, setSize and parentIndex for an expanded tree', () => {
+    expect(place(reindexVisible(filterVisible(flattenTree(tree()))))).toEqual([
+      ['a', 0, 1, 3, undefined],
+      ['a1', 1, 1, 2, 0],
+      ['a1x', 2, 1, 1, 1],
+      ['a2', 3, 2, 2, 0],
+      ['b', 4, 2, 3, undefined],
+      ['c', 5, 3, 3, undefined],
+      ['c1', 6, 1, 1, 5],
+    ]);
+  });
+
+  it('counts only visible rows when a parent is collapsed', () => {
+    expect(place(reindexVisible(filterVisible(flattenTree(tree(), new Set(['a', 'c'])))))).toEqual([
+      ['a', 0, 1, 3, undefined],
+      ['b', 1, 2, 3, undefined],
+      ['c', 2, 3, 3, undefined],
+    ]);
+    expect(place(reindexVisible(filterVisible(flattenTree(tree(), new Set(['a1'])))))).toEqual([
+      ['a', 0, 1, 3, undefined],
+      ['a1', 1, 1, 2, 0],
+      ['a2', 2, 2, 2, 0],
+      ['b', 3, 2, 3, undefined],
+      ['c', 4, 3, 3, undefined],
+      ['c1', 5, 1, 1, 4],
+    ]);
+  });
+
+  it('follows the sorted order (sortTree keeps subtrees under their parent)', () => {
+    const rows = sortTree(flattenTree(tree()), columnComparator('name', 'desc'));
+    expect(place(reindexVisible(filterVisible(rows)))).toEqual([
+      ['c', 0, 1, 3, undefined],
+      ['c1', 1, 1, 1, 0],
+      ['b', 2, 2, 3, undefined],
+      ['a', 3, 3, 3, undefined],
+      ['a2', 4, 1, 2, 3],
+      ['a1', 5, 2, 2, 3],
+      ['a1x', 6, 1, 1, 5],
+    ]);
+  });
+
+  it('a row whose parent is missing (a filtered list) belongs to the nearest earlier row of a lower level', () => {
+    const rows = filterVisible(flattenTree(tree())).filter(r => r.task.id !== 'a1' && r.task.id !== 'c');
+    expect(place(reindexVisible(rows))).toEqual([
+      ['a', 0, 1, 2, undefined],
+      ['a1x', 1, 1, 2, 0],
+      ['a2', 2, 2, 2, 0],
+      ['b', 3, 2, 2, undefined],
+      ['c1', 4, 1, 1, 3],
+    ]);
+    // no earlier row of a lower level: a root
+    const orphans = filterVisible(flattenTree(tree())).filter(r => r.level > 0);
+    expect(place(reindexVisible(orphans)).slice(0, 2)).toEqual([
+      ['a1', 0, 1, 3, undefined],
+      ['a1x', 1, 1, 1, 0],
+    ]);
+  });
+
+  it('keeps the other fields, returns new rows and handles an empty list', () => {
+    const input = filterVisible(flattenTree(tree()));
+    const out = reindexVisible(input);
+    expect(out[1]).not.toBe(input[1]);
+    expect(out[1]).toMatchObject({ task: input[1]?.task, level: 1, hasChildren: true, barType: 'task' });
+    expect(input[1]?.posInSet).toBeUndefined();
+    // Reindexing again gives the same positions (a stale parentIndex is overwritten)
+    expect(place(reindexVisible(out))).toEqual(place(out));
+    expect(reindexVisible([])).toEqual([]);
   });
 });

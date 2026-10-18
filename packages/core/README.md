@@ -17,13 +17,20 @@ npm i @gantryjs/core
 
 ## What's inside
 
-| Area          | Exports                                                                                                                                                                                                                                                                    |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Types         | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, … and `ViewMode`, `TaskType`, `DependencyType` (`as const` objects with same-name types: `ViewMode.Week` works as a value and as a type) |
-| Timeline math | `dateToPixel`, `pixelToDate`, `getTimelineRange`, `generateHeaderRows`, `generateGridLines`, `zoomIn`, `zoomOut`, `PX_PER_DAY`, `formatDate`, `durationLabel`                                                                                                              |
-| Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                                                                                                              |
-| Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                                                                                                          |
-| i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                                                                                                        |
+| Area          | Exports                                                                                                                                                                                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Types         | `GanttTask`, `GanttDependency`, `GanttOptions`, `GanttTheme`, `ColumnDef`, `GanttAnnotation`, `TaskDragEvent`, `TaskResizeEvent`, `RetryEvent`, … and `ViewMode`, `TaskType`, `DependencyType` (`as const` objects with same-name types: `ViewMode.Week` works as a value and as a type)         |
+| Timeline math | `dateToPixel`, `pixelToDate`, `calendarDays`, `addDays`, `formatDate`, `durationLabel`                                                                                                                                                                                                           |
+| Render model  | `resolveConfig` (every option default), `buildTimeline`, `computeRowGeometries`, `computeBarVisual` / `hitTestBar`, `computeArrowVisual`, `computeMarkerLane`, `DragSession`, `formatDragReadout`, `wheelZoom` / `fitZoomLevel` / `anchoredScrollLeft`, `LightTheme` / `DarkTheme`, `themeToCss` |
+| Interaction   | `resolveKey` (the key map), `navigateGrid` / `navigateTimeline`, `tabStopIndex`, `KeyboardEditSession`, the pointer gesture machine (`startGesture`, `DRAG_THRESHOLD_PX`, `LONG_PRESS_MS`), `autoScrollDelta`, `createAnnouncer`, `taskAccessibleName`                                           |
+| State models  | `buildToolbar`, `resolveChartState` / `skeletonRows`, `buildLegend` / `legendPlacement`, `buildTooltipModel` / `reduceTooltip` / `placeTooltip`, selection and saved state                                                                                                                       |
+| Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                                                                                                                                    |
+| Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                                                                                                                                |
+| i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                                                                                                                              |
+
+Every Gantry binding paints these models, which is why an option behaves the same everywhere;
+the options themselves are documented in the main README's
+[Configuration](https://github.com/ErlonRr/gantryjs#configuration).
 
 ```ts
 import { computeCriticalPath, DependencyType } from '@gantryjs/core';

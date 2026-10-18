@@ -175,7 +175,7 @@ describe('task-list layer', () => {
   });
 
   describe('delegated listeners', () => {
-    it('selects on click and on Enter / Space on the row itself, emits row-dblclick', () => {
+    it('selects on click, on Enter (row-click) and Space (toggle) on a row or its cells, emits row-dblclick', () => {
       el = mount({ tasks: plan(3) });
       const clicks: string[] = [];
       const dbl: string[] = [];
@@ -187,16 +187,17 @@ describe('task-list layer', () => {
         .dispatchEvent(new MouseEvent('click', { bubbles: true }));
       expect(el.getSelectedTasks().map(t => t.id)).toEqual(['t1']);
 
-      const enter = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      // Enter activates: only this row, and row-click
+      const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
       row(el, 't2')!.dispatchEvent(enter);
       expect(enter.defaultPrevented).toBe(true);
       expect(el.getSelectedTasks().map(t => t.id)).toEqual(['t2']);
 
-      // A key on something inside the row is not a row activation
-      row(el, 't0')!
-        .querySelector('.gantt-tl-cell')!
-        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      expect(el.getSelectedTasks().map(t => t.id)).toEqual(['t2']);
+      // Space toggles with multiple selection (no row-click); on a cell it selects the cell's row
+      const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+      row(el, 't0')!.querySelector('.gantt-tl-cell')!.dispatchEvent(space);
+      expect(space.defaultPrevented).toBe(true);
+      expect(el.getSelectedTasks().map(t => t.id)).toEqual(['t0', 't2']);
 
       row(el, 't0')!.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
       expect(clicks).toEqual(['t1', 't2']);
@@ -227,7 +228,7 @@ describe('task-list layer', () => {
 
     it('sorts from a header click or Enter, cycling asc → desc → original', () => {
       el = mount({ tasks: plan(3) });
-      const header = $(el, '[data-focus-key="sort:name"]')!;
+      const header = $(el, '[data-focus-key="head:name"]')!;
       header.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       flush(el);
       expect(getEngine(el).graph.sort()).toEqual({ key: 'name', dir: 'asc' });
@@ -335,21 +336,33 @@ describe('task-list layer', () => {
       el.dataSource = { fetcher, pageSize: 40, retries: 0 };
       await vi.waitFor(() => expect(gates).toHaveLength(1));
       flush(el);
-      const footer = $(el, '.gantt-tl-load-more')!;
-      const button = $<HTMLButtonElement>(el, '.gantt-load-more-btn')!;
-      expect(footer.getAttribute('aria-busy')).toBe('true');
-      expect(button.textContent).toBe('Loading…');
-      expect(button.getAttribute('aria-disabled')).toBe('true');
+      // The first page loads under the chart's loading state (the host is busy), not in a footer
+      expect($(el, '.gantt-tl-load-more')).toBeNull();
+      expect(getEngine(el).graph.chartState().kind).toBe('loading');
+      expect(el.getAttribute('aria-busy')).toBe('true');
 
       await release();
-      await settled(button, 'Load more');
+      await vi.waitFor(() => {
+        flush(el);
+        expect($(el, '.gantt-load-more-btn')?.textContent).toBe('Load more');
+      });
+      const footer = $(el, '.gantt-tl-load-more')!;
+      const button = $<HTMLButtonElement>(el, '.gantt-load-more-btn')!;
       expect(el.tasks).toHaveLength(40);
-      expect($(el, '.gantt-load-more-btn')).toBe(button);
+      expect(el.hasAttribute('aria-busy')).toBe(false);
       expect(button.hasAttribute('aria-disabled')).toBe(false);
       expect(footer.hasAttribute('aria-busy')).toBe(false);
 
+      // The next pages load in the footer
       fail = true;
       button.click();
+      await vi.waitFor(() => expect(gates).toHaveLength(1));
+      flush(el);
+      expect($(el, '.gantt-load-more-btn')).toBe(button);
+      expect(footer.getAttribute('aria-busy')).toBe('true');
+      expect(button.textContent).toBe('Loading…');
+      expect(button.getAttribute('aria-disabled')).toBe('true');
+      expect(el.hasAttribute('aria-busy')).toBe(false);
       await release();
       await settled(button, 'Retry');
       expect($(el, '.gantt-load-error .gantt-load-more-btn')).toBe(button);
@@ -415,19 +428,19 @@ describe('toolbar layer', () => {
       'gantt-tb-group gantt-tb-pills gantt-tb-views',
     ]);
 
-    // Clicking a pill zooms; the pills stay, aria-pressed follows
+    // Clicking a radio zooms; the radios stay, aria-checked follows
     week.click();
     flush(el);
     expect(el.viewMode).toBe(ViewMode.Week);
     expect($(el, '[data-focus-key="zoom:Week"]')).toBe(week);
-    expect(week.getAttribute('aria-pressed')).toBe('true');
-    expect($(el, '[data-focus-key="zoom:Month"]')?.getAttribute('aria-pressed')).toBe('false');
+    expect(week.getAttribute('aria-checked')).toBe('true');
+    expect($(el, '[data-focus-key="zoom:Month"]')?.getAttribute('aria-checked')).toBe('false');
 
     const table = $(el, '[data-focus-key="view:table"]')!;
     table.click();
     flush(el);
     expect(el.view).toBe('table');
-    expect(table.getAttribute('aria-pressed')).toBe('true');
+    expect(table.getAttribute('aria-checked')).toBe('true');
 
     el.showToolbar = false;
     flush(el);
@@ -450,7 +463,7 @@ describe('toolbar layer', () => {
     flush(el);
     expect(zoomIn.getAttribute('aria-label')).toBe('Ingrandisci');
     expect(zoomIn.title).toBe('Ingrandisci');
-    expect($(el, '[data-focus-key="today"]')?.textContent).toBe('◎ Oggi');
+    expect($(el, '[data-focus-key="today"]')?.textContent).toBe('Oggi');
   });
 });
 
@@ -464,7 +477,7 @@ describe('legend layer', () => {
     el?.remove();
   });
 
-  it('patches the items in place and holds no children while hidden', () => {
+  it('patches the items in place and is detached while hidden', () => {
     el = mount({ tasks: plan(3), options: { showToday: false, criticalPath: true } });
     el.annotations = [{ x1: new Date(2026, 2, 5), label: { text: 'Freeze' } }];
     el.showLegend = true;
@@ -487,12 +500,13 @@ describe('legend layer', () => {
     expect(freeze.querySelector('line')).toBe(swatch);
     expect(swatch.style.getPropertyValue('stroke')).toBe('#8B5CF6');
 
+    // The table view has no timeline: detached (D27), then back with the same nodes
     el.setView('table');
     flush(el);
-    expect(legend.hidden).toBe(true);
-    expect(legend.children).toHaveLength(0);
+    expect($(el, '.gantt-legend')).toBeNull();
     el.setView('split');
     flush(el);
+    expect($(el, '.gantt-legend')).toBe(legend);
     expect(legend.hidden).toBe(false);
     expect(legend.firstElementChild?.className).toBe('gantt-legend-title');
     expect(legend.firstElementChild?.textContent).toBe('Legend');

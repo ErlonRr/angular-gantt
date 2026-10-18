@@ -4,7 +4,14 @@
   A thin binding over the `<gantry-element>` Web Component: props are set as element
   properties, events arrive as callback props with the event `detail` (`onTaskDragged`,
   `onSelectionChange`, …), and `bind:element` gives the `GantryElement` with its imperative API
-  (`zoomIn()`, `scrollToToday()`, …). Other props (`class`, `id`, `aria-*`, …) go to the element.
+  (`zoomIn()`, `scrollToToday()`, …). Other props (`class`, `id`, `style`, `aria-*`, …) go to the
+  element. No inline style of its own: `:host` sizes the element (block, 100% × 100%).
+
+  Light DOM: the `empty` snippet is rendered as `<div slot="empty">` (the element's empty-state
+  slot), then `children` as it is. `empty` exists because Svelte can't pass `<div slot="empty">`
+  through `children` cleanly: written as a direct child of <Gantry> it is a legacy named slot (never
+  rendered by a runes component), and the explicit `{#snippet children()}` that keeps it an
+  attribute trips the recommended `svelte/no-useless-children-snippet` lint rule.
 -->
 <script module lang="ts">
   /** The data props, copied one level (`shallow`); the others (`dataSource`, `renderBar`, …) pass as they are */
@@ -26,7 +33,7 @@
 
 <script lang="ts">
   import '@gantryjs/vanilla';
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
   import type { GantryElement, GantryProperties, GantryEventCallbacks } from '@gantryjs/vanilla';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -35,6 +42,8 @@
     GantryEventCallbacks &
     Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | keyof GantryEventCallbacks> & {
       element?: GantryElement | undefined;
+      /** Empty-state content, rendered in `<div slot="empty">` (replaces `labels.emptyState`) */
+      empty?: Snippet | undefined;
     };
 
   // Every name of GANTRY_PROPERTIES and GANTRY_EVENTS is destructured explicitly: what is left
@@ -52,6 +61,8 @@
     showLegend,
     dataSource,
     renderBar,
+    loading,
+    errorMessage,
     onTaskDragged,
     onTaskResized,
     onSelectionChange,
@@ -60,8 +71,10 @@
     onViewModeChange,
     onStateChange,
     onLoadError,
+    onRetry,
     element = $bindable(),
-    style = '',
+    empty,
+    children,
     ...rest
   }: Props = $props();
 
@@ -80,6 +93,8 @@
     showLegend: () => showLegend,
     dataSource: () => dataSource,
     renderBar: () => renderBar,
+    loading: () => loading,
+    errorMessage: () => errorMessage,
   };
   const callbacks: { [K in keyof Required<GantryEventCallbacks>]: () => GantryEventCallbacks[K] } = {
     onTaskDragged: () => onTaskDragged,
@@ -90,6 +105,7 @@
     onViewModeChange: () => onViewModeChange,
     onStateChange: () => onStateChange,
     onLoadError: () => onLoadError,
+    onRetry: () => onRetry,
   };
 
   // Listeners first: assigning a property can fire an event at once (`view-mode-change`), so they
@@ -135,5 +151,7 @@
   }
 </script>
 
-<gantry-element bind:this={element} style="display: block; width: 100%; height: 100%; {style}" {...rest}
-></gantry-element>
+<!-- (one line: no whitespace text node between the slot content and the children) -->
+<gantry-element bind:this={element} {...rest}>
+  {#if empty}<div slot="empty">{@render empty()}</div>{/if}{@render children?.()}
+</gantry-element>

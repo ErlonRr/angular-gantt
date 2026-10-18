@@ -64,6 +64,10 @@ export interface Inputs {
   readonly tooltipEnabled: WritableSignal<boolean>;
   readonly renderBar: WritableSignal<GanttBarRenderer | undefined>;
   readonly dataSource: WritableSignal<GanttDataSource | null>;
+  /** `loading`: the consumer is loading the tasks (skeleton while there are no rows, `aria-busy`) */
+  readonly loading: WritableSignal<boolean>;
+  /** `errorMessage`: a non-blank string shows the error state with that message (`null` = none) */
+  readonly errorMessage: WritableSignal<string | null>;
 
   // ── Theme ───────────────────────────────────────────────
   /** `prefers-color-scheme: dark` (followed while `darkMode` is `'auto'` and connected) */
@@ -84,8 +88,21 @@ export interface Inputs {
   readonly sort: WritableSignal<SortState | null>;
   readonly selection: WritableSignal<SelectionState>;
   readonly dragPreview: WritableSignal<DragPreview | null>;
-  /** Task-list row that holds keyboard focus (`focusin`, `interaction/keyboard.ts`): pinned in the vertical window */
+  /** Row holding focus (a task-list row or cell, or a bar; `interaction/keyboard.ts`): pinned, both panes' tab stops follow it */
   readonly focusedRowId: WritableSignal<string | null>;
+  /**
+   * Where a zoom keeps its date: x in viewport px (from the viewport's left edge) of the pointer
+   * for Ctrl/⌘ + wheel and pinch zooms, `null` = the viewport's centre (toolbar, keyboard, API).
+   * Written by the zoom gestures with the zoom, read and cleared by the scroll-commands region.
+   */
+  readonly zoomAnchor: WritableSignal<number | null>;
+  /** Bar under a fine pointer (mouse / pen hover): its grips show (`g.gantt-bar-overlay`) */
+  readonly hoveredBarId: WritableSignal<string | null>;
+  /**
+   * Bar that holds keyboard focus reached from the keyboard (the last input was a key, not a
+   * pointer): its focus ring and grips show (`g.gantt-bar-overlay`). `null` otherwise.
+   */
+  readonly focusVisibleBarId: WritableSignal<string | null>;
   /** Panel width the user chose (splitter, restored state), in px; `null` = from `panel.width` */
   readonly panelW: WritableSignal<number | null>;
   /** Data-source footer state (`null` without a data source) */
@@ -165,6 +182,8 @@ export function createInputs(): Inputs {
     tooltipEnabled: flag(fresh<boolean>('tooltipEnabled')),
     renderBar: signal(fresh<GanttBarRenderer | undefined>('renderBar')),
     dataSource: signal(fresh<GanttDataSource | null>('dataSource')),
+    loading: flag(fresh<boolean>('loading')),
+    errorMessage: signal(fresh<string | null>('errorMessage')),
     prefersDark: flag(false),
     apiTheme: signal<GanttThemeOverrides>({}),
     viewModeOverride: signal('Month'),
@@ -174,6 +193,9 @@ export function createInputs(): Inputs {
     selection: signal(emptySelection()),
     dragPreview: signal<DragPreview | null>(null),
     focusedRowId: signal<string | null>(null),
+    zoomAnchor: signal<number | null>(null),
+    hoveredBarId: signal<string | null>(null),
+    focusVisibleBarId: signal<string | null>(null),
     panelW: signal<number | null>(null),
     loadState: signal<GanttLoadMoreState | null>(null, { equals: structuralEqual }),
     // The engine's clock: the one place that reads the time

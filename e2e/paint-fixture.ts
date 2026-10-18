@@ -1,7 +1,10 @@
-// Data for `paint.spec.ts`: a small plan that reaches every colour path of the canvas, the
-// header, the task list, the legend and the tooltip. Dates are local ISO strings (no offset)
-// relative to `NOW`, revived into `Date`s inside the page by both drivers (the Web Component
-// `host.evaluate` and the Angular `/fixture` route), so both bindings get identical input.
+// Data for `paint.spec.ts` and `forced-colors.spec.ts`: a small plan that reaches every colour
+// path of the canvas, the header, the task list, the legend and the tooltip, and the two drivers
+// that render it (`renderFixture`). Dates are local ISO strings (no offset) relative to `NOW`,
+// revived into `Date`s inside the page by both drivers (the Web Component `host.evaluate` and the
+// Angular `/fixture` route), so both bindings get identical input.
+import type { Chart } from './fixtures';
+import { TARGETS } from '../playwright.config';
 
 /** `NOW` (2026-10-14, a Wednesday) as a calendar day; offsets below are in days from it. */
 const BASE = { y: 2026, m: 9, d: 14 } as const;
@@ -191,7 +194,11 @@ export const PAINT_OPTIONS: Record<string, unknown> = {
   },
 };
 
-export type Scenario = 'light-week' | 'dark-week' | 'auto-dark' | 'hour' | 'table' | 'tooltip' | 'selected';
+/**
+ * `forced` is the light week with a selected bar (`visual`, off the critical path) next to the
+ * critical chain, rendered with forced colours emulated (`emulateMedia({ forcedColors: 'active' })`).
+ */
+export type Scenario = 'light-week' | 'dark-week' | 'auto-dark' | 'hour' | 'table' | 'tooltip' | 'selected' | 'forced';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -201,6 +208,7 @@ export const SCENARIOS: readonly Scenario[] = [
   'table',
   'tooltip',
   'selected',
+  'forced',
 ];
 
 /** The fixture each scenario renders. */
@@ -223,8 +231,78 @@ export function paintFixture(scenario: Scenario): PaintFixture {
     case 'table':
       return { ...base, options: { ...PAINT_OPTIONS, view: 'table' } };
     case 'selected':
+    case 'forced':
       return { ...base, selected: ['visual'] };
     default:
       return base;
   }
+}
+
+/** The bindings the drivers render. */
+export type Target = 'vanilla' | 'angular';
+
+/**
+ * Replace the playground's element with a fresh one (no playground listeners or state) fed by the
+ * fixture, in the same fixed box as the Angular `/fixture` route (1150 × 700 at the top left), so
+ * both bindings window the same rows and columns.
+ */
+async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
+  await chart.open(`http://localhost:${TARGETS.vanilla.port}/`);
+  await chart.host().evaluate((old, f) => {
+    const LOCAL_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/;
+    const revive = (v: unknown): unknown => {
+      if (typeof v === 'string') return LOCAL_ISO.test(v) ? new Date(v) : v;
+      if (Array.isArray(v)) return v.map(revive);
+      if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, revive(x)]));
+      return v;
+    };
+    const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const byDay = new Map(f.highlight.map(h => [dayKey(new Date(h.day)), h]));
+    const el = document.createElement('gantry-element') as HTMLElement & Record<string, unknown>;
+    el.id = old.id;
+    for (const [prop, value] of [
+      ['position', 'fixed'],
+      ['top', '0'],
+      ['left', '0'],
+      ['z-index', '100'],
+      ['width', '1150px'],
+      ['height', '700px'],
+    ]) {
+      el.style.setProperty(prop, value);
+    }
+    el['darkMode'] = f.darkMode;
+    el['showToolbar'] = true;
+    el['enableDrag'] = true;
+    el['enableResize'] = true;
+    el['tooltipEnabled'] = true;
+    el['showLegend'] = true;
+    el['tasks'] = revive(f.tasks);
+    el['annotations'] = revive(f.annotations);
+    el['options'] = {
+      ...(revive(f.options) as object),
+      highlightTime: byDay.size
+        ? (start: Date, unit: string) => {
+            const h = unit === 'day' ? byDay.get(dayKey(start)) : undefined;
+            return h ? { color: h.color, label: h.label } : null;
+          }
+        : undefined,
+    };
+    old.replaceWith(el);
+    (el['setSelectedTasks'] as (ids: string[]) => void)(f.selected);
+  }, fx);
+}
+
+async function renderAngular(chart: Chart, fx: PaintFixture): Promise<void> {
+  await chart.page.addInitScript(f => {
+    (window as Window & { __GANTRY_FIXTURE__?: unknown }).__GANTRY_FIXTURE__ = f;
+  }, fx);
+  await chart.open(`http://localhost:${TARGETS.angular.port}/fixture`);
+}
+
+/**
+ * Render `fx` on `target`: the Web Component in the playground page (a fresh element in a fixed
+ * box), Angular in the showcase's `/fixture` route (read from `window.__GANTRY_FIXTURE__`).
+ */
+export function renderFixture(chart: Chart, target: Target, fx: PaintFixture): Promise<void> {
+  return target === 'vanilla' ? renderVanilla(chart, fx) : renderAngular(chart, fx);
 }

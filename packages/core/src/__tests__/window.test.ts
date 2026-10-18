@@ -318,6 +318,37 @@ describe('computeHorizontalWindow', () => {
     ).toEqual({ x0: 1030, x1: 1830 });
   });
 
+  it('windows an unmeasured viewport with fallbackWidth when one is given (SSR)', () => {
+    for (const viewportWidth of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(
+        computeHorizontalWindow({ scrollLeft: 1000, viewportWidth, totalWidth: 5000, fallbackWidth: 800 }),
+      ).toEqual({ x0: 600, x1: 2200 });
+    }
+    // Same overscan and quantum rules as a measured viewport
+    expect(
+      computeHorizontalWindow({
+        scrollLeft: 1030,
+        viewportWidth: 0,
+        totalWidth: 5000,
+        fallbackWidth: 800,
+        overscan: 0,
+        quantum: 256,
+      }),
+    ).toEqual({ x0: 1024, x1: 2048 });
+  });
+
+  it('ignores fallbackWidth while the viewport is measurable, and an unusable fallbackWidth', () => {
+    expect(
+      computeHorizontalWindow({ scrollLeft: 1000, viewportWidth: 400, totalWidth: 5000, fallbackWidth: 800 }),
+    ).toEqual(computeHorizontalWindow({ scrollLeft: 1000, viewportWidth: 400, totalWidth: 5000 }));
+    for (const fallbackWidth of [undefined, 0, -800, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(computeHorizontalWindow({ scrollLeft: 1000, viewportWidth: 0, totalWidth: 5000, fallbackWidth })).toEqual({
+        x0: 0,
+        x1: 5000,
+      });
+    }
+  });
+
   it('keeps a quantized window equal while the scroll stays inside a chunk', () => {
     const at = (scrollLeft: number) =>
       computeHorizontalWindow({ scrollLeft, viewportWidth: 800, totalWidth: 5000, overscan: 0, quantum: 256 });

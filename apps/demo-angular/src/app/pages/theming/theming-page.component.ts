@@ -5,6 +5,7 @@ import { createDemoData } from '@gantryjs/core/demo';
 import { AppThemeService } from '../../shell/app-theme.service';
 import { CodeBlockComponent } from '../../shell/code-block.component';
 import { IconComponent } from '../../shell/icon.component';
+import { TABS } from '../../shell/tabs';
 import {
   COLOR_FIELDS,
   PRESETS,
@@ -39,7 +40,7 @@ function ratioText(ratio: number): string {
 @Component({
   selector: 'app-theming-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [GantryComponent, CodeBlockComponent, IconComponent],
+  imports: [GantryComponent, CodeBlockComponent, IconComponent, TABS],
   template: `
     <div class="gs-page-head">
       <div>
@@ -196,21 +197,15 @@ function ratioText(ratio: number): string {
             <p class="gs-hint">Only the tokens you changed.</p>
           </div>
           <div class="gs-card-body">
-            <div class="gs-tabs" role="tablist" aria-label="Code format">
+            <div
+              class="gs-tabs"
+              aria-label="Code format"
+              tabPanel="th-code-panel"
+              [appTabList]="codeTab()"
+              (tabSelect)="codeTab.set($event)"
+            >
               @for (t of codeTabs; track t.id) {
-                <button
-                  type="button"
-                  role="tab"
-                  class="gs-tab"
-                  aria-controls="th-code-panel"
-                  [id]="'th-tab-' + t.id"
-                  [attr.aria-selected]="t.id === codeTab()"
-                  [tabIndex]="t.id === codeTab() ? 0 : -1"
-                  (click)="codeTab.set(t.id)"
-                  (keydown)="onTabKey($event)"
-                >
-                  {{ t.label }}
-                </button>
+                <button type="button" class="gs-tab" [appTab]="t.id" [id]="'th-tab-' + t.id">{{ t.label }}</button>
               }
             </div>
             <div id="th-code-panel" role="tabpanel" [attr.aria-labelledby]="'th-tab-' + codeTab()">
@@ -364,18 +359,6 @@ export class ThemingPageComponent {
 
   protected setMetric(field: RangeField, value: number): void {
     if (Number.isFinite(value)) this.edit({ [field.key]: `${value}px` });
-  }
-
-  /** Arrow keys, Home and End move between the tabs (WAI-ARIA tabs pattern). */
-  protected onTabKey(e: KeyboardEvent): void {
-    const i = CODE_TABS.findIndex(t => t.id === this.codeTab());
-    const n = CODE_TABS.length;
-    const keys: Record<string, number> = { ArrowRight: (i + 1) % n, ArrowLeft: (i - 1 + n) % n, Home: 0, End: n - 1 };
-    const next = keys[e.key];
-    if (next === undefined) return;
-    e.preventDefault();
-    this.codeTab.set(CODE_TABS[next].id);
-    (e.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>('[role="tab"]')[next]?.focus();
   }
 
   private overridesFor(mode: BoardMode): GanttThemeOverrides {

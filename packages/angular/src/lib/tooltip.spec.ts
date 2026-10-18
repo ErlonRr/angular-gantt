@@ -1,10 +1,12 @@
-// The task tooltip (Gantry 2 phase 7, step 4.1): one popover per chart, inside <gantry>, with the
-// Web Component's markup (`div.gantt-tooltip` > title + `<dl>` of `dt` / `dd` groups) built from
-// the core tooltip model, written as text, and driven like the Web Component's tooltip layer:
-// delegated hover on the canvas, the core show / hide delays, closed on drag start and when
-// `tooltipEnabled` turns off, timers cleared with the chart. Timers are faked (setTimeout only) and
-// the renders flushed with TestBed.tick(); the test DOM has no Popover API (the `hidden`
-// attribute alone shows the popover), the Popover API test stubs it.
+// The task tooltip (Gantry 2 phase 7 step 4.1, phase 9 step 4.8): one popover per chart, inside
+// <gantry>, with the Web Component's markup (`div.gantt-tooltip` > title + `<dl>` of `dt` / `dd`
+// groups) built from the core tooltip model and written as text; opened and closed by core's
+// tooltip machine (`reduceTooltip`, with the resolved `options.tooltip`), anchored to its bar by
+// core `placeTooltip` (one measurement per opening), closed on drag start and when
+// `tooltipEnabled` turns off, its timer cleared with the chart. The chart's tooltip state is
+// driven directly (as the canvas pointer handlers do) or through pointer events on the bars.
+// Timers are faked (setTimeout only) and the renders flushed with TestBed.tick(); the test DOM has
+// no Popover API (the `hidden` attribute alone shows the popover), the Popover API test stubs it.
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChildren } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
@@ -16,13 +18,18 @@ import {
   TOOLTIP_SHOW_DELAY,
   TaskType,
   buildTooltipModel,
+  placeTooltip,
   resolveConfig,
   themeVar,
+  type GanttFlatRow,
   type GanttOptions,
   type GanttTask,
 } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
+import { GanttCanvasComponent } from './layout/gantt-canvas.component';
+import { GanttLayoutService } from './layout/gantt-layout.service';
 import { GanttDragService } from './drag/gantt-drag.service';
+import { GanttTooltipState } from './tooltip/tooltip-state';
 
 const day = (d: number) => new Date(2026, 0, d);
 
@@ -58,7 +65,7 @@ async function mount(setup?: (host: Host) => void): Promise<Fixture> {
   const f = TestBed.createComponent(Host);
   setup?.(f.componentInstance);
   await f.whenStable();
-  // From here on the hover timers are driven by hand; renders are flushed with TestBed.tick()
+  // From here on the tooltip timer is driven by hand; renders are flushed with TestBed.tick()
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   return f;
 }
@@ -68,17 +75,29 @@ const tipOf = (f: Fixture, id = 'one') => chartEl(f, id).querySelector<HTMLEleme
 const barOf = (f: Fixture, task: string, id = 'one') =>
   chartEl(f, id).querySelector<SVGGElement>(`.gantt-bars-layer [data-task-id="${task}"]`)!;
 const texts = (tip: HTMLElement, sel: string) => [...tip.querySelectorAll(sel)].map(n => n.textContent);
+const children = (tip: HTMLElement) => [...tip.children].map(c => `${c.tagName.toLowerCase()}.${c.className}`);
 
-/** Pointer move over `task`'s bar (the canvas delegates hover from the <svg>) */
-function hover(f: Fixture, task: string, x = 100, y = 100, chart = 'one'): void {
-  barOf(f, task, chart).dispatchEvent(new PointerEvent('pointermove', { bubbles: true, clientX: x, clientY: y }));
+/** The chart's tooltip state (provided by its canvas) */
+function stateOf(f: Fixture, id = 'one'): GanttTooltipState {
+  const chart = f.debugElement.query(By.css(`#${id}`));
+  return chart.query(By.directive(GanttCanvasComponent)).injector.get(GanttTooltipState);
+}
+function rowOf(f: Fixture, task: string, id = 'one'): GanttFlatRow {
+  return f.debugElement
+    .query(By.css(`#${id}`))
+    .injector.get(GanttLayoutService)
+    .geometryById()
+    .get(task)!.row;
+}
+
+/** The pointer over `task`'s bar at `x` (what the canvas pointer handler sends) */
+function hover(f: Fixture, task: string, x = 100, chart = 'one'): void {
+  stateOf(f, chart).hover(rowOf(f, task, chart), barOf(f, task, chart), x);
   TestBed.tick();
 }
-/** Pointer move over the canvas outside the bars */
-function moveOff(f: Fixture): void {
-  chartEl(f)
-    .querySelector('.gantt-rows')!
-    .dispatchEvent(new PointerEvent('pointermove', { bubbles: true }));
+/** The pointer left the bars */
+function unhover(f: Fixture): void {
+  stateOf(f).unhover();
   TestBed.tick();
 }
 function wait(ms: number): void {
@@ -86,8 +105,8 @@ function wait(ms: number): void {
   TestBed.tick();
 }
 /** Hovers `task`'s bar and waits for the tooltip to open */
-function open(f: Fixture, task: string, x = 100, y = 100): HTMLElement {
-  hover(f, task, x, y);
+function open(f: Fixture, task: string, x = 100): HTMLElement {
+  hover(f, task, x);
   wait(TOOLTIP_SHOW_DELAY);
   return tipOf(f)!;
 }
@@ -98,14 +117,14 @@ describe('task tooltip', () => {
     vi.restoreAllMocks();
   });
 
-  it('is one popover per chart, inside <gantry>, created on the first hover, with the WC markup', async () => {
+  it('is one popover per chart, inside <gantry>, created on the first hover, with the WC markup and its own id', async () => {
     const f = await mount(h => h.second.set(true));
     // Nothing before a hover (a server render has no popover either)
     expect(document.querySelectorAll('.gantt-tooltip')).toHaveLength(0);
 
     hover(f, 'a');
     hover(f, 'b');
-    hover(f, 'a', 10, 10, 'two');
+    hover(f, 'a', 10, 'two');
     expect(document.querySelectorAll('.gantt-tooltip')).toHaveLength(2);
     expect(document.body.querySelector(':scope > .gantt-tooltip')).toBeNull();
     for (const id of ['one', 'two']) {
@@ -115,20 +134,31 @@ describe('task tooltip', () => {
       expect(tip.tagName).toBe('DIV');
       expect(tip.getAttribute('popover')).toBe('manual');
       expect(tip.getAttribute('role')).toBe('tooltip');
+      expect(tip.id).toBe(stateOf(f, id).elementId());
       expect(tip.hidden).toBe(true);
-      expect([...tip.children].map(c => `${c.tagName.toLowerCase()}.${c.className}`)).toEqual([
-        'div.gantt-tooltip-title',
-        'dl.gantt-tooltip-rows',
-      ]);
+      expect(children(tip)).toEqual(['div.gantt-tooltip-title', 'dl.gantt-tooltip-rows']);
     }
+    expect(tipOf(f)!.id).toMatch(/^gantt-tooltip-\d+$/);
+    expect(tipOf(f)!.id).not.toBe(tipOf(f, 'two')!.id);
     // The tokens are inherited from the chart, never copied onto the popover
     expect(tipOf(f)!.style.getPropertyValue('--gantt-tooltip-bg')).toBe('');
     expect(chartEl(f).style.getPropertyValue('--gantt-tooltip-bg')).not.toBe('');
   });
 
-  it('opens after the show delay with the core model rows as dt / dd text and the progress fill', async () => {
+  it('opens after the show delay from a pointer move over a bar, with the core model rows as dt / dd text', async () => {
     const f = await mount();
-    hover(f, 'a');
+    const gantt = f.componentInstance.charts()[0];
+    const v = gantt.getBarVisual('a')!;
+    // The canvas' delegated hover (the test DOM maps client to SVG coordinates 1:1)
+    barOf(f, 'a').dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'mouse',
+        clientX: v.x + v.width / 2,
+        clientY: v.y + v.height / 2,
+      }),
+    );
+    TestBed.tick();
     const tip = tipOf(f)!;
     wait(TOOLTIP_SHOW_DELAY - 1);
     expect(tip.hidden).toBe(true);
@@ -174,18 +204,39 @@ describe('task tooltip', () => {
     }
   });
 
-  it('moving to another bar while open keeps it open and swaps the content after the show delay, keeping row nodes', async () => {
+  it('takes its delays from options.tooltip, and the hover intent restarts the show delay', async () => {
+    const f = await mount(h =>
+      h.options.set({ initialScroll: false, viewMode: 'Day', tooltip: { showDelay: 100, hideDelay: 40 } }),
+    );
+    hover(f, 'a', 100);
+    wait(80);
+    hover(f, 'a', 110); // still moving over the bar
+    wait(80);
+    const tip = tipOf(f)!;
+    expect(tip.hidden).toBe(true);
+    wait(20);
+    expect(tip.hidden).toBe(false);
+    unhover(f);
+    wait(39);
+    expect(tip.hidden).toBe(false);
+    wait(1);
+    expect(tip.hidden).toBe(true);
+
+    // A zero delay opens at once
+    f.componentInstance.options.set({ initialScroll: false, viewMode: 'Day', tooltip: { showDelay: 0 } });
+    TestBed.tick();
+    hover(f, 'b');
+    expect(tip.hidden).toBe(false);
+    expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task b');
+  });
+
+  it('switches to another hovered bar at once, keeping row nodes (keyed by kind) and dropping the rows a task lacks', async () => {
     const f = await mount();
     const tip = open(f, 'a');
     const firstRow = tip.querySelector('dl > div')!;
     expect(tip.querySelectorAll('dl > div')).toHaveLength(5);
 
     hover(f, 'm');
-    // Same delay as the Web Component (hover intent); the open tooltip stays up meanwhile
-    wait(TOOLTIP_SHOW_DELAY - 1);
-    expect(tip.hidden).toBe(false);
-    expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task a');
-    wait(1);
     expect(tip.hidden).toBe(false);
     expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task m');
     expect(texts(tip, 'dl > div > dt')).toEqual([DEFAULT_LABELS.ttMilestone]);
@@ -193,16 +244,15 @@ describe('task tooltip', () => {
     expect(tip.querySelector('.gantt-tooltip-fill')).toBeNull();
 
     hover(f, 'c');
-    wait(TOOLTIP_SHOW_DELAY);
     expect(tip.querySelector('dl > div')).toBe(firstRow);
     expect(tip.querySelectorAll('dl > div')).toHaveLength(4);
     expect(tipOf(f)).toBe(tip);
   });
 
-  it('hides after the hide delay unless the pointer comes back', async () => {
+  it('hides after the hide delay unless the pointer comes back; leaving the canvas counts as leaving the bars', async () => {
     const f = await mount();
     const tip = open(f, 'a');
-    moveOff(f);
+    unhover(f);
     wait(TOOLTIP_HIDE_DELAY - 1);
     expect(tip.hidden).toBe(false);
     hover(f, 'a');
@@ -210,10 +260,10 @@ describe('task tooltip', () => {
     expect(tip.hidden).toBe(false);
 
     // Leaving the canvas, then moving off again: the first deadline holds
-    chartEl(f).querySelector('svg')!.dispatchEvent(new PointerEvent('pointerleave'));
+    chartEl(f).querySelector('gantt-canvas svg')!.dispatchEvent(new PointerEvent('pointerleave'));
     TestBed.tick();
     wait(TOOLTIP_HIDE_DELAY - 1);
-    moveOff(f);
+    unhover(f);
     wait(1);
     expect(tip.hidden).toBe(true);
     // Its last content stays (hidden) for the next opening
@@ -242,7 +292,6 @@ describe('task tooltip', () => {
     expect(fill.style.getPropertyValue('background-color')).toBe(themeVar('criticalColor'));
 
     hover(f, 'c');
-    wait(TOOLTIP_SHOW_DELAY);
     expect(tip.classList.contains('gantt-tooltip--critical')).toBe(false);
     expect(tip.classList[0]).toBe('gantt-tooltip');
     fill = tip.querySelector<HTMLElement>('.gantt-tooltip-fill')!;
@@ -250,23 +299,44 @@ describe('task tooltip', () => {
     expect(['#FDE68A', 'rgb(253, 230, 138)']).toContain(fill.style.getPropertyValue('background-color'));
   });
 
-  it('follows the pointer with a translate, flips at the viewport edges, and measures once per content', async () => {
+  it('sits by its bar (core placeTooltip): on the pointer while hovering, centred on focus; one measurement per opening', async () => {
     const f = await mount();
-    hover(f, 'a');
+    hover(f, 'b', 10); // creates the popover (still waiting for the show delay)
+    stateOf(f).hide();
+    TestBed.tick();
     const tip = tipOf(f)!;
     const measure = vi.spyOn(tip, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 200, 100));
-    wait(TOOLTIP_SHOW_DELAY);
-    expect(tip.style.getPropertyValue('translate')).toBe('112px 108px');
+    const box = new DOMRect(300, 120, 240, 24);
+    const anchor = vi.spyOn(barOf(f, 'a'), 'getBoundingClientRect').mockReturnValue(box);
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const size = { width: 200, height: 100 };
+    const at = () => tip.style.getPropertyValue('translate');
 
-    const view = document.defaultView!;
-    const x = view.innerWidth - 50;
-    const y = view.innerHeight - 20;
-    hover(f, 'a', x, y);
-    expect(tip.style.getPropertyValue('translate')).toBe(`${x - 200 - 12}px ${y - 100 - 8}px`);
-    // Never closer than 8px to the top-left corner
-    hover(f, 'a', -40, -40);
-    expect(tip.style.getPropertyValue('translate')).toBe('8px 8px');
+    open(f, 'a', 500);
+    const hovered = placeTooltip({ anchor: box, pointerX: 500, size, viewport });
+    expect(at()).toBe(`${hovered.x}px ${hovered.y}px`);
+    expect(hovered.y).toBe(120 + 24 + 8); // below the bar
+    // Moving over the same bar does not move it, nor measure again
+    hover(f, 'a', 320);
+    expect(at()).toBe(`${hovered.x}px ${hovered.y}px`);
     expect(measure).toHaveBeenCalledTimes(1);
+
+    // Keyboard focus: centred on the bar, at once
+    stateOf(f).hide();
+    TestBed.tick();
+    stateOf(f).focus(rowOf(f, 'a'), barOf(f, 'a'));
+    TestBed.tick();
+    const focused = placeTooltip({ anchor: box, size, viewport });
+    expect(at()).toBe(`${focused.x}px ${focused.y}px`);
+    expect(focused.x).toBe(300 + 120 - 100);
+    expect(measure).toHaveBeenCalledTimes(2);
+
+    // A scroll of the timeline re-reads the bar only
+    anchor.mockReturnValue(new DOMRect(300, 60, 240, 24));
+    chartEl(f).querySelector('.gantry-canvas-viewport')!.dispatchEvent(new Event('scroll'));
+    expect(at()).toBe(`${focused.x}px ${60 + 24 + 8}px`);
+    expect(measure).toHaveBeenCalledTimes(2);
+    for (const prop of ['left', 'top', 'display']) expect(tip.style.getPropertyValue(prop)).toBe('');
   });
 
   it('uses the Popover API when the browser has it, once per opening', async () => {
@@ -277,13 +347,12 @@ describe('task tooltip', () => {
       const f = await mount();
       open(f, 'a');
       hover(f, 'b');
-      wait(TOOLTIP_SHOW_DELAY);
       expect(showPopover).toHaveBeenCalledTimes(1);
       expect(tipOf(f)!.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task b');
-      moveOff(f);
+      unhover(f);
       wait(TOOLTIP_HIDE_DELAY);
-      moveOff(f);
-      wait(TOOLTIP_HIDE_DELAY);
+      stateOf(f).hide();
+      TestBed.tick();
       expect(hidePopover).toHaveBeenCalledTimes(1);
     } finally {
       const proto = HTMLElement.prototype as unknown as Record<string, unknown>;
@@ -292,30 +361,26 @@ describe('task tooltip', () => {
     }
   });
 
-  it('closes on drag start and stays closed during the drag', async () => {
+  it('closes when a drag or keyboard move mode starts, and the bar does not reopen it meanwhile', async () => {
     const f = await mount();
-    const gantt = f.componentInstance.charts()[0];
     const drag = f.debugElement.query(By.directive(GantryComponent)).injector.get(GanttDragService);
     const tip = open(f, 'a');
-    // Pointer down on the bar starts a drag (the test DOM maps client to SVG coordinates 1:1)
-    const v = gantt.getBarVisual('a')!;
-    chartEl(f)
-      .querySelector('svg')!
-      .dispatchEvent(
-        new PointerEvent('pointerdown', {
-          bubbles: true,
-          button: 0,
-          clientX: v.x + v.width / 2,
-          clientY: v.y + v.height / 2,
-        }),
-      );
+    // Keyboard move mode borrows the drag's visuals: the tooltip closes like on a pointer drag start
+    expect(drag.startExternal('a')).toBe(true);
     TestBed.tick();
-    expect(drag.isDragging()).toBe(true);
+    expect(drag.isActive()).toBe(true);
     expect(tip.hidden).toBe(true);
-    // No tooltip during the drag
-    hover(f, 'b');
+    expect(stateOf(f).visibleId()).toBeNull();
+    // Dismissed: the bar does not reopen it
+    hover(f, 'a');
     wait(TOOLTIP_SHOW_DELAY);
     expect(tip.hidden).toBe(true);
+    drag.endExternal();
+    TestBed.tick();
+    // Once the pointer has left the bar, it opens again
+    unhover(f);
+    open(f, 'a');
+    expect(tip.hidden).toBe(false);
   });
 
   it('closes when tooltipEnabled turns off and ignores the bars while off', async () => {
@@ -342,29 +407,40 @@ describe('task tooltip', () => {
     expect(tip.hidden).toBe(true);
   });
 
-  it('destroying the chart clears both timers and removes the popover', async () => {
+  it('keeps one timer, cleared when the tooltip resets and when the chart goes away (with its popover)', async () => {
     const f = await mount(h => h.second.set(true));
     const settle = () => vi.advanceTimersByTime(0); // Angular's own render callbacks: what is left are the tooltips'
     settle();
     const idle = vi.getTimerCount();
 
-    // Pending show
-    hover(f, 'a', 10, 10, 'two');
+    // Pending show: one timer however often the pointer moves
+    hover(f, 'a', 10, 'two');
+    hover(f, 'a', 20, 'two');
     settle();
     expect(vi.getTimerCount()).toBe(idle + 1);
+    stateOf(f, 'two').hide();
+    expect(vi.getTimerCount()).toBe(idle);
+
+    hover(f, 'a', 10, 'two');
     wait(TOOLTIP_SHOW_DELAY);
     const tip = tipOf(f, 'two')!;
     expect(tip.hidden).toBe(false);
+    settle();
+    expect(vi.getTimerCount()).toBe(idle);
     // Pending hide (the pointer left the bars), then the chart goes away
-    chartEl(f, 'two').querySelector('svg')!.dispatchEvent(new PointerEvent('pointerleave'));
+    stateOf(f, 'two').unhover();
     TestBed.tick();
     settle();
     expect(vi.getTimerCount()).toBe(idle + 1);
+    const state = stateOf(f, 'two');
     f.componentInstance.second.set(false);
     TestBed.tick();
     settle();
     expect(vi.getTimerCount()).toBe(idle);
     expect(tip.isConnected).toBe(false);
+    // A destroyed state ignores the pointer
+    state.unhover();
+    expect(vi.getTimerCount()).toBe(idle);
     // The other chart still works
     expect(open(f, 'b').hidden).toBe(false);
   });

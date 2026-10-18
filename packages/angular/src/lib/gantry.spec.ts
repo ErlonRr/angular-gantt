@@ -83,17 +83,19 @@ describe('GantryComponent', () => {
     expect(f.componentInstance.events.at(-1)?.selectedIds).toEqual([]);
   });
 
-  it('leaves unhandled shortcuts (fit, Alt+key) to the browser', async () => {
+  it('leaves unhandled shortcuts (Alt+key, undo until Phase 11) to the browser; + and F are the chart’s', async () => {
     const f = await mount();
     const host = f.nativeElement.querySelector('gantry') as HTMLElement;
-    for (const init of [{ key: 'f' }, { key: 't', altKey: true }, { key: 'z', ctrlKey: true }]) {
+    for (const init of [{ key: 't', altKey: true }, { key: 'z', ctrlKey: true }, { key: 'l' }]) {
       const e = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
       host.dispatchEvent(e);
       expect(e.defaultPrevented).toBe(false);
     }
-    const zoom = new KeyboardEvent('keydown', { key: '+', bubbles: true, cancelable: true });
-    host.dispatchEvent(zoom);
-    expect(zoom.defaultPrevented).toBe(true);
+    for (const key of ['+', 'f']) {
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      host.dispatchEvent(e);
+      expect(e.defaultPrevented, key).toBe(true);
+    }
   });
 
   it('names bars with type, dates, progress and critical state', async () => {

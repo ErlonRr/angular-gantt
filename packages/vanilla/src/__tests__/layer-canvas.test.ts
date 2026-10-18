@@ -64,16 +64,32 @@ function scrollTo(el: GantryElement, top: number): void {
   flush(el);
 }
 
-/** Pointer-drags the bar of `id` by `days` (the drop only when `drop`). */
-function drag(el: GantryElement, id: string, days: number, drop = true): void {
+/**
+ * Pointer-drags the bar of `id` by `days` (the drop only when `drop`), pressing the middle of its
+ * body: bars are hit by geometry (the canvas box is at 0,0 in happy-dom). A mouse press drags once
+ * it has moved 3 px (the move's `clientY` 0 is far from the bar's centre too). Returns the pressed x.
+ */
+function drag(el: GantryElement, id: string, days: number, drop = true): number {
   const canvas = $(el, '.gantry-canvas-container')!;
   const px = getEngine(el).graph.timeline().pxPerDay;
-  bar(el, id).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
-  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + days * px, pointerId: 1 }));
+  const v = el.getBarVisual(id)!;
+  const x = v.x + v.width / 2;
+  bar(el, id).dispatchEvent(
+    new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      clientX: x,
+      clientY: v.cy,
+      pointerId: 1,
+      pointerType: 'mouse',
+    }),
+  );
+  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + days * px, pointerId: 1, pointerType: 'mouse' }));
   flush(el);
-  if (!drop) return;
-  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + days * px, pointerId: 1 }));
+  if (!drop) return x;
+  canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + days * px, pointerId: 1, pointerType: 'mouse' }));
   flush(el);
+  return x;
 }
 
 /** The same nodes, in any order. */
@@ -113,8 +129,11 @@ describe('canvas layers', () => {
       observer.disconnect();
       const after = [...layer.children];
       expect(diff(before, after)).toEqual({ added: 1, removed: 1 });
-      // The new bar is built before it is attached: the kept bars see no attribute write at all
-      expect(records.filter(r => r.type === 'attributes')).toEqual([]);
+      // The new bar is built before it is attached: the kept bars see no attribute write, but for
+      // the roving tab stop (D5: the first bar in view while no bar has had focus) moving by a row
+      const writes = records.filter(r => r.type === 'attributes');
+      expect(writes.filter(r => r.attributeName !== 'tabindex')).toEqual([]);
+      expect(writes.length).toBeLessThanOrEqual(2);
       expect(after.slice(0, -1)).toEqual(before.slice(1));
       // Rows follow the same rule
       expect($$(el, '.gantt-rows rect')).toHaveLength(after.length);
@@ -133,7 +152,7 @@ describe('canvas layers', () => {
       expect(body.getAttribute('stroke-width')).toBe('1.5');
       expect(body.style.getPropertyValue('stroke')).toBe(PAINTS.selectionStroke);
 
-      drag(el, 't1', 2, false);
+      const x0 = drag(el, 't1', 2, false);
       expect(bar(el, 't1')).toBe(t1);
       expect(t1.style.getPropertyValue('opacity')).toBe('0.35');
       expect(t1.hasAttribute('opacity')).toBe(false);
@@ -141,7 +160,7 @@ describe('canvas layers', () => {
 
       const canvas = $(el, '.gantry-canvas-container')!;
       const px = getEngine(el).graph.timeline().pxPerDay;
-      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 2 * px, pointerId: 1 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x0 + 2 * px, pointerId: 1, pointerType: 'mouse' }));
       flush(el);
       // The task moved (after t2 now, rows go by start date): its bar is patched in place and
       // moved to its row's place; every bar is the same node
@@ -209,20 +228,22 @@ describe('canvas layers', () => {
       expect(calls).toEqual(['t2']);
       expect(old.isConnected).toBe(false);
       expect(bar(el, 't2')).not.toBe(old);
-      expect(bar(el, 't2').getAttribute('role')).toBe('listitem');
+      expect(bar(el, 't2').getAttribute('role')).toBe('option');
       expect(bar(el, 't2').getAttribute('aria-label')).toContain('Task 2');
       expect(bar(el, 't3')).toBe(neighbour);
       expect(barIds(el)).toEqual(mounted);
 
       // Drag moves: nothing re-rendered, the node is dimmed
       calls.length = 0;
-      drag(el, 't3', 1, false);
+      const x0 = drag(el, 't3', 1, false);
       expect(calls).toEqual([]);
       expect(neighbour.style.getPropertyValue('opacity')).toBe('0.35');
       // The drop changes that task only (the timeline keeps its range)
       const tl = getEngine(el).graph.timeline();
       const canvas = $(el, '.gantry-canvas-container')!;
-      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + tl.pxPerDay, pointerId: 1 }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointerup', { clientX: x0 + tl.pxPerDay, pointerId: 1, pointerType: 'mouse' }),
+      );
       flush(el);
       expect(getEngine(el).graph.timeline().start.getTime()).toBe(tl.start.getTime());
       expect(calls).toEqual(['t3']);
@@ -288,6 +309,8 @@ describe('canvas layers', () => {
       baseline: null,
       caps: null,
       handles: null,
+      focusRect: { x: 7, y: 2, width: 106, height: 26, rx: 7 },
+      hitBox: { x: 10, y: 5, width: 100, height: 20 },
       ...over,
     });
     const parts = (g: Element) => [...g.children].map(c => c.getAttribute('class'));
@@ -349,20 +372,28 @@ describe('canvas layers', () => {
         paint: 'var(--gantt-arrow)',
         width: 1.5,
         dashed: false,
+        dash: null,
         critical: false,
         lagLabel: null,
       };
-      const g = createArrow(a, 13);
+      // The dash and the lag label's font size are the visual's (core `ArrowVisual.dash`, `lagLabel.fontPx`)
+      const g = createArrow(a);
       expect(g.getAttribute('class')).toBe('gantt-arrow');
       expect(g.children).toHaveLength(2);
       const path = g.firstElementChild!;
-      patchArrow(g, { ...a, critical: true, dashed: true, lagLabel: { text: '+2d', x: 5, y: 5 } }, 13);
+      patchArrow(g, {
+        ...a,
+        critical: true,
+        dashed: true,
+        dash: '5 3',
+        lagLabel: { text: '+2d', x: 5, y: 5, fontPx: 11 },
+      });
       expect(g.getAttribute('class')).toBe('gantt-arrow gantt-arrow--critical');
       expect(g.firstElementChild).toBe(path);
       expect(path.getAttribute('stroke-dasharray')).toBe('5 3');
       expect(g.lastElementChild!.textContent).toBe('+2d');
       expect(g.lastElementChild!.getAttribute('font-size')).toBe('11');
-      patchArrow(g, a, 13);
+      patchArrow(g, a);
       expect(g.children).toHaveLength(2);
       expect(path.hasAttribute('stroke-dasharray')).toBe(false);
     });
@@ -470,7 +501,12 @@ describe('canvas layers', () => {
     ];
 
     it('keys annotations by index and patches them when the window moves', () => {
-      el = mount({ tasks: plan(60), annotations: annotations(), options: { initialScroll: false } });
+      // Without the marker lane, the labels are drawn in the canvas (with the lane they go to the header, D12)
+      el = mount({
+        tasks: plan(60),
+        annotations: annotations(),
+        options: { initialScroll: false, markers: { lane: false } },
+      });
       const marks = $$(el, '.gantt-annotations > *');
       expect(marks.map(m => m.tagName.toLowerCase())).toEqual(['rect', 'line', 'line']);
       const label = $(el, '.gantt-annotation-labels > text')!;
@@ -500,7 +536,7 @@ describe('canvas layers', () => {
       expect(today!.nextElementSibling).toBe(dom.arrows);
       expect(today!.getAttribute('x1')).toBe(String(G.todayX()));
 
-      drag(el, 't1', 2, false);
+      const x0 = drag(el, 't1', 2, false);
       const ghost = $(el, '.gantt-drag-preview')!;
       expect(ghost).toBe(dom.ghost);
       expect(dom.svg.lastElementChild).toBe(ghost);
@@ -520,13 +556,15 @@ describe('canvas layers', () => {
       // A further move patches the same two nodes
       const canvas = $(el, '.gantry-canvas-container')!;
       const px = G.timeline().pxPerDay;
-      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 100 + 3 * px, pointerId: 1 }));
+      canvas.dispatchEvent(
+        new PointerEvent('pointermove', { clientX: x0 + 3 * px, pointerId: 1, pointerType: 'mouse' }),
+      );
       flush(el);
       expect($(el, '.gantt-drag-preview')).toBe(ghost);
       expect(ghost.previousElementSibling).toBe(label);
       expect(label.textContent).toBe('+3d');
 
-      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100 + 3 * px, pointerId: 1 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x0 + 3 * px, pointerId: 1, pointerType: 'mouse' }));
       flush(el);
       expect($$(el, '.gantt-drag-preview')).toHaveLength(0);
       expect(label.isConnected).toBe(false);

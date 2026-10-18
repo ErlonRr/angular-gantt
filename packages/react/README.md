@@ -44,12 +44,48 @@ export function Roadmap() {
 
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties): `tasks`, `options`,
   `columns`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
-  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, plus `className` / `style` / any HTML attribute.
+  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`, plus
+  `className` / `style` / any HTML attribute.
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,
   `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`,
-  `onLoadError`.
+  `onLoadError`, `onRetry`.
+- **Children** go into the element's light DOM, where its slots pick them up:
+  `<div slot="empty">…</div>` replaces the empty-state text (`labels.emptyState`).
 - **Ref** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is attached once the
   props are set, so a callback ref can call `scrollToTask()` right away.
+- **Size** — the element fills its container (`display: block; width: 100%; height: 100%`, from
+  its own `:host` style); a `className` or `style` overrides that. The wrapper adds no inline
+  style of its own.
+
+### Loading, error and empty states
+
+```tsx
+<Gantry
+  tasks={tasks}
+  loading={isLoading}
+  errorMessage={error ? 'Couldn’t load the plan' : null}
+  onRetry={() => refetch()}
+>
+  <div slot="empty">No tasks yet: add one to start.</div>
+</Gantry>
+```
+
+`loading` shows the loading state and `errorMessage` the error state, whose Retry button fires
+`onRetry`: `{ source: 'error' }` for the `errorMessage` state (load again yourself), `{ source:
+'dataSource' }` after a failed first `dataSource` page (the element also calls
+`dataSource.retry()`). The `slot="empty"` child replaces the text shown when there are no tasks.
+
+### Options and behaviour
+
+`options` takes every `GanttOptions` field, documented once for every binding in
+[Configuration](https://github.com/ErlonRr/gantryjs#configuration): among them the
+[toolbar, legend and marker lane](https://github.com/ErlonRr/gantryjs#toolbar-legend-and-markers), the
+[tooltip](https://github.com/ErlonRr/gantryjs#tooltip) (`tooltip.render` returns a string or a DOM node, not a React element) and
+`keyboard.characterShortcuts`. Keyboard navigation and move mode, touch gestures, zoom gestures,
+screen-reader semantics and forced colors behave as in every Gantry binding: see
+[Keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus), [Touch and pointer](https://github.com/ErlonRr/gantryjs#touch-and-pointer),
+[Zoom](https://github.com/ErlonRr/gantryjs#zoom), [Screen readers](https://github.com/ErlonRr/gantryjs#screen-readers) and [Forced colors](https://github.com/ErlonRr/gantryjs#forced-colors).
+`gantt.current?.fitToScreen()` zooms to the finest level that shows every task.
 
 ### How props reach the chart
 
@@ -73,9 +109,21 @@ export function Roadmap() {
 
 ### Server-side rendering
 
-`renderToString` / streaming render an empty `<gantry-element>` with its class, style and
-attributes, without touching DOM APIs or warning about layout effects; the chart renders in the
-browser once the element is defined and the component hydrates.
+`renderToString` / streaming render the `<gantry-element>` tag with your class, style,
+attributes and children (no inline style of its own, so the markup needs no `'unsafe-inline'`
+style policy), without touching DOM APIs or warning about layout effects; the chart renders in
+the browser once the element is defined and the component hydrates.
+
+Until then the element's own `:host` style (which makes it fill its container) doesn't apply, so
+the server markup takes no room. Reserve the chart's box with one rule in your stylesheet:
+
+```css
+gantry-element:not(:defined) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+```
 
 All `@gantryjs/core` types and helpers (`ViewMode`, `GanttTask`, `computeCriticalPath`, …)
 are re-exported.

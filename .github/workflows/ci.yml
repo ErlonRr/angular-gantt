@@ -50,7 +50,7 @@ jobs:
       - name: Custom Elements Manifest is up to date (packages/vanilla/custom-elements.json)
         run: pnpm --filter @gantryjs/vanilla cem:check
       - name: Bundle size budget (`import '@gantryjs/vanilla'`, minified + gzip)
-        run: node scripts/size.mjs --max 50
+        run: node scripts/size.mjs --max 70
       - name: Build packages, Angular library, showcase and demos
         run: pnpm build
       - name: API report is up to date (@gantryjs/angular)

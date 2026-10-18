@@ -237,6 +237,27 @@ describe('header and static layers (horizontal window)', () => {
     expect($(el, '.g-header')).toBe(header);
   });
 
+  it('sizes the header box to the model header height: the tiers, plus the marker lane while it shows', () => {
+    el = mount(span(1));
+    const { graph } = getEngine(el);
+    const header = $(el, '.g-header')!;
+    expect(px(header, 'height')).toBe(graph.timeline().headerHeight);
+    expect(graph.headerHeight()).toBe(graph.timeline().headerHeight);
+
+    el.annotations = [{ x1: new Date(2024, 0, 5), label: { text: 'Kickoff' } }];
+    flush(el);
+    expect(px(header, 'height')).toBe(graph.headerHeight());
+    expect(graph.headerHeight()).toBe(graph.timeline().headerHeight + graph.laneHeight());
+    expect(graph.laneHeight()).toBeGreaterThan(0);
+    expect($(el, '.g-marker-lane')?.parentElement).toBe(header);
+
+    // The lane adds no scroll work: inside one chunk the header does not re-run
+    scrollTo(el, 3000);
+    const runs = regionCounter(el);
+    scrollTo(el, 3050, 36);
+    expect(runs('header')).toBe(0);
+  });
+
   it('tints the finest tier with the non-working bands of the window only', () => {
     el = mount(span(3), { ...DAY, nonWorkingTime: { weekends: true } });
     const { graph } = getEngine(el);

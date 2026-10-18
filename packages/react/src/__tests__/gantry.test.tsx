@@ -59,7 +59,7 @@ afterEach(async () => {
 });
 
 describe('<Gantry> (React wrapper)', () => {
-  it('renders a <gantry-element> with the default size, the class and the native attributes', async () => {
+  it('renders a <gantry-element> with the class, the style and the native attributes', async () => {
     const errors = vi.spyOn(console, 'error');
     await render(
       <Gantry
@@ -76,14 +76,18 @@ describe('<Gantry> (React wrapper)', () => {
     expect(el.getAttribute('class')).toBe('chart');
     expect(el.id).toBe('plan');
     expect(el.getAttribute('aria-describedby')).toBe('help');
-    expect(el.style.display).toBe('block');
-    expect(el.style.width).toBe('100%');
-    expect(el.style.height).toBe('400px');
+    // Only the consumer's style: the element sizes itself (`:host`: block, 100% × 100%)
+    expect(el.getAttribute('style')).toBe('height: 400px;');
     // Properties and callbacks are not attributes (`role` / `aria-label`: the element's ARIA
     // fallback without ElementInternals, as in happy-dom)
     const ours = el.getAttributeNames().filter(name => name !== 'role' && name !== 'aria-label');
     expect(ours.sort()).toEqual(['aria-describedby', 'class', 'id', 'style']);
     expect(errors).not.toHaveBeenCalled();
+  });
+
+  it('writes no inline style of its own', async () => {
+    await render(<Gantry className="chart" />);
+    expect(element().hasAttribute('style')).toBe(false);
   });
 
   it('delivers the events fired by the first property writes', async () => {

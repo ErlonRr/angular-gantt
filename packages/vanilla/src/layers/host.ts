@@ -5,12 +5,24 @@
  * the collapse toggle and its vertical position (below the header). Everything comes from the
  * graph; the widths it needs were measured by the ResizeObserver (`mainW`).
  *
- * It also hands the header height to the vertical window (`headerH`): the sticky header is
- * sized by the model, so the model's height is exact, and it is known before the first layout.
- * Host runs first in the flush, so the windowed regions read the new value in the same flush.
+ * Inert: the panel in the chart view, the timeline viewport in the table view, and while the chart
+ * is not ready (`graph.chartState`) everything the state box covers — the timeline viewport and
+ * the splitter here, the task-list rows in the task-list region — so no hidden control stays in
+ * the tab order or the accessibility tree. The task-list header row stays above the box and
+ * reachable.
+ *
+ * It also hands the header height (tiers + marker lane, `graph.headerHeight`) to the vertical
+ * window (`headerH`): the sticky header is sized by the model, so the model's height is exact, and
+ * it is known before the first layout. Host runs first in the flush, so the windowed regions read
+ * the new value in the same flush. The same height is `--gantry-header-h` on the wrapper (the
+ * timeline header box is at least that tall, lane included: `styles/host.css.ts`) and the panes'
+ * scroll padding: what the browser scrolls into view stays clear of the sticky headers, and a bar
+ * lands with its whole focus ring in the timeline (core `timelineScrollPadding`).
+ *
+ * The host region is busy (`aria-busy`, `ctx.setBusy`) while `graph.chartState.busy`.
  */
 
-import { SPLITTER_TOGGLE_OFFSET } from '@gantryjs/core';
+import { SPLITTER_TOGGLE_OFFSET, timelineScrollPadding } from '@gantryjs/core';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
 
@@ -37,11 +49,16 @@ export function createHostLayer(ctx: LayerContext): HostLayer {
       const view = I.viewOverride();
       const headerHeight = G.headerHeight();
       I.headerH.set(headerHeight);
+      const state = G.chartState();
+      ctx.setBusy(state.busy);
+      // The state box covers the body (from the header down): what is under it can't be reached
+      const covered = state.kind !== 'ready';
 
       panes();
       dom.panel.inert = view === 'chart';
-      // Hidden behind the table view: out of the tab order and the accessibility tree
-      dom.viewport.inert = view === 'table';
+      // Hidden behind the table view or the state box: out of the tab order and the accessibility tree
+      dom.viewport.inert = view === 'table' || covered;
+      dom.splitter.inert = covered;
       setAttr(dom.splitter, 'data-resizable', String(cfg.panel.resizable && view === 'split'));
       // A focusable separator states its position and range: the panel width in px (as Angular's splitter)
       const value = G.splitter();
@@ -56,9 +73,19 @@ export function createHostLayer(ctx: LayerContext): HostLayer {
       setAttr(dom.toggle, 'title', label);
       setAttr(dom.toggle, 'aria-label', label);
       setAttr(dom.toggle, 'aria-expanded', String(!collapsed));
-      // Inherited by the toggle (`top: var(--gantry-toggle-top)`); on the wrapper, so a string
-      // `style` on the host can't wipe it
+      // Inherited by the toggle (`top: var(--gantry-toggle-top)`) and the timeline header box
+      // (`min-height: var(--gantry-header-h)`); on the wrapper, so a string `style` on the host
+      // can't wipe them
       setStyleProp(dom.wrapper, '--gantry-toggle-top', `${headerHeight + SPLITTER_TOGGLE_OFFSET}px`);
+      setStyleProp(dom.wrapper, '--gantry-header-h', `${headerHeight}px`);
+      // Keyboard focus and `scrollIntoView` keep what they reveal below the sticky headers, a bar
+      // with its whole focus ring (2.4.11)
+      const pad = timelineScrollPadding(headerHeight);
+      setStyleProp(dom.viewport, 'scroll-padding-top', `${pad.top}px`);
+      setStyleProp(dom.viewport, 'scroll-padding-right', `${pad.right}px`);
+      setStyleProp(dom.viewport, 'scroll-padding-bottom', `${pad.bottom}px`);
+      setStyleProp(dom.viewport, 'scroll-padding-left', `${pad.left}px`);
+      setStyleProp(dom.panel, 'scroll-padding-top', `${headerHeight}px`);
     },
   };
 }

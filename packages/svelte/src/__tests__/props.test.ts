@@ -30,9 +30,23 @@ describe('Gantry.svelte props', () => {
     expect(Object.values(GANTRY_EVENTS).filter(name => !names.includes(name))).toEqual([]);
   });
 
-  it('destructures nothing else but element, style and the rest', () => {
-    const known = new Set<string>([...GANTRY_PROPERTIES, ...Object.values(GANTRY_EVENTS), 'element', 'style', 'rest']);
+  it('destructures nothing else but element, the empty and children snippets, and the rest', () => {
+    const known = new Set<string>([
+      ...GANTRY_PROPERTIES,
+      ...Object.values(GANTRY_EVENTS),
+      'element',
+      'empty',
+      'children',
+      'rest',
+    ]);
     expect(destructured().filter(name => !known.has(name))).toEqual([]);
+  });
+
+  it('destructures the snippets (never attributes) and leaves style to the rest', () => {
+    const names = destructured();
+    expect(names).toEqual(expect.arrayContaining(['empty', 'children']));
+    // No default inline style to merge with: `style` reaches the element like any other attribute
+    expect(names).not.toContain('style');
   });
 });
 

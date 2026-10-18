@@ -1,13 +1,14 @@
 // Accessibility of <gantry-element> (Gantry 2 phase 6, step 4.2): the host region through
 // ElementInternals (role, name, custom states) or host attributes without it, no host tab stop
-// or theme attribute, the internal tab stops (task-list row, splitter, timeline viewport), the
-// polite live region and the focus fallback. happy-dom has no ElementInternals: the internals
-// path runs against a stub, the real one is covered by e2e/a11y.spec.ts.
+// or theme attribute, the internal tab stops (task-list row, splitter, the timeline's tab-stop
+// bar — the viewport only without bars, phase 9), the polite live region (debounced, core
+// `createAnnouncer`: fake timers below) and the focus fallback. happy-dom has no ElementInternals: the internals path runs against a stub, the real
+// one is covered by e2e/a11y.spec.ts.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { GanttTask } from '@gantryjs/core';
+import { ANNOUNCE_DEBOUNCE, REPEAT_MARK, type GanttTask } from '@gantryjs/core';
 import { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
-import { announce } from '../engine/announce';
+import { createLiveAnnouncer } from '../engine/announce';
 import '../index';
 
 const flush = (el: GantryElement) => getEngine(el).flushSync();
@@ -52,9 +53,20 @@ const idAt = (el: GantryElement, i: number) => getEngine(el).graph.visibleRows()
 /** Every text written into `region`, in order (one per announcement). */
 function announcements(region: HTMLElement): string[] {
   const said: string[] = [];
-  new MutationObserver(records => {
-    for (const r of records) for (const n of r.addedNodes) said.push(n.textContent ?? '');
-  }).observe(region, { childList: true });
+  // The accessor the region inherits (happy-dom defines it below `Node.prototype`)
+  let proto = Object.getPrototypeOf(region) as object;
+  while (!Object.getOwnPropertyDescriptor(proto, 'textContent')) proto = Object.getPrototypeOf(proto) as object;
+  const text = Object.getOwnPropertyDescriptor(proto, 'textContent')!;
+  Object.defineProperty(region, 'textContent', {
+    configurable: true,
+    get(this: Node) {
+      return text.get!.call(this) as string;
+    },
+    set(this: Node, value: string) {
+      said.push(value);
+      text.set!.call(this, value);
+    },
+  });
   return said;
 }
 
@@ -89,6 +101,7 @@ describe('<gantry-element> accessibility', () => {
   afterEach(() => {
     el?.remove();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe('host', () => {
@@ -160,11 +173,18 @@ describe('<gantry-element> accessibility', () => {
 
       const bar = $(el, '.gantt-bars-layer [data-task-id="t0"]');
       const canvas = $(el, '.gantry-canvas-container');
-      bar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: 100, pointerId: 1 }));
+      // Bars are hit by geometry: press the middle of the body (the canvas box is at 0,0 in happy-dom)
+      const v = el.getBarVisual('t0')!;
+      const x = v.x + v.width / 2;
+      bar.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, button: 0, clientX: x, clientY: v.cy, pointerId: 1 }),
+      );
+      // A mouse drags once it has moved 3 px (D13)
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 4, clientY: v.cy, pointerId: 1 }));
       expect(internals.states.has('dragging')).toBe(true);
-      // The drag takes keyboard focus to the timeline (Escape cancels it)
+      // The press takes keyboard focus to the timeline (Escape cancels the drag)
       expect(el.shadowRoot!.activeElement).toBe($(el, '.gantry-canvas-viewport'));
-      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: 100, pointerId: 1 }));
+      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 4, pointerId: 1 }));
       expect(internals.states.has('dragging')).toBe(false);
     });
 
@@ -185,14 +205,18 @@ describe('<gantry-element> accessibility', () => {
   });
 
   describe('tab stops', () => {
-    it('makes the timeline viewport a named tab stop', () => {
+    it('names the timeline viewport, a tab stop only while no bar is mounted (the bars rove)', () => {
       el = mount({ tasks: plan(3) });
       const viewport = $(el, '.gantry-canvas-viewport');
-      expect(viewport.getAttribute('tabindex')).toBe('0');
+      expect(viewport.getAttribute('tabindex')).toBe('-1');
+      expect($$(el, '.gantt-bars-layer > [tabindex="0"]').map(b => b.dataset['taskId'])).toEqual(['t0']);
       expect(viewport.getAttribute('role')).toBe('group');
       expect(viewport.getAttribute('aria-label')).toBe('Gantt chart timeline');
       el.options = { labels: { ariaChart: 'Release plan' } };
       expect(viewport.getAttribute('aria-label')).toBe('Release plan');
+      el.tasks = [];
+      flush(el);
+      expect(viewport.getAttribute('tabindex')).toBe('0');
     });
 
     it('makes the splitter a focusable separator beside its toggle', () => {
@@ -258,13 +282,22 @@ describe('<gantry-element> accessibility', () => {
   });
 
   describe('focus fallback', () => {
-    it('moves focus to the timeline viewport when the focused row goes away', () => {
+    it("moves focus to the timeline's tab-stop bar when the focused row goes away", () => {
       el = mount({ tasks: plan(3) });
       $(el, '.gantt-tl-row[data-task-id="t1"]').focus();
       flush(el);
       el.tasks = plan(1);
       flush(el);
-      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantry-canvas-viewport'));
+      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantt-bars-layer > [data-task-id="t0"]'));
+    });
+
+    it('without rows the empty state covers the body: the toolbar tab stop takes focus', () => {
+      el = mount({ tasks: plan(1) });
+      $(el, '.gantt-tl-row[data-task-id="t0"]').focus();
+      flush(el);
+      el.tasks = [];
+      flush(el);
+      expect(el.shadowRoot!.activeElement?.getAttribute('data-focus-key')).toBe('zoom-out');
     });
 
     it('in the table view (inert timeline) moves it to the task list tab stop', () => {
@@ -291,57 +324,119 @@ describe('<gantry-element> accessibility', () => {
       expect(region.textContent).toBe('');
     });
 
-    it('announces changes of the selection count, not the selection found when connected', () => {
+    it('announces changes of the selection count once settled, not the selection found when connected', () => {
+      vi.useFakeTimers();
       el = create({ tasks: plan(5) });
       el.setSelectedTasks(['t0']);
       document.body.appendChild(el);
       flush(el);
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
       expect(live(el)).toBe('');
 
       el.setSelectedTasks(['t1', 't2']);
+      expect(live(el)).toBe(''); // debounced
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE - 1);
+      expect(live(el)).toBe('');
+      vi.advanceTimersByTime(1);
       expect(live(el)).toBe('2 tasks selected');
       el.setSelectedTasks(['t3', 't4']); // same count: nothing new to say
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
       expect(live(el)).toBe('2 tasks selected');
+
+      // A burst is read once, as its last message
+      const said = announcements($(el, '.gantt-sr-live'));
       el.setSelectedTasks(['t3']);
-      expect(live(el)).toBe('1 task selected');
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE / 2);
       el.clearSelection();
-      expect(live(el)).toBe('Selection cleared');
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
+      expect(said).toEqual(['Selection cleared']);
 
       el.options = { labels: { announceSelection: n => `${n} selezionate` } };
       el.setSelectedTasks(['t1', 't2', 't3']);
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
       expect(live(el)).toBe('3 selezionate');
     });
 
-    it('announces the data source load state, page by page', async () => {
+    it('announces zoom changes in the toolbar words, not the level found when connected', () => {
+      vi.useFakeTimers();
+      el = mount({ tasks: plan(3), options: { viewMode: 'Week' } });
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
+      expect(live(el)).toBe('');
+      el.zoomIn();
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
+      expect(live(el)).toBe('Zoom: Day');
+      el.options = { viewMode: 'Week', labels: { viewModes: { Week: 'Settimana' }, announceZoom: l => `Zoom ${l}` } };
+      el.zoomOut();
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
+      expect(live(el)).toBe('Zoom Settimana');
+    });
+
+    it('announces the data source load state from its subscription, page by page', async () => {
+      vi.useFakeTimers();
       const pending: ((items: GanttTask[]) => void)[] = [];
       const fetcher = vi.fn(() => new Promise<GanttTask[]>(resolve => pending.push(resolve)));
       el = mount();
       const said = announcements($(el, '.gantt-sr-live'));
-      el.dataSource = { fetcher, pageSize: 5, retries: 0 };
-      pending.shift()!(plan(5));
-      // A full page: more may follow, and the lazy-load region asks for it near the end of the list
-      await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+      // Pages of 40 rows: nothing more loads by itself, the footer's "Load more" asks for page 2
+      el.dataSource = { fetcher, pageSize: 40, retries: 0 };
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      pending.shift()!(plan(40));
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      flush(el);
+      $<HTMLButtonElement>(el, '.gantt-load-more-btn').click();
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
       pending.shift()!([]);
-      await vi.waitFor(() => expect(said.at(-1)).toBe('All 5 tasks loaded'));
-      expect(said).toEqual(['Loading…', '5 tasks loaded', 'Loading…', 'All 5 tasks loaded']);
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(said).toEqual(['Loading…', '40 tasks loaded', 'Loading…', 'All 40 tasks loaded']);
     });
 
-    it('leaves a failed page to the alert region', async () => {
+    it('does not announce the load state found when it connects', async () => {
+      vi.useFakeTimers();
+      const fetcher = vi.fn(() => new Promise<GanttTask[]>(() => {}));
       el = mount();
+      el.dataSource = { fetcher, pageSize: 5, retries: 0 };
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      expect(live(el)).toBe('Loading…');
+      el.remove();
+      const said = announcements($(el, '.gantt-sr-live'));
+      document.body.appendChild(el);
+      flush(el);
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      expect(said).toEqual([]);
+    });
+
+    it('leaves a failed first page to the alert of the error state, dropping the pending "Loading…"', async () => {
+      vi.useFakeTimers();
+      el = mount();
+      const said = announcements($(el, '.gantt-sr-live'));
       el.dataSource = { fetcher: () => Promise.reject(new Error('offline')), pageSize: 5, retries: 0 };
-      expect(live(el)).toBe('Loading…');
-      await vi.waitFor(() => expect(el.dataSource?.error).not.toBeNull());
-      expect(live(el)).toBe('Loading…');
-      expect($(el, '.gantt-sr-alert').textContent).toBe('Couldn’t load tasks');
+      await vi.advanceTimersByTimeAsync(ANNOUNCE_DEBOUNCE);
+      flush(el);
+      expect(el.dataSource?.error).not.toBeNull();
+      expect(said).toEqual([]);
+      // The error box is the alert (the assertive region stays empty, as in Angular)
+      expect($(el, '.gantt-state--error [role="alert"]')).not.toBeNull();
+      expect($(el, '.gantt-sr-alert').textContent).toBe('');
     });
 
     it('makes a repeated sentence a change, so it is read again', () => {
       const region = document.createElement('div');
-      announce(region, '1 task selected');
-      announce(region, '1 task selected');
-      expect(region.textContent).toBe('1 task selected\u00A0');
-      announce(region, '1 task selected');
+      const announcer = createLiveAnnouncer(region);
+      announcer.now('1 task selected');
+      announcer.now('1 task selected');
+      expect(region.textContent).toBe(`1 task selected${REPEAT_MARK}`);
+      announcer.now('1 task selected');
       expect(region.textContent).toBe('1 task selected');
+    });
+
+    it('drops a pending announcement when the element disconnects', () => {
+      vi.useFakeTimers();
+      el = mount({ tasks: plan(3) });
+      el.setSelectedTasks(['t1']);
+      el.remove();
+      vi.advanceTimersByTime(ANNOUNCE_DEBOUNCE);
+      expect(live(el)).toBe('');
     });
   });
 });

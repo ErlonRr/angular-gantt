@@ -49,7 +49,7 @@
             {
               "description": "Milestone fill (`milestoneColor`); set `--gantt-bar-text-on-milestone` with it.",
               "name": "--gantt-milestone",
-              "default": "#8B5CF6"
+              "default": "#7C3AED"
             },
             {
               "description": "Baseline bars (`baselineColor`).",
@@ -142,7 +142,7 @@
               "default": "#EFF6FF"
             },
             {
-              "description": "Selection outline and focus rings (`selectionBorder`).",
+              "description": "Selection outline (selected bar and row) and the splitter / column-resize hover (`selectionBorder`).",
               "name": "--gantt-sel-border",
               "default": "#2563EB"
             },
@@ -202,6 +202,11 @@
               "default": "#000000"
             },
             {
+              "description": "Keyboard focus rings (`focusRing`).",
+              "name": "--gantt-focus-ring",
+              "default": "#2563EB"
+            },
+            {
               "description": "Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).",
               "name": "--gantt-bar-text-on-bar",
               "default": "#FFFFFF"
@@ -242,6 +247,20 @@
             {
               "description": "The timeline viewport (header and chart; scrolls on both axes).",
               "name": "timeline"
+            },
+            {
+              "description": "The legend of the timeline markers (`showLegend`).",
+              "name": "legend"
+            },
+            {
+              "description": "The box over the chart body while it loads, failed or is empty.",
+              "name": "state"
+            }
+          ],
+          "slots": [
+            {
+              "description": "Shown in the empty state (no tasks and nothing loading); `labels.emptyState` when nothing is slotted.",
+              "name": "empty"
             }
           ],
           "members": [
@@ -348,6 +367,24 @@
               "description": "Replace or decorate the built-in bar SVG (see `GanttBarRenderer`)."
             },
             {
+              "kind": "field",
+              "name": "loading",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "You are loading the tasks: the body shows a loading skeleton while there are no rows, and the\nchart is `aria-busy` (rows already shown stay).",
+              "attribute": "loading"
+            },
+            {
+              "kind": "field",
+              "name": "errorMessage",
+              "type": {
+                "text": "string | null"
+              },
+              "description": "Shows the error state with this message (under `labels.errorTitle`) and a Retry button that\nfires `retry`; `null` or a blank string shows none. It wins over every other state.",
+              "attribute": "error-message"
+            },
+            {
               "kind": "method",
               "name": "zoomIn",
               "return": {
@@ -366,6 +403,16 @@
                 }
               },
               "description": "One zoom level further out."
+            },
+            {
+              "kind": "method",
+              "name": "fitToScreen",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest\nwhen none does), then scroll the first task into view. The levels are the chart's: those of\n`options.zoomLevels`, or the built-in presets when it is unset. Nothing happens without tasks\nor before the chart is laid out."
             },
             {
               "kind": "field",
@@ -829,6 +876,13 @@
               },
               "description": "A data-source page failed after its automatic retries (`dataSource.retry()` tries again).",
               "name": "load-error"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<RetryEvent>"
+              },
+              "description": "Retry was pressed on the error state: `{ source: 'error' }` for `errorMessage` (load again, then clear it), `{ source: 'dataSource' }` after a failed first data-source page (the element calls `dataSource.retry()`).",
+              "name": "retry"
             }
           ],
           "attributes": [
@@ -881,6 +935,22 @@
               "fieldName": "showLegend"
             },
             {
+              "name": "loading",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "Sets `loading`: present = `true`, `\"false\"` = `false`. Removing it restores the default (`false`).",
+              "fieldName": "loading"
+            },
+            {
+              "name": "error-message",
+              "type": {
+                "text": "string"
+              },
+              "description": "Sets `errorMessage`: its text (a blank one shows no error). Removing it restores the default (`null`).",
+              "fieldName": "errorMessage"
+            },
+            {
               "type": {
                 "text": "string"
               },
@@ -898,7 +968,7 @@
               "name": "dragging"
             },
             {
-              "description": "A data-source page is loading.",
+              "description": "`loading` is on, or a data-source page is loading.",
               "name": "loading"
             }
           ],

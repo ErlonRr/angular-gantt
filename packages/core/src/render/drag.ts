@@ -30,6 +30,14 @@ export interface DragPreview {
   unit: 'day' | 'hour';
   /** @deprecated Use `delta` (with `unit`) — it counts hours on hour scales. */
   daysDelta: number;
+  /**
+   * New task start: a task date, not a drawn one (what the drop / commit would emit as
+   * `newStart`). Always set by `DragSession` and `KeyboardEditSession`; the drag readout
+   * (`formatDragReadout`) reads it.
+   */
+  start?: Date | undefined;
+  /** New task end, like `start` (an inclusive end stays inclusive) */
+  end?: Date | undefined;
 }
 
 export type DragResult = { kind: 'drag'; event: TaskDragEvent } | { kind: 'resize'; event: TaskResizeEvent } | null;
@@ -109,6 +117,8 @@ export class DragSession {
       delta: units,
       unit: this.timing.snap,
       daysDelta: units,
+      start,
+      end,
     };
   }
 

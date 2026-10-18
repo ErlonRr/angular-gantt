@@ -1,8 +1,8 @@
 // @vitest-environment node
 // Server rendering: no DOM at all here. Importing the binding (and through it `@gantryjs/vanilla`)
 // and rendering `<Gantry>` must not touch `document`, `window` or `HTMLElement`; the markup is the
-// bare `<gantry-element>` with its layout style and the consumer's attributes, no props or
-// listeners serialised (the client sets them when it hydrates).
+// bare `<gantry-element>` with the consumer's attributes (no inline style of its own: strict CSP),
+// no props or listeners serialised (the client sets them when it hydrates).
 import { describe, it, expect } from 'vitest';
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
@@ -34,8 +34,6 @@ describe('server rendering', () => {
         }),
     });
     const html = await renderToString(app);
-    expect(html).toBe(
-      '<gantry-element style="display:block;width:100%;height:100%;" class="chart" aria-label="Roadmap"></gantry-element>',
-    );
+    expect(html).toBe('<gantry-element class="chart" aria-label="Roadmap"></gantry-element>');
   });
 });
