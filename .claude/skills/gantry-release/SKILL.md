@@ -24,6 +24,8 @@ explicit "go" for each step (commit, tag, push, publish).
   group); `ngx-gantry` is independent.
 - Tags are `vX.Y.Z` (ngx-gantry's version for Angular-only releases).
 - The `@gantryjs` npm org belongs to the user (`@gantry` is someone else's); `ngx-gantry` is theirs too.
+- Gantry 2.0 is in Changesets pre mode (`.changeset/pre.json`, tag `next`): releases are `2.0.0-next.N`
+  on the `next` dist-tag. Run `changeset pre exit` only for the stable 2.0.0 (after the roadmap's Phase 10).
 
 ## 1. Verify (all must pass)
 
