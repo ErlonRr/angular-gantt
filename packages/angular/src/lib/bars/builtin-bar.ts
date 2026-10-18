@@ -55,7 +55,7 @@ export abstract class GanttBuiltinBar extends GanttBarBase {
 
   /**
    * Selection outline and baseline rail: theme paints (`var(--gantt-*)`). Typed explicitly so the
-   * published d.ts names `PAINTS` instead of inlining `import("ngx-gantry").Paint` self-references.
+   * published d.ts names `PAINTS` instead of inlining `import("@gantryjs/angular").Paint` self-references.
    */
   protected readonly paints: typeof PAINTS = PAINTS;
 

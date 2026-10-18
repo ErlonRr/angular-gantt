@@ -12,8 +12,8 @@ paths:
 - The root README "Configuration" section is the single reference for options (all
   bindings share them). Package READMEs link to it with absolute GitHub URLs (npm renders
   READMEs outside the repo, so relative links break).
-- Every user-facing change gets a `.changeset/*.md` (the `@gantryjs/*` packages are versioned
-  together; `ngx-gantry` independently) and a line under `## [Unreleased]` in `CHANGELOG.md`.
+- Every user-facing change gets a `.changeset/*.md` (all `@gantryjs/*` packages, Angular included,
+  are versioned together) and a line under `## [Unreleased]` in `CHANGELOG.md`.
 - New option → add a control to `PLAYGROUND_SECTIONS` and map it in `playgroundOptions()`
   (`apps/demo-kit/src/playground.ts`): the vanilla playground and the site's `/playground` both
   render it, and its code tabs print it for every framework.

@@ -8,7 +8,7 @@ import {
   type TaskDragEvent,
   type TaskResizeEvent,
   type SelectionChangeEvent,
-} from 'ngx-gantry';
+} from '@gantryjs/angular';
 import { createDemoData } from '@gantryjs/core/demo';
 import { addDays, snapToDay } from '@gantryjs/core';
 import { AppThemeService } from '../shell/app-theme.service';

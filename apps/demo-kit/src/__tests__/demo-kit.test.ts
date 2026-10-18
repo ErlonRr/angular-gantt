@@ -64,7 +64,7 @@ describe('playground model', () => {
 describe('site', () => {
   it('builds install commands', () => {
     expect(installCommand('pnpm', '@gantryjs/vanilla')).toBe('pnpm add @gantryjs/vanilla');
-    expect(installCommand('npm', 'ngx-gantry')).toBe('npm i ngx-gantry');
+    expect(installCommand('npm', '@gantryjs/angular')).toBe('npm i @gantryjs/angular');
   });
 
   it('reads the element API from the manifest', () => {

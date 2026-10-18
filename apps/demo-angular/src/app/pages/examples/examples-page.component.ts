@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ViewEncapsulation, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { GantryComponent, provideGanttBar } from 'ngx-gantry';
+import { GantryComponent, provideGanttBar } from '@gantryjs/angular';
 import { AppThemeService } from '../../shell/app-theme.service';
 import { IconComponent } from '../../shell/icon.component';
 import { EXAMPLES } from '../../shell/demo-registry';

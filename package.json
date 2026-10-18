@@ -17,7 +17,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve gantry-demo --open",
-    "build:lib": "ng build gantry && node scripts/resolve-workspace-deps.mjs dist/ngx-gantry/package.json",
+    "build:lib": "ng build gantry && node scripts/resolve-workspace-deps.mjs dist/gantryjs-angular/package.json",
     "build:app": "ng build gantry-demo --configuration production",
     "build:demo": "ng build gantry-demo --configuration production --base-href ./",
     "watch:lib": "ng build gantry --watch",

@@ -11,5 +11,4 @@ user-facing summary. On merge to `main`, the release workflow opens a
 "Version packages" PR that bumps versions and updates each package's
 CHANGELOG; merging that PR publishes to npm.
 
-The `@gantryjs/*` packages are versioned together (`fixed`); `ngx-gantry`
-is versioned independently.
+All `@gantryjs/*` packages, Angular included, are versioned together (`fixed`).

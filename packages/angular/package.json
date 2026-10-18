@@ -1,5 +1,5 @@
 {
-  "name": "ngx-gantry",
+  "name": "@gantryjs/angular",
   "version": "1.0.1",
   "type": "module",
   "description": "Gantry — a free, zoneless, signal-based Gantt chart for Angular (no @angular/animations, no CDK, no zone.js).",
@@ -35,7 +35,7 @@
     "@gantryjs/core": "workspace:^"
   },
   "publishConfig": {
-    "directory": "../../dist/ngx-gantry",
+    "directory": "../../dist/gantryjs-angular",
     "access": "public",
     "provenance": true
   },

@@ -16,5 +16,5 @@
       "@gantryjs/core": ["./node_modules/@gantryjs/core"]
     }
   },
-  "files": ["../../dist/ngx-gantry/types/ngx-gantry.d.ts"]
+  "files": ["../../dist/gantryjs-angular/types/gantryjs-angular.d.ts"]
 }

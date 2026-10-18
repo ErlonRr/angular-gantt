@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
-//  ngx-gantry · public-api.ts
+//  @gantryjs/angular · public-api.ts
 //
-//  The published surface, reviewed in `packages/angular/etc/ngx-gantry.api.md`
+//  The published surface, reviewed in `packages/angular/etc/gantryjs-angular.api.md`
 //  (`pnpm api:angular` after a deliberate change; CI fails on drift).
 //  Only explicit named exports of local modules: a local `export *` makes
 //  the bundled d.ts declare namespaces (and lose names) instead of exports.

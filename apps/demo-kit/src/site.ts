@@ -23,7 +23,7 @@ export type PackageId = 'vanilla' | 'core' | 'angular' | 'react' | 'vue' | 'svel
 export const PACKAGES: Record<PackageId, { name: string; npmUrl: string }> = {
   vanilla: { name: '@gantryjs/vanilla', npmUrl: 'https://www.npmjs.com/package/@gantryjs/vanilla' },
   core: { name: '@gantryjs/core', npmUrl: 'https://www.npmjs.com/package/@gantryjs/core' },
-  angular: { name: 'ngx-gantry', npmUrl: 'https://www.npmjs.com/package/ngx-gantry' },
+  angular: { name: '@gantryjs/angular', npmUrl: 'https://www.npmjs.com/package/@gantryjs/angular' },
   react: { name: '@gantryjs/react', npmUrl: 'https://www.npmjs.com/package/@gantryjs/react' },
   vue: { name: '@gantryjs/vue', npmUrl: 'https://www.npmjs.com/package/@gantryjs/vue' },
   svelte: { name: '@gantryjs/svelte', npmUrl: 'https://www.npmjs.com/package/@gantryjs/svelte' },

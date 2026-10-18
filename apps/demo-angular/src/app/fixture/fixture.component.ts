@@ -15,7 +15,7 @@ import {
   type GanttOptions,
   type GanttTask,
   type GanttTimeHighlight,
-} from 'ngx-gantry';
+} from '@gantryjs/angular';
 
 interface FixtureHighlight {
   day: string;

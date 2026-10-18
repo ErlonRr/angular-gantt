@@ -1,7 +1,7 @@
 ---
 '@gantryjs/core': major
 '@gantryjs/vanilla': major
-'ngx-gantry': major
+'@gantryjs/angular': major
 ---
 
 **Theming through CSS variables.** Every colour of the render model is now a `Paint`: a CSS colour
@@ -78,9 +78,9 @@ bar.style.setProperty('fill', visual.paint.body); // or resolvePaint(visual.pain
 - `@gantryjs/react`, `@gantryjs/vue` and `@gantryjs/svelte` follow in the same release (fixed version
   group); no API change there.
 
-### `ngx-gantry` (breaking)
+### `@gantryjs/angular` (breaking)
 
-`ngx-gantry` re-exports `@gantryjs/core`, so every core change above reaches Angular users. In
+`@gantryjs/angular` re-exports `@gantryjs/core`, so every core change above reaches Angular users. In
 particular, **custom bars** registered with `provideGanttBar()` that read `ctx.visual.fill`,
 `ctx.visual.label.color` or `ctx.visual.progress.color` must switch to `ctx.visual.paint.body` /
 `.label` / `.progress`: bind them as styles (`[style.fill]="ctx.visual.paint.body"`) or resolve them
@@ -95,4 +95,4 @@ reading `TooltipModel.colors` migrates as described in the `@gantryjs/core` sect
 - The chart's resolved theme reaches custom bars as `ctx.theme`; the `resolveConfig` call site
   passes the theme metrics, so a colour-only theme change re-renders no geometry.
 - The task list, load-more footer and drag preview are painted with the chart's `--gantt-*` tokens
-  (their `theme` inputs are gone in `ngx-gantry` 2.0, where these components are internal).
+  (their `theme` inputs are gone in `@gantryjs/angular`, where these components are internal).

@@ -11,7 +11,7 @@ import {
   type GanttTask,
   type TaskDragEvent,
   type TaskResizeEvent,
-} from 'ngx-gantry';
+} from '@gantryjs/angular';
 import { AppThemeService } from '../../shell/app-theme.service';
 import { IconComponent } from '../../shell/icon.component';
 import { InstallBlockComponent } from '../../shell/install-block.component';

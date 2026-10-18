@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────
-//  Tests — drag ghost: `computeDragGhostVisual` draws what ngx-gantry's
+//  Tests — drag ghost: `computeDragGhostVisual` draws what @gantryjs/angular's
 //  `GanttDragPreviewComponent` draws today (rect, dash, opacity, delta
 //  label), for move and resize previews from a real `DragSession`.
 // ─────────────────────────────────────────────────────────────
@@ -78,7 +78,7 @@ function drag(c: Chart, id: string, handle: DragHandle, units: number): DragPrev
 }
 
 /**
- * ngx-gantry's drag preview, transcribed from `gantt-drag-preview.component.ts` and the inputs
+ * @gantryjs/angular's drag preview, transcribed from `gantt-drag-preview.component.ts` and the inputs
  * `gantt-canvas.component.ts` binds: barHeight = the dragged bar's visual height, radius =
  * `config().bar.radius`, colours from the theme.
  */

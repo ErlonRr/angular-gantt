@@ -2,7 +2,7 @@
 name: gantry-release
 description: Prepare a Gantry release — verify everything, version with Changesets, update the changelogs and the README "Recent Releases" accordions, inspect the npm tarballs, and only on explicit request commit, tag and publish. Run manually with /gantry-release.
 disable-model-invocation: true
-argument-hint: "[notes, e.g. 'ngx-gantry patch only']"
+argument-hint: "[notes, e.g. 'patch only']"
 ---
 
 # Prepare a Gantry release
@@ -20,19 +20,20 @@ explicit "go" for each step (commit, tag, push, publish).
 
 - `patch` (x.y.Z) routine fixes · `minor` (x.Y.0) features · `major` (X.0.0) breaking changes
   (renamed/removed options or outputs, changed defaults that alter output, changed public
-  component inputs). The `@gantryjs/*` packages are versioned together (Changesets `fixed`
-  group); `ngx-gantry` is independent.
-- Tags are `vX.Y.Z` (ngx-gantry's version for Angular-only releases).
-- The `@gantryjs` npm org belongs to the user (`@gantry` is someone else's); `ngx-gantry` is theirs too.
+  component inputs). All `@gantryjs/*` packages, Angular included, are versioned together
+  (Changesets `fixed` group).
+- Tags are `vX.Y.Z`.
+- The `@gantryjs` npm org belongs to the user (`@gantry` is someone else's). The Angular package was
+  `ngx-gantry` up to 1.0.1; it is now `@gantryjs/angular` and `ngx-gantry` only gets a deprecation notice.
 - Gantry 2.0 is in Changesets pre mode (`.changeset/pre.json`, tag `next`): releases are `2.0.0-next.N`
-  on the `next` dist-tag. Run `changeset pre exit` only for the stable 2.0.0 (after the roadmap's Phase 10).
+  on the `next` dist-tag. Run `changeset pre exit` only for the stable 2.0.0.
 
 ## 1. Verify (all must pass)
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm typecheck && pnpm test && pnpm test:tz
-pnpm build                                   # packages → ngx-gantry → showcase → demos
+pnpm build                                   # packages → @gantryjs/angular → showcase → demos
 pnpm e2e                                     # Playwright on every binding (serves the builds above)
 ```
 
@@ -52,8 +53,8 @@ pnpm version-packages        # = changeset version: bumps versions, writes packa
 
 ```bash
 for p in packages/*; do (cd "$p" && pnpm pack --pack-destination "$TMPDIR/gantry-packs"); done
-(cd packages/angular && pnpm pack --pack-destination "$TMPDIR/gantry-packs")   # from dist/ngx-gantry
-for t in "$TMPDIR"/gantry-packs/{gantryjs-*,ngx-gantry-*}.tgz; do npx -y publint@0.3 --strict "$t"; done
+(cd packages/angular && pnpm pack --pack-destination "$TMPDIR/gantry-packs")   # from dist/gantryjs-angular
+for t in "$TMPDIR"/gantry-packs/gantryjs-*.tgz; do npx -y publint@0.3 --strict "$t"; done
 for t in "$TMPDIR"/gantry-packs/gantryjs-{core,vanilla,react,vue}-*.tgz; do npx -y @arethetypeswrong/cli@0.18 "$t" --profile esm-only; done
 ```
 

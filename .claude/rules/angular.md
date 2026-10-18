@@ -4,7 +4,7 @@ paths:
   - 'apps/demo-angular/**'
 ---
 
-# ngx-gantry (Angular) rules
+# @gantryjs/angular rules
 
 ## Style
 
@@ -90,9 +90,9 @@ paths:
 - `src/public-api.ts` has explicit named exports only, plus `@gantryjs/core` re-exported as a whole; never a local
   `export *` (the d.ts bundle would get `*_d_exports` namespaces that break api-extractor). Services and inner
   components stay internal.
-- The API report `packages/angular/etc/ngx-gantry.api.md` must match: `pnpm build:lib && pnpm api:angular` updates
-  it, CI runs `pnpm api:angular:check`. Removing or renaming a public input, output, method or export is a breaking
-  change: `ngx-gantry: major` changeset (deprecate first outside a major).
+- The API report `packages/angular/etc/gantryjs-angular.api.md` must match: `pnpm build:lib && pnpm api:angular`
+  updates it, CI runs `pnpm api:angular:check`. Removing or renaming a public input, output, method or export is a
+  breaking change: `'@gantryjs/angular': major` changeset (deprecate first outside a major).
 
 ## Verify
 

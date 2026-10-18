@@ -3,7 +3,7 @@
 The Gantry Gantt chart as a framework-agnostic **Web Component**: `<gantry-element>`.
 Use it from plain JavaScript or any framework. React, Vue and Svelte users can install
 the thin bindings [`@gantryjs/react`](https://github.com/ErlonRr/gantryjs/tree/main/packages/react), [`@gantryjs/vue`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vue) and
-[`@gantryjs/svelte`](https://github.com/ErlonRr/gantryjs/tree/main/packages/svelte) instead; Angular users, [`ngx-gantry`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular).
+[`@gantryjs/svelte`](https://github.com/ErlonRr/gantryjs/tree/main/packages/svelte) instead; Angular users, [`@gantryjs/angular`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular).
 
 Free and MIT licensed. Interactive drag & resize, dependency arrows (FS/SS/FF/SF + lag),
 critical path, baselines, milestones, groups, virtual scrolling, sorting, lazy loading,

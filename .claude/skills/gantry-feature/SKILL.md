@@ -58,7 +58,7 @@ File-by-file map: [parity-map.md](parity-map.md).
 ```bash
 pnpm test && pnpm test:tz        # unit tests, date code in other time zones
 pnpm typecheck                   # all packages (+ demos: pnpm --filter demo-<x> typecheck)
-pnpm build                       # packages → ngx-gantry → showcase → demos
+pnpm build                       # packages → @gantryjs/angular → showcase → demos
 ```
 
 Then run the `/gantry-visual-qa` skill (or ask the `gantry-visual-qa` agent) on at least the

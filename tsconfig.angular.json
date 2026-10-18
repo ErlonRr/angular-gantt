@@ -10,7 +10,7 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "paths": {
-      "ngx-gantry": ["./packages/angular/src/public-api.ts"],
+      "@gantryjs/angular": ["./packages/angular/src/public-api.ts"],
       "@gantryjs/core": ["./packages/core/src/index.ts"],
       "@gantryjs/core/demo": ["./packages/core/src/demo.ts"],
       "@gantryjs/vanilla/package.json": ["./packages/vanilla/package.json"],

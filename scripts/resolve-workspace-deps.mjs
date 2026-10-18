@@ -1,8 +1,8 @@
-// Rewrites `workspace:` ranges in a built package.json (e.g. dist/ngx-gantry)
+// Rewrites `workspace:` ranges in a built package.json (e.g. dist/gantryjs-angular)
 // to real semver ranges. ng-packagr copies the manifest verbatim, and npm
 // can't publish `workspace:` protocol versions.
 //
-// Usage: node scripts/resolve-workspace-deps.mjs dist/ngx-gantry/package.json
+// Usage: node scripts/resolve-workspace-deps.mjs dist/gantryjs-angular/package.json
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 

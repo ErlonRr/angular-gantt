@@ -50,7 +50,7 @@ so horizontal scrolling inside a chunk does no DOM work; `.g-header` keeps the f
 critical/baseline state, scale or theme changes. The drag ghost uses the shared core look (dashed outline at 35 %
 opacity with a "+2d" movement label) and the dragged bar is dimmed through a CSS style. The tooltip is one persistent
 popover (`role="tooltip"`) with `<dl>` rows written as text. Column resizing uses pointer capture (no `window` listeners).
-`ngx-gantry` 2.0, in the same release, windows its header, bands and grid lines the same way.
+`@gantryjs/angular`, in the same release, windows its header, bands and grid lines the same way.
 
 Strict Content-Security-Policy and Trusted Types: the element works under `style-src 'self'` (no `'unsafe-inline'`),
 `script-src 'self'` (no eval) and `require-trusted-types-for 'script'; trusted-types 'none'`. Its CSS is one shared

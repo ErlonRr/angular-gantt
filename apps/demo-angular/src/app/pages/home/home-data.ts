@@ -1,7 +1,7 @@
 // Data of the home page: the hero plan and the example cards, built relative to today
 // (calendar-day arithmetic through `addDays`, never milliseconds).
 
-import { DependencyType, TaskType, addDays, type GanttOptions, type GanttTask } from 'ngx-gantry';
+import { DependencyType, TaskType, addDays, type GanttOptions, type GanttTask } from '@gantryjs/angular';
 import { FRAMEWORKS } from 'demo-kit/site';
 
 /** The hero's plan: four phases linked finish-to-start, then the launch milestone. */

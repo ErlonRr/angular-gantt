@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { GanttBarBase } from 'ngx-gantry';
+import { GanttBarBase } from '@gantryjs/angular';
 
 /** Default fill of an epic without `barColor` (white text on it passes AA). */
 export const EPIC_COLOR = '#4f46e5';

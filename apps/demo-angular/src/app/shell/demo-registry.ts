@@ -26,7 +26,7 @@ export const EXAMPLES: readonly ExampleEntry[] = [
     blurb: 'Squads as groups, release milestones, and Owner and Status columns from templates.',
     file: 'roadmap.component.ts',
     usage: `import { Component, computed, viewChild, type TemplateRef } from '@angular/core';
-import { GantryComponent, type ColumnDef, type ColumnCellContext } from 'ngx-gantry';
+import { GantryComponent, type ColumnDef, type ColumnCellContext } from '@gantryjs/angular';
 
 @Component({
   imports: [GantryComponent],
@@ -59,7 +59,7 @@ export class Roadmap {
     tags: ['dependency', 'criticalPath', 'baseline', '[(viewMode)]', 'selectionChange'],
     blurb: 'Dependencies with lag, baselines, the critical path, selection and two-way zoom.',
     file: 'board.component.ts',
-    usage: `import { GantryComponent, type GanttTask, DependencyType, provideGantt } from 'ngx-gantry';
+    usage: `import { GantryComponent, type GanttTask, DependencyType, provideGantt } from '@gantryjs/angular';
 
 // main.ts (optional: built-in bars need no provider) — defaults for every chart
 bootstrapApplication(App, { providers: [provideZonelessChangeDetection(), provideGantt({ darkMode: 'auto' })] });
@@ -85,7 +85,7 @@ zoom = signal<string | undefined>('Month');
     tags: ['GanttDataSource', 'pageSize', 'retries', 'loadError'],
     blurb: 'Rows load 25 at a time as you scroll. A failed page is retried, then offers Retry.',
     file: 'tasks.component.ts',
-    usage: `import { GanttDataSource } from 'ngx-gantry';
+    usage: `import { GanttDataSource } from '@gantryjs/angular';
 
 ds = new GanttDataSource({  // or createGanttDataSource({ … })
   fetcher: (page, size) =>
@@ -107,7 +107,7 @@ ds = new GanttDataSource({  // or createGanttDataSource({ … })
     tags: ['provideGanttBar', 'GanttBarBase', 'barType'],
     blurb: 'provideGanttBar turns your own Angular component into a bar type, picked per task.',
     file: 'plan.component.ts',
-    usage: `import { GanttBarBase, provideGanttBar } from 'ngx-gantry';
+    usage: `import { GanttBarBase, provideGanttBar } from '@gantryjs/angular';
 
 @Component({
   selector: 'g[epicBar]',

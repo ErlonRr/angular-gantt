@@ -4,7 +4,7 @@ Framework-free core of the [Gantry](https://github.com/ErlonRr/gantryjs/tree/mai
 timeline math, tree helpers and critical-path computation. No DOM, no framework —
 runs in browsers, Node, workers and SSR. No runtime dependencies.
 
-You usually don't install this directly: it powers [`ngx-gantry`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular)
+You usually don't install this directly: it powers [`@gantryjs/angular`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular)
 (Angular) and [`@gantryjs/vanilla`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla) (Web Component, used by the React, Vue and
 Svelte bindings), and every binding re-exports it. Use it on its own to compute
 schedules server-side or to build your own renderer.

@@ -1,14 +1,15 @@
-# Gantry — `ngx-gantry`
+# Gantry — `@gantryjs/angular`
 
 > A free, **zoneless**, **signal-based** Gantt chart for **Angular 22+**.
 > Zero `@angular/animations`, zero CDK, zero RxJS — no runtime dependency besides `@gantryjs/core`.
+> Formerly published as `ngx-gantry` (1.x).
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-banner.png)
 
 ![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-demo.gif)
 
 ```bash
-npm i ngx-gantry
+npm i @gantryjs/angular
 ```
 
 Peer dependencies: `@angular/core` and `@angular/common` `^22.0.0`.
@@ -18,7 +19,7 @@ Peer dependencies: `@angular/core` and `@angular/common` `^22.0.0`.
 ```ts
 // app.component.ts
 import { Component, signal } from '@angular/core';
-import { GantryComponent, ViewMode, type GanttTask } from 'ngx-gantry';
+import { GantryComponent, ViewMode, type GanttTask } from '@gantryjs/angular';
 
 @Component({
   selector: 'app-root',
@@ -57,7 +58,7 @@ formats, custom bars) for every chart below the application, route or component 
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGantt } from 'ngx-gantry';
+import { provideGantt } from '@gantryjs/angular';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -106,7 +107,7 @@ The Angular API:
 - [Theming](https://github.com/ErlonRr/gantryjs#theming-1),
   [keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus) and
   [server-side rendering](https://github.com/ErlonRr/gantryjs#server-side-rendering)
-- [Upgrading from 1.x](https://github.com/ErlonRr/gantryjs#upgrading-from-1x)
+- [Coming from ngx-gantry 1.x](https://github.com/ErlonRr/gantryjs#coming-from-ngx-gantry-1x)
 
 Demos and issues: **https://github.com/ErlonRr/gantryjs**
 

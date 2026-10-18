@@ -5,7 +5,7 @@ configurable open-source Gantt — every option behaves identically in every bin
 
 ```
 @gantryjs/core              types · render model · timeline math · CPM     packages/core
- ├── ngx-gantry             native Angular 22 (zoneless, signals, OnPush)  packages/angular
+ ├── @gantryjs/angular      native Angular 22 (zoneless, signals, OnPush)  packages/angular
  └── @gantryjs/vanilla      <gantry-element> Web Component (shadow DOM)    packages/vanilla
       ├── @gantryjs/react   React 18/19 wrapper                            packages/react
       ├── @gantryjs/vue     Vue 3.5 render-function wrapper                packages/vue
@@ -27,19 +27,19 @@ Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/sr
 
 pnpm 10.33 workspace. If `pnpm` fails (unconfigured mise shim) use `npx -y pnpm@10.33.0 <cmd>`.
 
-| Task                                                                                                                               | Command                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Unit tests: core (Node) + Web Component (happy-dom) with Vitest, then ngx-gantry (`ng test`, Vitest + happy-dom, zoneless TestBed) | `pnpm test` · core only: `npx vitest run --project core` · Angular only: `pnpm test:angular` |
-| Date code in other time zones                                                                                                      | `pnpm test:tz`                                                                               |
-| Typecheck packages, demos, e2e and the Angular projects                                                                            | `pnpm typecheck`                                                                             |
-| Lint (type-checked TS, Angular templates + a11y, Svelte, Vue, React hooks, core rules)                                             | `pnpm lint`                                                                                  |
-| Format (Prettier; formatting-only commits go in `.git-blame-ignore-revs`)                                                          | `pnpm format` · `pnpm format:check`                                                          |
-| Build everything (packages → ngx-gantry → showcase → demos)                                                                        | `pnpm build`                                                                                 |
-| Angular library only (needs `@gantryjs/core` built)                                                                                | `pnpm --filter @gantryjs/core build && pnpm build:lib`                                       |
-| Dev servers                                                                                                                        | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte`     |
-| Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors)                                                | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`                   |
-| Screenshot baselines (Playwright container = CI pixels)                                                                            | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate                               |
-| Release notes for a change                                                                                                         | `pnpm changeset`                                                                             |
+| Task                                                                                                                                      | Command                                                                                      |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Unit tests: core (Node) + Web Component (happy-dom) with Vitest, then @gantryjs/angular (`ng test`, Vitest + happy-dom, zoneless TestBed) | `pnpm test` · core only: `npx vitest run --project core` · Angular only: `pnpm test:angular` |
+| Date code in other time zones                                                                                                             | `pnpm test:tz`                                                                               |
+| Typecheck packages, demos, e2e and the Angular projects                                                                                   | `pnpm typecheck`                                                                             |
+| Lint (type-checked TS, Angular templates + a11y, Svelte, Vue, React hooks, core rules)                                                    | `pnpm lint`                                                                                  |
+| Format (Prettier; formatting-only commits go in `.git-blame-ignore-revs`)                                                                 | `pnpm format` · `pnpm format:check`                                                          |
+| Build everything (packages → @gantryjs/angular → showcase → demos)                                                                        | `pnpm build`                                                                                 |
+| Angular library only (needs `@gantryjs/core` built)                                                                                       | `pnpm --filter @gantryjs/core build && pnpm build:lib`                                       |
+| Dev servers                                                                                                                               | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte`     |
+| Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors)                                                       | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`                   |
+| Screenshot baselines (Playwright container = CI pixels)                                                                                   | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate                               |
+| Release notes for a change                                                                                                                | `pnpm changeset`                                                                             |
 
 Iterate with `pnpm test` + `pnpm typecheck`; run `pnpm build` and the browser QA before
 calling UI work done.
@@ -74,7 +74,7 @@ calling UI work done.
 - Angular renders in the light DOM: SVG `id`s must be unique per instance (use the canvas `uid`).
 - Workspace packages export a `@gantryjs/source` condition; demos, tests and typecheck read the
   TypeScript sources. Published packages are ESM-only with bundled `.d.ts`.
-- `ngx-gantry` publishes from `dist/ngx-gantry` (`publishConfig.directory`);
+- `@gantryjs/angular` publishes from `dist/gantryjs-angular` (`publishConfig.directory`);
   `scripts/resolve-workspace-deps.mjs` rewrites `workspace:` ranges after `ng build`.
 - Node ≥ 22 shadows happy-dom's `localStorage` in tests — the element tests polyfill it.
 - Visual verification needs a browser: the Playwright suite uses its bundled Chromium (install it

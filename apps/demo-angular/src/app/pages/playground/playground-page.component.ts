@@ -17,7 +17,7 @@ import {
   type SelectionChangeEvent,
   type TaskDragEvent,
   type TaskResizeEvent,
-} from 'ngx-gantry';
+} from '@gantryjs/angular';
 import { createDemoData } from '@gantryjs/core/demo';
 import {
   PLAYGROUND_DEFAULTS,

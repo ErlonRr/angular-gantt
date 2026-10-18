@@ -20,8 +20,8 @@ You update Gantry's docs to match the code. You never commit.
      READMEs when callbacks or props change. Use absolute GitHub links
      (`https://github.com/ErlonRr/gantryjs/tree/main/...`).
    - `CHANGELOG.md` → `## [Unreleased]` (Added / Changed / Fixed).
-   - `.changeset/<kebab-name>.md`: `@gantryjs/*` packages move together; add `ngx-gantry` when
-     Angular is affected; `major` for breaking changes.
+   - `.changeset/<kebab-name>.md`: name the packages the change touches (`@gantryjs/angular` when
+     Angular is affected; all `@gantryjs/*` versions move together); `major` for breaking changes.
    - Playground `apps/demo-kit/src/playground.ts`: add the option to `PLAYGROUND_DEFAULTS`,
      `playgroundOptions()` and a control in `PLAYGROUND_SECTIONS` (both playgrounds render it);
      then run `npx vitest run --project demo-kit` and `pnpm --filter demo-kit typecheck`.

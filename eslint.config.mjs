@@ -108,7 +108,7 @@ export default tseslint.config(
               message: 'Core is framework-free.',
             },
             {
-              group: ['@gantryjs/vanilla', '@gantryjs/react', '@gantryjs/vue', '@gantryjs/svelte', 'ngx-gantry'],
+              group: ['@gantryjs/vanilla', '@gantryjs/react', '@gantryjs/vue', '@gantryjs/svelte', '@gantryjs/angular'],
               message: 'Core must not depend on a binding.',
             },
           ],
@@ -167,7 +167,7 @@ export default tseslint.config(
     },
   },
 
-  // ── Angular (ngx-gantry in packages/angular + showcase in apps/demo-angular) ──────────────────────────
+  // ── Angular (@gantryjs/angular in packages/angular + showcase in apps/demo-angular) ──────────────────────────
   {
     files: ['packages/angular/**/*.ts', 'apps/demo-angular/**/*.ts'],
     extends: [...angular.configs.tsRecommended],
@@ -184,7 +184,7 @@ export default tseslint.config(
     extends: [...angular.configs.templateRecommended, ...angular.configs.templateAccessibility],
   },
   {
-    // ngx-gantry renders on the server too: no browser globals. Inject DOCUMENT and use
+    // @gantryjs/angular renders on the server too: no browser globals. Inject DOCUMENT and use
     // `doc.defaultView` / Renderer2, inside afterNextRender (released through DestroyRef) or an
     // event handler. The test DOM defines these globals, so only a lint rule catches a stray access.
     files: ['packages/angular/src/lib/**/*.ts'],
@@ -210,7 +210,7 @@ export default tseslint.config(
         ].map(name => ({
           name,
           message:
-            'SSR: no browser globals in ngx-gantry. Use inject(DOCUMENT) / doc.defaultView / Renderer2 inside afterNextRender or an event handler.',
+            'SSR: no browser globals in @gantryjs/angular. Use inject(DOCUMENT) / doc.defaultView / Renderer2 inside afterNextRender or an event handler.',
         })),
       ],
     },

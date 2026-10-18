@@ -1,7 +1,7 @@
 ---
 '@gantryjs/core': major
 '@gantryjs/vanilla': major
-'ngx-gantry': major
+'@gantryjs/angular': major
 ---
 
 **No more `dayjs`: zero runtime dependencies.** Dates are formatted by a built-in, `Intl`-based formatter
@@ -49,6 +49,6 @@ Renderers (`<gantry-element>` and `<gantry>` behave the same):
 - `setState()` drops invalid fields (e.g. `panelWidth: 0`); an explicit `panel.collapsed: false` beats `panelVisible: false`.
 - `@gantryjs/vanilla`: the element's selection and tooltip internals that implement this are private in 2.0 (see the
   `wc-engine` changeset); the `virtual-scroll` entry no longer has its own `computeVirtualWindow` (use the core one).
-- `ngx-gantry`: the selection service, task list, tooltip and canvas these changes touched are internal in
-  `ngx-gantry` 2.0 (see its changeset); use `<gantry>`'s `selectionChange`, `getSelectedTasks()` and
+- `@gantryjs/angular`: the selection service, task list, tooltip and canvas these changes touched are internal in
+  `@gantryjs/angular` (see its changeset); use `<gantry>`'s `selectionChange`, `getSelectedTasks()` and
   `setSelectedTasks()`.

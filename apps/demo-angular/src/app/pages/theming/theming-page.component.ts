@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { GantryComponent, ViewMode, type GanttOptions } from 'ngx-gantry';
+import { GantryComponent, ViewMode, type GanttOptions } from '@gantryjs/angular';
 import { contrastRatio, cssPx, readableOn, resolveTheme, type GanttThemeOverrides } from '@gantryjs/core';
 import { createDemoData } from '@gantryjs/core/demo';
 import { AppThemeService } from '../../shell/app-theme.service';

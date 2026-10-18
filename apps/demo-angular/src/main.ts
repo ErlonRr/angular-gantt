@@ -3,7 +3,7 @@ import { provideBrowserGlobalErrorListeners, provideZonelessChangeDetection } fr
 import { provideRouter, withInMemoryScrolling } from '@angular/router';
 import { AppComponent } from './app/app.component';
 import { routes } from './app/app.routes';
-import { provideGantt } from 'ngx-gantry';
+import { provideGantt } from '@gantryjs/angular';
 
 bootstrapApplication(AppComponent, {
   providers: [

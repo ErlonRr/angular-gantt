@@ -1,6 +1,6 @@
 ---
 '@gantryjs/vanilla': patch
-'ngx-gantry': patch
+'@gantryjs/angular': patch
 ---
 
 **One task-list markup for both renderers.** `<gantry-element>` and `<gantry>` render the task list
@@ -18,6 +18,6 @@ with the same elements, classes and colours:
 - `@gantryjs/vanilla`: cell texts use the secondary text colour (`--gantt-text-sec`, was `--gantt-text`),
   the collapse toggle is a 24 × 24 px target (WCAG 2.5.8; it was 20 px wide) and leaf names are
   indented to match (4 px more), and rows with children get the class `gantt-tl-row--group`, as in Angular.
-- `ngx-gantry`: the toolbar group that holds `[ganttToolbar]` content has the classes
+- `@gantryjs/angular`: the toolbar group that holds `[ganttToolbar]` content has the classes
   `gantt-tb-slot gantt-tb-group` (in that order; was `gantt-tb-group gantt-tb-slot`), and the task-list
   `grid-template-columns` comes from `columnsGridTemplate()` in `@gantryjs/core`.

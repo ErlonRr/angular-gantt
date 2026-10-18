@@ -1,8 +1,8 @@
 ---
-'ngx-gantry': major
+'@gantryjs/angular': major
 ---
 
-**`ngx-gantry` 2.0: the Angular chart at parity with `<gantry-element>`.** `<gantry>` now renders the same DOM, CSS
+**`@gantryjs/angular`: the Angular chart at parity with `<gantry-element>`.** `<gantry>` now renders the same DOM, CSS
 classes, windows and accessibility tree as the Web Component, and is rebuilt on Angular's signal APIs: its state is
 `linkedSignal` / `model()` / `computed` (no syncing effects), browser work starts in `afterNextRender` and stops
 through `DestroyRef` (SSR-safe), custom bars resolve per chart through the injector hierarchy, and the public API is
@@ -37,7 +37,7 @@ curated.
 
 ### Public API (breaking)
 
-- `ngx-gantry` exports `GantryComponent`, `GanttColumnDefDirective`, `provideGantt`, `withBars`, `GanttGlobalConfig`,
+- `@gantryjs/angular` exports `GantryComponent`, `GanttColumnDefDirective`, `provideGantt`, `withBars`, `GanttGlobalConfig`,
   `GanttFeature`, `provideGanttBar`, `GanttBarDef`, `GanttBarBase`, the built-in bars `GanttTaskBarComponent`,
   `GanttMilestoneComponent` and `GanttGroupBarComponent`, `GanttDataSource`, `createGanttDataSource`,
   `GanttDataSourceConfig`, `ColumnDef`, and everything in `@gantryjs/core`.
@@ -50,7 +50,7 @@ curated.
 - Deleted: `GanttVirtualScrollDirective`, `GanttAnnotationComponent`, `GanttTooltipDirective`, `GanttTooltipContext`,
   `GanttBarInputs`, and the `gantt-math` / `gantt-data` / `gantt-cpm` re-export modules. Their names still come from
   `@gantryjs/core` through `ngx-gantry`, now as real values: 1.x's type declarations exported 24 of them as type-only
-  aliases, so `import { addDays } from 'ngx-gantry'` failed as a value. Fixed: `addDays`, `clamp`,
+  aliases, so `import { addDays } from '@gantryjs/angular'` failed as a value. Fixed: `addDays`, `clamp`,
   `collectDescendants`, `computeCriticalPath`, `dateToPixel`, `diffDays`, `durationLabel`, `filterVisible`,
   `findRowById`, `flattenTree`, `formatDate`, `longestChain`, `pixelToDate`, `reindexVisible`, `snapToDay`,
   `sortRoots`, `SORT_BY_NAME`, `SORT_BY_PROGRESS`, `SORT_BY_START`, `DEFAULT_COLUMNS`, and the types `SortComparator`,
@@ -204,5 +204,5 @@ gantry[data-theme='dark'] …                         gantry.gantry-dark …
 body > .gantt-tooltip, .gantt-tooltip-popover       gantry .gantt-tooltip (+ dl / dt / dd classes)
 .gantt-panel-scroll / .gantt-timeline-scroll        .gantry-panel / .gantry-canvas-viewport
 .gantt-timeline-header                              .gantry-canvas-header-sticky
-import { GanttLayoutService, … } from 'ngx-gantry'  not public: use GantryComponent's inputs / methods
+import { GanttLayoutService, … } from 'ngx-gantry'        not public: use GantryComponent's inputs / methods
 ```

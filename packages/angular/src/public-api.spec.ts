@@ -1,11 +1,11 @@
 // The published surface (Gantry 2 phase 7, step 5.1): `export * from '@gantryjs/core'` plus the
-// curated Angular names. The type side is reviewed in `packages/angular/etc/ngx-gantry.api.md`.
+// curated Angular names. The type side is reviewed in `packages/angular/etc/gantryjs-angular.api.md`.
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import type { Provider, TemplateRef } from '@angular/core';
 import * as core from '@gantryjs/core';
 import * as api from './public-api';
 
-/** The runtime (value) exports ngx-gantry adds to @gantryjs/core. */
+/** The runtime (value) exports @gantryjs/angular adds to @gantryjs/core. */
 const ANGULAR_VALUES = [
   'GantryComponent',
   'GanttBarBase',
@@ -56,7 +56,7 @@ const REMOVED = [
 
 const exported = api as Record<string, unknown>;
 
-describe('ngx-gantry public API', () => {
+describe('@gantryjs/angular public API', () => {
   it('adds exactly the curated Angular values (and the ɵ ones the compiler needs) to @gantryjs/core', () => {
     const own = Object.keys(api).filter(name => !(name in core));
     expect(own.filter(name => !name.startsWith('ɵ')).sort()).toEqual([...ANGULAR_VALUES].sort());

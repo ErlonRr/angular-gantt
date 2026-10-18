@@ -8,7 +8,7 @@ import {
   snapToDay,
   type GanttOptions,
   type GanttTask,
-} from 'ngx-gantry';
+} from '@gantryjs/angular';
 
 /**
  * Options every preview shares: chart only, compact header and rows, nothing to interact with,

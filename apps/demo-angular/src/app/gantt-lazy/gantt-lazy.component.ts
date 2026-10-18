@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { GantryComponent, type GanttTask, TaskType, GanttDataSource } from 'ngx-gantry';
+import { GantryComponent, type GanttTask, TaskType, GanttDataSource } from '@gantryjs/angular';
 import { addDays, snapToDay } from '@gantryjs/core';
 import { AppThemeService } from '../shell/app-theme.service';
 import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';

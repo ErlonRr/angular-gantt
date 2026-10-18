@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { GantryComponent, type GanttTask, provideGanttBar, TaskType } from 'ngx-gantry';
+import { GantryComponent, type GanttTask, provideGanttBar, TaskType } from '@gantryjs/angular';
 import { anchorToToday } from '@gantryjs/core/demo';
 import { AppThemeService } from '../shell/app-theme.service';
 import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';

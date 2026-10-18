@@ -11,7 +11,7 @@
 
 | Framework            | Package             | Install                   | Docs                                           |
 | -------------------- | ------------------- | ------------------------- | ---------------------------------------------- |
-| **Angular 22+**      | `ngx-gantry`        | `npm i ngx-gantry`        | [below](#angular-ngx-gantry)                   |
+| **Angular 22+**      | `@gantryjs/angular` | `npm i @gantryjs/angular` | [below](#angular-gantryjsangular)              |
 | **React 18 / 19**    | `@gantryjs/react`   | `npm i @gantryjs/react`   | [packages/react](packages/react/README.md)     |
 | **Vue 3.5+**         | `@gantryjs/vue`     | `npm i @gantryjs/vue`     | [packages/vue](packages/vue/README.md)         |
 | **Svelte 5**         | `@gantryjs/svelte`  | `npm i @gantryjs/svelte`  | [packages/svelte](packages/svelte/README.md)   |
@@ -20,7 +20,7 @@
 
 ```
 @gantryjs/core              types · timeline math · tree helpers · critical path (no DOM, no framework)
- ├── ngx-gantry             native Angular components (signals, zoneless)
+ ├── @gantryjs/angular      native Angular components (signals, zoneless)
  └── @gantryjs/vanilla      <gantry-element> Web Component
       ├── @gantryjs/react
       ├── @gantryjs/vue
@@ -273,15 +273,15 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
 
 ---
 
-## Angular (`ngx-gantry`)
+## Angular (`@gantryjs/angular`)
 
 > Angular 22+ — zoneless, signal-based, SSR-safe, zero `@angular/animations`, zero `@angular/cdk`.
-> npm package: **`ngx-gantry`** · component: `<gantry>` · class: `GantryComponent`.
+> npm package: **`@gantryjs/angular`** (formerly `ngx-gantry`) · component: `<gantry>` · class: `GantryComponent`.
 
 ## Install
 
 ```bash
-npm i ngx-gantry
+npm i @gantryjs/angular
 # peer deps: @angular/core & @angular/common ^22 (@gantryjs/core is installed automatically)
 ```
 
@@ -312,7 +312,7 @@ npm i ngx-gantry
 ```ts
 // app.component.ts
 import { Component, signal } from '@angular/core';
-import { GantryComponent, ViewMode, type GanttTask, type TaskDragEvent } from 'ngx-gantry';
+import { GantryComponent, ViewMode, type GanttTask, type TaskDragEvent } from '@gantryjs/angular';
 
 @Component({
   selector: 'app-root',
@@ -359,7 +359,7 @@ provided at (see [Providers & setup](#providers--setup)):
 // main.ts
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGantt } from 'ngx-gantry';
+import { provideGantt } from '@gantryjs/angular';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -376,7 +376,7 @@ A custom bar is a component that extends `GanttBarBase`: an abstract directive t
 
 ```ts
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
-import { GantryComponent, GanttBarBase, provideGanttBar, type GanttTask } from 'ngx-gantry';
+import { GantryComponent, GanttBarBase, provideGanttBar, type GanttTask } from '@gantryjs/angular';
 
 @Component({
   selector: 'g[epicBar]',
@@ -512,7 +512,7 @@ Three ways to define the columns of the task list panel.
 **a) Plain columns via the `columns` input** — `render` returns a text string:
 
 ```ts
-import { ColumnDef } from 'ngx-gantry';
+import { ColumnDef } from '@gantryjs/angular';
 
 columns: ColumnDef[] = [
   { key: 'name',  label: 'Task', width: 220 },              // built-in name cell
@@ -777,7 +777,7 @@ const routes: Routes = [
 
 ## Public API
 
-`ngx-gantry` exports everything in `@gantryjs/core` (types such as `GanttTask`, `GanttOptions` and
+`@gantryjs/angular` exports everything in `@gantryjs/core` (types such as `GanttTask`, `GanttOptions` and
 `ViewMode`, the themes, the labels and the date, tree, critical-path and theme helpers) and these
 Angular pieces:
 
@@ -859,7 +859,7 @@ number of selected tasks and the data source's load state (`labels.loading`, the
 
 ## Server-side rendering
 
-`ngx-gantry` is SSR-safe. It reads no browser globals (`DOCUMENT` and `Renderer2` instead of
+`@gantryjs/angular` is SSR-safe. It reads no browser globals (`DOCUMENT` and `Renderer2` instead of
 `window` / `document`), and everything browser-only — the `ResizeObserver`, the load-more
 `IntersectionObserver`, the one-minute clock, the scroll listeners, `matchMedia` for
 `darkMode: 'auto'`, the tooltip popover — starts after the first browser render
@@ -886,10 +886,11 @@ light until the browser reports the colour scheme.
 
 ---
 
-## Upgrading from 1.x
+## Coming from `ngx-gantry` 1.x
 
 | 1.x                                                                         | 2.0                                                                                                               |
 | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npm i ngx-gantry`, `import { … } from 'ngx-gantry'`                        | `npm i @gantryjs/angular`, `import { … } from '@gantryjs/angular'`                                                |
 | `provideGanttLib(config)`, `GanttModule.forRoot(config)`                    | `provideGantt(config)` — optional; the built-in bars need no provider                                             |
 | `provideGanttBar(def)` in `bootstrapApplication`                            | `provideGanttBar(...defs)` at application, route or component level, or `provideGantt(config, withBars(...defs))` |
 | `inject(GanttBarRegistry).register(def)`                                    | `provideGanttBar(def)` in the `providers` of the page or route                                                    |
@@ -908,7 +909,7 @@ Every change is listed in the [changelog](https://github.com/ErlonRr/gantryjs/bl
 
 ## Live showcase (the demo site)
 
-`apps/demo-angular` is the **Gantry site**, built with `ngx-gantry`:
+`apps/demo-angular` is the **Gantry site**, built with `@gantryjs/angular`:
 
 - **Home** — what Gantry is, with live charts;
 - **Playground** — every option at hand: the code follows your choices in the syntax of each
@@ -941,15 +942,15 @@ loads on refresh.
 
 A pnpm workspace (`pnpm-workspace.yaml`):
 
-| Path                                                | What                                                             |
-| --------------------------------------------------- | ---------------------------------------------------------------- |
-| `packages/core`                                     | `@gantryjs/core` — framework-free logic, shared by every binding |
-| `packages/vanilla`                                  | `@gantryjs/vanilla` — the `<gantry-element>` Web Component       |
-| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                   |
-| `packages/angular`                                  | `ngx-gantry` — the Angular library (imports `@gantryjs/core`)    |
-| `apps/demo-angular`                                 | the Gantry site (Angular showcase)                               |
-| `apps/demo-*`                                       | one Vite demo per framework                                      |
-| `apps/demo-kit`                                     | the demos' shared look, theme switch and playground model        |
+| Path                                                | What                                                                 |
+| --------------------------------------------------- | -------------------------------------------------------------------- |
+| `packages/core`                                     | `@gantryjs/core` — framework-free logic, shared by every binding     |
+| `packages/vanilla`                                  | `@gantryjs/vanilla` — the `<gantry-element>` Web Component           |
+| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                       |
+| `packages/angular`                                  | `@gantryjs/angular` — the Angular library (imports `@gantryjs/core`) |
+| `apps/demo-angular`                                 | the Gantry site (Angular showcase)                                   |
+| `apps/demo-*`                                       | one Vite demo per framework                                          |
+| `apps/demo-kit`                                     | the demos' shared look, theme switch and playground model            |
 
 | Script                                                                      | Effect                                                                                                                                |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -987,12 +988,12 @@ frozen clock; screenshots for review land in `test-results/e2e/shots/`.
 
 **Vitest** runs two projects: the framework-free core (render model, timeline math, formatter, CPM, interaction
 and state helpers) in plain Node, and the `<gantry-element>` Web Component in happy-dom. `ng test` runs the
-`ngx-gantry` specs (Vitest + happy-dom, zoneless TestBed), including a server-render smoke test.
+`@gantryjs/angular` specs (Vitest + happy-dom, zoneless TestBed), including a server-render smoke test.
 
 ```bash
-pnpm test           # core + Web Component, then ngx-gantry
+pnpm test           # core + Web Component, then @gantryjs/angular
 pnpm test:watch     # Vitest watch mode
-pnpm test:angular   # ngx-gantry only
+pnpm test:angular   # @gantryjs/angular only
 pnpm test:tz        # core in other time zones
 ```
 

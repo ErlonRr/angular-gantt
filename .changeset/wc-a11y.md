@@ -1,7 +1,7 @@
 ---
 '@gantryjs/vanilla': major
 '@gantryjs/core': minor
-'ngx-gantry': patch
+'@gantryjs/angular': patch
 ---
 
 **Accessibility of `<gantry-element>`.** The host is a landmark region instead of a tab stop, and keyboard focus moves
@@ -39,6 +39,6 @@ New labels in `GanttLabels` / `DEFAULT_LABELS`: `ariaToolbar` (`'Chart toolbar'`
 `announceLoaded(count)` (`'20 tasks loaded'`, read when a data-source page loads and more remain). They are required
 members of `GanttLabels`: only objects typed as a full `GanttLabels` need them, `options.labels` stays partial.
 
-### `ngx-gantry`
+### `@gantryjs/angular`
 
 The toolbar is named by `labels.ariaToolbar`, like the Web Component's.

@@ -522,7 +522,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today, '  ');
       return [
         `import { Component, input } from '@angular/core';`,
-        `import { GantryComponent${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from 'ngx-gantry';`,
+        `import { GantryComponent${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/angular';`,
         ``,
         `@Component({`,
         `  selector: 'app-plan',`,

@@ -6,5 +6,5 @@
     "cssUrl": "inline"
   },
   "deleteDestPath": true,
-  "dest": "../../dist/ngx-gantry"
+  "dest": "../../dist/gantryjs-angular"
 }

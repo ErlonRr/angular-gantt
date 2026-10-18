@@ -64,7 +64,7 @@ document.querySelector('#today').addEventListener('click', () => gantt.scrollToT
 
 const ANGULAR = `// app.component.ts
 import { Component, signal, viewChild } from '@angular/core';
-import { GantryComponent, ViewMode, type GanttTask, type TaskDragEvent } from 'ngx-gantry';
+import { GantryComponent, ViewMode, type GanttTask, type TaskDragEvent } from '@gantryjs/angular';
 
 @Component({
   selector: 'app-root',
@@ -107,7 +107,7 @@ export class AppComponent {
 const ANGULAR_MAIN = `// main.ts — optional: defaults for every chart below this level
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideZonelessChangeDetection } from '@angular/core';
-import { provideGantt } from 'ngx-gantry';
+import { provideGantt } from '@gantryjs/angular';
 import { AppComponent } from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -239,7 +239,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
       'Methods on the component: `viewChild(GantryComponent)`, then `zoomIn()`, `scrollToTask(id)`, `getState()`, …',
       "Dark mode: `[darkMode]` takes `true`, `false` or `'auto'`; left `undefined`, the `provideGantt({ darkMode })` default applies, else light. `provideGantt()` is optional and sets defaults (theme, dark mode, locale, labels, formats) for the application, a route or a component.",
     ],
-    readmeUrl: `${SITE.repoUrl}#angular-ngx-gantry`,
+    readmeUrl: `${SITE.repoUrl}#angular-gantryjsangular`,
     npmUrl: PACKAGES.angular.npmUrl,
   },
   react: {
