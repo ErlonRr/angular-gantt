@@ -9,7 +9,7 @@ argument-hint: '[feature or option to add/change]'
 Request: $ARGUMENTS
 
 Gantry's promise is that **one option behaves identically in every binding**. That holds only
-if the value is resolved and the geometry computed once, in `@gantry/core`, and both renderers
+if the value is resolved and the geometry computed once, in `@gantryjs/core`, and both renderers
 just paint it. Work through the steps in order; skip a step only when it truly does not apply.
 
 ## 0. Design the API first (tell the user before coding)

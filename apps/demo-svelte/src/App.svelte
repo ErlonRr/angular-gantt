@@ -6,8 +6,8 @@
     type GanttTask,
     type TaskDragEvent,
     type TaskResizeEvent,
-  } from '@gantry/svelte';
-  import { createDemoData } from '@gantry/core/demo';
+  } from '@gantryjs/svelte';
+  import { createDemoData } from '@gantryjs/core/demo';
   import { PACKAGES, SITE } from 'demo-kit/site';
   import { getTheme, onThemeChange, toggleTheme } from 'demo-kit/theme';
   import Icon from './Icon.svelte';

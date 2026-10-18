@@ -17,12 +17,12 @@
 //
 //  The component binds to ds.items() — a Signal<GanttTask[]> that grows
 //  as pages load. Paging, resets, errors and retries come from the
-//  framework-free `PagedLoader` in @gantry/core (shared with the Web
+//  framework-free `PagedLoader` in @gantryjs/core (shared with the Web
 //  Component); this class only exposes its state as signals.
 // ─────────────────────────────────────────────────────────────
 
 import { signal, computed, type Signal } from '@angular/core';
-import { PagedLoader } from '@gantry/core';
+import { PagedLoader } from '@gantryjs/core';
 
 import { type GanttTask } from '../types';
 

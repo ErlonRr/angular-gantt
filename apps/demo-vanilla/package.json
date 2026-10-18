@@ -10,8 +10,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@gantry/vanilla": "workspace:^",
-    "@gantry/core": "workspace:^",
+    "@gantryjs/vanilla": "workspace:^",
+    "@gantryjs/core": "workspace:^",
     "demo-kit": "workspace:*"
   },
   "devDependencies": {

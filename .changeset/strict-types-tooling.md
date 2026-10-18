@@ -1,6 +1,6 @@
 ---
-'@gantry/core': minor
-'@gantry/vanilla': minor
+'@gantryjs/core': minor
+'@gantryjs/vanilla': minor
 'ngx-gantry': minor
 ---
 

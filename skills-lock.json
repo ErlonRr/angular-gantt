@@ -14,7 +14,7 @@
       "computedHash": "4b23f026727c3e7aad1b553eac3769a39fb2cb3d2e04a450712455ce67653cef"
     },
     "planning-first-development": {
-      "source": "erlonrru/angular-gantt",
+      "source": "erlonrru/gantryjs",
       "sourceType": "local",
       "skillPath": "skills/planning-first-development/SKILL.md"
     },

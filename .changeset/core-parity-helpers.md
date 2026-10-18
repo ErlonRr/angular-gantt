@@ -1,6 +1,6 @@
 ---
-'@gantry/core': minor
-'@gantry/vanilla': patch
+'@gantryjs/core': minor
+'@gantryjs/vanilla': patch
 ---
 
 **Readable current-period label, themable progress overlay, shared binding helpers.**
@@ -17,11 +17,11 @@
   instead of the literal `#000000` (same pixels, now themable). A custom renderer reading
   `ctx.visual.paint.progress` gets the token: apply it as a style property or `resolvePaint()` it.
 - `themeToCss()` returns 42 custom properties (was 40); `<gantry-element>` lists both new ones as `@cssprop`.
-- Helpers both bindings share, moved from the Web Component into `@gantry/core`: `columnsGridTemplate(cols)` (the
+- Helpers both bindings share, moved from the Web Component into `@gantryjs/core`: `columnsGridTemplate(cols)` (the
   task-list `grid-template-columns`), `sameVirtualWindow(a, b)`, `HORIZONTAL_WINDOW_QUANTUM` (256),
   `announceLoadState(prev, next, labels)` with `LoadStateSnapshot` / `LoadStateLabels`, `TOOLTIP_SHOW_DELAY` (320 ms)
   and `TOOLTIP_HIDE_DELAY` (120 ms).
-- More shared rules and constants both bindings now read from `@gantry/core` instead of their own copies:
+- More shared rules and constants both bindings now read from `@gantryjs/core` instead of their own copies:
   `seedCollapsed(tasks, seen?)` (`task.collapsed` seeds only the ids a chart has never seen; returns the ids to
   collapse and the ids seen so far, type `CollapseSeed`), `clampColumnWidth(width, col)` with `COLUMN_MIN_WIDTH` (40)
   and `COLUMN_MAX_WIDTH` (800), `VIRTUAL_OVERSCAN_ROWS` (4, `computeVirtualWindow`'s default), `panelWidthRange(bounds,

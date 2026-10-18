@@ -1,10 +1,10 @@
 /**
  * The `<gantry-element>` API, read from the Custom Elements Manifest the Web Component ships
- * (`@gantry/vanilla/custom-elements.json`, checked in CI), so the site's API page never drifts
+ * (`@gantryjs/vanilla/custom-elements.json`, checked in CI), so the site's API page never drifts
  * from the code. Option fields are documented in the README "Configuration" section.
  */
 
-import manifest from '@gantry/vanilla/custom-elements.json' with { type: 'json' };
+import manifest from '@gantryjs/vanilla/custom-elements.json' with { type: 'json' };
 
 export interface ApiProperty {
   name: string;

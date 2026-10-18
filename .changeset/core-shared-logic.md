@@ -1,6 +1,6 @@
 ---
-'@gantry/core': major
-'@gantry/vanilla': major
+'@gantryjs/core': major
+'@gantryjs/vanilla': major
 'ngx-gantry': major
 ---
 
@@ -12,7 +12,7 @@ fall back to `'en'`, which is also the default — the dayjs global locale (`day
 lowercase Catalan months, Russian `июн.`), and a short month after a day number uses the format-context form (`5 мар.`).
 New exports: `dateNames(locale, kind)`, `resolveFormatLocale`, `isoWeek`, `isoWeekYear`, `quarterOf`, `dayOfYear`, `ISO_FORMAT`.
 
-**Shared logic in `@gantry/core`**, used by both renderers instead of their own copies:
+**Shared logic in `@gantryjs/core`**, used by both renderers instead of their own copies:
 virtual rows (`computeVirtualWindow` with pinned rows, `isIndexMounted`, `virtualIndexes`), horizontal windowing
 (`computeHorizontalWindow`, `tiersInRange`, `bandsInRange`, `linesInRange`, `sameHorizontalWindow`), selection
 (`selectionClick`, `selectAllRows`, `selectionOf`, `emptySelection`, `shouldEmitSelection`), view and panel width
@@ -42,12 +42,12 @@ Renderers (`<gantry-element>` and `<gantry>` behave the same):
   exists; milestones show one date row (Angular's "◆ Milestone" badge is gone); progress is clamped to 0–100 and its
   fill follows the critical colour. Angular's tooltip now has `role="tooltip"` and the shared `gantt-tooltip` class.
 - The legend honours `showToday` and lists the critical path (bar) and baseline (strip) when those options are on; the
-  swatch geometry comes from `@gantry/core` (`legendSwatch`, `LEGEND_SWATCH_SIZE`).
+  swatch geometry comes from `@gantryjs/core` (`legendSwatch`, `LEGEND_SWATCH_SIZE`).
 - Keyboard: `Ctrl/⌘+Shift+A` also selects all; shortcuts no longer fire with `Alt` / `AltGr`; unhandled keys
   (`F`, `Ctrl+Z`, `Ctrl+Y`) keep their browser default.
 - `selection-change` / `selectionChange` is no longer emitted when clearing an already empty selection.
 - `setState()` drops invalid fields (e.g. `panelWidth: 0`); an explicit `panel.collapsed: false` beats `panelVisible: false`.
-- `@gantry/vanilla`: the element's selection and tooltip internals that implement this are private in 2.0 (see the
+- `@gantryjs/vanilla`: the element's selection and tooltip internals that implement this are private in 2.0 (see the
   `wc-engine` changeset); the `virtual-scroll` entry no longer has its own `computeVirtualWindow` (use the core one).
 - `ngx-gantry`: the selection service, task list, tooltip and canvas these changes touched are internal in
   `ngx-gantry` 2.0 (see its changeset); use `<gantry>`'s `selectionChange`, `getSelectedTasks()` and

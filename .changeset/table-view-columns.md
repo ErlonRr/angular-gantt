@@ -1,9 +1,9 @@
 ---
-'@gantry/core': minor
-'@gantry/vanilla': minor
-'@gantry/react': minor
-'@gantry/vue': minor
-'@gantry/svelte': minor
+'@gantryjs/core': minor
+'@gantryjs/vanilla': minor
+'@gantryjs/react': minor
+'@gantryjs/vue': minor
+'@gantryjs/svelte': minor
 'ngx-gantry': minor
 ---
 

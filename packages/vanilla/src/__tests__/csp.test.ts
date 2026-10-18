@@ -4,7 +4,7 @@
 // text); no colour in any style attribute (theme colours are var() references written through the
 // CSSOM); the host keeps no style attribute of ours; the resize cursor is a data attribute + CSS.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LightTheme, themeToCss, type GanttTask, type GanttFlatRow } from '@gantry/core';
+import { LightTheme, themeToCss, type GanttTask, type GanttFlatRow } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { BASE_CSS, getBaseSheet } from '../styles/base';

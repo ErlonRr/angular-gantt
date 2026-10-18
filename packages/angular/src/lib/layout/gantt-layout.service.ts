@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · layout/gantt-layout.service.ts
 //
-//  Layout state + the shared @gantry/core render model.
+//  Layout state + the shared @gantryjs/core render model.
 //
 //  Data flow (signals only, no effect, no imperative push):
 //
@@ -83,7 +83,7 @@ import {
   type TierWindow,
   type TimeBand,
   type LinesWindow,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttDragService } from '../drag/gantt-drag.service';

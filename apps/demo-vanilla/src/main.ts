@@ -8,9 +8,9 @@
 // theme changes.
 import 'demo-kit/site.css';
 import './playground.css';
-import '@gantry/vanilla';
-import type { GanttOptions, GanttTask } from '@gantry/vanilla';
-import { createDemoData } from '@gantry/core/demo';
+import '@gantryjs/vanilla';
+import type { GanttOptions, GanttTask } from '@gantryjs/vanilla';
+import { createDemoData } from '@gantryjs/core/demo';
 import faviconUrl from 'demo-kit/favicon.svg?url';
 import {
   PLAYGROUND_DEFAULTS,

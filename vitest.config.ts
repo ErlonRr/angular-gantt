@@ -43,10 +43,10 @@ const svelteServerBuild = (): Plugin => {
 //             environment with a `// @vitest-environment node` comment).
 //  - demo-kit: the demo apps' shared playground model, API reference and theme switch (happy-dom).
 // Workspace packages resolve to their TypeScript sources via the
-// `@gantry/source` export condition, so no package build is needed.
+// `@gantryjs/source` export condition, so no package build is needed.
 export default defineConfig({
-  resolve: { conditions: ['@gantry/source'] },
-  ssr: { resolve: { conditions: ['@gantry/source'] } },
+  resolve: { conditions: ['@gantryjs/source'] },
+  ssr: { resolve: { conditions: ['@gantryjs/source'] } },
   test: {
     projects: [
       {
@@ -69,7 +69,7 @@ export default defineConfig({
         // Svelte resolves its client build only with the `browser` condition (its server build has no `mount`)
         extends: true,
         plugins: [svelteServerBuild(), svelte({ configFile: false, compilerOptions: { runes: true } })],
-        resolve: { conditions: ['@gantry/source', 'browser'] },
+        resolve: { conditions: ['@gantryjs/source', 'browser'] },
         test: { name: 'svelte', include: ['packages/svelte/src/**/*.test.ts'], environment: 'happy-dom' },
       },
       {

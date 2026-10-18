@@ -1,5 +1,5 @@
 // Drag ghost (Gantry 2 phase 6, step 2.5): the preview paints `computeDragGhostVisual` from
-// @gantry/core and draws exactly what it drew before (rect, dash, opacity, delta label), with
+// @gantryjs/core and draws exactly what it drew before (rect, dash, opacity, delta label), with
 // its paints as CSS properties; the canvas feeds it the dragged row, the config and the timeline.
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
@@ -29,7 +29,7 @@ import {
   type GanttOptions,
   type GanttTask,
   type RowGeometry,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GanttDragPreviewComponent } from './gantt-drag-preview.component';
 import { GanttDragService } from './gantt-drag.service';
 import { GantryComponent } from '../gantt-component/gantry.component';

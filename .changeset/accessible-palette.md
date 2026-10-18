@@ -1,5 +1,5 @@
 ---
-'@gantry/core': major
+'@gantryjs/core': major
 'ngx-gantry': major
 ---
 

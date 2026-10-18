@@ -8,7 +8,7 @@ paths:
 # React / Vue / Svelte binding rules
 
 - Wrappers stay thin: forward properties to `<gantry-element>` and events to callbacks, no
-  rendering logic. Derive from `GANTRY_PROPERTIES` / `GANTRY_EVENTS` exported by `@gantry/vanilla`.
+  rendering logic. Derive from `GANTRY_PROPERTIES` / `GANTRY_EVENTS` exported by `@gantryjs/vanilla`.
 - React: `forwardRef` exposing the element; `createElement('gantry-element')` (no global JSX typing). Isomorphic
   layout effects (`useEffect` when `document` is undefined) in this order: event listeners (attached once, removed a
   microtask after the cleanup unless the effect re-ran — StrictMode, `<Activity>` — so the disconnect `state-change`
@@ -39,5 +39,5 @@ paths:
 - All three: a prop never set is not written (attributes and imperative values survive); listeners are attached before
   the first property assignment so events fired by it reach the callbacks; tests live in `src/__tests__/` (Vitest
   projects `react` / `vue` / `svelte`, SSR specs with `// @vitest-environment node`).
-- Named exports only (no default export); each package re-exports `@gantry/core`.
+- Named exports only (no default export); each package re-exports `@gantryjs/core`.
 - Verify: `pnpm typecheck` and the demo apps (`pnpm --filter demo-react typecheck`, etc.).

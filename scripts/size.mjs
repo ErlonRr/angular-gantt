@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// What `import '@gantry/vanilla'` costs a user: the esbuild-minified, tree-shaken ESM bundle of
-// the Web Component and the parts of @gantry/core it reaches, built from the TypeScript sources
-// (`@gantry/source` condition, so no `pnpm build` is needed), gzipped at level 9.
+// What `import '@gantryjs/vanilla'` costs a user: the esbuild-minified, tree-shaken ESM bundle of
+// the Web Component and the parts of @gantryjs/core it reaches, built from the TypeScript sources
+// (`@gantryjs/source` condition, so no `pnpm build` is needed), gzipped at level 9.
 //
 //   node scripts/size.mjs              → prints `vanilla+core: NN.N KB gz`
 //   node scripts/size.mjs --max 30     → also exits 1 when the bundle is over 30 KB gz
@@ -21,12 +21,12 @@ if (max !== null && !(max > 0)) {
 
 const result = await build({
   stdin: {
-    contents: "import '@gantry/vanilla';",
-    // A workspace package that depends on @gantry/vanilla, so the bare import resolves
+    contents: "import '@gantryjs/vanilla';",
+    // A workspace package that depends on @gantryjs/vanilla, so the bare import resolves
     resolveDir: fileURLToPath(new URL('../apps/demo-vanilla', import.meta.url)),
     loader: 'js',
   },
-  conditions: ['@gantry/source'],
+  conditions: ['@gantryjs/source'],
   bundle: true,
   minify: true,
   format: 'esm',

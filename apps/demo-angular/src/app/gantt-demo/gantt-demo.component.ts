@@ -9,8 +9,8 @@ import {
   type TaskResizeEvent,
   type SelectionChangeEvent,
 } from 'ngx-gantry';
-import { createDemoData } from '@gantry/core/demo';
-import { addDays, snapToDay } from '@gantry/core';
+import { createDemoData } from '@gantryjs/core/demo';
+import { addDays, snapToDay } from '@gantryjs/core';
 import { AppThemeService } from '../shell/app-theme.service';
 import { EXAMPLE_STYLES, ExampleHeadComponent, ExampleUsageComponent } from '../pages/examples/example-parts';
 

@@ -1,16 +1,16 @@
 /** Names, links and navigation of the Gantry site, shared by every demo app. */
 
-import vanillaPackage from '@gantry/vanilla/package.json' with { type: 'json' };
+import vanillaPackage from '@gantryjs/vanilla/package.json' with { type: 'json' };
 import type { IconName } from './icons';
 
 export const SITE = {
   name: 'Gantry',
-  /** Version of the published packages (`@gantry/*` are versioned together). */
+  /** Version of the published packages (`@gantryjs/*` are versioned together). */
   version: vanillaPackage.version,
-  repoUrl: 'https://github.com/ErlonRr/angular-gantt',
-  readmeUrl: 'https://github.com/ErlonRr/angular-gantt#readme',
-  configurationUrl: 'https://github.com/ErlonRr/angular-gantt#configuration',
-  changelogUrl: 'https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md',
+  repoUrl: 'https://github.com/ErlonRr/gantryjs',
+  readmeUrl: 'https://github.com/ErlonRr/gantryjs#readme',
+  configurationUrl: 'https://github.com/ErlonRr/gantryjs#configuration',
+  changelogUrl: 'https://github.com/ErlonRr/gantryjs/blob/main/CHANGELOG.md',
   author: 'Erlon Rru',
   authorUrl: 'https://erlonrru.com',
   license: 'MIT License',
@@ -21,18 +21,18 @@ export const SITE = {
 export type PackageId = 'vanilla' | 'core' | 'angular' | 'react' | 'vue' | 'svelte';
 
 export const PACKAGES: Record<PackageId, { name: string; npmUrl: string }> = {
-  vanilla: { name: '@gantry/vanilla', npmUrl: 'https://www.npmjs.com/package/@gantry/vanilla' },
-  core: { name: '@gantry/core', npmUrl: 'https://www.npmjs.com/package/@gantry/core' },
+  vanilla: { name: '@gantryjs/vanilla', npmUrl: 'https://www.npmjs.com/package/@gantryjs/vanilla' },
+  core: { name: '@gantryjs/core', npmUrl: 'https://www.npmjs.com/package/@gantryjs/core' },
   angular: { name: 'ngx-gantry', npmUrl: 'https://www.npmjs.com/package/ngx-gantry' },
-  react: { name: '@gantry/react', npmUrl: 'https://www.npmjs.com/package/@gantry/react' },
-  vue: { name: '@gantry/vue', npmUrl: 'https://www.npmjs.com/package/@gantry/vue' },
-  svelte: { name: '@gantry/svelte', npmUrl: 'https://www.npmjs.com/package/@gantry/svelte' },
+  react: { name: '@gantryjs/react', npmUrl: 'https://www.npmjs.com/package/@gantryjs/react' },
+  vue: { name: '@gantryjs/vue', npmUrl: 'https://www.npmjs.com/package/@gantryjs/vue' },
+  svelte: { name: '@gantryjs/svelte', npmUrl: 'https://www.npmjs.com/package/@gantryjs/svelte' },
 };
 
 export type PackageManager = 'pnpm' | 'npm' | 'yarn' | 'bun';
 export const PACKAGE_MANAGERS: readonly PackageManager[] = ['pnpm', 'npm', 'yarn', 'bun'];
 
-/** `pnpm add @gantry/vanilla`, `npm i …`, `yarn add …`, `bun add …`. */
+/** `pnpm add @gantryjs/vanilla`, `npm i …`, `yarn add …`, `bun add …`. */
 export function installCommand(pm: PackageManager, pkg: string): string {
   return `${pm === 'npm' ? 'npm i' : `${pm} add`} ${pkg}`;
 }

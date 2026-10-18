@@ -7,7 +7,7 @@ import { Component, provideZonelessChangeDetection, signal, viewChild } from '@a
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { type GanttOptions, type GanttTask } from '@gantry/core';
+import { type GanttOptions, type GanttTask } from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 3, d);
 const TASKS: GanttTask[] = [

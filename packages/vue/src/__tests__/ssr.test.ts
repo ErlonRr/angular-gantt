@@ -1,5 +1,5 @@
 // @vitest-environment node
-// Server rendering: no DOM at all here. Importing the binding (and through it `@gantry/vanilla`)
+// Server rendering: no DOM at all here. Importing the binding (and through it `@gantryjs/vanilla`)
 // and rendering `<Gantry>` must not touch `document`, `window` or `HTMLElement`; the markup is the
 // bare `<gantry-element>` with its layout style and the consumer's attributes, no props or
 // listeners serialised (the client sets them when it hydrates).

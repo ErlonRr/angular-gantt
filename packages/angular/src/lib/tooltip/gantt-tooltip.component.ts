@@ -44,7 +44,7 @@ import {
   type Paint,
   type ResolvedGanttConfig,
   type TooltipModel,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttTooltipState } from './tooltip-state';

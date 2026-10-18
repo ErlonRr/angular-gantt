@@ -1,10 +1,10 @@
 export { Gantry } from './Gantry';
-export { GanttDataSource } from '@gantry/vanilla';
+export { GanttDataSource } from '@gantryjs/vanilla';
 export type {
   GantryElement,
   GantryProperties,
   VanillaColumnDef as ColumnDef,
   GanttDataSourceConfig,
   GanttBarRenderer,
-} from '@gantry/vanilla';
-export * from '@gantry/core';
+} from '@gantryjs/vanilla';
+export * from '@gantryjs/core';

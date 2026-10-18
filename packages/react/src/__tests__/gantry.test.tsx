@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { act, Activity, startTransition, StrictMode, Suspense, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
-import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantry/vanilla';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
 import { Gantry, GanttDataSource, type GantryElement, type GanttOptions, type GanttTask } from '../index';
 
 // React only checks `act()` usage when this flag is set (as testing libraries do)

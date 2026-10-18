@@ -1,6 +1,6 @@
 // @ts-check
 // ESLint flat config for the whole workspace: type-checked TypeScript everywhere, Angular
-// templates (incl. accessibility), Svelte, Vue, React hooks — and the @gantry/core rules from
+// templates (incl. accessibility), Svelte, Vue, React hooks — and the @gantryjs/core rules from
 // `.claude/rules/core.md` encoded as lint errors. Formatting is Prettier's job (eslint-config-prettier).
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
@@ -86,7 +86,7 @@ export default tseslint.config(
     extends: [tseslint.configs.disableTypeChecked],
   },
 
-  // ── @gantry/core: framework-free, DOM-free, deterministic ────
+  // ── @gantryjs/core: framework-free, DOM-free, deterministic ────
   {
     files: ['packages/core/src/**/*.ts'],
     ignores: ['packages/core/src/__tests__/**'],
@@ -108,7 +108,7 @@ export default tseslint.config(
               message: 'Core is framework-free.',
             },
             {
-              group: ['@gantry/vanilla', '@gantry/react', '@gantry/vue', '@gantry/svelte', 'ngx-gantry'],
+              group: ['@gantryjs/vanilla', '@gantryjs/react', '@gantryjs/vue', '@gantryjs/svelte', 'ngx-gantry'],
               message: 'Core must not depend on a binding.',
             },
           ],
@@ -129,7 +129,7 @@ export default tseslint.config(
     },
   },
 
-  // ── @gantry/vanilla: strict CSP + Trusted Types ──────────────
+  // ── @gantryjs/vanilla: strict CSP + Trusted Types ──────────────
   // No HTML parsing sinks (Trusted Types `require-trusted-types-for 'script'`), no style text
   // (a strict `style-src` refuses inline styles: use `setStyleProp`, the CSSOM, or a stylesheet
   // rule), no inline event handlers, no eval. See packages/vanilla/src/dom/sheet.ts.

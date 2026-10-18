@@ -59,7 +59,7 @@ import {
   viewFromState,
   initialScrollChanged,
   STATE_SAVE_DELAY,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { createRoot, effect, runWithOwner, untracked, type WritableSignal } from './reactive';
 import { setAttr } from './dom/patch';
 import { createEngine, type Engine } from './engine/engine';

@@ -7,7 +7,7 @@
 // No static import of the element module here: the first test creates an element before
 // `<gantry-element>` is defined, then loads the module.
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
-import type { GanttTask } from '@gantry/core';
+import type { GanttTask } from '@gantryjs/core';
 import type { GantryElement } from '../gantry.element';
 import type { GanttDataSource as DataSourceClass } from '../datasource/gantt-datasource';
 import { getEngine } from '../engine/registry';

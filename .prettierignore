@@ -3,7 +3,7 @@ dist/
 **/dist/
 node_modules/
 pnpm-lock.yaml
-# Written by `pnpm --filter @gantry/vanilla cem` (checked byte for byte by `cem:check`)
+# Written by `pnpm --filter @gantryjs/vanilla cem` (checked byte for byte by `cem:check`)
 packages/vanilla/custom-elements.json
 # Written by `pnpm api:angular` (API Extractor report, checked by `api:angular:check`)
 packages/angular/etc/

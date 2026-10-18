@@ -19,7 +19,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { DestroyRef, Injectable, computed, inject, linkedSignal, signal, type Signal } from '@angular/core';
-import { TOOLTIP_HIDE_DELAY, TOOLTIP_SHOW_DELAY, type GanttFlatRow } from '@gantry/core';
+import { TOOLTIP_HIDE_DELAY, TOOLTIP_SHOW_DELAY, type GanttFlatRow } from '@gantryjs/core';
 
 import { GanttDragService } from '../drag/gantt-drag.service';
 

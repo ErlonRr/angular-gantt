@@ -2,7 +2,7 @@
 // happy-dom's getComputedStyle ignores CSSOM edits of stylesheet rules, so "computed" colours
 // are resolved here from the inline paint and the theme sheet rule (`paintOf`).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DarkTheme, LightTheme, ViewMode, themeToCss, type GanttTask, type GanttOptions } from '@gantry/core';
+import { DarkTheme, LightTheme, ViewMode, themeToCss, type GanttTask, type GanttOptions } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { createThemeSheet } from '../styles/theme-sheet';
 import '../index';

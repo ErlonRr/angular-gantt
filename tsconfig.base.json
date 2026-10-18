@@ -6,7 +6,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "customConditions": ["@gantry/source"],
+    "customConditions": ["@gantryjs/source"],
     "strict": true,
     "noImplicitOverride": true,
     "noImplicitReturns": true,

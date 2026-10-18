@@ -1,6 +1,6 @@
 ---
-'@gantry/core': major
-'@gantry/vanilla': major
+'@gantryjs/core': major
+'@gantryjs/vanilla': major
 'ngx-gantry': major
 ---
 
@@ -9,7 +9,7 @@ value that is either a theme token (`var(--gantt-*)`) or an explicit task / opti
 through as is. Both renderers apply paints as CSS properties, and the theme reaches the pixels only
 through custom properties. The resolved config no longer carries the theme.
 
-### `@gantry/core` (breaking)
+### `@gantryjs/core` (breaking)
 
 - `resolveConfig(options, theme, i18n)` becomes `resolveConfig(options?, i18n?, metrics?)`, where
   `metrics` is `Partial<ThemeMetrics>` (pass `themeMetrics(theme)`; only `barRadius` is read, as the
@@ -59,7 +59,7 @@ const cfg = resolveConfig(options, i18n, themeMetrics(theme));
 bar.style.setProperty('fill', visual.paint.body); // or resolvePaint(visual.paint.body, theme)
 ```
 
-### `@gantry/vanilla`
+### `@gantryjs/vanilla`
 
 - The theme variables live in a `:host` stylesheet inside the shadow root instead of the host's
   inline style: page CSS on `gantry-element` overrides them, and a string `style` attribute (for
@@ -75,17 +75,17 @@ bar.style.setProperty('fill', visual.paint.body); // or resolvePaint(visual.pain
   variables, so it needs them in scope (inside the element or on an ancestor). The low-level painters
   (`paintBar`, `GanttCanvasProps`, `GanttTaskListProps`, …) are no longer exported (see the engine
   changeset).
-- `@gantry/react`, `@gantry/vue` and `@gantry/svelte` follow in the same release (fixed version
+- `@gantryjs/react`, `@gantryjs/vue` and `@gantryjs/svelte` follow in the same release (fixed version
   group); no API change there.
 
 ### `ngx-gantry` (breaking)
 
-`ngx-gantry` re-exports `@gantry/core`, so every core change above reaches Angular users. In
+`ngx-gantry` re-exports `@gantryjs/core`, so every core change above reaches Angular users. In
 particular, **custom bars** registered with `provideGanttBar()` that read `ctx.visual.fill`,
 `ctx.visual.label.color` or `ctx.visual.progress.color` must switch to `ctx.visual.paint.body` /
 `.label` / `.progress`: bind them as styles (`[style.fill]="ctx.visual.paint.body"`) or resolve them
 to colours with `resolvePaint(paint, ctx.theme)`. Code calling `resolveConfig`, `statusColor` or
-reading `TooltipModel.colors` migrates as described in the `@gantry/core` section.
+reading `TooltipModel.colors` migrates as described in the `@gantryjs/core` section.
 
 - Paints are bound through `[style.fill]` / `[style.stroke]` / `[style.background-color]`. Page CSS
   that targeted SVG `fill` / `stroke` presentation attributes no longer applies; restyle through the

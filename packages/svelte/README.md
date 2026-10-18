@@ -1,22 +1,22 @@
-# @gantry/svelte
+# @gantryjs/svelte
 
 The free, full-featured **Gantry Gantt chart for Svelte 5**: drag & resize,
 dependencies, critical path, baselines, virtual scrolling, sorting, lazy loading,
 theming and i18n. MIT licensed.
 
-A thin, runes-based binding over the [`<gantry-element>`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) Web Component.
+A thin, runes-based binding over the [`<gantry-element>`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla) Web Component.
 
 ## Install
 
 ```bash
-npm i @gantry/svelte
+npm i @gantryjs/svelte
 ```
 
 ## Usage
 
 ```svelte
 <script lang="ts">
-  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent } from '@gantry/svelte';
+  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent } from '@gantryjs/svelte';
 
   let gantt = $state<GantryElement>();
   // `$state.raw`: no proxy around every task; assign a new array to update the chart
@@ -46,28 +46,28 @@ npm i @gantry/svelte
 
 The chart fills its container (`display: block; width: 100%; height: 100%`): give the container
 a height. `options` takes every `GanttOptions` field — see
-[Configuration](https://github.com/ErlonRr/angular-gantt#configuration).
+[Configuration](https://github.com/ErlonRr/gantryjs#configuration).
 
 ## API
 
-- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#properties):
+- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties):
   `tasks`, `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`,
   `enableResize`, `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`. Each is set as an
   element property, and only when it changes.
-- **Callback props** receive the [event](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#events)
+- **Callback props** receive the [event](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#events)
   `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`,
   `onViewModeChange`, `onStateChange`, `onLoadError`. The listeners are attached before the first
   property is set, so events fired while the chart starts (`onViewModeChange` for
   `options.viewMode`) arrive too; a changed callback is used from the next event on. Callbacks
   run untracked: an event fired inside your `$effect` (`gantt.setViewMode(mode)`) does not make
   that effect depend on the callback or on the state it reads.
-- **`bind:element`** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#methods)
+- **`bind:element`** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)
   (`zoomIn()`, `scrollToTask()`, `setState()`, …).
 - **Other props** (`class`, `id`, `style`, `aria-*`, `data-*`, attributes such as `dark-mode`) go
   to the element; `style` is added after the default size.
 
-All `@gantry/core` types and helpers are re-exported (`ViewMode`, `GanttTask`, `GanttOptions`, …),
-and `GanttDataSource` from `@gantry/vanilla`.
+All `@gantryjs/core` types and helpers are re-exported (`ViewMode`, `GanttTask`, `GanttOptions`, …),
+and `GanttDataSource` from `@gantryjs/vanilla`.
 
 ### Unset and cleared props
 

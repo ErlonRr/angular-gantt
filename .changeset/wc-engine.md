@@ -1,15 +1,15 @@
 ---
-'@gantry/vanilla': major
+'@gantryjs/vanilla': major
 ---
 
 New rendering engine for `<gantry-element>`: an in-house reactive graph (signals and computeds) drives one render per
 animation frame, so scrolling inside the overscan, re-assigning equal `options` or changing only theme colours no longer
 re-renders the chart.
 
-Breaking: the public surface is curated. `@gantry/vanilla` now exports only `GantryElement`, `GanttDataSource`, the
+Breaking: the public surface is curated. `@gantryjs/vanilla` now exports only `GantryElement`, `GanttDataSource`, the
 tables `GANTRY_PROPERTIES` and `GANTRY_EVENTS`, the types `GantryProperties`, `GantryEventDetailMap`, `GantryEventMap`,
 `GantryEventCallbacks`, `GanttBarRenderer`, `GanttDataSourceConfig`, `VanillaColumnDef` and `VanillaCellTemplate`, and
-everything in `@gantry/core`; the engine behind the element is private.
+everything in `@gantryjs/core`; the engine behind the element is private.
 
 - Removed exports (internal services, state primitives and low-level painters): `createState`, `WritableState`,
   `EventEmitter`, `EventListenerCallback`, `BaseComponent`, `GanttThemeService`, `GanttI18nService`,
@@ -19,7 +19,7 @@ everything in `@gantry/core`; the engine behind the element is private.
   `GanttToolbarComponent`, `GanttToolbarProps`, `GanttDragService`, `DragState`, `GanttSelectionService`,
   `GanttTooltip`, `GanttTooltipContext`. A custom `renderBar` gets the built-in bar from its `renderDefault()`
   argument (instead of `paintBar()`); `LightTheme`, `DarkTheme`, `VirtualWindow`, `DragPreview` and the virtual-window
-  math (`computeVirtualWindow`) still come from `@gantry/core`, re-exported here.
+  math (`computeVirtualWindow`) still come from `@gantryjs/core`, re-exported here.
 - Removed element fields: `themeSvc`, `i18nSvc`, `colSvc`, `layout`, `scrollSvc`, `selSvc` and `dragSvc` (with their
   members, such as `colSvc.visibleColumns`, `colSvc.totalPanelWidth` and `layout.panelCollapsed`; the collapsed state
   is `el.view === 'chart'` or `getState().panelCollapsed`). The element has no public instance fields; its state is
@@ -28,8 +28,8 @@ everything in `@gantry/core`; the engine behind the element is private.
 - New `resetTheme()`: drops the `setTheme()` / `patchTheme()` overrides (back to the light / dark base plus
   `options.theme`).
 - `package.json` declares `sideEffects`: only the files that register `<gantry-element>` (the bundle, and on the
-  `@gantry/source` path the entry and the element module) count as having side effects, so a bare
-  `import '@gantry/vanilla'` always defines the element.
+  `@gantryjs/source` path the entry and the element module) count as having side effects, so a bare
+  `import '@gantryjs/vanilla'` always defines the element.
 
 `view-mode-change` fires synchronously when the effective zoom level changes (an unknown level name now only reports
 the fallback level).
@@ -76,7 +76,7 @@ move to another document re-adopts that document's stylesheets. The shadow root 
 true`): `el.focus()` and a click on a non-focusable part of the chart focus the first focusable control inside it.
 
 Custom Elements Manifest: the package ships `custom-elements.json` (the `customElements` field of `package.json`, also
-exported as `@gantry/vanilla/custom-elements.json`) describing the element's attributes, properties, methods, events
+exported as `@gantryjs/vanilla/custom-elements.json`) describing the element's attributes, properties, methods, events
 with their detail types, CSS parts, custom states and the 42 `--gantt-*` CSS custom properties with their light-theme
-defaults, for IDEs, Storybook and linters. CI fails when it is stale and when `import '@gantry/vanilla'` grows past
-50 KB minified and gzipped (about 48 KB today, `@gantry/core` included).
+defaults, for IDEs, Storybook and linters. CI fails when it is stale and when `import '@gantryjs/vanilla'` grows past
+50 KB minified and gzipped (about 48 KB today, `@gantryjs/core` included).

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fails when the committed Custom Elements Manifest is stale: regenerates it in memory with the
 // package's config (`custom-elements-manifest.config.mjs`) and compares it with
-// `custom-elements.json`. CI runs it; `pnpm --filter @gantry/vanilla cem` rewrites the file.
+// `custom-elements.json`. CI runs it; `pnpm --filter @gantryjs/vanilla cem` rewrites the file.
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { cli } from '@custom-elements-manifest/analyzer/cli.js';
@@ -27,7 +27,7 @@ if (fresh === committed) {
   const have = committed.split('\n');
   let line = want.findIndex((text, i) => text !== have[i]);
   if (line < 0) line = want.length; // the committed file is longer
-  console.error(`${FILE} is stale: run \`pnpm --filter @gantry/vanilla cem\` and commit the result.`);
+  console.error(`${FILE} is stale: run \`pnpm --filter @gantryjs/vanilla cem\` and commit the result.`);
   console.error(`first difference at line ${line + 1}:`);
   console.error(`- ${have[line] ?? '(end of file)'}\n+ ${want[line] ?? '(end of file)'}`);
   process.exit(1);

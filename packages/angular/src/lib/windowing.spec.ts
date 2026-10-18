@@ -17,7 +17,7 @@ import {
   type GanttDependency,
   type GanttOptions,
   type GanttTask,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttLayoutService } from './layout/gantt-layout.service';
 import { GanttScrollService } from './scroll/gantt-scroll.service';

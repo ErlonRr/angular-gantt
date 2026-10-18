@@ -46,8 +46,8 @@ import {
   type GanttDataSource,
   type GanttDataSourceConfig,
   type VanillaColumnDef,
-} from '@gantry/vanilla';
-import type { GanttAnnotation, GanttOptions, GanttTask } from '@gantry/core';
+} from '@gantryjs/vanilla';
+import type { GanttAnnotation, GanttOptions, GanttTask } from '@gantryjs/core';
 
 type PropertyName = (typeof GANTRY_PROPERTIES)[number];
 

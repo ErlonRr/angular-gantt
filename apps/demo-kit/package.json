@@ -20,8 +20,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@gantry/core": "workspace:^",
-    "@gantry/vanilla": "workspace:^"
+    "@gantryjs/core": "workspace:^",
+    "@gantryjs/vanilla": "workspace:^"
   },
   "devDependencies": {
     "typescript": "catalog:"

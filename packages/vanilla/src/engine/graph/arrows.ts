@@ -13,7 +13,7 @@ import {
   type ArrowIndex,
   type ArrowLink,
   type ArrowVisual,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { CoreGraph } from '../engine';
 import type { Inputs } from '../inputs';

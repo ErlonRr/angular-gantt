@@ -1,7 +1,7 @@
 // The engine graph (Gantry 2 phase 6, step 1.2): which parts of the render model a change
 // recomputes, read from the per-node run counters (`getEngine(el).runs`).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LightTheme, ViewMode, type GanttOptions, type GanttTask } from '@gantry/core';
+import { LightTheme, ViewMode, type GanttOptions, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { structuralEqual } from '../engine/inputs';

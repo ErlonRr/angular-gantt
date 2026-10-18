@@ -3,7 +3,7 @@
 // layers; the focused task-list row pinned in the virtual window; the first frame measured by
 // the ResizeObserver.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { initialScrollLeft, ViewMode, type GanttTask } from '@gantry/core';
+import { initialScrollLeft, ViewMode, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { REGIONS, type Region } from '../engine/render';

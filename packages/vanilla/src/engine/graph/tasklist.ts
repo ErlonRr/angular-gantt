@@ -6,7 +6,7 @@
  * option the task list does not show re-runs nothing that reads them.
  */
 
-import { columnsGridTemplate, virtualIndexes, type GanttFlatRow } from '@gantry/core';
+import { columnsGridTemplate, virtualIndexes, type GanttFlatRow } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Columns } from '../../interaction/columns';
 import type { VanillaColumnDef } from '../../types';

@@ -4,7 +4,7 @@
 // changes nothing, a scroll across a chunk adds and removes elements at the window's ends and
 // keeps every other node.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { headerCellBorder, ViewMode, type GanttOptions, type GanttTask } from '@gantry/core';
+import { headerCellBorder, ViewMode, type GanttOptions, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { HORIZONTAL_QUANTUM } from '../engine/graph/horizontal';

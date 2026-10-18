@@ -17,7 +17,7 @@
  * `syncRun()` below.
  */
 
-import type { LinesWindow, ResolvedLine, TimeBand } from '@gantry/core';
+import type { LinesWindow, ResolvedLine, TimeBand } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp } from '../dom/patch';

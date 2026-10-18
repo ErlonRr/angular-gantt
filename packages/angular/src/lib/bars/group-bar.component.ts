@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · bars/group-bar.component.ts
 //  Summary bar of a parent task (bracket style or regular bar).
-//  Geometry comes from `ctx.visual` (the shared @gantry/core render model).
+//  Geometry comes from `ctx.visual` (the shared @gantryjs/core render model).
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component } from '@angular/core';

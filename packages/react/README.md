@@ -1,22 +1,22 @@
-# @gantry/react
+# @gantryjs/react
 
 The free, full-featured **Gantry Gantt chart for React** 18 and 19: drag & resize,
 dependencies, critical path, baselines, virtual scrolling, sorting, lazy loading,
 theming and i18n. MIT licensed.
 
-A thin binding over the [`<gantry-element>`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) Web Component.
+A thin binding over the [`<gantry-element>`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla) Web Component.
 
 ## Install
 
 ```bash
-npm i @gantry/react
+npm i @gantryjs/react
 ```
 
 ## Usage
 
 ```tsx
 import { useRef, useState } from 'react';
-import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantry/react';
+import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantryjs/react';
 
 export function Roadmap() {
   const gantt = useRef<GantryElement>(null);
@@ -42,13 +42,13 @@ export function Roadmap() {
 }
 ```
 
-- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#properties): `tasks`, `options`,
+- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties): `tasks`, `options`,
   `columns`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
   `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, plus `className` / `style` / any HTML attribute.
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,
   `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`,
   `onLoadError`.
-- **Ref** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#methods). It is attached once the
+- **Ref** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is attached once the
   props are set, so a callback ref can call `scrollToTask()` right away.
 
 ### How props reach the chart
@@ -77,7 +77,7 @@ export function Roadmap() {
 attributes, without touching DOM APIs or warning about layout effects; the chart renders in the
 browser once the element is defined and the component hydrates.
 
-All `@gantry/core` types and helpers (`ViewMode`, `GanttTask`, `computeCriticalPath`, …)
+All `@gantryjs/core` types and helpers (`ViewMode`, `GanttTask`, `computeCriticalPath`, …)
 are re-exported.
 
 ## License

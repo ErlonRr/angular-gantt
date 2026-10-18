@@ -16,7 +16,7 @@
 
 import { Injectable, signal, computed, inject, afterNextRender, DestroyRef, DOCUMENT } from '@angular/core';
 import { type GanttTheme, type GanttThemeOverrides, type GanttOptions } from '../types';
-import { resolveTheme, themeToCss } from '@gantry/core';
+import { resolveTheme, themeToCss } from '@gantryjs/core';
 import { GANTT_GLOBAL_CONFIG } from '../global-config';
 
 /** What GantryComponent binds once: its `options` and `darkMode` inputs. */

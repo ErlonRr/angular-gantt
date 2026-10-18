@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · layout/gantt-canvas.component.ts
 //
-//  Timeline body. Everything it draws comes from the @gantry/core
+//  Timeline body. Everything it draws comes from the @gantryjs/core
 //  render model (shared with the Web Component): non-working bands,
 //  period delimiters, rows, annotations, today, dependency arrows and
 //  bars. Bars are rendered through this chart's bar registry (built-in
@@ -61,7 +61,7 @@ import {
   type ArrowLink,
   type ArrowVisual,
   type BarVisual,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 import { GanttBarRegistry } from '../bar-registry';
 import { GanttBarOutletDirective } from '../bars/bar-outlet.directive';

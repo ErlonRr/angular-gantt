@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: () => 'index.js',
     },
     rolldownOptions: {
-      external: ['vue', /^@gantry\//],
+      external: ['vue', /^@gantryjs\//],
     },
     sourcemap: true,
   },

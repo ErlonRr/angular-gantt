@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
-import type { GanttZoomLevel, GanttView, ResolvedToolbar } from '@gantry/core';
+import type { GanttZoomLevel, GanttView, ResolvedToolbar } from '@gantryjs/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({

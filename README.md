@@ -3,45 +3,45 @@
 > A free, full-featured, open-source Gantt chart for **every framework** — Angular, React, Vue, Svelte, or plain JavaScript.
 > Interactive drag & resize, dependencies, critical path, baselines, virtual scrolling, theming and i18n — MIT licensed, zero runtime dependencies.
 
-![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
+![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-banner.png)
 
-![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.gif)
+![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-demo.gif)
 
 ## Packages
 
-| Framework            | Package           | Install                 | Docs                                           |
-| -------------------- | ----------------- | ----------------------- | ---------------------------------------------- |
-| **Angular 22+**      | `ngx-gantry`      | `npm i ngx-gantry`      | [below](#angular-ngx-gantry)                   |
-| **React 18 / 19**    | `@gantry/react`   | `npm i @gantry/react`   | [packages/react](packages/react/README.md)     |
-| **Vue 3.5+**         | `@gantry/vue`     | `npm i @gantry/vue`     | [packages/vue](packages/vue/README.md)         |
-| **Svelte 5**         | `@gantry/svelte`  | `npm i @gantry/svelte`  | [packages/svelte](packages/svelte/README.md)   |
-| **Vanilla JS / any** | `@gantry/vanilla` | `npm i @gantry/vanilla` | [packages/vanilla](packages/vanilla/README.md) |
-| Framework-free logic | `@gantry/core`    | `npm i @gantry/core`    | [packages/core](packages/core/README.md)       |
+| Framework            | Package             | Install                   | Docs                                           |
+| -------------------- | ------------------- | ------------------------- | ---------------------------------------------- |
+| **Angular 22+**      | `ngx-gantry`        | `npm i ngx-gantry`        | [below](#angular-ngx-gantry)                   |
+| **React 18 / 19**    | `@gantryjs/react`   | `npm i @gantryjs/react`   | [packages/react](packages/react/README.md)     |
+| **Vue 3.5+**         | `@gantryjs/vue`     | `npm i @gantryjs/vue`     | [packages/vue](packages/vue/README.md)         |
+| **Svelte 5**         | `@gantryjs/svelte`  | `npm i @gantryjs/svelte`  | [packages/svelte](packages/svelte/README.md)   |
+| **Vanilla JS / any** | `@gantryjs/vanilla` | `npm i @gantryjs/vanilla` | [packages/vanilla](packages/vanilla/README.md) |
+| Framework-free logic | `@gantryjs/core`    | `npm i @gantryjs/core`    | [packages/core](packages/core/README.md)       |
 
 ```
-@gantry/core      types · timeline math · tree helpers · critical path (no DOM, no framework)
- ├── ngx-gantry       native Angular components (signals, zoneless)
- └── @gantry/vanilla  <gantry-element> Web Component
-      ├── @gantry/react
-      ├── @gantry/vue
-      └── @gantry/svelte
+@gantryjs/core              types · timeline math · tree helpers · critical path (no DOM, no framework)
+ ├── ngx-gantry             native Angular components (signals, zoneless)
+ └── @gantryjs/vanilla      <gantry-element> Web Component
+      ├── @gantryjs/react
+      ├── @gantryjs/vue
+      └── @gantryjs/svelte
 ```
 
 ### Quick start (any framework)
 
 ```tsx
 // React
-import { Gantry, ViewMode } from '@gantry/react';
+import { Gantry, ViewMode } from '@gantryjs/react';
 <Gantry tasks={tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={e => save(e)} />;
 ```
 
 ```vue
-<!-- Vue — import { Gantry, ViewMode } from '@gantry/vue' -->
+<!-- Vue — import { Gantry, ViewMode } from '@gantryjs/vue' -->
 <Gantry :tasks="tasks" :options="{ viewMode: ViewMode.Week }" @task-dragged="save" />
 ```
 
 ```svelte
-<!-- Svelte — import { Gantry, ViewMode } from '@gantry/svelte' -->
+<!-- Svelte — import { Gantry, ViewMode } from '@gantryjs/svelte' -->
 <Gantry {tasks} options={{ viewMode: ViewMode.Week }} onTaskDragged={save} />
 ```
 
@@ -49,7 +49,7 @@ import { Gantry, ViewMode } from '@gantry/react';
 <!-- Plain HTML / any framework -->
 <gantry-element id="gantt"></gantry-element>
 <script type="module">
-  import '@gantry/vanilla';
+  import '@gantryjs/vanilla';
   const gantt = document.getElementById('gantt');
   gantt.tasks = [{ id: '1', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20'), progress: 40 }];
   gantt.addEventListener('task-dragged', e => console.log(e.detail));
@@ -59,7 +59,7 @@ import { Gantry, ViewMode } from '@gantry/react';
 ## Configuration
 
 Every binding (Angular `[options]`, React / Vue / Svelte `options`, `<gantry-element>.options`)
-takes the same `GanttOptions` object, and both renderers draw from the same `@gantry/core`
+takes the same `GanttOptions` object, and both renderers draw from the same `@gantryjs/core`
 render model — an option behaves identically everywhere. Try them all live in the
 **playground** — the site's `/playground` (`pnpm start`) or the Web Component one
 (`pnpm dev:vanilla`).
@@ -74,21 +74,21 @@ Each binding documents the rest of its API in its own README:
 - **Angular** `<gantry>`: [Inputs & Outputs](#inputs--outputs), [Public API](#public-api),
   [keyboard and focus](#keyboard-and-focus) and [Theming](#theming-1).
 
-[wc-properties]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#properties
-[wc-attributes]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#attributes
-[wc-events]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#events
-[wc-methods]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#methods
-[wc-focus]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#keyboard-and-focus
-[wc-css]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#css-custom-properties
-[wc-parts]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#parts
-[wc-states]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#custom-states
-[wc-csp]: https://github.com/ErlonRr/angular-gantt/blob/main/packages/vanilla/README.md#content-security-policy
+[wc-properties]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#properties
+[wc-attributes]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#attributes
+[wc-events]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#events
+[wc-methods]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#methods
+[wc-focus]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#keyboard-and-focus
+[wc-css]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#css-custom-properties
+[wc-parts]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#parts
+[wc-states]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#custom-states
+[wc-csp]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#content-security-policy
 [cem]: https://github.com/webcomponents/custom-elements-manifest
 
 ### Timeline, header tiers and zoom
 
 ```ts
-import { ViewMode, WEEK_FORMATS } from '@gantry/core';
+import { ViewMode, WEEK_FORMATS } from '@gantryjs/core';
 
 options = {
   viewMode: ViewMode.Week, // Hour · Day · Week · Month · Quarter · Year, or a custom level name
@@ -282,7 +282,7 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
 
 ```bash
 npm i ngx-gantry
-# peer deps: @angular/core & @angular/common ^22 (@gantry/core is installed automatically)
+# peer deps: @angular/core & @angular/common ^22 (@gantryjs/core is installed automatically)
 ```
 
 ## Features
@@ -303,7 +303,7 @@ npm i ngx-gantry
 | **Tooltip**        | One native popover per chart (Popover API) — zero CDK Overlay                                                                |
 | **Dark / light**   | Auto `prefers-color-scheme` + manual toggle                                                                                  |
 | **Animations**     | CSS transitions (panel, table view), off with `prefers-reduced-motion`                                                       |
-| **Dependencies**   | None at runtime besides `@gantry/core`                                                                                       |
+| **Dependencies**   | None at runtime besides `@gantryjs/core`                                                                                     |
 
 ---
 
@@ -422,7 +422,7 @@ export class PlanComponent {
 ```
 
 - `ctx` is a `GanttBarContext`: `row` (the task and its tree position), `geometry`, `visual` (the
-  `@gantry/core` bar model: path, label, progress, baseline and the paints
+  `@gantryjs/core` bar model: path, label, progress, baseline and the paints
   `visual.paint.{body,progress,label}`, which may be `var(--gantt-*)` tokens — bind them as styles
   or use `resolvePaint(paint, ctx.theme)`), `theme`, `isSelected`, `isCritical`, `draggable` and
   `showBaseline`. The chart keeps the same `ctx` object while none of them change, so only the bars
@@ -432,7 +432,7 @@ export class PlanComponent {
   Prefix the SVG elements of the template with `svg:`.
 - Drag, resize, selection and the tooltip use the row's geometry, so they work on any bar.
 - The timeline `<svg>` is a `role="list"`: give the bar `role="listitem"` and an `aria-label`
-  (`taskAccessibleName()` from `@gantry/core` builds the built-in bars' names).
+  (`taskAccessibleName()` from `@gantryjs/core` builds the built-in bars' names).
 - Provide bars in `bootstrapApplication`, a route's `providers` or a component's `providers`
   (`provideGanttBar(...defs)`, or `provideGantt(config, withBars(...defs))`). Each chart resolves a
   type from the nearest level that defines it, so a level can also replace a built-in type (`task`,
@@ -633,7 +633,7 @@ Built-in themes `LightTheme` / `DarkTheme` are exported. They meet WCAG 2.2 AA: 
 4.5:1 and bars, markers and arrows 3:1 against the background. Labels inside bars switch to white
 or near-black when `barTextColor` is unreadable on a custom `barColor` (an explicit
 `task.textColor` or `bar.label.color` is always kept); `contrastRatio()` and `readableOn()` are
-exported from `@gantry/core`. The 1.x colours are available as `LegacyLightTheme` /
+exported from `@gantryjs/core`. The 1.x colours are available as `LegacyLightTheme` /
 `LegacyDarkTheme`. Full token map:
 
 | `GanttTheme` field | CSS variable              |     | `GanttTheme` field               | CSS variable                    |
@@ -777,7 +777,7 @@ const routes: Routes = [
 
 ## Public API
 
-`ngx-gantry` exports everything in `@gantry/core` (types such as `GanttTask`, `GanttOptions` and
+`ngx-gantry` exports everything in `@gantryjs/core` (types such as `GanttTask`, `GanttOptions` and
 `ViewMode`, the themes, the labels and the date, tree, critical-path and theme helpers) and these
 Angular pieces:
 
@@ -902,7 +902,7 @@ light until the browser reports the colour scheme.
 | `import { GanttLayoutService, … } from 'ngx-gantry'`                        | internal: use `<gantry>`'s inputs, outputs and methods                                                            |
 | `<gantry [visibleRows]>`, `GanttTooltipDirective`, `GanttModule`            | removed                                                                                                           |
 
-Every change is listed in the [changelog](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
+Every change is listed in the [changelog](https://github.com/ErlonRr/gantryjs/blob/main/CHANGELOG.md).
 
 ---
 
@@ -941,15 +941,15 @@ loads on refresh.
 
 A pnpm workspace (`pnpm-workspace.yaml`):
 
-| Path                                                | What                                                           |
-| --------------------------------------------------- | -------------------------------------------------------------- |
-| `packages/core`                                     | `@gantry/core` — framework-free logic, shared by every binding |
-| `packages/vanilla`                                  | `@gantry/vanilla` — the `<gantry-element>` Web Component       |
-| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                 |
-| `packages/angular`                                  | `ngx-gantry` — the Angular library (imports `@gantry/core`)    |
-| `apps/demo-angular`                                 | the Gantry site (Angular showcase)                             |
-| `apps/demo-*`                                       | one Vite demo per framework                                    |
-| `apps/demo-kit`                                     | the demos' shared look, theme switch and playground model      |
+| Path                                                | What                                                             |
+| --------------------------------------------------- | ---------------------------------------------------------------- |
+| `packages/core`                                     | `@gantryjs/core` — framework-free logic, shared by every binding |
+| `packages/vanilla`                                  | `@gantryjs/vanilla` — the `<gantry-element>` Web Component       |
+| `packages/react`, `packages/vue`, `packages/svelte` | thin framework bindings over the Web Component                   |
+| `packages/angular`                                  | `ngx-gantry` — the Angular library (imports `@gantryjs/core`)    |
+| `apps/demo-angular`                                 | the Gantry site (Angular showcase)                               |
+| `apps/demo-*`                                       | one Vite demo per framework                                      |
+| `apps/demo-kit`                                     | the demos' shared look, theme switch and playground model        |
 
 | Script                                                                      | Effect                                                                                                                                |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -962,7 +962,7 @@ A pnpm workspace (`pnpm-workspace.yaml`):
 | `pnpm e2e` · `pnpm e2e:full`                                                | Playwright end-to-end tests on every binding (after `pnpm build`; `e2e:full` builds first)                                            |
 | `pnpm e2e:visual` · `pnpm e2e:update`                                       | compare / regenerate the screenshot baselines (`e2e/__screenshots__`) in the Playwright container (Docker/Podman) — same pixels as CI |
 
-Workspace packages expose a `@gantry/source` export condition pointing at
+Workspace packages expose a `@gantryjs/source` export condition pointing at
 their TypeScript sources; the demos, tests and type-checks use it, so nothing
 has to be built first. Published consumers never see that condition.
 
@@ -1010,11 +1010,11 @@ webpack in the toolchain. The live showcase replaces a component workshop such a
 
 ## Dependencies
 
-| Package        | License | Size                        |
-| -------------- | ------- | --------------------------- |
-| `@gantry/core` | MIT     | shared logic from this repo |
+| Package          | License | Size                        |
+| ---------------- | ------- | --------------------------- |
+| `@gantryjs/core` | MIT     | shared logic from this repo |
 
-`@gantry/core` itself has no runtime dependencies (dates are formatted with `Intl`).
+`@gantryjs/core` itself has no runtime dependencies (dates are formatted with `Intl`).
 Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses native Popover API).
 
 ---
@@ -1039,6 +1039,6 @@ Zero `zone.js` required. Zero `@angular/animations`. Zero CDK (tooltip uses nati
 
 ---
 
-For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
+For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/gantryjs/blob/main/CHANGELOG.md).
 
 </details>

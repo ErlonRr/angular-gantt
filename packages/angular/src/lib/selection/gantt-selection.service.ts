@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · selection/gantt-selection.service.ts
 //
-//  Signal-based selection manager around the @gantry/core
+//  Signal-based selection manager around the @gantryjs/core
 //  selection reducer (shared with the Web Component).
 //
 //  Interaction model (see core `state/selection.ts`):
@@ -29,7 +29,7 @@ import {
   type SelectionModifierSource,
   type SelectionPolicy,
   type SelectionState,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { type GanttFlatRow, type SelectionChangeEvent } from '../types';
 import { GanttAnnouncer } from '../a11y/announcer';
 

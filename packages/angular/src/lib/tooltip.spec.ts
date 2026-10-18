@@ -20,7 +20,7 @@ import {
   themeVar,
   type GanttOptions,
   type GanttTask,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDragService } from './drag/gantt-drag.service';
 

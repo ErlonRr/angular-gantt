@@ -5,7 +5,7 @@
  * `focusedRowId` input, so the virtual window keeps it mounted (pinned) while it scrolls away.
  */
 
-import { resolveKey } from '@gantry/core';
+import { resolveKey } from '@gantryjs/core';
 import type { LayerContext } from '../layers/context';
 
 /** Binds the shortcuts until `signal` aborts (the element disconnects). */

@@ -21,7 +21,7 @@ import {
   type GanttFlatRow,
   type TooltipModel,
   type TooltipRow,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { h } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';

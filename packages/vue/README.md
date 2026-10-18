@@ -1,16 +1,16 @@
-# @gantry/vue
+# @gantryjs/vue
 
 The free, full-featured **Gantry Gantt chart for Vue 3** (3.5+): drag & resize,
 dependencies, critical path, baselines, virtual scrolling, sorting, lazy loading,
 theming and i18n. MIT licensed.
 
-A thin binding over the [`<gantry-element>`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) Web Component — no
+A thin binding over the [`<gantry-element>`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla) Web Component — no
 `isCustomElement` compiler configuration needed.
 
 ## Install
 
 ```bash
-npm i @gantry/vue
+npm i @gantryjs/vue
 ```
 
 ## Usage
@@ -18,7 +18,7 @@ npm i @gantry/vue
 ```vue
 <script setup lang="ts">
 import { ref, shallowRef } from 'vue';
-import { Gantry, ViewMode, type GanttTask, type TaskDragEvent } from '@gantry/vue';
+import { Gantry, ViewMode, type GanttTask, type TaskDragEvent } from '@gantryjs/vue';
 
 const gantt = shallowRef<InstanceType<typeof Gantry>>();
 const tasks = ref<GanttTask[]>([
@@ -46,7 +46,7 @@ function onDragged(e: TaskDragEvent) {
 </template>
 ```
 
-- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#properties), in this order: `tasks`,
+- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties), in this order: `tasks`,
   `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
   `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`. An omitted prop keeps the element's
   default (booleans are not cast to `false`), and a prop that becomes `undefined` (or is dropped)
@@ -54,10 +54,10 @@ function onDragged(e: TaskDragEvent) {
 - **Events** carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`,
   `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`.
 - **Template ref** — exposes only `element`: the underlying `GantryElement`, with its
-  [methods](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#methods). It is set
+  [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is set
   before the element is inserted, so it is there in the parent's `onMounted`.
 
-All `@gantry/core` types and helpers are re-exported.
+All `@gantryjs/core` types and helpers are re-exported.
 
 ## How props reach the element
 
@@ -92,7 +92,7 @@ All `@gantry/core` types and helpers are re-exported.
 
 `<Gantry>` renders on the server without touching the DOM: `renderToString` emits an empty
 `<gantry-element>` (with its layout style and your attributes); the props and listeners are set
-on the client when it hydrates. Importing `@gantry/vue` on the server is safe.
+on the client when it hydrates. Importing `@gantryjs/vue` on the server is safe.
 
 ## License
 

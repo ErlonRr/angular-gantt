@@ -3,7 +3,7 @@
 // attributes and touches no DOM (there is none here); props and callbacks are not attributes.
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
-import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantry/vanilla';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
 import { Gantry, ViewMode, type GanttTask } from '../index';
 
 const TASKS: GanttTask[] = [

@@ -6,7 +6,7 @@
 import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { flushSync, mount, tick, unmount, type ComponentProps } from 'svelte';
 import { types } from 'node:util';
-import { GANTRY_EVENTS, GANTRY_PROPERTIES, type GantryProperties } from '@gantry/vanilla';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES, type GantryProperties } from '@gantryjs/vanilla';
 import { Gantry, GanttDataSource, ViewMode, type GantryElement, type GanttOptions, type GanttTask } from '../index';
 import Bound from './Bound.svelte';
 

@@ -4,7 +4,7 @@
 // element as a stray attribute / an `on…` listener that never fires.
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantry/vanilla';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
 import * as api from '../index';
 
 const source = readFileSync(new URL('../Gantry.svelte', import.meta.url), 'utf8');
@@ -37,7 +37,7 @@ describe('Gantry.svelte props', () => {
 });
 
 describe('public API', () => {
-  it('has named exports only: the component, the data source and @gantry/core', () => {
+  it('has named exports only: the component, the data source and @gantryjs/core', () => {
     expect(api).not.toHaveProperty('default');
     expect(typeof api.Gantry).toBe('function');
     expect(typeof api.GanttDataSource).toBe('function');

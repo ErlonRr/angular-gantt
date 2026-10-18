@@ -4,56 +4,56 @@
 
 ```ts
 
-import { BarVisual } from '@gantry/core';
-import { ColumnCellContext } from '@gantry/core';
-import { ColumnContext } from '@gantry/core';
-import { ColumnDef as ColumnDef_2 } from '@gantry/core';
-import { ColumnRenderer } from '@gantry/core';
-import { CPMResult } from '@gantry/core';
-import { DragPreview } from '@gantry/core';
-import { DragTiming } from '@gantry/core';
-import { GanttAnnotation } from '@gantry/core';
-import { GanttBarContext } from '@gantry/core';
-import { GanttFlatRow } from '@gantry/core';
-import { GanttFormats } from '@gantry/core';
-import { GanttI18n } from '@gantry/core';
-import { GanttLabels } from '@gantry/core';
-import { GanttOptions } from '@gantry/core';
-import { GanttState } from '@gantry/core';
-import { GanttTask } from '@gantry/core';
-import { GanttTheme } from '@gantry/core';
-import { GanttThemeOverrides } from '@gantry/core';
-import { GanttView } from '@gantry/core';
-import { HorizontalWindow } from '@gantry/core';
+import { BarVisual } from '@gantryjs/core';
+import { ColumnCellContext } from '@gantryjs/core';
+import { ColumnContext } from '@gantryjs/core';
+import { ColumnDef as ColumnDef_2 } from '@gantryjs/core';
+import { ColumnRenderer } from '@gantryjs/core';
+import { CPMResult } from '@gantryjs/core';
+import { DragPreview } from '@gantryjs/core';
+import { DragTiming } from '@gantryjs/core';
+import { GanttAnnotation } from '@gantryjs/core';
+import { GanttBarContext } from '@gantryjs/core';
+import { GanttFlatRow } from '@gantryjs/core';
+import { GanttFormats } from '@gantryjs/core';
+import { GanttI18n } from '@gantryjs/core';
+import { GanttLabels } from '@gantryjs/core';
+import { GanttOptions } from '@gantryjs/core';
+import { GanttState } from '@gantryjs/core';
+import { GanttTask } from '@gantryjs/core';
+import { GanttTheme } from '@gantryjs/core';
+import { GanttThemeOverrides } from '@gantryjs/core';
+import { GanttView } from '@gantryjs/core';
+import { HorizontalWindow } from '@gantryjs/core';
 import * as i0 from '@angular/core';
 import { InputSignal } from '@angular/core';
 import { InputSignalWithTransform } from '@angular/core';
-import { LegendItem } from '@gantry/core';
-import { LinesWindow } from '@gantry/core';
-import { LoadStateSnapshot } from '@gantry/core';
+import { LegendItem } from '@gantryjs/core';
+import { LinesWindow } from '@gantryjs/core';
+import { LoadStateSnapshot } from '@gantryjs/core';
 import { ModelSignal } from '@angular/core';
 import { OutputEmitterRef } from '@angular/core';
-import { PAINTS } from '@gantry/core';
+import { PAINTS } from '@gantryjs/core';
 import { Provider } from '@angular/core';
-import { ResolvedGanttConfig } from '@gantry/core';
-import { RowGeometry } from '@gantry/core';
-import { SelectionAction } from '@gantry/core';
-import { SelectionChangeEvent } from '@gantry/core';
-import { SelectionModifierSource } from '@gantry/core';
-import { SelectionPolicy } from '@gantry/core';
-import { SelectionState } from '@gantry/core';
+import { ResolvedGanttConfig } from '@gantryjs/core';
+import { RowGeometry } from '@gantryjs/core';
+import { SelectionAction } from '@gantryjs/core';
+import { SelectionChangeEvent } from '@gantryjs/core';
+import { SelectionModifierSource } from '@gantryjs/core';
+import { SelectionPolicy } from '@gantryjs/core';
+import { SelectionState } from '@gantryjs/core';
 import { Signal } from '@angular/core';
-import { SortDirection } from '@gantry/core';
-import { SplitterValue } from '@gantry/core';
-import { TaskDragEvent } from '@gantry/core';
-import { TaskResizeEvent } from '@gantry/core';
+import { SortDirection } from '@gantryjs/core';
+import { SplitterValue } from '@gantryjs/core';
+import { TaskDragEvent } from '@gantryjs/core';
+import { TaskResizeEvent } from '@gantryjs/core';
 import { TemplateRef } from '@angular/core';
-import { TierWindow } from '@gantry/core';
-import { TimeBand } from '@gantry/core';
-import { TimelineModel } from '@gantry/core';
+import { TierWindow } from '@gantryjs/core';
+import { TimeBand } from '@gantryjs/core';
+import { TimelineModel } from '@gantryjs/core';
 import { Type } from '@angular/core';
-import { ViewMode } from '@gantry/core';
-import { VirtualWindow } from '@gantry/core';
+import { ViewMode } from '@gantryjs/core';
+import { VirtualWindow } from '@gantryjs/core';
 import { WritableSignal } from '@angular/core';
 
 // @public
@@ -485,7 +485,7 @@ export class ɵGanttKeyboardDirective {
 }
 
 
-export * from "@gantry/core";
+export * from "@gantryjs/core";
 
 // (No @packageDocumentation comment for this package)
 

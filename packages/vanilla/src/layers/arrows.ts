@@ -6,7 +6,7 @@
  * and leaves the others untouched.
  */
 
-import type { ArrowVisual } from '@gantry/core';
+import type { ArrowVisual } from '@gantryjs/core';
 import { reconcile } from '../dom/keyed';
 import { createArrow, patchArrow } from '../paint/arrows';
 import type { Layer, LayerContext } from './context';

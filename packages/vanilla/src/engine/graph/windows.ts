@@ -10,7 +10,7 @@ import {
   VIEWPORT_FALLBACK_HEIGHT,
   VIRTUAL_OVERSCAN_ROWS,
   type VirtualWindow,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ConfigGraph } from './config';

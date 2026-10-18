@@ -17,7 +17,7 @@ import {
   type GanttOptions,
   type GanttState,
   type GanttTask,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttColumnDefDirective } from './columns/gantt-column.directive';
 import { GanttColumnService } from './columns/gantt-column.service';

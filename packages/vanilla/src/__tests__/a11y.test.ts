@@ -4,7 +4,7 @@
 // polite live region and the focus fallback. happy-dom has no ElementInternals: the internals
 // path runs against a stub, the real one is covered by e2e/a11y.spec.ts.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import type { GanttTask } from '@gantry/core';
+import type { GanttTask } from '@gantryjs/core';
 import { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { announce } from '../engine/announce';

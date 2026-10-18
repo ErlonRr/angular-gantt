@@ -1,6 +1,6 @@
 ---
 name: gantry-reviewer
-description: Reviews Gantry changes for parity and architecture regressions — options honoured by both renderers, geometry only in @gantry/core, date/time-zone rules, public API and SSR safety, accessibility, tests, docs and changesets. Use proactively after changing packages/core, packages/vanilla, packages/angular or the framework bindings, and before reporting a feature as done.
+description: Reviews Gantry changes for parity and architecture regressions — options honoured by both renderers, geometry only in @gantryjs/core, date/time-zone rules, public API and SSR safety, accessibility, tests, docs and changesets. Use proactively after changing packages/core, packages/vanilla, packages/angular or the framework bindings, and before reporting a feature as done.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write, NotebookEdit
 model: inherit

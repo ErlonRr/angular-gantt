@@ -1,9 +1,9 @@
-# @gantry/vanilla
+# @gantryjs/vanilla
 
 The Gantry Gantt chart as a framework-agnostic **Web Component**: `<gantry-element>`.
 Use it from plain JavaScript or any framework. React, Vue and Svelte users can install
-the thin bindings [`@gantry/react`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/react), [`@gantry/vue`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vue) and
-[`@gantry/svelte`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/svelte) instead; Angular users, [`ngx-gantry`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/angular).
+the thin bindings [`@gantryjs/react`](https://github.com/ErlonRr/gantryjs/tree/main/packages/react), [`@gantryjs/vue`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vue) and
+[`@gantryjs/svelte`](https://github.com/ErlonRr/gantryjs/tree/main/packages/svelte) instead; Angular users, [`ngx-gantry`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular).
 
 Free and MIT licensed. Interactive drag & resize, dependency arrows (FS/SS/FF/SF + lag),
 critical path, baselines, milestones, groups, virtual scrolling, sorting, lazy loading,
@@ -12,7 +12,7 @@ light/dark theming, i18n, keyboard shortcuts and ARIA.
 ## Install
 
 ```bash
-npm i @gantry/vanilla
+npm i @gantryjs/vanilla
 ```
 
 ## Usage
@@ -21,8 +21,8 @@ npm i @gantry/vanilla
 <gantry-element id="gantt" style="height: 500px"></gantry-element>
 
 <script type="module">
-  import '@gantry/vanilla'; // registers <gantry-element>
-  import { ViewMode, DependencyType } from '@gantry/vanilla';
+  import '@gantryjs/vanilla'; // registers <gantry-element>
+  import { ViewMode, DependencyType } from '@gantryjs/vanilla';
 
   const gantt = document.getElementById('gantt');
   gantt.tasks = [
@@ -48,7 +48,7 @@ Give the element a height (it fills its container: `display: block; height: 100%
 `options` accepts every `GanttOptions` field — header tiers & week formats, zoom presets,
 period delimiters, weekends / holidays / working hours, bar & arrow sizes, panel splitter,
 table view and saved state. See the full guide:
-[Configuration](https://github.com/ErlonRr/angular-gantt#configuration).
+[Configuration](https://github.com/ErlonRr/gantryjs#configuration).
 
 ## Properties
 
@@ -261,10 +261,10 @@ host's inline style, which needs `style-src 'unsafe-inline'`. There is no nonce 
 
 ## Exports
 
-`@gantry/vanilla` exports `GantryElement`, `GanttDataSource`, the tables `GANTRY_PROPERTIES` and
+`@gantryjs/vanilla` exports `GantryElement`, `GanttDataSource`, the tables `GANTRY_PROPERTIES` and
 `GANTRY_EVENTS`, the types `GantryProperties`, `GantryEventDetailMap`, `GantryEventMap`,
 `GantryEventCallbacks`, `GanttBarRenderer`, `GanttDataSourceConfig`, `VanillaColumnDef` and
-`VanillaCellTemplate`, and everything in `@gantry/core` (model types, `LightTheme` / `DarkTheme`,
+`VanillaCellTemplate`, and everything in `@gantryjs/core` (model types, `LightTheme` / `DarkTheme`,
 labels, date and theme helpers). Importing it registers `<gantry-element>`.
 
 The package ships a [Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest)

@@ -44,7 +44,7 @@
  * while hidden: the paint snapshots and `.gantt-drag-preview` (count 0 after a drop) rely on it.
  */
 
-import { PAINTS } from '@gantry/core';
+import { PAINTS } from '@gantryjs/core';
 import { h, s } from '../dom/h';
 import { setStyleProp } from '../dom/patch';
 import { applySheet } from '../dom/sheet';

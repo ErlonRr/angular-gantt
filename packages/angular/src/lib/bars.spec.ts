@@ -19,7 +19,7 @@ import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDragService } from './drag/gantt-drag.service';
 import { GanttBarBase, provideGanttBar } from './bar-registry';
 import { GanttBarOutletDirective } from './bars/bar-outlet.directive';
-import { DRAG_SOURCE_OPACITY, TaskType, type GanttBarContext, type GanttTask } from '@gantry/core';
+import { DRAG_SOURCE_OPACITY, TaskType, type GanttBarContext, type GanttTask } from '@gantryjs/core';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const day = (d: number) => new Date(2026, 0, d);

@@ -2,7 +2,7 @@
 // the jump, so the horizontally windowed header and grid repaint in the same flush instead of
 // staying blank until the viewport's scroll event arrives one frame later.
 import { describe, it, expect, afterEach } from 'vitest';
-import { ViewMode, type GanttTask } from '@gantry/core';
+import { ViewMode, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import '../index';

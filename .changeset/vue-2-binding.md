@@ -1,5 +1,5 @@
 ---
-'@gantry/vue': major
+'@gantryjs/vue': major
 ---
 
 `<Gantry>` for Vue sets its listeners and props on `<gantry-element>` before Vue inserts it, so the chart connects

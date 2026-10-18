@@ -19,7 +19,7 @@ import {
   type GanttFlatRow,
   type GanttTask,
   type ResolvedGanttConfig,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Columns } from '../../interaction/columns';
 import type { Inputs } from '../inputs';

@@ -1,9 +1,9 @@
 /**
  * The code a theme from the Theming page needs: an `options.theme` object per mode, or page CSS
- * for `<gantry-element>`. Variable names and the derived contrast tokens come from `@gantry/core`.
+ * for `<gantry-element>`. Variable names and the derived contrast tokens come from `@gantryjs/core`.
  */
 
-import { CONTRAST_CSS_VARS, DarkTheme, LightTheme, THEME_CSS_VARS, themeToCss, type GanttTheme } from '@gantry/core';
+import { CONTRAST_CSS_VARS, DarkTheme, LightTheme, THEME_CSS_VARS, themeToCss, type GanttTheme } from '@gantryjs/core';
 import type { ThemeKey } from './theme-tokens';
 
 type Theme = Required<GanttTheme>;
@@ -45,7 +45,7 @@ export function themeSource(light: Theme, dark: Theme): string {
   const darkKeys = changedThemeKeys(dark, true);
   if (!lightKeys.length && !darkKeys.length) return '// Pick a preset or change a token to print the theme.';
   return [
-    `import type { GanttOptions, GanttThemeOverrides } from '@gantry/core';`,
+    `import type { GanttOptions, GanttThemeOverrides } from '@gantryjs/core';`,
     ``,
     `// Merged over the built-in light and dark themes`,
     `const light: GanttThemeOverrides = ${objectSource(light, lightKeys)};`,

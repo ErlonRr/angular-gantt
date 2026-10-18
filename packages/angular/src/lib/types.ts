@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · types.ts
-//  Domain types live in @gantry/core (framework-free, shared with
+//  Domain types live in @gantryjs/core (framework-free, shared with
 //  the Web Component and React / Vue / Svelte bindings).
 //  Only Angular-specific refinements are declared here.
 //
@@ -9,14 +9,14 @@
 //  star-re-exports an external one makes the bundled d.ts reach those
 //  names through a namespace that does not declare them (they turn
 //  into unresolved types). Need another core name? Add it below, or
-//  import it from '@gantry/core'. The public surface is
-//  `src/public-api.ts` (`export * from '@gantry/core'` lives there).
+//  import it from '@gantryjs/core'. The public surface is
+//  `src/public-api.ts` (`export * from '@gantryjs/core'` lives there).
 // ─────────────────────────────────────────────────────────────
 
 import type { TemplateRef } from '@angular/core';
-import type { ColumnDef as CoreColumnDef, ColumnCellContext } from '@gantry/core';
+import type { ColumnDef as CoreColumnDef, ColumnCellContext } from '@gantryjs/core';
 
-export { DEFAULT_FORMATS, DEFAULT_LABELS, DependencyType } from '@gantry/core';
+export { DEFAULT_FORMATS, DEFAULT_LABELS, DependencyType } from '@gantryjs/core';
 export type {
   ColumnCellContext,
   ColumnRenderer,
@@ -39,7 +39,7 @@ export type {
   TaskDragEvent,
   TaskResizeEvent,
   ViewMode,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 /** Column definition whose `cellTemplate` is an Angular `<ng-template ganttColumn>`. */
 export type ColumnDef = CoreColumnDef<TemplateRef<ColumnCellContext>>;

@@ -6,7 +6,7 @@
  * re-runs nothing that reads them.
  */
 
-import { resolvePanelWidth, splitterValue, virtualIndexes, type RowGeometry, type SplitterValue } from '@gantry/core';
+import { resolvePanelWidth, splitterValue, virtualIndexes, type RowGeometry, type SplitterValue } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ConfigGraph } from './config';

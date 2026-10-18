@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { GantryComponent } from '../gantt-component/gantry.component';
-import { TaskType, type GanttOptions, type GanttTask } from '@gantry/core';
+import { TaskType, type GanttOptions, type GanttTask } from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 2, d);
 const TASKS: GanttTask[] = [

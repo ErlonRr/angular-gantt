@@ -1,10 +1,10 @@
 /**
  * @file index.ts
- * Public API of `@gantry/vanilla`. Importing it defines `<gantry-element>` (a side effect).
+ * Public API of `@gantryjs/vanilla`. Importing it defines `<gantry-element>` (a side effect).
  *
  * Only the element, its data source and the types and tables framework bindings build on are
  * exported; the engine (`engine/`, `layers/`, `interaction/`, `dom/`, `reactive/`, `styles/`) is
- * private. Everything in `@gantry/core` is re-exported, so one import covers the model types,
+ * private. Everything in `@gantryjs/core` is re-exported, so one import covers the model types,
  * themes, labels and helpers.
  */
 
@@ -21,4 +21,4 @@ export type {
   GantryEventCallbacks,
   GanttBarRenderer,
 } from './types';
-export * from '@gantry/core';
+export * from '@gantryjs/core';

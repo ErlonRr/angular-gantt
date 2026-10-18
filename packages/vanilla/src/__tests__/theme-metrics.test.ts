@@ -2,7 +2,7 @@
 // metrics (`themeMetrics(theme)`: bar radius, label font size, label colour on explicit bar
 // colours) enter the model; custom renderers get the resolved theme from the theme service.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { LightTheme, ViewMode, type GanttTask, type GanttTheme } from '@gantry/core';
+import { LightTheme, ViewMode, type GanttTask, type GanttTheme } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import '../index';
 

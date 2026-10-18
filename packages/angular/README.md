@@ -1,11 +1,11 @@
 # Gantry — `ngx-gantry`
 
 > A free, **zoneless**, **signal-based** Gantt chart for **Angular 22+**.
-> Zero `@angular/animations`, zero CDK, zero RxJS — no runtime dependency besides `@gantry/core`.
+> Zero `@angular/animations`, zero CDK, zero RxJS — no runtime dependency besides `@gantryjs/core`.
 
-![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.png)
+![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-banner.png)
 
-![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/angular-gantt/main/assets/angular-gantt.gif)
+![Gantry Showcase Demo](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-demo.gif)
 
 ```bash
 npm i ngx-gantry
@@ -93,26 +93,26 @@ bootstrapApplication(AppComponent, {
 ## Documentation & source
 
 Every option is documented once, for every binding, in the
-[Configuration](https://github.com/ErlonRr/angular-gantt#configuration) section of the main README.
+[Configuration](https://github.com/ErlonRr/gantryjs#configuration) section of the main README.
 The Angular API:
 
-- [Quick start](https://github.com/ErlonRr/angular-gantt#quick-start-standalone) and
-  [providers & setup](https://github.com/ErlonRr/angular-gantt#providers--setup)
-- [Custom bars](https://github.com/ErlonRr/angular-gantt#custom-bar-component) and
-  [custom columns](https://github.com/ErlonRr/angular-gantt#custom-columns-left-panel)
-- [Lazy loading](https://github.com/ErlonRr/angular-gantt#lazy-load-with-ganttdatasource)
-- [Inputs & Outputs](https://github.com/ErlonRr/angular-gantt#inputs--outputs) and the
-  [public API](https://github.com/ErlonRr/angular-gantt#public-api)
-- [Theming](https://github.com/ErlonRr/angular-gantt#theming-1),
-  [keyboard and focus](https://github.com/ErlonRr/angular-gantt#keyboard-and-focus) and
-  [server-side rendering](https://github.com/ErlonRr/angular-gantt#server-side-rendering)
-- [Upgrading from 1.x](https://github.com/ErlonRr/angular-gantt#upgrading-from-1x)
+- [Quick start](https://github.com/ErlonRr/gantryjs#quick-start-standalone) and
+  [providers & setup](https://github.com/ErlonRr/gantryjs#providers--setup)
+- [Custom bars](https://github.com/ErlonRr/gantryjs#custom-bar-component) and
+  [custom columns](https://github.com/ErlonRr/gantryjs#custom-columns-left-panel)
+- [Lazy loading](https://github.com/ErlonRr/gantryjs#lazy-load-with-ganttdatasource)
+- [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs) and the
+  [public API](https://github.com/ErlonRr/gantryjs#public-api)
+- [Theming](https://github.com/ErlonRr/gantryjs#theming-1),
+  [keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus) and
+  [server-side rendering](https://github.com/ErlonRr/gantryjs#server-side-rendering)
+- [Upgrading from 1.x](https://github.com/ErlonRr/gantryjs#upgrading-from-1x)
 
-Demos and issues: **https://github.com/ErlonRr/angular-gantt**
+Demos and issues: **https://github.com/ErlonRr/gantryjs**
 
 ## License
 
-[MIT](https://github.com/ErlonRr/angular-gantt/blob/main/LICENSE) © Erlon Rrustemaj
+[MIT](https://github.com/ErlonRr/gantryjs/blob/main/LICENSE) © Erlon Rrustemaj
 
 ---
 
@@ -136,6 +136,6 @@ Demos and issues: **https://github.com/ErlonRr/angular-gantt**
 
 ---
 
-For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/angular-gantt/blob/main/CHANGELOG.md).
+For complete release history, view the full [CHANGELOG.md](https://github.com/ErlonRr/gantryjs/blob/main/CHANGELOG.md).
 
 </details>

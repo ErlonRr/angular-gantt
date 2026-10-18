@@ -19,7 +19,7 @@ import {
   type LinesWindow,
   type TierWindow,
   type TimeBand,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { CoreGraph } from '../engine';
 import type { Inputs } from '../inputs';

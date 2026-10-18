@@ -6,7 +6,7 @@
  * label is added or removed as needed). A patch with the same visual and font size is skipped.
  */
 
-import type { ArrowVisual } from '@gantry/core';
+import type { ArrowVisual } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
 

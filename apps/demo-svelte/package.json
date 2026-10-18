@@ -10,8 +10,8 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json"
   },
   "dependencies": {
-    "@gantry/svelte": "workspace:^",
-    "@gantry/core": "workspace:^",
+    "@gantryjs/svelte": "workspace:^",
+    "@gantryjs/core": "workspace:^",
     "demo-kit": "workspace:*"
   },
   "devDependencies": {

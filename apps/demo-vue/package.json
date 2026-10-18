@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "vue": "catalog:",
-    "@gantry/vue": "workspace:^",
-    "@gantry/core": "workspace:^",
+    "@gantryjs/vue": "workspace:^",
+    "@gantryjs/core": "workspace:^",
     "demo-kit": "workspace:*"
   },
   "devDependencies": {

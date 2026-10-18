@@ -59,7 +59,7 @@ export class PackageManagerService {
   `,
 })
 export class InstallBlockComponent {
-  /** Package to install (`@gantry/vanilla`, `ngx-gantry`…). */
+  /** Package to install (`@gantryjs/vanilla`, `ngx-gantry`…). */
   readonly pkg = input.required<string>();
 
   protected readonly pms = inject(PackageManagerService);

@@ -1,6 +1,6 @@
 import { useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
-import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantry/react';
-import { createDemoData } from '@gantry/core/demo';
+import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantryjs/react';
+import { createDemoData } from '@gantryjs/core/demo';
 import { PACKAGES, SITE } from 'demo-kit/site';
 import { getTheme, onThemeChange, toggleTheme } from 'demo-kit/theme';
 import { Icon } from './Icon';

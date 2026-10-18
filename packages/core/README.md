@@ -1,18 +1,18 @@
-# @gantry/core
+# @gantryjs/core
 
-Framework-free core of the [Gantry](https://github.com/ErlonRr/angular-gantt/tree/main#readme) Gantt chart: domain types,
+Framework-free core of the [Gantry](https://github.com/ErlonRr/gantryjs/tree/main#readme) Gantt chart: domain types,
 timeline math, tree helpers and critical-path computation. No DOM, no framework —
 runs in browsers, Node, workers and SSR. No runtime dependencies.
 
-You usually don't install this directly: it powers [`ngx-gantry`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/angular)
-(Angular) and [`@gantry/vanilla`](https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla) (Web Component, used by the React, Vue and
+You usually don't install this directly: it powers [`ngx-gantry`](https://github.com/ErlonRr/gantryjs/tree/main/packages/angular)
+(Angular) and [`@gantryjs/vanilla`](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla) (Web Component, used by the React, Vue and
 Svelte bindings), and every binding re-exports it. Use it on its own to compute
 schedules server-side or to build your own renderer.
 
 ## Install
 
 ```bash
-npm i @gantry/core
+npm i @gantryjs/core
 ```
 
 ## What's inside
@@ -26,7 +26,7 @@ npm i @gantry/core
 | i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                                                                                                        |
 
 ```ts
-import { computeCriticalPath, DependencyType } from '@gantry/core';
+import { computeCriticalPath, DependencyType } from '@gantryjs/core';
 
 const { criticalIds } = computeCriticalPath([
   { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
@@ -40,10 +40,10 @@ const { criticalIds } = computeCriticalPath([
 ]);
 ```
 
-Sample data for demos and docs lives in a separate entry point, `@gantry/core/demo`:
+Sample data for demos and docs lives in a separate entry point, `@gantryjs/core/demo`:
 
 ```ts
-import { createDemoData, anchorToToday, DEMO_TASKS } from '@gantry/core/demo';
+import { createDemoData, anchorToToday, DEMO_TASKS } from '@gantryjs/core/demo';
 
 const { tasks, annotations } = createDemoData(); // today ≈ 40% into the plan
 const later = createDemoData({ now: new Date(2027, 0, 4), at: 0.8 });

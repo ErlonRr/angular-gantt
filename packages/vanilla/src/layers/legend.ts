@@ -11,7 +11,7 @@
  *     span.gantt-legend-item  ×n   svg.gantt-legend-swatch > line | rect · span (label)
  */
 
-import { buildLegend, isLegendVisible, LEGEND_SWATCH_SIZE, type LegendItem } from '@gantry/core';
+import { buildLegend, isLegendVisible, LEGEND_SWATCH_SIZE, type LegendItem } from '@gantryjs/core';
 import { computed } from '../reactive';
 import { h, s } from '../dom/h';
 import { reconcile } from '../dom/keyed';

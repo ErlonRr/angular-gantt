@@ -10,7 +10,7 @@
  * Host runs first in the flush, so the windowed regions read the new value in the same flush.
  */
 
-import { SPLITTER_TOGGLE_OFFSET } from '@gantry/core';
+import { SPLITTER_TOGGLE_OFFSET } from '@gantryjs/core';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
 

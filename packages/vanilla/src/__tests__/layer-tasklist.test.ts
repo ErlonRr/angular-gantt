@@ -2,7 +2,7 @@
 // id (pooled), cells keyed by column key, delegated listeners, column resize through pointer
 // capture (no `window` listeners), a toolbar built once, a legend keyed by item.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TaskType, ViewMode, type GanttFlatRow, type GanttState, type GanttTask } from '@gantry/core';
+import { TaskType, ViewMode, type GanttFlatRow, type GanttState, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import '../index';

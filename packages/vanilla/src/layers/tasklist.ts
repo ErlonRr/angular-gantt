@@ -34,7 +34,7 @@
  * icon colour of a task with `barColor`) goes through the CSSOM.
  */
 
-import { computeCellVisual, rowPaint, type ColumnContext, type GanttFlatRow, type GanttLabels } from '@gantry/core';
+import { computeCellVisual, rowPaint, type ColumnContext, type GanttFlatRow, type GanttLabels } from '@gantryjs/core';
 import { h } from '../dom/h';
 import { createPool, reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';

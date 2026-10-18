@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PostToolUse hook (Edit|Write|MultiEdit): after a TypeScript edit in @gantry/core or
-# @gantry/vanilla, run that package's unit tests (core ~1 s, vanilla ~2.5 s).
+# PostToolUse hook (Edit|Write|MultiEdit): after a TypeScript edit in @gantryjs/core or
+# @gantryjs/vanilla, run that package's unit tests (core ~1 s, vanilla ~2.5 s).
 # Silent when they pass; on failure prints a short summary to stderr and exits 2, which
 # Claude Code feeds back to Claude. Opt out with GANTRY_HOOK_TESTS=0.
 set -uo pipefail
@@ -27,7 +27,7 @@ cd "$root" || exit 0
 out=$(npx vitest run --project "$project" --reporter=dot 2>&1)
 if [[ $? -ne 0 ]]; then
   {
-    echo "Unit tests for @gantry/$project fail after editing $rel:"
+    echo "Unit tests for @gantryjs/$project fail after editing $rel:"
     grep -E "FAIL|×|✗|Error|expected|Tests |Test Files" <<<"$out" | head -30
     echo "(Fix or continue the change; run: npx vitest run --project $project)"
   } >&2

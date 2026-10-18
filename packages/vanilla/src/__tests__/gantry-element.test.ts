@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ViewMode, TaskType, type GanttTask, type TaskDragEvent, type SelectionChangeEvent } from '@gantry/core';
-import { DEMO_TASKS } from '@gantry/core/demo';
+import { ViewMode, TaskType, type GanttTask, type TaskDragEvent, type SelectionChangeEvent } from '@gantryjs/core';
+import { DEMO_TASKS } from '@gantryjs/core/demo';
 import { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import '../index';

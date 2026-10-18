@@ -20,11 +20,10 @@ explicit "go" for each step (commit, tag, push, publish).
 
 - `patch` (x.y.Z) routine fixes · `minor` (x.Y.0) features · `major` (X.0.0) breaking changes
   (renamed/removed options or outputs, changed defaults that alter output, changed public
-  component inputs). The `@gantry/*` packages are versioned together (Changesets `fixed`
+  component inputs). The `@gantryjs/*` packages are versioned together (Changesets `fixed`
   group); `ngx-gantry` is independent.
 - Tags are `vX.Y.Z` (ngx-gantry's version for Angular-only releases).
-- Never publish `@gantry/*` until the user confirms they own the `@gantry` npm scope
-  (fallback scope: `@erlonrru/gantry-*`).
+- The `@gantryjs` npm org belongs to the user (`@gantry` is someone else's); `ngx-gantry` is theirs too.
 
 ## 1. Verify (all must pass)
 
@@ -52,8 +51,8 @@ pnpm version-packages        # = changeset version: bumps versions, writes packa
 ```bash
 for p in packages/*; do (cd "$p" && pnpm pack --pack-destination "$TMPDIR/gantry-packs"); done
 (cd packages/angular && pnpm pack --pack-destination "$TMPDIR/gantry-packs")   # from dist/ngx-gantry
-for t in "$TMPDIR"/gantry-packs/gantry-*.tgz; do npx -y publint@0.3 --strict "$t"; done
-for t in "$TMPDIR"/gantry-packs/gantry-{core,vanilla,react,vue}-*.tgz; do npx -y @arethetypeswrong/cli@0.18 "$t" --profile esm-only; done
+for t in "$TMPDIR"/gantry-packs/{gantryjs-*,ngx-gantry-*}.tgz; do npx -y publint@0.3 --strict "$t"; done
+for t in "$TMPDIR"/gantry-packs/gantryjs-{core,vanilla,react,vue}-*.tgz; do npx -y @arethetypeswrong/cli@0.18 "$t" --profile esm-only; done
 ```
 
 Check: tarballs hold only `dist/`, `README.md`, `LICENSE`, `package.json`; no `workspace:`

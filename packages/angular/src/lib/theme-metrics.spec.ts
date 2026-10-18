@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { LightTheme, type ResolvedGanttConfig, type GanttOptions, type GanttTask } from '@gantry/core';
+import { LightTheme, type ResolvedGanttConfig, type GanttOptions, type GanttTask } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 
 const day = (d: number) => new Date(2026, 0, d);

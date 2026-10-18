@@ -44,7 +44,7 @@ function perfTasks() {
 }
 
 const tasks = perfTasks();
-await import('@gantry/vanilla');
+await import('@gantryjs/vanilla');
 const gantt = document.querySelector('gantry-element')!;
 gantt.options = { viewMode: 'Day', initialScroll: false };
 gantt.tasks = tasks;

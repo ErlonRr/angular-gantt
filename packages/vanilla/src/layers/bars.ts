@@ -22,7 +22,7 @@ import {
   type GanttBarContext,
   type GanttFlatRow,
   type GanttI18n,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, toggleClass } from '../dom/patch';
 import { structuralEqual } from '../engine/inputs';

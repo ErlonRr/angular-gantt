@@ -1,7 +1,7 @@
 /**
  * @file columns.ts
  * Column catalogue, widths and visibility as signals. Which columns a view shows (lean split-view
- * panel vs data-rich table view) is resolved by `@gantry/core` (`resolveViewColumns`), exactly
+ * panel vs data-rich table view) is resolved by `@gantryjs/core` (`resolveViewColumns`), exactly
  * like Angular. Widths changed by the user (or restored from saved state) and visibility toggles
  * are kept as overrides, so they survive re-assigning `columns` or a locale change.
  */
@@ -15,7 +15,7 @@ import {
   type GanttOptions,
   type GanttView,
   type ResolvedGanttConfig,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { computed, signal, type ReadonlySignal } from '../reactive';
 import type { VanillaColumnDef as ColumnDef } from '../types';
 

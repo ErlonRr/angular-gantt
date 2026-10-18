@@ -37,7 +37,7 @@ const ZOOMS = ['Day', 'Week', 'Month'] as const;
               A configurable Gantt chart that renders the same in every framework. Zero runtime dependencies, safe under
               a strict CSP, usable from the keyboard, and windowed to stay smooth at 10,000 rows.
             </p>
-            <app-install-block pkg="@gantry/vanilla" />
+            <app-install-block pkg="@gantryjs/vanilla" />
             <div class="gs-actions">
               <a class="gs-btn gs-btn--primary" routerLink="/playground">
                 Open the playground

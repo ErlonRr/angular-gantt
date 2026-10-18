@@ -13,7 +13,7 @@
  * `engine.ts`). The state found when the element connects is the baseline and is not announced.
  */
 
-import { announceLoadState, announceSelection, type GanttLabels } from '@gantry/core';
+import { announceLoadState, announceSelection, type GanttLabels } from '@gantryjs/core';
 import { effect, untracked, type ReadonlySignal } from '../reactive';
 import type { GanttLoadMoreState, Inputs } from './inputs';
 

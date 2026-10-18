@@ -1,5 +1,5 @@
 export { default as Gantry } from './Gantry.svelte';
-export { GanttDataSource } from '@gantry/vanilla';
+export { GanttDataSource } from '@gantryjs/vanilla';
 export type {
   GantryElement,
   GantryProperties,
@@ -7,5 +7,5 @@ export type {
   VanillaColumnDef as ColumnDef,
   GanttDataSourceConfig,
   GanttBarRenderer,
-} from '@gantry/vanilla';
-export * from '@gantry/core';
+} from '@gantryjs/vanilla';
+export * from '@gantryjs/core';

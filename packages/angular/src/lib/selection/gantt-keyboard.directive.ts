@@ -5,7 +5,7 @@
 //  Applied as a host directive on GantryComponent; mirrors the
 //  Web Component's `onKeyDown`.
 //
-//  Keys resolve through the @gantry/core keymap (`resolveKey`).
+//  Keys resolve through the @gantryjs/core keymap (`resolveKey`).
 //  Handled commands:
 //    Escape          → cancel a drag, else clear selection
 //    Ctrl/Cmd(+Shift)+A → select all visible rows (when selection + multiSelect are on)
@@ -20,7 +20,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { Directive, inject } from '@angular/core';
-import { resolveKey } from '@gantry/core';
+import { resolveKey } from '@gantryjs/core';
 
 import { GanttSelectionService } from './gantt-selection.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
@@ -40,7 +40,7 @@ export class GanttKeyboardDirective {
   onKeyDown(event: KeyboardEvent): void {
     if (event.defaultPrevented || isTextEntry(event)) return;
 
-    // Shared key → command table (@gantry/core); only the commands handled here swallow the key
+    // Shared key → command table (@gantryjs/core); only the commands handled here swallow the key
     switch (resolveKey(event, 'any', { active: this.drag.isActive() })) {
       case 'cancel':
         this.drag.cancel();

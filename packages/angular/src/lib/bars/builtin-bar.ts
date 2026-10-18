@@ -1,14 +1,14 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · bars/builtin-bar.ts
 //  Shared rendering for the built-in bars. Geometry (size, radius,
-//  label placement, progress, baseline) comes from the @gantry/core
+//  label placement, progress, baseline) comes from the @gantryjs/core
 //  render model in `ctx.visual` — identical to the Web Component.
 //  Colours are `Paint`s (`var(--gantt-*)` or an explicit task colour)
 //  bound as CSS properties, never as presentation attributes.
 // ─────────────────────────────────────────────────────────────
 
 import { Directive, computed, inject } from '@angular/core';
-import { taskAccessibleName, themeMetrics, PAINTS } from '@gantry/core';
+import { taskAccessibleName, themeMetrics, PAINTS } from '@gantryjs/core';
 import { GanttBarBase } from './bar-base';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 

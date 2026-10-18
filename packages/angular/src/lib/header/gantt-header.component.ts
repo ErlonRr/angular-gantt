@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · header/gantt-header.component.ts
 //
-//  Timeline header: N tiers from the @gantry/core render model, drawn
+//  Timeline header: N tiers from the @gantryjs/core render model, drawn
 //  as HTML so labels stick to the left edge while scrolling and
 //  ellipsize natively. Period delimiters, the current period and
 //  non-working time match the chart body. Same markup as the Web Component.
@@ -16,7 +16,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { headerCellBorder } from '@gantry/core';
+import { headerCellBorder } from '@gantryjs/core';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 
 @Component({

@@ -3,7 +3,7 @@ paths:
   - 'packages/core/**'
 ---
 
-# @gantry/core rules
+# @gantryjs/core rules
 
 - Framework-free and DOM-free: no imports from `@angular/*`, `react`, `vue`, `svelte`; no
   `document` / `window`. It must run in Node, workers and SSR. `pnpm lint` enforces this (and no
@@ -18,12 +18,12 @@ paths:
   (range, delimiters, bands, row geometry), `bars.ts`, `arrows.ts`, `drag.ts`, `theme.ts`.
 - New theme key: add it to `GanttTheme`, both palettes in `render/theme.ts`, `THEME_CSS_VARS`,
   the README theming tables, and the `@cssprop` list of `<gantry-element>` (then
-  `pnpm --filter @gantry/vanilla cem`).
+  `pnpm --filter @gantryjs/vanilla cem`).
 - Dates: x positions via `calendarDays` / `dateToPixel` / `toX`; date-only UTC values are local
   days (`toLocalDay`); `addDays` keeps date-only values date-only. Normalise user dates once at
   the input boundary; dates core generates itself (scale cells, bands, `now`) are already local
   and go through `calendarDays(d, false)`. Format with `formatDate` (`src/format/`, `Intl`-based,
   dayjs-compatible tokens): core has no runtime dependencies.
-- Export new public symbols from `src/index.ts`; sample data stays in the `@gantry/core/demo` subpath.
+- Export new public symbols from `src/index.ts`; sample data stays in the `@gantryjs/core/demo` subpath.
 - Tests live in `src/__tests__/`. Build expected dates with `new Date(y, m, d)` so assertions
   hold in any time zone, and run `pnpm test:tz` for date or scale changes.

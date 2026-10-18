@@ -1,5 +1,5 @@
 ---
-'@gantry/react': major
+'@gantryjs/react': major
 ---
 
 `<Gantry>` applies its props and listeners in the commit (layout effects in the browser, nothing on the server), so the

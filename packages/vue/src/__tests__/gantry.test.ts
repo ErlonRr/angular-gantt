@@ -20,7 +20,7 @@ import {
   type VNode,
 } from 'vue';
 import { renderToString } from 'vue/server-renderer';
-import { GANTRY_EVENTS, GANTRY_PROPERTIES, GantryElement, type GantryProperties } from '@gantry/vanilla';
+import { GANTRY_EVENTS, GANTRY_PROPERTIES, GantryElement, type GantryProperties } from '@gantryjs/vanilla';
 import { Gantry, GanttDataSource, ViewMode, type GanttAnnotation, type GanttOptions, type GanttTask } from '../index';
 
 function task(id: string, day: number, length = 5): GanttTask {

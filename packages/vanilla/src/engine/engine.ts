@@ -40,7 +40,7 @@ import {
   type GanttTask,
   type ResolvedGanttConfig,
   type TimelineModel,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { createThemeSheet, type ThemeSheet } from '../styles/theme-sheet';
 import { BASE_CSS, getBaseSheet } from '../styles/base';
 import { applySheet, pruneSheets } from '../dom/sheet';

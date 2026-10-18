@@ -3,10 +3,10 @@ paths:
   - 'packages/vanilla/**'
 ---
 
-# @gantry/vanilla (<gantry-element>) rules
+# @gantryjs/vanilla (<gantry-element>) rules
 
 - **Paint the core model, don't compute it.** Geometry, defaults and colours come from
-  `@gantry/core` (`resolveConfig`, `buildTimeline`, `computeBarVisual`, …); the element only
+  `@gantryjs/core` (`resolveConfig`, `buildTimeline`, `computeBarVisual`, …); the element only
   derives and paints them.
 - **Data flow: inputs → graph → region effects → DOM.**
   - `engine/inputs.ts`: input signals. Property setters, attributes, API methods, pointer /
@@ -49,7 +49,7 @@ paths:
   `document`). The `options` setter only re-applies UI state the consumer actually changed (view
   mode, view, panel width) — never undo the user's interaction.
 - **Public surface.** `src/index.ts` is curated: `GantryElement`, `GanttDataSource`,
-  `GANTRY_PROPERTIES`, `GANTRY_EVENTS`, the types in `src/types.ts`, and `@gantry/core`. Never
+  `GANTRY_PROPERTIES`, `GANTRY_EVENTS`, the types in `src/types.ts`, and `@gantryjs/core`. Never
   export engine internals or add public instance fields (use `#private` fields; tests reach the
   engine through `engine/registry.ts`, which the index does not export). The React / Vue / Svelte
   wrappers derive from `GANTRY_PROPERTIES` / `GANTRY_EVENTS`. `customElements.define` stays in
@@ -63,7 +63,7 @@ paths:
 - **Custom Elements Manifest.** `custom-elements.json` is generated from the JSDoc of
   `GantryElement` (`@attr`, `@fires`, `@csspart`, `@cssstate`, `@cssprop` on the class; `@attr` on
   attribute-backed accessors; member docs). After changing an attribute, property, method, event,
-  part, state or theme token, update that JSDoc and run `pnpm --filter @gantry/vanilla cem`;
+  part, state or theme token, update that JSDoc and run `pnpm --filter @gantryjs/vanilla cem`;
   `__tests__/manifest.test.ts` and `cem:check` (CI) fail otherwise.
 - **Accessibility.** The host's role, name and custom states (`dark`, `dragging`, `loading`) go
   through `ElementInternals` (host attributes only as the fallback); the host is not a tab stop

@@ -5,7 +5,7 @@
  * clock ticks, drag ends and colour changes.
  */
 
-import { resolveConfig, type ResolvedGanttConfig } from '@gantry/core';
+import { resolveConfig, type ResolvedGanttConfig } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ChromeGraph } from './chrome';

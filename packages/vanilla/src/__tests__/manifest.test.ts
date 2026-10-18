@@ -6,7 +6,7 @@
 // the light theme's values as defaults.
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, afterEach } from 'vitest';
-import { LightTheme, themeToCss, type GanttTask } from '@gantry/core';
+import { LightTheme, themeToCss, type GanttTask } from '@gantryjs/core';
 import { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { OBSERVED_ATTRIBUTES, PROPERTY_TABLE, propertyOfAttribute, VIEW_MODE_ATTR } from '../engine/props';

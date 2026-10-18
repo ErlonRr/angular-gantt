@@ -2,12 +2,12 @@
 //  gantry · arrows/gantt-arrow.component.ts
 //  Paints one dependency link. The path (orthogonal routing with
 //  U-turns, milestone-aware endpoints, rounded corners) comes from
-//  `computeArrowVisual` in @gantry/core — shared with the Web Component.
+//  `computeArrowVisual` in @gantryjs/core — shared with the Web Component.
 //  Its colour is a `Paint`, bound as a CSS property.
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import type { ArrowVisual } from '@gantry/core';
+import type { ArrowVisual } from '@gantryjs/core';
 
 @Component({
   selector: 'g[ganttArrow]',

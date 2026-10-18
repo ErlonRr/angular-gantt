@@ -37,7 +37,7 @@ import {
   type ComponentRef,
   type Type,
 } from '@angular/core';
-import { DRAG_SOURCE_OPACITY } from '@gantry/core';
+import { DRAG_SOURCE_OPACITY } from '@gantryjs/core';
 
 import { type GanttBarContext } from '../types';
 import { type GanttBarBase } from './bar-base';

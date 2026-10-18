@@ -1,7 +1,7 @@
 /**
  * @file selection.ts
  * Selection on the engine's `selection` signal. The click / range / select-all rules and the emit
- * rule come from the core reducer (`@gantry/core` state/selection), so the Web Component selects
+ * rule come from the core reducer (`@gantryjs/core` state/selection), so the Web Component selects
  * and fires `selection-change` exactly like Angular.
  */
 
@@ -17,7 +17,7 @@ import {
   type SelectionModifierSource,
   type SelectionPolicy,
   type SelectionState,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { WritableSignal } from '../reactive';
 
 export interface Selection {

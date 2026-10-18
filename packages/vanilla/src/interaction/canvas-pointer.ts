@@ -5,7 +5,7 @@
  * handlers may read layout (the canvas box for hit-testing): they run outside the flush.
  */
 
-import type { GanttFlatRow } from '@gantry/core';
+import type { GanttFlatRow } from '@gantryjs/core';
 import { setAttr } from '../dom/patch';
 import type { LayerContext } from '../layers/context';
 import type { TooltipLayer } from '../layers/tooltip';

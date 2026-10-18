@@ -18,7 +18,7 @@ import {
   type TaskDragEvent,
   type TaskResizeEvent,
 } from 'ngx-gantry';
-import { createDemoData } from '@gantry/core/demo';
+import { createDemoData } from '@gantryjs/core/demo';
 import {
   PLAYGROUND_DEFAULTS,
   PLAYGROUND_SECTIONS,

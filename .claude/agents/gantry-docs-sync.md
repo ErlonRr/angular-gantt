@@ -18,9 +18,9 @@ You update Gantry's docs to match the code. You never commit.
      one-line explanation, in the matching subsection; theming table for new theme keys.
    - `packages/vanilla/README.md` (properties, events, methods) and the React/Vue/Svelte
      READMEs when callbacks or props change. Use absolute GitHub links
-     (`https://github.com/ErlonRr/angular-gantt/tree/main/...`).
+     (`https://github.com/ErlonRr/gantryjs/tree/main/...`).
    - `CHANGELOG.md` → `## [Unreleased]` (Added / Changed / Fixed).
-   - `.changeset/<kebab-name>.md`: `@gantry/*` packages move together; add `ngx-gantry` when
+   - `.changeset/<kebab-name>.md`: `@gantryjs/*` packages move together; add `ngx-gantry` when
      Angular is affected; `major` for breaking changes.
    - Playground `apps/demo-kit/src/playground.ts`: add the option to `PLAYGROUND_DEFAULTS`,
      `playgroundOptions()` and a control in `PLAYGROUND_SECTIONS` (both playgrounds render it);

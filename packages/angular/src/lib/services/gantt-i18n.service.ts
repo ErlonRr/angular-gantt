@@ -6,7 +6,7 @@
 //    DEFAULT_*  ←  provideGantt({ ... }) (merged along the injector levels)  ←  [options] (instance)
 //  Pure signals: GantryComponent binds its `options` once (`bind()`).
 //  Presentational components inject this; the pure functions in
-//  @gantry/core receive `{ locale, labels, formats }` as params.
+//  @gantryjs/core receive `{ locale, labels, formats }` as params.
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, computed, inject } from '@angular/core';

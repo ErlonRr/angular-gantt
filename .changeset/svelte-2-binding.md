@@ -1,8 +1,8 @@
 ---
-'@gantry/svelte': major
+'@gantryjs/svelte': major
 ---
 
-**`@gantry/svelte` 2.0: a one-level copy instead of a deep clone, nullable props, no lost first events.**
+**`@gantryjs/svelte` 2.0: a one-level copy instead of a deep clone, nullable props, no lost first events.**
 
 - **Data props are copied one level, never deep-cloned (breaking).** `tasks`, `columns`, `annotations` and
   `options` reach `<gantry-element>` as a plain array (or object) holding your own items: no `$state` proxy at the

@@ -2,7 +2,7 @@
 //  gantry · a11y/announcer.ts
 //
 //  What the chart's polite live region (`.gantt-sr-live`, role=status)
-//  reads out, in the words of the @gantry/core announcements and labels
+//  reads out, in the words of the @gantryjs/core announcements and labels
 //  (the Web Component's `engine/announce.ts`):
 //
 //   - a change of the number of selected tasks (`announceSelection`:
@@ -23,7 +23,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, inject, signal, untracked } from '@angular/core';
-import { announceLoadState, announceSelection, type LoadStateSnapshot } from '@gantry/core';
+import { announceLoadState, announceSelection, type LoadStateSnapshot } from '@gantryjs/core';
 
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { type GanttDataSource } from '../datasource/gantt-datasource';

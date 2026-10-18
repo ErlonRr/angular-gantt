@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { SPLITTER_TOGGLE_OFFSET, type GanttOptions, type GanttTask } from '@gantry/core';
+import { SPLITTER_TOGGLE_OFFSET, type GanttOptions, type GanttTask } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttLayoutService } from './layout/gantt-layout.service';
 

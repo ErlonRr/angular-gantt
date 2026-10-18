@@ -12,7 +12,7 @@
  * persistent nodes and caches; `disconnect()` runs when the element leaves the document.
  */
 
-import type { GanttFlatRow, GanttView } from '@gantry/core';
+import type { GanttFlatRow, GanttView } from '@gantryjs/core';
 import type { Graph } from '../engine/engine';
 import type { Inputs } from '../engine/inputs';
 import type { Columns } from '../interaction/columns';

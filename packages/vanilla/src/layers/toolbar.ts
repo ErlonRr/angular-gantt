@@ -16,7 +16,7 @@
  * One delegated click listener runs the action of the button clicked.
  */
 
-import type { GanttView, GanttZoomLevel } from '@gantry/core';
+import type { GanttView, GanttZoomLevel } from '@gantryjs/core';
 import { h } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setText } from '../dom/patch';

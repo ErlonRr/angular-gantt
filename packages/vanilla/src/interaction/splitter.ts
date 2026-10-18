@@ -6,7 +6,7 @@
  * chooses goes to the `panelW` input.
  */
 
-import { availablePanelWidth, clampPanelWidth, SPLITTER_KEY_STEP } from '@gantry/core';
+import { availablePanelWidth, clampPanelWidth, SPLITTER_KEY_STEP } from '@gantryjs/core';
 import type { LayerContext } from '../layers/context';
 
 export interface SplitterOptions {

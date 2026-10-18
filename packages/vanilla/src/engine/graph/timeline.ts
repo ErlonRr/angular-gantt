@@ -13,7 +13,7 @@ import {
   todayX as todayXOf,
   type RowGeometry,
   type TimelineModel,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { computed, type ReadonlySignal } from '../../reactive';
 import type { Inputs } from '../inputs';
 import type { ChromeGraph } from './chrome';

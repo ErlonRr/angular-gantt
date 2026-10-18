@@ -1,6 +1,6 @@
 /**
  * @file drag.ts
- * Drag & resize: wires Pointer Events to the framework-free `DragSession` from @gantry/core
+ * Drag & resize: wires Pointer Events to the framework-free `DragSession` from @gantryjs/core
  * (snapping, minimum length, preview, result). The preview goes to the engine's `dragPreview`
  * signal; the timing is read from the current timeline when a drag starts.
  */
@@ -12,7 +12,7 @@ import {
   type RowGeometry,
   type TaskDragEvent,
   type TaskResizeEvent,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { signal, type ReadonlySignal, type WritableSignal } from '../reactive';
 
 export type DragState = { kind: 'idle' } | { kind: 'dragging' | 'resizing-left' | 'resizing-right'; taskId: string };

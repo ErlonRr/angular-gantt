@@ -1,9 +1,9 @@
 /**
  * The Theming page's model: presets, the token fields and the code printed for a theme.
- * Every CSS variable name comes from `@gantry/core` (`THEME_CSS_VARS`, `CONTRAST_CSS_VARS`).
+ * Every CSS variable name comes from `@gantryjs/core` (`THEME_CSS_VARS`, `CONTRAST_CSS_VARS`).
  */
 
-import type { GanttTheme, GanttThemeOverrides } from '@gantry/core';
+import type { GanttTheme, GanttThemeOverrides } from '@gantryjs/core';
 
 export type ThemeKey = keyof GanttTheme;
 export type BoardMode = 'light' | 'dark';

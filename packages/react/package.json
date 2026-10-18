@@ -1,5 +1,5 @@
 {
-  "name": "@gantry/react",
+  "name": "@gantryjs/react",
   "version": "1.0.0",
   "description": "Gantry Gantt chart for React \u2014 a free, full-featured interactive Gantt component.",
   "keywords": [
@@ -14,13 +14,13 @@
     "critical-path",
     "svg"
   ],
-  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/react#readme",
+  "homepage": "https://github.com/ErlonRr/gantryjs/tree/main/packages/react#readme",
   "bugs": {
-    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+    "url": "https://github.com/ErlonRr/gantryjs/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "url": "git+https://github.com/ErlonRr/gantryjs.git",
     "directory": "packages/react"
   },
   "license": "MIT",
@@ -30,7 +30,7 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "@gantry/source": "./src/index.tsx",
+      "@gantryjs/source": "./src/index.tsx",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -47,8 +47,8 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@gantry/vanilla": "workspace:^",
-    "@gantry/core": "workspace:^"
+    "@gantryjs/vanilla": "workspace:^",
+    "@gantryjs/core": "workspace:^"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0"

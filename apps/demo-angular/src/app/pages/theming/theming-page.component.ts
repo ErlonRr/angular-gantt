@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { GantryComponent, ViewMode, type GanttOptions } from 'ngx-gantry';
-import { contrastRatio, cssPx, readableOn, resolveTheme, type GanttThemeOverrides } from '@gantry/core';
-import { createDemoData } from '@gantry/core/demo';
+import { contrastRatio, cssPx, readableOn, resolveTheme, type GanttThemeOverrides } from '@gantryjs/core';
+import { createDemoData } from '@gantryjs/core/demo';
 import { AppThemeService } from '../../shell/app-theme.service';
 import { CodeBlockComponent } from '../../shell/code-block.component';
 import { IconComponent } from '../../shell/icon.component';

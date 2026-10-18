@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, useTemplateRef } from 'vue';
-import { Gantry, ViewMode, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantry/vue';
-import { createDemoData } from '@gantry/core/demo';
+import { Gantry, ViewMode, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantryjs/vue';
+import { createDemoData } from '@gantryjs/core/demo';
 import { PACKAGES, SITE } from 'demo-kit/site';
 import { getTheme, onThemeChange, toggleTheme, type SiteTheme } from 'demo-kit/theme';
 import { Icon } from './Icon';

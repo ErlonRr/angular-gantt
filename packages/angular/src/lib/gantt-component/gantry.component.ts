@@ -16,7 +16,7 @@
 //  └──────────────────────────────────────────────────────────────┘
 //  Views: 'split' (both), 'table' (task list only), 'chart' (timeline only).
 //
-//  Geometry comes from the @gantry/core render model (shared with the
+//  Geometry comes from the @gantryjs/core render model (shared with the
 //  Web Component). The component itself contains no layout math.
 //
 //  Accessibility (the Web Component's model): the host is a region named
@@ -104,7 +104,7 @@ import {
   type ResolvedGanttConfig,
   type SplitterValue,
   type TimelineModel,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttCanvasComponent, type BarVisualOf } from '../layout/gantt-canvas.component';
@@ -749,7 +749,7 @@ export class GantryComponent {
   });
   readonly criticalIds = computed<ReadonlySet<string>>(() => this.cpm()?.criticalIds ?? new Set());
 
-  // ── Bar visuals (@gantry/core) ────────────────────────────
+  // ── Bar visuals (@gantryjs/core) ────────────────────────────
   /**
    * Bar visual of a row geometry, memoised per geometry. A new memo starts whenever an input of
    * `computeBarVisual` changes (config, timeline, critical path, theme metrics, drag / resize
@@ -782,7 +782,7 @@ export class GantryComponent {
     };
   });
 
-  // ── Legend items (today, annotations, critical path, baseline — @gantry/core) ──
+  // ── Legend items (today, annotations, critical path, baseline — @gantryjs/core) ──
   protected readonly swatchSize = LEGEND_SWATCH_SIZE;
   protected readonly legendItems = computed<LegendItem[]>(() => {
     const cfg = this.cfg();
@@ -1157,7 +1157,7 @@ export class GantryComponent {
   }
 
   /**
-   * Bar geometry and paints of a task (`computeBarVisual` from @gantry/core, the same object the
+   * Bar geometry and paints of a task (`computeBarVisual` from @gantryjs/core, the same object the
    * canvas paints), or `undefined` when the task has no visible row. Works for rows outside the
    * virtual window too.
    */

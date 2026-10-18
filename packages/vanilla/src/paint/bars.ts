@@ -9,7 +9,7 @@
  * the same visual and options as the last one returns at once.
  */
 
-import { PAINTS, type BarVisual } from '@gantry/core';
+import { PAINTS, type BarVisual } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
 

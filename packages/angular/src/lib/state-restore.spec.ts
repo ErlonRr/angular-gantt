@@ -6,7 +6,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { TaskType, type GanttOptions, type GanttState, type GanttTask } from '@gantry/core';
+import { TaskType, type GanttOptions, type GanttState, type GanttTask } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
 

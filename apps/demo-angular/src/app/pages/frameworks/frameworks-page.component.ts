@@ -153,7 +153,7 @@ const isFramework = (id: string | null): id is FrameworkId => FRAMEWORKS.some(f 
           </li>
           <li>
             <app-inline-code
-              text="The Web Component ships a Custom Elements Manifest, \`@gantry/vanilla/custom-elements.json\` (the \`customElements\` field of its \`package.json\`): IDEs, Storybook and linters read its attributes, properties, methods, events, parts, custom states and CSS custom properties."
+              text="The Web Component ships a Custom Elements Manifest, \`@gantryjs/vanilla/custom-elements.json\` (the \`customElements\` field of its \`package.json\`): IDEs, Storybook and linters read its attributes, properties, methods, events, parts, custom states and CSS custom properties."
             />
             The <a routerLink="/api">API reference</a> on this site is generated from it.
           </li>

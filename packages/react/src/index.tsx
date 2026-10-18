@@ -14,7 +14,7 @@ import {
   type GantryElement,
   type GantryProperties,
   type GantryEventCallbacks,
-} from '@gantry/vanilla';
+} from '@gantryjs/vanilla';
 
 export type {
   GantryElement,
@@ -23,9 +23,9 @@ export type {
   VanillaColumnDef as ColumnDef,
   GanttDataSourceConfig,
   GanttBarRenderer,
-} from '@gantry/vanilla';
-export { GanttDataSource } from '@gantry/vanilla';
-export * from '@gantry/core';
+} from '@gantryjs/vanilla';
+export { GanttDataSource } from '@gantryjs/vanilla';
+export * from '@gantryjs/core';
 
 type NativeProps = Omit<HTMLAttributes<HTMLElement>, keyof GantryProperties | keyof GantryEventCallbacks | 'children'>;
 

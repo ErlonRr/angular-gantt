@@ -1,5 +1,5 @@
 // Paints (Gantry 2 phase 6, step 0.3): every colour of the Angular painters is a `Paint` from
-// @gantry/core — a theme token (`var(--gantt-*)`) or an explicit task colour — bound as a CSS
+// @gantryjs/core — a theme token (`var(--gantt-*)`) or an explicit task colour — bound as a CSS
 // property, never as a presentation attribute; the theme service writes every token, the
 // bar-label contrast tokens included. Task-list text colours are stylesheet rules (phase 7 step 1.2);
 // the tooltip lives inside the chart and inherits the tokens (phase 7 step 4.1).
@@ -16,7 +16,7 @@ import {
   type GanttAnnotation,
   type GanttOptions,
   type GanttTask,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 
 const day = (d: number) => new Date(2026, 0, d);

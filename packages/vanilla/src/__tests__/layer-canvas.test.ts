@@ -3,7 +3,14 @@
 // from the interval index keyed by link, row backgrounds and separators keyed by task id,
 // annotations keyed by index, and the persistent today line and drag ghost.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { computeBarVisual, PAINTS, ViewMode, type BarVisual, type GanttAnnotation, type GanttTask } from '@gantry/core';
+import {
+  computeBarVisual,
+  PAINTS,
+  ViewMode,
+  type BarVisual,
+  type GanttAnnotation,
+  type GanttTask,
+} from '@gantryjs/core';
 import { arrowLinks, indexArrowLinks, type ArrowIndexProbe } from '../../../core/src/render/arrow-index';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';

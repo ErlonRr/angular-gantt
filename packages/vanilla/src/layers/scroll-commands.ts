@@ -15,7 +15,7 @@
  * the DOM), and only when the timeline changed — never on a plain scroll.
  */
 
-import { initialScrollLeft, zoomAnchorScroll, type RowGeometry, type TimelineModel } from '@gantry/core';
+import { initialScrollLeft, zoomAnchorScroll, type RowGeometry, type TimelineModel } from '@gantryjs/core';
 import { scrollToX } from '../interaction/scroll';
 import type { Layer, LayerContext } from './context';
 

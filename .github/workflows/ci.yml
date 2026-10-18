@@ -48,8 +48,8 @@ jobs:
       - run: pnpm test
       - run: pnpm test:tz
       - name: Custom Elements Manifest is up to date (packages/vanilla/custom-elements.json)
-        run: pnpm --filter @gantry/vanilla cem:check
-      - name: Bundle size budget (`import '@gantry/vanilla'`, minified + gzip)
+        run: pnpm --filter @gantryjs/vanilla cem:check
+      - name: Bundle size budget (`import '@gantryjs/vanilla'`, minified + gzip)
         run: node scripts/size.mjs --max 50
       - name: Build packages, Angular library, showcase and demos
         run: pnpm build
@@ -61,11 +61,11 @@ jobs:
           for dir in packages/*; do
             (cd "$dir" && pnpm pack --pack-destination "$RUNNER_TEMP/packs")
           done
-          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-core-*.tgz
-          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vanilla-*.tgz
-          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-react-*.tgz
-          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-vue-*.tgz
-          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantry-svelte-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantryjs-core-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantryjs-vanilla-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantryjs-react-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantryjs-vue-*.tgz
+          npx --yes publint@0.3 --strict "$RUNNER_TEMP"/packs/gantryjs-svelte-*.tgz
           npx --yes publint@0.3 --strict dist/ngx-gantry
 
   e2e:

@@ -1,6 +1,6 @@
 /**
  * @file types.ts
- * Web Component–specific refinements of the @gantry/core types.
+ * Web Component–specific refinements of the @gantryjs/core types.
  */
 
 import type {
@@ -16,7 +16,7 @@ import type {
   PagedLoaderConfig,
   ColumnContext,
   GanttBarContext,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
 
 /** Custom cell content: a DOM node, or a string rendered as text. `ctx` carries "now" and the task index. */

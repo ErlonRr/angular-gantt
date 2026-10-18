@@ -26,7 +26,7 @@ import { BrowserTestingModule, platformBrowserTesting } from '@angular/platform-
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { TaskType, type GanttOptions, type GanttTask } from '@gantry/core';
+import { TaskType, type GanttOptions, type GanttTask } from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 4, d);
 const TASKS: GanttTask[] = [

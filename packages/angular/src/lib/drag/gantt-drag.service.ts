@@ -9,14 +9,14 @@
 //          ──pointercancel─► discard    → idle
 //
 //  Snapping, minimum length and the resulting dates come from the
-//  framework-free `DragSession` in @gantry/core (shared with the Web
+//  framework-free `DragSession` in @gantryjs/core (shared with the Web
 //  Component). setPointerCapture() keeps pointermove flowing outside
 //  the SVG. The real task is never mutated until pointerup.
 // ─────────────────────────────────────────────────────────────
 
 import { Injectable, signal, computed } from '@angular/core';
 import { type RowGeometry, type TaskDragEvent, type TaskResizeEvent } from '../types';
-import { DragSession, type DragTiming, type DragPreview } from '@gantry/core';
+import { DragSession, type DragTiming, type DragPreview } from '@gantryjs/core';
 
 export type { DragPreview };
 

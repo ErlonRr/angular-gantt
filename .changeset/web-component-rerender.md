@@ -1,5 +1,5 @@
 ---
-'@gantry/vanilla': patch
+'@gantryjs/vanilla': patch
 'ngx-gantry': patch
 ---
 

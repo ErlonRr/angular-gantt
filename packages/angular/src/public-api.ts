@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────
 
 // Everything framework-free: types, the render model, helpers, themes (same as every other binding)
-export * from '@gantry/core';
+export * from '@gantryjs/core';
 
 // Angular-specific
 export type { ColumnDef } from './lib/types';

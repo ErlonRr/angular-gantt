@@ -25,8 +25,8 @@ const packageReadme = (dir: string) => `${SITE.repoUrl}/tree/main/packages/${dir
 const HTML = `<gantry-element id="gantt" dark-mode="auto" show-legend style="height: 500px"></gantry-element>
 
 <script type="module">
-  import '@gantry/vanilla'; // registers <gantry-element>
-  import { ViewMode, DependencyType } from '@gantry/vanilla';
+  import '@gantryjs/vanilla'; // registers <gantry-element>
+  import { ViewMode, DependencyType } from '@gantryjs/vanilla';
 
   const gantt = document.getElementById('gantt');
   gantt.tasks = [
@@ -44,8 +44,8 @@ const HTML = `<gantry-element id="gantt" dark-mode="auto" show-legend style="hei
   gantt.addEventListener('task-dragged', e => console.log(e.detail.taskId, e.detail.newStart));
 </script>`;
 
-const JS = `import '@gantry/vanilla'; // registers <gantry-element>
-import { ViewMode } from '@gantry/vanilla';
+const JS = `import '@gantryjs/vanilla'; // registers <gantry-element>
+import { ViewMode } from '@gantryjs/vanilla';
 
 const gantt = document.createElement('gantry-element');
 gantt.style.height = '500px'; // it fills its container: give it a height
@@ -115,7 +115,7 @@ bootstrapApplication(AppComponent, {
 });`;
 
 const REACT = `import { useRef, useState } from 'react';
-import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantry/react';
+import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantryjs/react';
 
 export function Roadmap() {
   const gantt = useRef<GantryElement>(null);
@@ -142,7 +142,7 @@ export function Roadmap() {
 
 const VUE = `<script setup lang="ts">
 import { ref, shallowRef } from 'vue';
-import { Gantry, ViewMode, type GanttTask, type TaskDragEvent } from '@gantry/vue';
+import { Gantry, ViewMode, type GanttTask, type TaskDragEvent } from '@gantryjs/vue';
 
 const gantt = shallowRef<InstanceType<typeof Gantry>>();
 const tasks = ref<GanttTask[]>([
@@ -170,7 +170,7 @@ function onDragged(e: TaskDragEvent) {
 </template>`;
 
 const SVELTE = `<script lang="ts">
-  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent } from '@gantry/svelte';
+  import { Gantry, ViewMode, type GantryElement, type GanttTask, type TaskDragEvent } from '@gantryjs/svelte';
 
   let gantt = $state<GantryElement>();
   // \`$state.raw\`: no proxy around every task; assign a new array to update the chart
@@ -305,12 +305,12 @@ export const SSR_NOTES: { label: string; text: string }[] = [
   },
   {
     label: 'Web Component',
-    text: 'Importing `@gantry/vanilla` where `HTMLElement` does not exist is safe: the element is only registered where `customElements` exists.',
+    text: 'Importing `@gantryjs/vanilla` where `HTMLElement` does not exist is safe: the element is only registered where `customElements` exists.',
   },
 ];
 
-export const SERVER_CODE = `// server.ts — @gantry/core has no DOM and no framework: it runs in Node
-import { computeCriticalPath, DependencyType } from '@gantry/core';
+export const SERVER_CODE = `// server.ts — @gantryjs/core has no DOM and no framework: it runs in Node
+import { computeCriticalPath, DependencyType } from '@gantryjs/core';
 
 const { criticalIds } = computeCriticalPath([
   { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
@@ -323,7 +323,7 @@ const { criticalIds } = computeCriticalPath([
   },
 ]);`;
 
-export const TYPES_CODE = `import { GANTRY_EVENTS, type GanttOptions } from '@gantry/vanilla';
+export const TYPES_CODE = `import { GANTRY_EVENTS, type GanttOptions } from '@gantryjs/vanilla';
 
 // <gantry-element> is in HTMLElementTagNameMap: this is a GantryElement | null
 const gantt = document.querySelector('gantry-element');

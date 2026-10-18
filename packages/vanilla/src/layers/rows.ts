@@ -9,7 +9,7 @@
  * the nodes between the markers are ever touched.
  */
 
-import { rowPaint, type RowGeometry } from '@gantry/core';
+import { rowPaint, type RowGeometry } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp } from '../dom/patch';

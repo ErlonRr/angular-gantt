@@ -4,12 +4,12 @@ Free, MIT-licensed Gantt chart for every framework, published on npm. Goal: the 
 configurable open-source Gantt — every option behaves identically in every binding.
 
 ```
-@gantry/core        types · render model · timeline math · CPM          packages/core
- ├── ngx-gantry      native Angular 22 (zoneless, signals, OnPush)       packages/angular
- └── @gantry/vanilla <gantry-element> Web Component (shadow DOM)         packages/vanilla
-      ├── @gantry/react   React 18/19 wrapper                            packages/react
-      ├── @gantry/vue     Vue 3.5 render-function wrapper                packages/vue
-      └── @gantry/svelte  Svelte 5 runes wrapper                         packages/svelte
+@gantryjs/core              types · render model · timeline math · CPM     packages/core
+ ├── ngx-gantry             native Angular 22 (zoneless, signals, OnPush)  packages/angular
+ └── @gantryjs/vanilla      <gantry-element> Web Component (shadow DOM)    packages/vanilla
+      ├── @gantryjs/react   React 18/19 wrapper                            packages/react
+      ├── @gantryjs/vue     Vue 3.5 render-function wrapper                packages/vue
+      └── @gantryjs/svelte  Svelte 5 runes wrapper                         packages/svelte
 apps/demo-angular  the Gantry site (Angular) · apps/demo-*  Vite demos (demo-vanilla = options playground)
 apps/demo-kit  the demos' shared look (site.css, gs- classes), theme switch, playground model
 ```
@@ -35,7 +35,7 @@ pnpm 10.33 workspace. If `pnpm` fails (unconfigured mise shim) use `npx -y pnpm@
 | Lint (type-checked TS, Angular templates + a11y, Svelte, Vue, React hooks, core rules)                                             | `pnpm lint`                                                                                  |
 | Format (Prettier; formatting-only commits go in `.git-blame-ignore-revs`)                                                          | `pnpm format` · `pnpm format:check`                                                          |
 | Build everything (packages → ngx-gantry → showcase → demos)                                                                        | `pnpm build`                                                                                 |
-| Angular library only (needs `@gantry/core` built)                                                                                  | `pnpm --filter @gantry/core build && pnpm build:lib`                                         |
+| Angular library only (needs `@gantryjs/core` built)                                                                                | `pnpm --filter @gantryjs/core build && pnpm build:lib`                                       |
 | Dev servers                                                                                                                        | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte`     |
 | Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors)                                                | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`                   |
 | Screenshot baselines (Playwright container = CI pixels)                                                                            | `pnpm e2e:visual` to compare · `pnpm e2e:update` to regenerate                               |
@@ -70,9 +70,9 @@ calling UI work done.
   do it in `connectedCallback`; module top level must stay SSR-safe (guard `document`/`HTMLElement`).
 - Web Component is CSP-strict (constructable stylesheets): no `innerHTML`, `style=`, `cssText` —
   ESLint enforces it; colours are `Paint`s applied through the CSSOM. After changing its public
-  properties, events or JSDoc, run `pnpm --filter @gantry/vanilla cem` (CI checks the manifest).
+  properties, events or JSDoc, run `pnpm --filter @gantryjs/vanilla cem` (CI checks the manifest).
 - Angular renders in the light DOM: SVG `id`s must be unique per instance (use the canvas `uid`).
-- Workspace packages export a `@gantry/source` condition; demos, tests and typecheck read the
+- Workspace packages export a `@gantryjs/source` condition; demos, tests and typecheck read the
   TypeScript sources. Published packages are ESM-only with bundled `.d.ts`.
 - `ngx-gantry` publishes from `dist/ngx-gantry` (`publishConfig.directory`);
   `scripts/resolve-workspace-deps.mjs` rewrites `workspace:` ranges after `ng build`.

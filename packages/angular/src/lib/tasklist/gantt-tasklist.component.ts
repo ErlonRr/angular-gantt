@@ -65,7 +65,7 @@ import {
   type CellVisual,
   type ColumnContext,
   type VirtualWindow,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 @Component({

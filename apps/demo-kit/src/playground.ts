@@ -5,7 +5,7 @@
  * syntax of each framework. A setup travels in links through `encodeState()` / `decodeState()`.
  */
 
-import { ViewMode, WEEK_FORMATS, type GanttOptions, type GanttScale, type ScaleFormat } from '@gantry/core';
+import { ViewMode, WEEK_FORMATS, type GanttOptions, type GanttScale, type ScaleFormat } from '@gantryjs/core';
 import type { FrameworkId } from './site';
 
 export interface PlaygroundState {
@@ -468,8 +468,8 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
         `<gantry-element id="plan" style="height: 480px"></gantry-element>`,
         ``,
         `<script type="module">`,
-        `  import '@gantry/vanilla';`,
-        ...(uses.length ? [`  import { ${uses.join(', ')} } from '@gantry/vanilla';`] : []),
+        `  import '@gantryjs/vanilla';`,
+        ...(uses.length ? [`  import { ${uses.join(', ')} } from '@gantryjs/vanilla';`] : []),
         ``,
         `  const chart = document.querySelector('#plan');`,
         `  chart.tasks = tasks; // GanttTask[]`,
@@ -480,8 +480,8 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
     case 'js': {
       const { source, uses } = optionsSource(s, today);
       return [
-        `import '@gantry/vanilla'; // defines <gantry-element>`,
-        ...(uses.length ? [`import { ${uses.join(', ')} } from '@gantry/vanilla';`] : []),
+        `import '@gantryjs/vanilla'; // defines <gantry-element>`,
+        ...(uses.length ? [`import { ${uses.join(', ')} } from '@gantryjs/vanilla';`] : []),
         ``,
         `const chart = document.createElement('gantry-element');`,
         `chart.style.height = '480px';`,
@@ -493,7 +493,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
     case 'react': {
       const { source, uses } = optionsSource(s, today);
       return [
-        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantry/react';`,
+        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/react';`,
         ``,
         `// Outside the component: the same object on every render`,
         `const options: GanttOptions = ${source};`,
@@ -507,7 +507,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today);
       return [
         `<script setup lang="ts">`,
-        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantry/vue';`,
+        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/vue';`,
         ``,
         `defineProps<{ tasks: GanttTask[] }>();`,
         `const options: GanttOptions = ${source};`,
@@ -539,7 +539,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today, '  ');
       return [
         `<script lang="ts">`,
-        `  import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantry/svelte';`,
+        `  import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/svelte';`,
         ``,
         `  let { tasks }: { tasks: GanttTask[] } = $props();`,
         `  const options: GanttOptions = ${source};`,

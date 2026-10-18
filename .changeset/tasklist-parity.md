@@ -1,5 +1,5 @@
 ---
-'@gantry/vanilla': patch
+'@gantryjs/vanilla': patch
 'ngx-gantry': patch
 ---
 
@@ -15,9 +15,9 @@ with the same elements, classes and colours:
   Only a task's `barColor` stays an inline colour, on its icon.
 - The column resize handle lies inside its header cell (`right: 0`): all 6 px can be grabbed (the
   header cell clipped half of it before).
-- `@gantry/vanilla`: cell texts use the secondary text colour (`--gantt-text-sec`, was `--gantt-text`),
+- `@gantryjs/vanilla`: cell texts use the secondary text colour (`--gantt-text-sec`, was `--gantt-text`),
   the collapse toggle is a 24 × 24 px target (WCAG 2.5.8; it was 20 px wide) and leaf names are
   indented to match (4 px more), and rows with children get the class `gantt-tl-row--group`, as in Angular.
 - `ngx-gantry`: the toolbar group that holds `[ganttToolbar]` content has the classes
   `gantt-tb-slot gantt-tb-group` (in that order; was `gantt-tb-group gantt-tb-slot`), and the task-list
-  `grid-template-columns` comes from `columnsGridTemplate()` in `@gantry/core`.
+  `grid-template-columns` comes from `columnsGridTemplate()` in `@gantryjs/core`.

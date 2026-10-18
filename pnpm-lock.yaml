@@ -194,7 +194,7 @@ importers:
       '@angular/router':
         specifier: 'catalog:'
         version: 22.2.2(@angular/common@22.2.2(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(@angular/platform-browser@22.2.2(@angular/common@22.2.2(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1))(rxjs@7.8.2))(@angular/core@22.2.2(@angular/compiler@22.2.2)(rxjs@7.8.2)(zone.js@0.15.1)))(rxjs@7.8.2)
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:*
         version: link:../../packages/core
       demo-kit:
@@ -212,10 +212,10 @@ importers:
 
   apps/demo-kit:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@gantry/vanilla':
+      '@gantryjs/vanilla':
         specifier: workspace:^
         version: link:../../packages/vanilla
     devDependencies:
@@ -225,10 +225,10 @@ importers:
 
   apps/demo-react:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@gantry/react':
+      '@gantryjs/react':
         specifier: workspace:^
         version: link:../../packages/react
       demo-kit:
@@ -259,10 +259,10 @@ importers:
 
   apps/demo-svelte:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@gantry/svelte':
+      '@gantryjs/svelte':
         specifier: workspace:^
         version: link:../../packages/svelte
       demo-kit:
@@ -287,10 +287,10 @@ importers:
 
   apps/demo-vanilla:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@gantry/vanilla':
+      '@gantryjs/vanilla':
         specifier: workspace:^
         version: link:../../packages/vanilla
       demo-kit:
@@ -306,10 +306,10 @@ importers:
 
   apps/demo-vue:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@gantry/vue':
+      '@gantryjs/vue':
         specifier: workspace:^
         version: link:../../packages/vue
       demo-kit:
@@ -334,7 +334,7 @@ importers:
 
   packages/angular:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../core
     devDependencies:
@@ -360,10 +360,10 @@ importers:
 
   packages/react:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../core
-      '@gantry/vanilla':
+      '@gantryjs/vanilla':
         specifier: workspace:^
         version: link:../vanilla
     devDependencies:
@@ -388,10 +388,10 @@ importers:
 
   packages/svelte:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../core
-      '@gantry/vanilla':
+      '@gantryjs/vanilla':
         specifier: workspace:^
         version: link:../vanilla
     devDependencies:
@@ -413,7 +413,7 @@ importers:
 
   packages/vanilla:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../core
     devDependencies:
@@ -429,10 +429,10 @@ importers:
 
   packages/vue:
     dependencies:
-      '@gantry/core':
+      '@gantryjs/core':
         specifier: workspace:^
         version: link:../core
-      '@gantry/vanilla':
+      '@gantryjs/vanilla':
         specifier: workspace:^
         version: link:../vanilla
     devDependencies:

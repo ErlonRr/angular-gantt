@@ -4,7 +4,7 @@
 // resize handle lies inside its header cell. happy-dom does not cascade adopted sheets, so the
 // declared values are read from the matching rules of the base sheet (`cascaded`).
 import { describe, it, expect, afterEach } from 'vitest';
-import type { GanttTask } from '@gantry/core';
+import type { GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { getBaseSheet } from '../styles/base';

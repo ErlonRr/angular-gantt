@@ -11,7 +11,7 @@
  *   its movement label (`text.gantt-drag-preview-label`) right before it.
  */
 
-import { annotationPaint, type GanttAnnotation } from '@gantry/core';
+import { annotationPaint, type GanttAnnotation } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText } from '../dom/patch';

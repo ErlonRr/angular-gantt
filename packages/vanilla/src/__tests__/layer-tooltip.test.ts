@@ -3,7 +3,7 @@
 // through the CSSOM, and both timers cleared on hide() / destroy(). The layer is driven directly
 // (as `interaction/canvas-pointer.ts` does), so these tests never depend on the bar painter.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DEFAULT_LABELS, TaskType, themeVar, type GanttFlatRow, type GanttTask } from '@gantry/core';
+import { DEFAULT_LABELS, TaskType, themeVar, type GanttFlatRow, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { TOOLTIP_HIDE_DELAY, TOOLTIP_SHOW_DELAY } from '../layers/tooltip';

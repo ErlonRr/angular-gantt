@@ -4,7 +4,7 @@
 //  Ghost overlay shown while a task is being dragged or resized.
 //  Rendered as an SVG <g> on top of the canvas layer.
 //
-//  It paints `computeDragGhostVisual` from @gantry/core (shared with
+//  It paints `computeDragGhostVisual` from @gantryjs/core (shared with
 //  the Web Component): a translucent, dashed copy of the bar at its
 //  snapped position, with the movement ("+3d", "-2h") above it.
 //  Colours are theme paints (`var(--gantt-*)`) bound as CSS properties.
@@ -18,7 +18,7 @@ import {
   type GhostVisual,
   type ResolvedGanttConfig,
   type TimelineModel,
-} from '@gantry/core';
+} from '@gantryjs/core';
 
 import { type DragPreview } from './gantt-drag.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';

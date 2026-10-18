@@ -17,7 +17,7 @@ import {
   type GanttOptions,
   type GanttTheme,
   type ThemeMetrics,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { effect, onCleanup, type ReadonlySignal } from '../../reactive';
 import type { ThemeCssEntries, ThemeSheet } from '../../styles/theme-sheet';
 import { structuralEqual, type Inputs } from '../inputs';

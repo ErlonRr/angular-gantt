@@ -7,9 +7,9 @@
 // would inject it as a style element during development). The chart is created with
 // `document.createElement`; the page sizes it through the CSSOM (`style.height`), which a strict
 // `style-src` allows — only style *text* (attributes, style elements) is refused.
-import '@gantry/vanilla';
-import { createDemoData } from '@gantry/core/demo';
-import type { GanttTask } from '@gantry/vanilla';
+import '@gantryjs/vanilla';
+import { createDemoData } from '@gantryjs/core/demo';
+import type { GanttTask } from '@gantryjs/vanilla';
 
 /** Extra rows below the demo plan, so the chart scrolls vertically. */
 function fillerTasks(count: number): GanttTask[] {

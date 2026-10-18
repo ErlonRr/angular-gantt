@@ -16,7 +16,7 @@ import {
   type GanttView,
   type SelectionState,
   type SortDirection,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { signal, type WritableSignal } from '../reactive';
 import type { GanttDataSource } from '../datasource/gantt-datasource';
 import type { GanttBarRenderer, VanillaColumnDef } from '../types';

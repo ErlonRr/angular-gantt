@@ -40,7 +40,7 @@ curated.
 - `ngx-gantry` exports `GantryComponent`, `GanttColumnDefDirective`, `provideGantt`, `withBars`, `GanttGlobalConfig`,
   `GanttFeature`, `provideGanttBar`, `GanttBarDef`, `GanttBarBase`, the built-in bars `GanttTaskBarComponent`,
   `GanttMilestoneComponent` and `GanttGroupBarComponent`, `GanttDataSource`, `createGanttDataSource`,
-  `GanttDataSourceConfig`, `ColumnDef`, and everything in `@gantry/core`.
+  `GanttDataSourceConfig`, `ColumnDef`, and everything in `@gantryjs/core`.
 - No longer exported (internal): `GanttArrowComponent`, `GanttHeaderComponent`, `GanttTaskListComponent`,
   `GanttCanvasComponent`, `GanttColumnService`, `GanttThemeService`, `GanttI18nService`, `GanttLayoutService`,
   `GanttSortState`, `GanttScrollService`, `GanttDragService`, `GanttDragPreviewComponent`, `DragState`,
@@ -49,7 +49,7 @@ curated.
   methods.
 - Deleted: `GanttVirtualScrollDirective`, `GanttAnnotationComponent`, `GanttTooltipDirective`, `GanttTooltipContext`,
   `GanttBarInputs`, and the `gantt-math` / `gantt-data` / `gantt-cpm` re-export modules. Their names still come from
-  `@gantry/core` through `ngx-gantry`, now as real values: 1.x's type declarations exported 24 of them as type-only
+  `@gantryjs/core` through `ngx-gantry`, now as real values: 1.x's type declarations exported 24 of them as type-only
   aliases, so `import { addDays } from 'ngx-gantry'` failed as a value. Fixed: `addDays`, `clamp`,
   `collectDescendants`, `computeCriticalPath`, `dateToPixel`, `diffDays`, `durationLabel`, `filterVisible`,
   `findRowById`, `flattenTree`, `formatDate`, `longestChain`, `pixelToDate`, `reindexVisible`, `snapToDay`,
@@ -90,7 +90,7 @@ curated.
   `setTheme()` / `patchTheme()` overrides) and `getBarVisual(id)` (a bar's core geometry and paints, also for rows
   outside the rendered window).
 - A new `series` (or new data-source items) resets local drags as in 1.x. `task.collapsed` seeds only the ids the
-  chart has never seen (`seedCollapsed` from `@gantry/core`, the Web Component's rule): an id seen before keeps the
+  chart has never seen (`seedCollapsed` from `@gantryjs/core`, the Web Component's rule): an id seen before keeps the
   user's expand / collapse state, also across an empty series in between or a data-source reset, and an id removed
   and added again is not collapsed again.
 - A state change still waiting for its 150 ms debounce (`STATE_SAVE_DELAY`) is written under `options.stateKey` when
@@ -113,7 +113,7 @@ curated.
   component stylesheets.
 - The light theme's current-period header label uses `--gantt-today-label` (`#964B13`, 5.01:1; it was `#B45309` at
   3.97:1, below WCAG AA), and theme-coloured progress uses `--gantt-progress-overlay` (theme key `progressOverlay`);
-  both tokens come from `@gantry/core`.
+  both tokens come from `@gantryjs/core`.
 
 ### Accessibility and focus (breaking)
 
@@ -126,7 +126,7 @@ curated.
 - The splitter's `role="separator"`, `tabindex="0"` and `aria-orientation` moved to its child
   `.gantry-splitter-handle`, which covers the splitter and gains `aria-valuenow` (the panel width in px),
   `aria-valuemin` (0 when the panel is collapsible, else `panel.minWidth`) and `aria-valuemax` (the widest panel the
-  splitter allows), the Web Component's values from `splitterValue()` in `@gantry/core`; the collapse
+  splitter allows), the Web Component's values from `splitterValue()` in `@gantryjs/core`; the collapse
   toggle is its sibling instead of a child of the separator.
 - A focused task-list row stays mounted while it is scrolled out of view (`.gantt-tl-row--pinned`), so focus survives
   scrolling. When the focused control disappears, focus moves to the timeline viewport (in the table view, to the task

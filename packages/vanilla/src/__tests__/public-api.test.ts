@@ -1,9 +1,9 @@
-// The curated public surface of `@gantry/vanilla` (Gantry 2 phase 6, step 5.1): the index exports
-// the element, its data source and the binding tables next to `@gantry/core`; the engine stays
+// The curated public surface of `@gantryjs/vanilla` (Gantry 2 phase 6, step 5.1): the index exports
+// the element, its data source and the binding tables next to `@gantryjs/core`; the engine stays
 // private. `resetTheme()` drops the `setTheme` / `patchTheme` overrides.
 import { describe, it, expect, afterEach } from 'vitest';
-import * as core from '@gantry/core';
-import { DarkTheme, LightTheme, type GanttTask } from '@gantry/core';
+import * as core from '@gantryjs/core';
+import { DarkTheme, LightTheme, type GanttTask } from '@gantryjs/core';
 import * as api from '../index';
 import type { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
@@ -36,8 +36,8 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('@gantry/vanilla index', () => {
-  it('exports the element, the data source and the binding tables next to @gantry/core', () => {
+describe('@gantryjs/vanilla index', () => {
+  it('exports the element, the data source and the binding tables next to @gantryjs/core', () => {
     const own = Object.keys(api)
       .filter(name => !(name in core))
       .sort();

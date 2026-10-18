@@ -9,7 +9,7 @@
  * listeners go, the width reached so far is kept and the end is reported like a release.
  */
 
-import { clampColumnWidth } from '@gantry/core';
+import { clampColumnWidth } from '@gantryjs/core';
 import type { VanillaColumnDef } from '../types';
 
 /** What a resize reports. */

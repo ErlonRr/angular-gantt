@@ -1,6 +1,6 @@
 /**
  * @file gantt-datasource.ts
- * Paged lazy loader for `<gantry-element>` — the shared `@gantry/core` `PagedLoader`
+ * Paged lazy loader for `<gantry-element>` — the shared `@gantryjs/core` `PagedLoader`
  * (pages, reset, retries with backoff, `error`) with an `onChange` callback.
  * Angular's `GanttDataSource` wraps the same loader and accepts the same config.
  *
@@ -9,7 +9,7 @@
  * elements.
  */
 
-import { type GanttTask, PagedLoader } from '@gantry/core';
+import { type GanttTask, PagedLoader } from '@gantryjs/core';
 import type { GanttDataSourceConfig } from '../types';
 
 export class GanttDataSource<T extends GanttTask = GanttTask> extends PagedLoader<T> {

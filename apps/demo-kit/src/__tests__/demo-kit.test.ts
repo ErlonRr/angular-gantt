@@ -63,7 +63,7 @@ describe('playground model', () => {
 
 describe('site', () => {
   it('builds install commands', () => {
-    expect(installCommand('pnpm', '@gantry/vanilla')).toBe('pnpm add @gantry/vanilla');
+    expect(installCommand('pnpm', '@gantryjs/vanilla')).toBe('pnpm add @gantryjs/vanilla');
     expect(installCommand('npm', 'ngx-gantry')).toBe('npm i ngx-gantry');
   });
 

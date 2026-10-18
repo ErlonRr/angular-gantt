@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: () => 'index.js',
     },
     rolldownOptions: {
-      external: [/^react(\/|$)/, /^react-dom/, /^@gantry\//],
+      external: [/^react(\/|$)/, /^react-dom/, /^@gantryjs\//],
     },
     sourcemap: true,
   },

@@ -12,7 +12,7 @@ paths:
   (`input()`, `output()`, `model()`, `computed()`, `linkedSignal()`, `viewChild()`, `contentChild(ren)()`),
   `input(…, { transform: booleanAttribute })` for boolean inputs, `host: {}` metadata (no `@HostListener` /
   `@HostBinding`), `inject()`, `@if` / `@for` with `track`. Zoneless only: no `NgZone`, never rely on zone.js.
-- No geometry, sizes or defaults in a component or template: they come from `@gantry/core`
+- No geometry, sizes or defaults in a component or template: they come from `@gantryjs/core`
   (`resolveConfig`, `buildTimeline`, `computeBarVisual`, the window helpers…). Components paint the model.
 
 ## State: the layout service is the graph
@@ -87,7 +87,7 @@ paths:
 
 ## Public API
 
-- `src/public-api.ts` has explicit named exports only, plus `@gantry/core` re-exported as a whole; never a local
+- `src/public-api.ts` has explicit named exports only, plus `@gantryjs/core` re-exported as a whole; never a local
   `export *` (the d.ts bundle would get `*_d_exports` namespaces that break api-extractor). Services and inner
   components stay internal.
 - The API report `packages/angular/etc/ngx-gantry.api.md` must match: `pnpm build:lib && pnpm api:angular` updates
@@ -96,7 +96,7 @@ paths:
 
 ## Verify
 
-- `pnpm --filter @gantry/core build && pnpm build:lib`, then `pnpm build:app`.
+- `pnpm --filter @gantryjs/core build && pnpm build:lib`, then `pnpm build:app`.
 - Unit tests: `packages/angular/src/**/*.spec.ts`, run with `pnpm test:angular` (`@angular/build:unit-test`,
   Vitest + happy-dom, specs share one environment). `src/test/dom-shims.ts` (ResizeObserver,
   IntersectionObserver, scrollTo stubs) is loaded by the `setupFiles` of `angular.json`: specs must not import it.

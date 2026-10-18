@@ -25,10 +25,10 @@
 </script>
 
 <script lang="ts">
-  import '@gantry/vanilla';
+  import '@gantryjs/vanilla';
   import { untrack } from 'svelte';
-  import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantry/vanilla';
-  import type { GantryElement, GantryProperties, GantryEventCallbacks } from '@gantry/vanilla';
+  import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
+  import type { GantryElement, GantryProperties, GantryEventCallbacks } from '@gantryjs/vanilla';
   import type { HTMLAttributes } from 'svelte/elements';
 
   type Props = GantryProperties &

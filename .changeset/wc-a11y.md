@@ -1,13 +1,13 @@
 ---
-'@gantry/vanilla': major
-'@gantry/core': minor
+'@gantryjs/vanilla': major
+'@gantryjs/core': minor
 'ngx-gantry': patch
 ---
 
 **Accessibility of `<gantry-element>`.** The host is a landmark region instead of a tab stop, and keyboard focus moves
 through the controls inside it.
 
-### `@gantry/vanilla` (breaking)
+### `@gantryjs/vanilla` (breaking)
 
 - **No `tabindex` on the host.** The element no longer makes itself focusable: the shadow root delegates focus, so
   `el.focus()` focuses the first internal tab stop. The tab stops are,
@@ -33,7 +33,7 @@ through the controls inside it.
   the task list's tab-stop row) instead of the host. Starting a bar drag focuses the timeline viewport.
 - The toolbar is named by `labels.ariaToolbar`.
 
-### `@gantry/core`
+### `@gantryjs/core`
 
 New labels in `GanttLabels` / `DEFAULT_LABELS`: `ariaToolbar` (`'Chart toolbar'`, the toolbar's accessible name) and
 `announceLoaded(count)` (`'20 tasks loaded'`, read when a data-source page loads and more remain). They are required

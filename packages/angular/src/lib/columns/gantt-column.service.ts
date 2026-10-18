@@ -4,7 +4,7 @@
 //  Reactive column catalogue, widths and visibility (signals only).
 //
 //  Which columns a view shows (lean split-view panel vs data-rich
-//  table view) is resolved by `@gantry/core` (`resolveViewColumns`),
+//  table view) is resolved by `@gantryjs/core` (`resolveViewColumns`),
 //  exactly like the Web Component.
 //
 //  Sources (bound once by GantryComponent, `bind()`):
@@ -24,7 +24,7 @@ import {
   resolveViewColumns,
   type GanttView,
   type ResolvedGanttConfig,
-} from '@gantry/core';
+} from '@gantryjs/core';
 import { type ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 

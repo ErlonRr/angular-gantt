@@ -23,7 +23,7 @@ import { GanttBarBase, GanttBarRegistry, provideGanttBar } from './bar-registry'
 import { GANTT_GLOBAL_CONFIG, mergeGanttConfig, provideGantt, withBars } from './provide';
 import { GanttI18nService } from './services/gantt-i18n.service';
 import { GanttThemeService } from './services/gantt-theme.service';
-import { TaskType, ViewMode, type GanttTask } from '@gantry/core';
+import { TaskType, ViewMode, type GanttTask } from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 0, d);
 const TASKS: GanttTask[] = [

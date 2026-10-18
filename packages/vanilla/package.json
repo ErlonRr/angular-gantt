@@ -1,5 +1,5 @@
 {
-  "name": "@gantry/vanilla",
+  "name": "@gantryjs/vanilla",
   "version": "1.0.0",
   "description": "Gantry Gantt chart as a framework-agnostic Web Component (<gantry-element>). Works with plain JS or any framework.",
   "keywords": [
@@ -16,13 +16,13 @@
     "critical-path",
     "svg"
   ],
-  "homepage": "https://github.com/ErlonRr/angular-gantt/tree/main/packages/vanilla#readme",
+  "homepage": "https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#readme",
   "bugs": {
-    "url": "https://github.com/ErlonRr/angular-gantt/issues"
+    "url": "https://github.com/ErlonRr/gantryjs/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ErlonRr/angular-gantt.git",
+    "url": "git+https://github.com/ErlonRr/gantryjs.git",
     "directory": "packages/vanilla"
   },
   "license": "MIT",
@@ -38,7 +38,7 @@
   ],
   "exports": {
     ".": {
-      "@gantry/source": "./src/index.ts",
+      "@gantryjs/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -59,7 +59,7 @@
     "cem:check": "node scripts/cem-check.mjs"
   },
   "dependencies": {
-    "@gantry/core": "workspace:^"
+    "@gantryjs/core": "workspace:^"
   },
   "devDependencies": {
     "@custom-elements-manifest/analyzer": "catalog:",

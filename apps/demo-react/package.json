@@ -12,8 +12,8 @@
   "dependencies": {
     "react": "catalog:",
     "react-dom": "catalog:",
-    "@gantry/react": "workspace:^",
-    "@gantry/core": "workspace:^",
+    "@gantryjs/react": "workspace:^",
+    "@gantryjs/core": "workspace:^",
     "demo-kit": "workspace:*"
   },
   "devDependencies": {

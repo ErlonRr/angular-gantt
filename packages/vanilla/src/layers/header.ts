@@ -19,7 +19,7 @@
  *     div.g-today-pointer           attached while the today line is shown
  */
 
-import { headerCellBorder, type ScaleCell, type TimeBand } from '@gantry/core';
+import { headerCellBorder, type ScaleCell, type TimeBand } from '@gantryjs/core';
 import { h } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText } from '../dom/patch';
