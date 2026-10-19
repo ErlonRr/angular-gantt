@@ -17,6 +17,7 @@ import {
   changedKeys,
   decodeState,
   encodeState,
+  playgroundCommand,
   playgroundOptions,
   withValue,
   type PlaygroundState,
@@ -98,9 +99,11 @@ function showState(): void {
 
 function setState(next: PlaygroundState): void {
   if (next === state) return;
+  const command = playgroundCommand(state, next);
   state = next;
   showState();
   applyOptions();
+  if (command) gantt[command]();
 }
 
 byId('options-reset').addEventListener('click', () => setState({ ...PLAYGROUND_DEFAULTS }));

@@ -29,6 +29,8 @@ export default tseslint.config(
       'e2e/__screenshots__/**',
       '.claude/skills/**',
       '**/*.d.ts',
+      // Written by scripts/gallery-sources.mjs (checked by `pnpm gallery:check`)
+      'apps/demo-kit/src/gallery/sources/*.generated.ts',
     ],
   },
 

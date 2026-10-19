@@ -5,6 +5,9 @@
 // coordinates and auto-scrolls near the edges; the hover writes `hoveredBarId`, the cursor and the
 // tooltip calls; a tap toggles the tooltip. Bars are hit by geometry (the canvas box is at 0,0 in
 // happy-dom: client and canvas coordinates are the same).
+// Phase 10 step 4.7 (the Web Component's 4.1): a mouse press on a bar focuses that bar (a touch or
+// pen drag too), with the pointer's modality (no focus ring); Escape belongs to the press while it
+// lasts; a scroll of either pane clears the hover (the row hover itself is in hover.spec.ts).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
@@ -26,6 +29,7 @@ import { GanttLayoutService } from './layout/gantt-layout.service';
 import { GanttDragService } from './drag/gantt-drag.service';
 import { GanttScrollService } from './scroll/gantt-scroll.service';
 import { GanttTooltipState } from './tooltip/tooltip-state';
+import { GanttSelectionService } from './selection/gantt-selection.service';
 
 const TASKS: GanttTask[] = [
   { id: 'a', name: 'A', start: new Date(2026, 2, 2), end: new Date(2026, 2, 12) },
@@ -65,6 +69,8 @@ interface Chart {
   drag: GanttDragService;
   scroll: GanttScrollService;
   tooltip: GanttTooltipState;
+  /** The task-list pane (`.gantry-panel`) */
+  panel: HTMLElement;
 }
 
 async function mount(setup?: (h: Host) => void): Promise<Chart> {
@@ -86,6 +92,7 @@ async function mount(setup?: (h: Host) => void): Promise<Chart> {
     drag: chart.injector.get(GanttDragService),
     scroll: chart.injector.get(GanttScrollService),
     tooltip: canvasDe.injector.get(GanttTooltipState),
+    panel: el.querySelector<HTMLElement>('.gantry-panel')!,
   };
 }
 
@@ -150,9 +157,10 @@ describe('mouse press', () => {
     const { x, y } = centre(c, 'a');
 
     const down = send(c, 'pointerdown', x, y, 'mouse', barEl(c, 'a'));
-    // No text selection or native focus: the timeline takes keyboard focus, the pointer is captured
+    // No text selection or native focus: the pressed bar takes keyboard focus, the pointer is captured
     expect(down.defaultPrevented).toBe(true);
-    expect(document.activeElement).toBe(c.viewport);
+    expect(document.activeElement).toBe(barEl(c, 'a'));
+    expect(c.layout.focusVisibleBarId()).toBeNull();
     expect(capture).toHaveBeenCalledWith(1);
     expect(kind(c)).toBe('idle');
 
@@ -204,23 +212,49 @@ describe('mouse press', () => {
     expect(c.host.resized[0]).toMatchObject({ taskId: 'a', handle: 'right', daysDelta: 1 });
   });
 
-  it('leaves a bar that cannot be dragged to the plain click (no capture, no prevented default)', async () => {
+  it('leaves a bar that cannot be dragged to the plain click (no capture), focusing that bar', async () => {
     const c = await mount();
     const capture = vi.spyOn(c.svg, 'setPointerCapture');
     const { x, y } = centre(c, 'locked');
     const down = send(c, 'pointerdown', x, y, 'mouse', barEl(c, 'locked'));
-    expect(down.defaultPrevented).toBe(false);
+    // The bar takes focus itself (no native focus elsewhere, no text selection)
+    expect(down.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(barEl(c, 'locked'));
     send(c, 'pointermove', x + 3 * px(c), y);
     expect(kind(c)).toBe('idle');
     send(c, 'pointerup', x + 3 * px(c), y);
     expect(capture).not.toHaveBeenCalled();
-    // Drag off: no press on any bar
+    // Drag off: no press on any bar, but a press still focuses the bar it hits (by geometry)
     c.host.options.update(o => ({ ...o, enableDrag: false }));
     await c.f.whenStable();
     const a = centre(c, 'a');
-    expect(send(c, 'pointerdown', a.x, a.y).defaultPrevented).toBe(false);
+    send(c, 'pointerdown', a.x, a.y);
+    expect(document.activeElement).toBe(barEl(c, 'a'));
     send(c, 'pointermove', a.x + 3 * px(c), a.y);
     expect(kind(c)).toBe('idle');
+    send(c, 'pointerup', a.x + 3 * px(c), a.y);
+    // Off the bars: nothing is prevented, focus stays where it was
+    const off = send(c, 'pointerdown', 5, 5);
+    expect(off.defaultPrevented).toBe(false);
+    expect(document.activeElement).toBe(barEl(c, 'a'));
+  });
+
+  it('a pressed bar keeps the pointer modality: no focus ring and no focus tooltip, until a key is pressed', async () => {
+    const c = await mount();
+    const focusTip = vi.spyOn(c.tooltip, 'focus');
+    const { x, y } = centre(c, 'b');
+    // A keyboard user's last input was a key: the press makes the pointer the modality
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+    send(c, 'pointerdown', x, y, 'mouse', barEl(c, 'b'));
+    send(c, 'pointerup', x, y, 'mouse', barEl(c, 'b'));
+    expect(document.activeElement).toBe(barEl(c, 'b'));
+    expect(c.layout.focusedRowId()).toBe('b');
+    expect(c.layout.focusVisibleBarId()).toBeNull();
+    await c.f.whenStable();
+    expect(focusTip).not.toHaveBeenCalled();
+    // The pressed bar is the timeline's tab stop now
+    expect(barEl(c, 'b').getAttribute('tabindex')).toBe('0');
+    expect(document.activeElement).toBe(barEl(c, 'b'));
   });
 
   it('ignores other buttons', async () => {
@@ -273,6 +307,43 @@ describe('cancelling', () => {
     expect(selected(c)).toEqual([]);
   });
 
+  it("Escape is the press's while it lasts: consumed before the chart and the page hear it, then theirs again", async () => {
+    const c = await mount();
+    const selection = c.f.debugElement.query(By.directive(GantryComponent)).injector.get(GanttSelectionService);
+    const onKey = vi.fn();
+    document.addEventListener('keydown', onKey);
+    c.gantt.setSelectedTasks(['b']);
+    await c.f.whenStable();
+    const { x, y } = centre(c, 'a');
+    send(c, 'pointerdown', x, y, 'mouse', barEl(c, 'a'));
+    send(c, 'pointermove', x + 2 * px(c), y);
+    expect(kind(c)).toBe('dragging');
+    // On the pressed bar, which holds focus
+    const esc = () => {
+      const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      barEl(c, 'a').dispatchEvent(e);
+      return e;
+    };
+    expect(esc().defaultPrevented).toBe(true);
+    expect(kind(c)).toBe('idle');
+    expect(c.drag.preview()).toBeNull();
+    // Not a keyboard focus (no ring, no focus tooltip), the selection stays, the page saw nothing
+    expect(c.layout.focusVisibleBarId()).toBeNull();
+    expect(c.tooltip.visibleId()).toBeNull();
+    expect([...selection.selectedIds()]).toEqual(['b']);
+    expect(onKey).not.toHaveBeenCalled();
+    send(c, 'pointerup', x + 2 * px(c), y);
+    // The press is over: the next Escape is the chart's (a key shows the focused bar's ring; with
+    // no tooltip to close first it clears the selection) and the page's
+    c.host.tooltip.set(false);
+    await c.f.whenStable();
+    esc();
+    expect(c.layout.focusVisibleBarId()).toBe('a');
+    expect(selected(c)).toEqual([]);
+    expect(onKey).toHaveBeenCalledOnce();
+    document.removeEventListener('keydown', onKey);
+  });
+
   it('Escape ends an undecided press: moving afterwards does not drag', async () => {
     const c = await mount();
     const { x, y } = centre(c, 'a');
@@ -314,14 +385,16 @@ describe('touch and pen press', () => {
     const down = send(c, 'pointerdown', x, y, 'touch', barEl(c, 'a'));
     // The browser may still pan: nothing is prevented, focus stays where it was
     expect(down.defaultPrevented).toBe(false);
-    expect(document.activeElement).not.toBe(c.viewport);
+    expect(document.activeElement).not.toBe(barEl(c, 'a'));
     vi.advanceTimersByTime(LONG_PRESS_MS - 1);
     expect(kind(c)).toBe('idle');
     expect(touchmove(c, x, y).defaultPrevented).toBe(false);
 
     vi.advanceTimersByTime(1);
     expect(kind(c)).toBe('dragging');
-    expect(document.activeElement).toBe(c.viewport);
+    // The dragged bar takes focus once the drag starts, with no focus ring
+    expect(document.activeElement).toBe(barEl(c, 'a'));
+    expect(c.layout.focusVisibleBarId()).toBeNull();
     expect(touchmove(c, x + px(c), y).defaultPrevented).toBe(true);
     // The held finger opens no context menu on the bar it drags
     const menu = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
@@ -628,6 +701,31 @@ describe('hover', () => {
     // The bar moved with the pointer: it is under it again
     expect(c.layout.hoveredBarId()).toBe('a');
     expect(cursor(c)).toBe('grab');
+  });
+
+  it('a scroll of either pane clears the hovered bar, its grips, the row and the cursor; a drag keeps its cursor', async () => {
+    const c = await mount();
+    const { x, y } = centre(c, 'a');
+    for (const pane of [c.viewport, c.panel]) {
+      send(c, 'pointermove', x, y, 'mouse', barEl(c, 'a'));
+      expect(c.layout.hoveredBarId()).toBe('a');
+      expect(c.layout.hoveredRowId()).toBe('a');
+      expect(cursor(c)).toBe('grab');
+      pane.dispatchEvent(new Event('scroll'));
+      expect(c.layout.hoveredBarId()).toBeNull();
+      expect(c.layout.hoveredRowId()).toBeNull();
+      expect(cursor(c)).toBeNull();
+    }
+    // The next move hovers again
+    send(c, 'pointermove', x, y);
+    expect(c.layout.hoveredBarId()).toBe('a');
+    // While a bar is dragged (the viewport auto-scrolls) the cursor stays
+    send(c, 'pointerdown', x, y);
+    send(c, 'pointermove', x + 2 * px(c), y);
+    expect(cursor(c)).toBe('grabbing');
+    c.viewport.dispatchEvent(new Event('scroll'));
+    expect(cursor(c)).toBe('grabbing');
+    send(c, 'pointerup', x + 2 * px(c), y);
   });
 
   it('measures the canvas box once per hover, again after a scroll, a resize of the panes or re-entering', async () => {

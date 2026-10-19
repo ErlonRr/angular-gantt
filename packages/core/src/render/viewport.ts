@@ -170,7 +170,7 @@ export function anchoredScrollLeft(
  * quarter of the viewport), clamped. `null` without tasks.
  */
 export function fitScrollLeft(timeline: TimelineModel, viewportWidth: number, margin = FIT_MARGIN): number | null {
-  const extent = timeline.extent;
+  const extent = timeline.sharedExtent ?? timeline.extent;
   if (!extent) return null;
   const vw = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0;
   return clampScroll(timeline.toX(extent.start) - fitMargin(vw, margin), timeline, vw);

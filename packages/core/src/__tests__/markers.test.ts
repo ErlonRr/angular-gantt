@@ -277,6 +277,40 @@ describe('computeAnnotationVisuals', () => {
     expect(computeAnnotationVisuals(anns, timeline, span, 12, { height: 0 })[0].label).not.toBeNull();
   });
 
+  it('moves the canvas label by label.offsetY (positive = down); regions and lines stay', () => {
+    const shifted: GanttAnnotation[] = [
+      { x1: day(5), x2: day(9), label: { text: 'Down', offsetY: 10 } },
+      { x1: day(12), label: { text: 'Up', offsetY: -6.5 } },
+      { x1: day(14), label: { text: 'Zero', offsetY: 0 } },
+      { x1: day(16), label: { text: 'Bad', offsetY: Number.NaN } },
+    ];
+    const base = computeAnnotationVisuals(
+      shifted.map(a => ({ ...a, label: { text: a.label!.text } })),
+      timeline,
+      span,
+      12,
+      false,
+    );
+    const v = computeAnnotationVisuals(shifted, timeline, span, 12, false);
+    expect(base.every(a => a.label!.y === 54)).toBe(true);
+    expect(v.map(a => a.label!.y)).toEqual([64, 47.5, 54, 54]);
+    expect(v.map(a => a.label!.x)).toEqual(base.map(a => a.label!.x));
+    expect(v.map(a => [a.region, a.line])).toEqual(base.map(a => [a.region, a.line]));
+    // The offset follows the window top
+    const [low] = computeAnnotationVisuals(shifted, timeline, { top: 100, bottom: 400 }, 12, false);
+    expect(low.label!.y).toBe(100 + 14 + 10);
+  });
+
+  it('offsetY is a canvas-label setting: the lane labels ignore it', () => {
+    const plain = lane([{ x1: day(12), label: { text: 'Release' } }]);
+    const moved = lane([{ x1: day(12), label: { text: 'Release', offsetY: 20 } }]);
+    expect(moved).toEqual(plain);
+    expect(
+      computeAnnotationVisuals([{ x1: day(12), label: { text: 'Release', offsetY: 20 } }], timeline, span, 12, true)[0]
+        .label,
+    ).toBeNull();
+  });
+
   it('a region that ends before it starts gets no negative width', () => {
     const [v] = computeAnnotationVisuals([{ x1: day(9), x2: day(5) }], timeline, span, 12, false);
     expect(v.region!.width).toBe(0);

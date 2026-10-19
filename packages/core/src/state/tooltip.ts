@@ -8,12 +8,21 @@
 //  at the same place, at the same moments.
 // ─────────────────────────────────────────────────────────────
 
-import { DEFAULT_LABELS, DependencyType, TaskType, type GanttLabels, type GanttTask, type TaskStatus } from '../types';
+import {
+  DEFAULT_LABELS,
+  DependencyType,
+  TaskType,
+  type GanttLabels,
+  type GanttTask,
+  type ResolvedTaskStyle,
+  type TaskStatus,
+} from '../types';
 import { calendarDays, clamp, formatDate } from '../gantt-math';
 import { taskSpan } from '../render/timeline';
 import { taskDependencies, taskDurationLabel, taskStatus } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
 import { themeVar, type Paint } from '../render/paint';
+import { taskOwnStyle } from '../render/task-style';
 
 // ─── Timing ───────────────────────────────────────────────────
 
@@ -389,12 +398,15 @@ export interface TooltipModel {
   predecessors: string[];
   /** Tasks that depend on this one (needs `tasksById`) */
   successors: string[];
-  /** Paints (theme tokens or the task's own colour); the chrome uses the `--gantt-tooltip-*` tokens */
+  /** Paints (theme tokens or the row's style colour); the chrome uses the `--gantt-tooltip-*` tokens */
   paint: TooltipPaint;
 }
 
 export interface TooltipPaint {
-  /** Fill of the progress bar: `var(--gantt-critical)` on the critical path, else `task.barColor`, else `var(--gantt-bar)` */
+  /**
+   * Fill of the progress bar, like the bar's body: `var(--gantt-critical)` on the critical path,
+   * else the style's `color`, else `var(--gantt-bar)`
+   */
   progress: Paint;
 }
 
@@ -420,6 +432,11 @@ export interface TooltipInput {
   barType?: string | undefined;
   /** Add a status row (default false) */
   showStatus?: boolean | undefined;
+  /**
+   * The row's resolved style (`createStyleResolver`, the one its bar is painted with); default:
+   * the task's own style (`taskOwnStyle`)
+   */
+  style?: ResolvedTaskStyle | undefined;
 }
 
 // ─── Builder ──────────────────────────────────────────────────
@@ -514,7 +531,11 @@ export function buildTooltipModel(input: TooltipInput): TooltipModel {
     baselineVariance,
     predecessors,
     successors,
-    paint: { progress: critical ? themeVar('criticalColor') : (task.barColor ?? themeVar('barColor')) },
+    paint: {
+      progress: critical
+        ? themeVar('criticalColor')
+        : ((input.style ?? taskOwnStyle(task)).color ?? themeVar('barColor')),
+    },
   };
 }
 

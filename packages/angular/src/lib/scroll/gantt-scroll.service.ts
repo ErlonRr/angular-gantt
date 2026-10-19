@@ -32,10 +32,17 @@
 //  `AUTO_SCROLL_EDGE` px of an edge, and beyond it). The viewport's box is
 //  measured once, when the drag starts; the loop runs only while the
 //  pointer is in an edge zone and the viewport can still scroll that way.
+//
+//  Inside a sync group (`sync/gantt-sync.ts`) the timeline's horizontal
+//  scroll events are the member's scroll reports: every horizontal move
+//  the viewport makes — the user's, and the chart's own jumps (initial
+//  scroll, zoom anchoring, `scrollToDate`, fit) — reaches the group from
+//  here, except the echo of a scroll the group caused (`group`: one echo
+//  guard per viewport), as the Web Component's `viewportSync`.
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, DestroyRef, inject, DOCUMENT } from '@angular/core';
-import { autoScrollDelta, createScrollMirror, type ScrollPane } from '@gantryjs/core';
+import { Injectable, signal, DestroyRef, inject, DOCUMENT, untracked } from '@angular/core';
+import { autoScrollDelta, createEchoGuard, createScrollMirror, type EchoGuard, type ScrollPane } from '@gantryjs/core';
 
 /** Auto-scroll of one drag (`GanttScrollService.autoScroll`) */
 export interface AutoScroll {
@@ -52,6 +59,75 @@ export interface AutoScrollOptions {
   readonly onScroll: () => void;
 }
 
+/**
+ * The timeline viewport's side of the sync group (`GanttScrollService.group`, the Web Component's
+ * `ViewportSync`): the sync member (`sync/gantt-sync.ts`) queues the group's scrolls and plugs in
+ * the reporter while the chart is in a group, the chart's scroll sync applies the queued scroll
+ * after the render (`GantryComponent`), and the scroll handler reports the moves.
+ *
+ * A move is not reported when it is the echo of a scroll the chart made for the group (`guard`: a
+ * group scroll applied, the zoom anchoring after a level the group applied, a start correction at
+ * the chart's scroll limit), nor while a group scroll waits for the render — the group's newer
+ * position replaces it, so two charts whose own scrolls cross (both apply `initialScroll`, or both
+ * correct a new start, in the same frame) end up together instead of swapped: the first report the
+ * group hears wins.
+ */
+export interface ViewportSync {
+  /** The viewport's echo guard (core `createEchoGuard`) */
+  readonly guard: EchoGuard;
+  /** Sends a horizontal offset to the group (set by the sync member while joined; `null` outside a group) */
+  report: ((x: number) => void) | null;
+  /**
+   * The group's scroll waiting for the render, or `null`. A tracked read: the chart's scroll sync
+   * runs again when the group sends a scroll.
+   */
+  waiting(): number | null;
+  /** Queues the group's scroll for the next render (`null` drops a waiting one: the chart left) */
+  queue(x: number | null): void;
+  /** The waiting scroll was applied, or a local scroll replaced it */
+  consume(): void;
+  /**
+   * The group applied a zoom level (`sync/gantt-sync.ts`): the zoom anchoring of the next rendered
+   * timeline is the group's correction, not the chart's own move. Read and cleared by the chart's
+   * scroll sync on every run.
+   */
+  groupLevel: boolean;
+  /** The viewport moved horizontally to `x` (the scroll handler): reported unless it's an echo */
+  moved(x: number): void;
+}
+
+function createViewportSync(): ViewportSync {
+  /** A fresh object per group scroll: equal offsets sent twice are two scrolls */
+  const request = signal<{ x: number } | null>(null);
+  /** The request applied last (compared by identity) */
+  let applied: { x: number } | null = null;
+  const waitingNow = (): boolean => {
+    const r = untracked(request);
+    return r !== null && r !== applied;
+  };
+  const link: ViewportSync = {
+    guard: createEchoGuard(),
+    report: null,
+    waiting() {
+      const r = request();
+      return r !== null && r !== applied ? r.x : null;
+    },
+    queue(x) {
+      request.set(x === null ? null : { x });
+    },
+    consume() {
+      applied = untracked(request);
+    },
+    groupLevel: false,
+    moved(x) {
+      // The guard is consumed by every move, so an expectation never outlives the next move
+      const echo = link.guard.isEcho(x);
+      if (!echo && !waitingNow()) link.report?.(x);
+    },
+  };
+  return link;
+}
+
 @Injectable()
 export class GanttScrollService {
   // ── Public signals ────────────────────────────────────────
@@ -61,12 +137,20 @@ export class GanttScrollService {
   /** Current vertical scroll offset shared by both panels (px) */
   readonly scrollTop = signal<number>(0);
 
+  /** The viewport's side of the sync group: echo guard, queued group scroll, scroll reports */
+  readonly group: ViewportSync = createViewportSync();
+
   // ── Private refs ──────────────────────────────────────────
   private _panel: HTMLElement | null = null;
   private _canvas: HTMLElement | null = null;
 
   /** Vertical mirroring of the two panes (core: ignores the echo of its own writes) */
   private readonly _mirror = createScrollMirror();
+  /**
+   * The timeline's horizontal offset at its last scroll event. Not `scrollLeft()`: an instant jump
+   * writes that before its scroll event comes, and the jump has to be reported too.
+   */
+  private _left = 0;
 
   private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
@@ -88,6 +172,7 @@ export class GanttScrollService {
    */
   registerCanvas(el: HTMLElement): void {
     this._canvas = el;
+    this._left = el.scrollLeft;
     this._listen(el, 'timeline');
   }
 
@@ -118,6 +203,11 @@ export class GanttScrollService {
     if (!canvas) return;
     this.scrollTop.set(canvas.scrollTop);
     this.scrollLeft.set(canvas.scrollLeft);
+    // A vertical scroll (or the panel's) leaves the horizontal offset alone: nothing to report
+    if (pane === 'timeline' && canvas.scrollLeft !== this._left) {
+      this._left = canvas.scrollLeft;
+      this.group.moved(this._left);
+    }
   }
 
   // ── Programmatic scroll ───────────────────────────────────
@@ -129,6 +219,20 @@ export class GanttScrollService {
     this._canvas.scrollTo({ left: Math.max(0, x), behavior: b });
     // An instant scroll is applied synchronously: keep the offset current for anchoring
     if (b !== 'smooth') this.scrollLeft.set(this._canvas.scrollLeft);
+  }
+
+  /**
+   * An instant jump to `x` whose scroll event is the sync group's echo, not the chart's move: the
+   * guard expects the offset read back from the viewport (the browser clamps it to this chart's
+   * scroll range, so a chart that cannot scroll as far does not push the others back). Reads
+   * `scrollLeft` before and after: once per group scroll or quiet correction, never on a scroll.
+   */
+  echoJump(x: number): void {
+    const canvas = this._canvas;
+    if (!canvas) return;
+    const from = canvas.scrollLeft;
+    this.scrollToX(x, 'instant');
+    this.group.guard.expect(canvas.scrollLeft, from);
   }
 
   /**

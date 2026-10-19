@@ -5,13 +5,26 @@
  * syntax of each framework. A setup travels in links through `encodeState()` / `decodeState()`.
  */
 
-import { ViewMode, WEEK_FORMATS, type GanttOptions, type GanttScale, type ScaleFormat } from '@gantryjs/core';
+import {
+  ViewMode,
+  WEEK_FORMATS,
+  type GanttDensity,
+  type GanttOptions,
+  type GanttRollupOptions,
+  type GanttScale,
+  type GanttStyleOptions,
+  type ScaleFormat,
+  type WeekNumbering,
+  type WeekStart,
+} from '@gantryjs/core';
 import type { FrameworkId } from './site';
 
 export interface PlaygroundState {
   viewMode: string;
   weekFormat: string;
-  weekStart: number;
+  /** A first day of the week (`WeekStart`), or `'rule'`: unset, the week-numbering rule's own */
+  weekStart: number | string;
+  weekNumbering: string;
   initialScroll: string;
   weekends: boolean;
   holiday: boolean;
@@ -27,9 +40,20 @@ export interface PlaygroundState {
   milestone: string;
   groupStyle: string;
   arrowRadius: number;
+  arrowRouting: string;
   baseline: boolean;
   criticalPath: boolean;
+  rollup: boolean;
+  rollupColor: string;
+  rollupProgress: string;
+  rollupSegments: boolean;
+  groupsCollapsed: boolean;
+  stylePreset: string;
   inclusive: boolean;
+  density: string;
+  responsive: string;
+  panelToggle: boolean;
+  toolbarOverflow: string;
   stateKey: boolean;
   panelCols: string;
   tableCols: string;
@@ -41,6 +65,7 @@ export interface PlaygroundState {
   handleHitSize: number;
   markerLane: string;
   toolbarFit: boolean;
+  readoutFormat: string;
 }
 
 export type PlaygroundKey = keyof PlaygroundState;
@@ -48,7 +73,6 @@ export type PlaygroundKey = keyof PlaygroundState;
 export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   viewMode: ViewMode.Week,
   weekFormat: 'number',
-  weekStart: 1,
   initialScroll: 'auto',
   weekends: true,
   holiday: true,
@@ -57,7 +81,7 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   intensive: true,
   nwStyle: 'shade',
   majorDash: false,
-  rowHeight: 36,
+  rowHeight: 36, // The rows of the default density: left out of the code at this value
   barHeight: 60,
   radius: 4,
   label: 'auto',
@@ -71,6 +95,19 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   panelCols: 'default',
   tableCols: 'default',
   // The core defaults (resolveConfig): at these values the options below are left out of the code
+  weekStart: 'rule',
+  weekNumbering: 'auto',
+  arrowRouting: 'orthogonal',
+  rollup: false,
+  rollupColor: 'none',
+  rollupProgress: 'duration',
+  rollupSegments: false,
+  groupsCollapsed: false,
+  stylePreset: 'none',
+  density: 'normal',
+  responsive: 'on',
+  panelToggle: false,
+  toolbarOverflow: 'menu',
   legendPosition: 'bottom',
   tooltipTrigger: 'auto',
   tooltipShowDelay: 320,
@@ -79,6 +116,7 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   handleHitSize: 24,
   markerLane: 'auto',
   toolbarFit: true,
+  readoutFormat: 'scale',
 };
 
 interface ControlBase {
@@ -126,6 +164,22 @@ const TABLE_COLUMNS: Record<string, string[] | undefined> = {
   schedule: ['name', 'start', 'end', 'duration'],
 };
 
+/**
+ * `styles` presets. Declarative layers only: a `rule` callback could neither travel in a link nor
+ * print as code. The sample plan gives its groups and milestones colours of their own (`task.style`
+ * wins over every layer), so the presets also tint rows and size bars.
+ */
+const STYLE_PRESETS: Record<string, GanttStyleOptions | undefined> = {
+  none: undefined,
+  parents: { parent: { color: '#64748B', rowColor: 'rgba(100, 116, 139, 0.12)' } },
+  levels: {
+    levels: [{ rowColor: 'rgba(99, 102, 241, 0.08)' }, { color: '#0EA5E9' }, { color: '#8B5CF6', height: '45%' }],
+  },
+};
+
+/** `responsive` for the `responsive` choice: `on` is the core default, left out of the code. */
+const RESPONSIVE: Record<string, GanttOptions['responsive']> = { on: undefined, off: false, table: { view: 'table' } };
+
 const WEEK: Record<string, ScaleFormat> = {
   number: WEEK_FORMATS.number,
   label: WEEK_FORMATS.label,
@@ -168,9 +222,25 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         label: 'Week starts',
         option: 'weekStart',
         choices: [
+          ['rule', 'From the rule'],
           [1, 'Monday'],
           [0, 'Sunday'],
+          [6, 'Saturday'],
         ],
+        hint: 'From the rule: the week numbers’ own first day (Sunday for US, the locale’s for locale).',
+      },
+      {
+        kind: 'select',
+        key: 'weekNumbering',
+        label: 'Week numbers',
+        option: 'weekNumbering',
+        choices: [
+          ['auto', 'Auto (US from Sunday, else ISO)'],
+          ['iso', 'ISO 8601'],
+          ['us', 'US'],
+          ['locale', 'The chart locale’s rule'],
+        ],
+        hint: 'ISO is exact only with Monday; weekStart overrides the rule’s first day.',
       },
       {
         kind: 'select',
@@ -230,7 +300,16 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
   {
     title: 'Bars',
     controls: [
-      { kind: 'range', key: 'rowHeight', label: 'Row height', option: 'rowHeight', min: 24, max: 64, unit: 'px' },
+      {
+        kind: 'range',
+        key: 'rowHeight',
+        label: 'Row height',
+        option: 'rowHeight',
+        min: 24,
+        max: 64,
+        unit: 'px',
+        hint: 'At 36 px the density decides; any other height wins over it.',
+      },
       {
         kind: 'range',
         key: 'barHeight',
@@ -278,6 +357,13 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         ],
       },
       {
+        kind: 'check',
+        key: 'groupsCollapsed',
+        label: 'Parents start collapsed',
+        option: 'groupBar.collapsed',
+        hint: 'With Roll up parents, the parents-only view.',
+      },
+      {
         kind: 'range',
         key: 'arrowRadius',
         label: 'Arrow corners',
@@ -286,6 +372,16 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         max: 12,
         unit: 'px',
       },
+      {
+        kind: 'select',
+        key: 'arrowRouting',
+        label: 'Arrow routing',
+        option: 'arrows.routing',
+        choices: [
+          ['orthogonal', 'Orthogonal'],
+          ['straight', 'Straight'],
+        ],
+      },
       { kind: 'check', key: 'baseline', label: 'Baseline', option: 'baseline' },
       {
         kind: 'check',
@@ -293,6 +389,102 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         label: 'Critical path',
         option: 'criticalPath',
         hint: 'Tasks with no slack before the last finish.',
+      },
+      {
+        kind: 'check',
+        key: 'rollup',
+        label: 'Roll up parents',
+        option: 'rollup',
+        hint: 'Parents take the progress and dates of their children (their bars no longer drag).',
+      },
+      {
+        kind: 'select',
+        key: 'rollupColor',
+        label: 'Rollup colour',
+        option: 'rollup.color',
+        choices: [
+          ['none', 'The parent’s style'],
+          ['status', 'The children’s status'],
+        ],
+        hint: 'With Roll up parents: overdue when a child is, done when all are.',
+      },
+      {
+        kind: 'select',
+        key: 'rollupProgress',
+        label: 'Rollup progress',
+        option: 'rollup.progress',
+        choices: [
+          ['duration', 'Weighted by duration'],
+          ['count', 'Plain mean'],
+          ['off', 'The parent’s own'],
+        ],
+        hint: 'With Roll up parents: how a parent’s progress comes from its children.',
+      },
+      {
+        kind: 'check',
+        key: 'rollupSegments',
+        label: 'Rollup segments',
+        option: 'rollup.segments',
+        hint: 'With Roll up parents: a collapsed parent draws its children in their own colours.',
+      },
+      {
+        kind: 'select',
+        key: 'stylePreset',
+        label: 'Styles',
+        option: 'styles',
+        choices: [
+          ['none', 'None'],
+          ['parents', 'Parent rows'],
+          ['levels', 'By level'],
+        ],
+        hint: 'Default styles by parent or depth; a task’s own style wins over them.',
+      },
+    ],
+  },
+  {
+    title: 'Layout',
+    controls: [
+      {
+        kind: 'select',
+        key: 'density',
+        label: 'Density',
+        option: 'density',
+        choices: [
+          ['compact', 'Compact (28 px rows)'],
+          ['normal', 'Normal (36 px rows)'],
+          ['comfortable', 'Comfortable (44 px rows)'],
+        ],
+        hint: 'Rows, header and toolbar controls together. A changed row height wins.',
+      },
+      {
+        kind: 'select',
+        key: 'responsive',
+        label: 'Narrow chart',
+        option: 'responsive',
+        choices: [
+          ['on', 'Timeline only'],
+          ['table', 'Table only'],
+          ['off', 'Keep the view'],
+        ],
+        hint: 'What a chart under 640 px wide shows. A view picked while narrow wins.',
+      },
+      {
+        kind: 'check',
+        key: 'panelToggle',
+        label: 'Task list button',
+        option: 'toolbar.panelToggle',
+        hint: 'A toolbar button that shows or hides the task list.',
+      },
+      {
+        kind: 'select',
+        key: 'toolbarOverflow',
+        label: 'Toolbar overflow',
+        option: 'toolbar.overflow',
+        choices: [
+          ['menu', 'More menu'],
+          ['wrap', 'Wrap'],
+        ],
+        hint: 'Where the toolbar controls that do not fit go.',
       },
     ],
   },
@@ -369,6 +561,19 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         hint: '+ and − zoom, T goes to today, F fits. Turn off when they clash with the page.',
       },
       {
+        kind: 'select',
+        key: 'readoutFormat',
+        label: 'Drag readout dates',
+        option: 'formats.readoutFormat',
+        choices: [
+          ['scale', 'By scale (4 Mar, 4 Mar 09:00)'],
+          ['ddd D MMM', 'Wed 4 Mar'],
+          ['D MMM YYYY', '4 Mar 2026'],
+          ['YYYY-MM-DD', '2026-03-04'],
+        ],
+        hint: 'The dates in the chip that shows the new dates while you drag or move a bar.',
+      },
+      {
         kind: 'range',
         key: 'handleHitSize',
         label: 'Resize target',
@@ -426,10 +631,32 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
 /** `markers.lane` for the `markerLane` choice. */
 const MARKER_LANE: Record<string, 'auto' | boolean> = { auto: 'auto', on: true, off: false };
 
+/** `rollup.progress` for the `rollupProgress` choice. */
+const ROLLUP_PROGRESS: Record<string, GanttRollupOptions['progress']> = {
+  duration: 'duration',
+  count: 'count',
+  off: false,
+};
+
 /**
- * `value` when it differs from the playground default of `key`, else `undefined`: the
- * "Interaction & accessibility" options appear in the printed code only once they are changed
- * (an `undefined` option prints nothing and the chart takes the core default, the same value).
+ * `rollup` for the state: left out while parents don't roll up, `true` with every rollup choice at
+ * its default, else an object with the changed ones (the colour, progress and segments only count
+ * while parents roll up).
+ */
+function rollupOption(s: PlaygroundState): GanttOptions['rollup'] {
+  if (!s.rollup) return undefined;
+  const rollup: GanttRollupOptions = {};
+  if (s.rollupColor === 'status') rollup.color = 'status';
+  if (s.rollupProgress !== PLAYGROUND_DEFAULTS.rollupProgress) rollup.progress = ROLLUP_PROGRESS[s.rollupProgress];
+  if (s.rollupSegments) rollup.segments = true;
+  return Object.keys(rollup).length ? rollup : true;
+}
+
+/**
+ * `value` when it differs from the playground default of `key`, else `undefined`: these options
+ * appear in the printed code only once they are changed (an `undefined` option prints nothing and
+ * the chart takes the core default, the same value). `rowHeight` too, so `density` sizes the rows
+ * until the row height is changed.
  */
 function ifChanged<K extends PlaygroundKey, V>(s: PlaygroundState, key: K, value: V): V | undefined {
   return s[key] === PLAYGROUND_DEFAULTS[key] ? undefined : value;
@@ -444,9 +671,13 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
   return {
     viewMode: s.viewMode,
     scales: s.viewMode === ViewMode.Week ? weekScales : undefined,
-    weekStart: s.weekStart as 0 | 1,
+    // 'rule' (the default) leaves it out: the week-numbering rule's own first day
+    weekStart: ifChanged(s, 'weekStart', s.weekStart as WeekStart),
+    weekNumbering: ifChanged(s, 'weekNumbering', s.weekNumbering as WeekNumbering),
     initialScroll: s.initialScroll === 'none' ? false : (s.initialScroll as 'auto' | 'today' | 'start'),
-    rowHeight: s.rowHeight,
+    density: ifChanged(s, 'density', s.density as GanttDensity),
+    rowHeight: ifChanged(s, 'rowHeight', s.rowHeight),
+    responsive: RESPONSIVE[s.responsive],
     baseline: s.baseline,
     criticalPath: s.criticalPath,
     endDateMode: s.inclusive ? 'inclusive' : 'exclusive',
@@ -467,21 +698,47 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       handles: { hitSize: ifChanged(s, 'handleHitSize', s.handleHitSize) },
     },
     milestone: { shape: s.milestone as 'diamond' },
-    groupBar: { style: s.groupStyle as 'summary' },
-    arrows: { radius: s.arrowRadius },
+    groupBar: { style: s.groupStyle as 'summary', collapsed: ifChanged(s, 'groupsCollapsed', s.groupsCollapsed) },
+    arrows: {
+      radius: s.arrowRadius,
+      routing: ifChanged(s, 'arrowRouting', s.arrowRouting as 'orthogonal' | 'straight'),
+    },
+    rollup: rollupOption(s),
+    styles: STYLE_PRESETS[s.stylePreset],
     stateKey: s.stateKey ? 'playground' : undefined,
     panel: { columns: PANEL_COLUMNS[s.panelCols] },
     table: { columns: TABLE_COLUMNS[s.tableCols] },
-    toolbar: { fit: ifChanged(s, 'toolbarFit', s.toolbarFit) },
+    toolbar: {
+      panelToggle: ifChanged(s, 'panelToggle', s.panelToggle),
+      fit: ifChanged(s, 'toolbarFit', s.toolbarFit),
+      overflow: ifChanged(s, 'toolbarOverflow', s.toolbarOverflow as 'menu' | 'wrap'),
+    },
     legend: { position: ifChanged(s, 'legendPosition', s.legendPosition as 'bottom' | 'toolbar') },
     markers: { lane: ifChanged(s, 'markerLane', MARKER_LANE[s.markerLane] ?? 'auto') },
     keyboard: { characterShortcuts: ifChanged(s, 'characterShortcuts', s.characterShortcuts) },
+    formats: { readoutFormat: ifChanged(s, 'readoutFormat', s.readoutFormat) },
     tooltip: {
       trigger: ifChanged(s, 'tooltipTrigger', s.tooltipTrigger as 'auto' | 'hover' | 'focus'),
       showDelay: ifChanged(s, 'tooltipShowDelay', s.tooltipShowDelay),
       hideDelay: ifChanged(s, 'tooltipHideDelay', s.tooltipHideDelay),
     },
   };
+}
+
+/**
+ * What the preview runs besides taking the new options when the state goes from `before` to
+ * `after`: `groupBar.collapsed` only seeds the rows a chart has not seen yet, so turning it on or
+ * off collapses or expands the rows already shown (`chart[command]()`).
+ */
+export function playgroundCommand(before: PlaygroundState, after: PlaygroundState): 'collapseAll' | 'expandAll' | null {
+  if (before.groupsCollapsed === after.groupsCollapsed) return null;
+  return after.groupsCollapsed ? 'collapseAll' : 'expandAll';
+}
+
+/** A range value with its unit, as every playground shows it: `36 px`, `600 ms`, `9 h`, `60%`. */
+export function valueText(value: number, unit: string | undefined): string {
+  if (!unit) return String(value);
+  return unit === '%' ? `${value}%` : `${value} ${unit}`;
 }
 
 /** The keys whose value differs from the playground defaults. */

@@ -1,6 +1,8 @@
 /** Names, links and navigation of the Gantry site, shared by every demo app. */
 
 import vanillaPackage from '@gantryjs/vanilla/package.json' with { type: 'json' };
+import type { CaseId, GalleryFramework } from './gallery/catalog';
+import { galleryHash } from './gallery/router';
 import type { IconName } from './icons';
 
 export const SITE = {
@@ -72,3 +74,33 @@ export const FRAMEWORKS: readonly Framework[] = [
   { id: 'vue', label: 'Vue', package: 'vue' },
   { id: 'svelte', label: 'Svelte', package: 'svelte' },
 ];
+
+// ─── Examples gallery: where each framework's cases live ─────
+
+/**
+ * Base path of each Vite demo app on the deployed site, which serves them next to the Angular
+ * site (`scripts/compose-site.mjs`): the Web Component under `/wc/`, React, Vue and Svelte under
+ * their names.
+ */
+export const DEMO_BASE: Readonly<Record<Exclude<GalleryFramework, 'angular'>, string>> = {
+  vanilla: '/wc/',
+  react: '/react/',
+  vue: '/vue/',
+  svelte: '/svelte/',
+};
+
+/** The site's page of a gallery case (root-relative): `/examples/<id>`. */
+export function siteCaseUrl(id: CaseId): string {
+  return `/examples/${id}`;
+}
+
+/**
+ * Where a framework shows a gallery case, or its gallery index without `id` (root-relative, for
+ * the composed site): Angular `/examples/<id>`; the Web Component `/wc/examples.html#/<id>`;
+ * React, Vue and Svelte `/<name>/#/examples/<id>`.
+ */
+export function frameworkCaseUrl(fw: GalleryFramework, id?: CaseId): string {
+  if (fw === 'angular') return id ? siteCaseUrl(id) : '/examples';
+  if (fw === 'vanilla') return `${DEMO_BASE.vanilla}examples.html${galleryHash(id, 'page')}`;
+  return `${DEMO_BASE[fw]}${galleryHash(id)}`;
+}

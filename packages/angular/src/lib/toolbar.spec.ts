@@ -516,9 +516,11 @@ describe('toolbar keyboard: one roving tab stop (D7)', () => {
 describe('toolbar styles', () => {
   it('has 32 px controls, 16 px stroked icons and checked radios in the bar colours', async () => {
     const c = await mount();
+    // The density's control size (phase 10, D5): 32 px by default, set on the chart's host
+    expect(c.host.style.getPropertyValue('--gantry-control-size')).toBe('32px');
     for (const b of [c.button('zoom-in'), c.button('zoom:Month'), c.button('today'), c.button('view:table')]) {
-      expect(cascaded(b, 'min-width')).toBe('32px');
-      expect(cascaded(b, 'min-height')).toBe('32px');
+      expect(cascaded(b, 'min-width')).toBe('var(--gantry-control-size, 32px)');
+      expect(cascaded(b, 'min-height')).toBe('var(--gantry-control-size, 32px)');
       expect(cascaded(b, 'box-sizing')).toBe('border-box');
     }
     const checked = c.button('zoom:Month');

@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRawSnippet, flushSync, mount, unmount, type ComponentProps } from 'svelte';
 import { GANTRY_EVENTS, GANTRY_PROPERTIES, type GantryProperties } from '@gantryjs/vanilla';
-import { Gantry, ViewMode, type GantryElement, type GanttTask, type RetryEvent } from '../index';
+import { Gantry, ViewMode, createGanttSyncGroup, type GantryElement, type GanttTask, type RetryEvent } from '../index';
 import EmptyState from './EmptyState.svelte';
 
 type Name = (typeof GANTRY_PROPERTIES)[number];
@@ -31,6 +31,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   renderBar: () => null,
   loading: true,
   errorMessage: 'Couldn’t load the plan',
+  syncGroup: createGanttSyncGroup(),
 };
 
 const proto = customElements.get('gantry-element')!.prototype as unknown as Record<string, unknown>;

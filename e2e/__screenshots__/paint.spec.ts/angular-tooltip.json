@@ -165,6 +165,7 @@
  "host/div.gantry-main/div.gantry-canvas-viewport/gantt-canvas/div/svg/g.gantt-bar-overlay": "fill=rgb(0, 0, 0); stroke=none; fill-opacity=1; stroke-opacity=1; opacity=1",
  "host/div.gantry-main/div.gantry-canvas-viewport/gantt-canvas/div/svg/g.gantt-bar-overlay/rect.gantt-bar-grip": "fill=rgb(255, 255, 255); stroke=rgb(37, 99, 235); fill-opacity=1; stroke-opacity=1; opacity=1",
  "host/div.gantry-main/div.gantry-canvas-viewport/gantt-canvas/div/svg/g.gantt-bar-overlay/rect.gantt-bar-grip:001": "fill=rgb(255, 255, 255); stroke=rgb(37, 99, 235); fill-opacity=1; stroke-opacity=1; opacity=1",
+ "host/div.gantry-main/div.gantry-canvas-viewport/gantt-canvas/div/svg/rect.gantt-row-hover": "fill=rgba(15, 23, 42, 0.04); stroke=none; fill-opacity=1; stroke-opacity=1; opacity=1",
  "host/div.gantry-main/div.gantry-panel": "color=rgb(30, 41, 59); background-color=rgb(255, 255, 255); border-color=rgb(30, 41, 59); font-family=system-ui, -apple-system, sans-serif; opacity=1",
  "host/div.gantry-main/div.gantry-panel/gantt-tasklist.gantt-tasklist": "color=rgb(30, 41, 59); background-color=rgba(0, 0, 0, 0); border-color=rgb(30, 41, 59); font-family=system-ui, -apple-system, sans-serif; opacity=1",
  "host/div.gantry-main/div.gantry-splitter": "color=rgb(30, 41, 59); background-color=rgba(0, 0, 0, 0); border-color=rgb(30, 41, 59); font-family=system-ui, -apple-system, sans-serif; opacity=1",

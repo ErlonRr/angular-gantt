@@ -42,10 +42,10 @@ export function Roadmap() {
 }
 ```
 
-- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties): `tasks`, `options`,
-  `columns`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
-  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`, plus
-  `className` / `style` / any HTML attribute.
+- **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties): `tasks`, `columns`,
+  `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
+  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`,
+  `syncGroup`, plus `className` / `style` / any HTML attribute.
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,
   `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`,
   `onLoadError`, `onRetry`.
@@ -74,6 +74,31 @@ export function Roadmap() {
 `onRetry`: `{ source: 'error' }` for the `errorMessage` state (load again yourself), `{ source:
 'dataSource' }` after a failed first `dataSource` page (the element also calls
 `dataSource.retry()`). The `slot="empty"` child replaces the text shown when there are no tasks.
+
+### Synchronised charts
+
+```tsx
+import { useState } from 'react';
+import { Gantry, createGanttSyncGroup, type GanttTask } from '@gantryjs/react';
+
+export function Portfolio({ design, build }: { design: GanttTask[]; build: GanttTask[] }) {
+  // One group for the component's lifetime: a new group on every render would re-join the charts
+  const [group] = useState(() => createGanttSyncGroup());
+  return (
+    <>
+      <Gantry tasks={design} syncGroup={group} />
+      <Gantry tasks={build} syncGroup={group} showToolbar={false} />
+    </>
+  );
+}
+```
+
+Charts given the same `syncGroup` share one timeline: the date range (the union of their plans),
+the zoom level, the horizontal scroll and the task-list width. `createGanttSyncGroup({ zoom,
+scroll, range, panel })` turns parts off (each is `true` by default). The group reaches the
+element as it is, never copied: keep it stable (`useState(() => …)`, `useMemo` or a module
+constant). `syncGroup={null}`, or leaving the prop out once it was set, takes the chart out of
+the group.
 
 ### Options and behaviour
 

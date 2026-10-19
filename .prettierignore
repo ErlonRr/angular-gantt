@@ -7,6 +7,8 @@ pnpm-lock.yaml
 packages/vanilla/custom-elements.json
 # Written by `pnpm api:angular` (API Extractor report, checked by `api:angular:check`)
 packages/angular/etc/
+# Written by `pnpm gallery:sources` (the gallery's code samples, checked by `gallery:check`)
+apps/demo-kit/src/gallery/sources/*.generated.ts
 coverage/
 test-results/
 playwright-report/

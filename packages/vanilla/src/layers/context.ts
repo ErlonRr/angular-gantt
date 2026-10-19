@@ -21,6 +21,7 @@ import type { Selection } from '../interaction/selection';
 import type { GantryEventDetailMap } from '../types';
 import type { FocusTracker } from './focus-restore';
 import type { Skeleton } from './skeleton';
+import type { SyncLayer } from './sync';
 
 /** The element's public API the layers and interactions call (toolbar buttons, splitter, keys). */
 export interface HostApi extends HTMLElement {
@@ -65,6 +66,11 @@ export interface LayerContext {
   readonly setBusy: (busy: boolean) => void;
   /** A row clicked (or Enter / Space) in either pane: selection rules, then `row-click` */
   readonly rowClick: (row: GanttFlatRow, event: MouseEvent | KeyboardEvent) => void;
+  /**
+   * The sync-group link (`layers/sync.ts`) for the interactions: the splitter reports the panel
+   * width it sets (`reportPanel`; never for a width the group applied)
+   */
+  readonly sync: Pick<SyncLayer, 'reportPanel'>;
 }
 
 /** One region's painter. */

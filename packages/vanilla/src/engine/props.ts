@@ -60,6 +60,8 @@ export const PROPERTY_TABLE = table([
   // The chart states (core `resolveChartState`): consumer-driven loading and error
   { name: 'loading', default: false, attr: 'loading', parse: flag },
   { name: 'errorMessage', default: null, attr: 'error-message', parse: text },
+  // Phase 10: charts that share one timeline (core `createGanttSyncGroup`); an object, so no attribute
+  { name: 'syncGroup', default: null },
 ]);
 
 const names = <const T extends readonly PropertySpec[]>(specs: T) =>

@@ -35,14 +35,33 @@ paths:
 - Consumer-seeded state the user can change is a `linkedSignal` (`tasks`, `collapsedIds`, `level`, `view`,
   `panelWidthPx`, `initialScrollPending`). `viewMode` is a `model()`: the shown `level` is whichever of
   `[viewMode]` / `options.viewMode` changed last, else the user's zoom.
-- **Effects whitelist:** the `viewModeChange` emission (model sync + zoom announcement + `saveState`), the
-  `loadError` emission, the `options.stateKey` restore, the load-state announcement (subscribed to the data source's
-  `ɵsubscribe`, not inferred from signals), the bar outlet (component type changes, the host attributes it stamps)
-  and `afterRenderEffect` / `afterEveryRender` for DOM work (scroll sync, zoom anchoring and `fitToScreen`'s scroll
-  request, the viewport focus of a pointer drag, focus restore, tooltip placement and the tooltip triggers in
-  `tooltip/tooltip-state.ts`: keyboard focus, drag start, rule changes, row gone). Each reads its other inputs in
-  `untracked()`. Anything else is a `computed` / `linkedSignal`. Order matters: the `viewModeChange` effect is
-  created before the `stateKey` restore, so a restored zoom level emits.
+- Phase 10 graph additions: `mainWidth`, `hoveredRowId`, `shared` (the sync group's range, date equality),
+  `rollups` (`computeRollups`, cut-off on the rolled-up fields; `applyRollups` runs before `sortTree`, and
+  `seedCollapsed(tasks, seen, groupBar.collapsed)` seeds only when the tasks change), `timeline` over the shared range
+  plus `naturalRange` (what the chart reports to its group), `critical` / `criticalIds`, `rowStyle` (core
+  `createStyleResolver`, layer-by-layer equality) and `barSegments` (`rollupSegments`). Canvas rows, task-list rows and
+  icons, bars and the tooltip read the resolved style from `layout.rowStyle()`, never `task.style` or the flat colour
+  fields; events carry the consumer's task (`rollupSource`). On the server `hWindow` uses a 1024 px fallback width.
+- **Effects whitelist:** the `viewModeChange` emission (model sync + zoom announcement + `saveState`; a level applied
+  by the sync group is not announced: `sync.takeGroupLevel`), the `loadError` emission, the `options.stateKey`
+  restore, the sync-group connection (created after the restore; `GanttSync` in `sync/gantt-sync.ts` reports level,
+  panel width and natural range, writes `shared` / `level` / `panelWidthPx` without saving state), the responsive
+  effect (re-reads the last width when `options.responsive` or `layout.view` change; `GanttResponsive` →
+  core `reduceResponsive` → `layout.view` without `saveState`), the load-state announcement (subscribed to the data
+  source's `ɵsubscribe`, not inferred from signals), the bar outlet (component type changes, the host attributes it
+  stamps) and `afterRenderEffect` / `afterEveryRender` for DOM work (scroll sync in the WC's order: fit request →
+  group scroll → `initialScroll` → zoom anchoring / `sync.correct`; focus restore; tooltip placement and the tooltip
+  triggers in `tooltip/tooltip-state.ts`: keyboard focus — retried on `mountedGeometries` only while its bar is
+  missing —, drag start, rule changes, row gone). The open tooltip's content is a `computed` with a cut-off (task
+  object, critical flag, labels, the row's resolved style compared with core `sameTaskStyle`), never the clock. Each effect reads its other inputs in `untracked()`. Anything else
+  is a `computed` / `linkedSignal`. Order matters: the `viewModeChange` effect is created before the `stateKey`
+  restore, so a restored zoom level emits.
+- Pointer: a mouse press on a bar focuses it (`preventDefault` + `focusBar` with `preventScroll`; touch / pen focus it
+  when a drag starts); Escape during a press belongs to the press (window capture listener in
+  `GanttDragService.trackPress`, removed when it ends). Row hover: the canvas (`rowIndexAtY`) and the task list
+  (delegated `pointerover` / `pointerleave`, bound in `afterNextRender`) write `layout.hoveredRowId`; cleared on
+  pointer leave, drag start, scroll of either pane (unless pressing) and destroy. `GanttScrollService.group` ports the
+  WC's `viewportSync` (echo guard, queued group scroll, scroll reports).
 - Shared rules and numbers come from core, never a local copy: `seedCollapsed` (collapse seeding),
   `clampColumnWidth`, `VIRTUAL_OVERSCAN_ROWS`, `splitterValue` / `SPLITTER_KEY_STEP` / `SPLITTER_TOGGLE_OFFSET`,
   `STATE_SAVE_DELAY`, `CLOCK_INTERVAL`; the tooltip's timing from `cfg().tooltip` through `reduceTooltip` and its
@@ -51,7 +70,10 @@ paths:
   `anchoredScrollLeft`; `resolveKey`, `navigateGrid` / `navigateTimeline`, `tabStopIndex`, `gridTabStop`,
   `KeyboardEditSession`, `createAnnouncer`, `createScrollMirror` (scroll sync), `timelineScrollPadding`, `bodyHeight` /
   `pageRowCount`; `buildToolbar`, `resolveChartState` / `skeletonRows`, `legendPlacement`, `computeMarkerLane`,
-  `computeAnnotationVisuals`, `formatDragReadout` / `placeDragReadout`, `HATCH_PATTERN`.
+  `computeAnnotationVisuals`, `formatDragReadout` / `placeDragReadout`, `HATCH_PATTERN`; `layoutToolbar` /
+  `estimateToolbarWidth`, `reduceMenu` / `toolbarMenuKey` / `toolbarMenuItems` / `toolbarMenuChecked`,
+  `reduceResponsive` / `persistedView`, `layoutCssVars`, `createStyleResolver`, `computeRollups` / `applyRollups` /
+  `rollupSegments` / `rollupSource`, `createEchoGuard`, `sharedExtent`.
 - Theme: the host binds `[style]="themeSvc.style()"` (`themeToCss`) and the classes `gantry-dark`,
   `gantry-dragging`, `gantry-loading` (no `data-theme`, no DOM writes from services). Chrome is stylesheet rules on
   `var(--gantt-*)`; paints are bound as `[style.fill]` / `[style.stroke]` / `[style.background-color]`, never as
@@ -67,7 +89,9 @@ paths:
   pointer, touch and zoom listeners in `connectPointer()`) or in event handlers, and is released through
   `DestroyRef`. No `ngOnInit` / `ngAfterViewInit` / `ngOnDestroy`. Timers go through `DOCUMENT.defaultView`
   (e.g. the announcer's), never on the server.
-- `ssr.spec.ts` renders two charts with `renderApplication` while the browser APIs throw: keep it green.
+- `ssr.spec.ts` renders three charts with `renderApplication` while the browser APIs throw (one long enough to prove
+  the windowed header): keep it green. The responsive view is decided after the first measurement, so the server
+  and the first browser frame render the wide layout.
 
 ## Bars and providers
 
@@ -99,7 +123,9 @@ paths:
   `dl.gantt-tooltip-rows`; `.gantt-sr-live` / `.gantt-sr-alert`. New components use attribute selectors on the
   element the WC renders (`div[ganttLegend]`, `div[ganttChartState]`, `div[ganttDragReadout]`, `g[ganttBarOverlay]`,
   `g[ganttAnnotations]`, `svg[ganttIcon]`), never a wrapper element (D26), and optional nodes are attached with
-  `@if` only while shown (D27). When you change one painter, change the other (the `gantry-reviewer` agent checks
+  `@if` only while shown (D27): the row-hover `rect.gantt-row-hover` (after `g.gantt-rows`, before `g.gantt-bands`),
+  `rect.gantt-bar-segment`s (after the bar body), the toolbar's More menu. Bars carry `visual.className` (custom bars
+  too, through the outlet). When you change one painter, change the other (the `gantry-reviewer` agent checks
   this).
 - `e2e/paint.spec.ts` compares the colours both bindings paint. Its keys are the first non-`ng-` class plus the
   sibling index: adding a class to a class-less element, reordering children or adding a wrapper changes keys.

@@ -162,6 +162,18 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
   }
 
   /**
+   * Cancel a load in flight and stop paging for good (as the Web Component's `destroy()`): call it
+   * when the source is no longer used. The items stay; `hasMore()` turns false.
+   */
+  destroy(): void {
+    if (!this._loader) return;
+    this._loader.destroy();
+    this._version.update(v => v + 1);
+    this._notify();
+    this._listeners.clear();
+  }
+
+  /**
    * Replace items with a static array (useful for search/filter results).
    * Disables paging until reset() is called.
    */

@@ -6,14 +6,18 @@
 //  Data flow (signals only, no effect, no imperative push):
 //
 //   dataSource.items() ?? series ──► tasks (linkedSignal: local edits until the source changes)
-//                                └─► collapsedIds (linkedSignal: `task.collapsed` seeds never-seen ids)
+//                                └─► collapsedIds (linkedSignal: `task.collapsed` / `groupBar.collapsed`
+//                                    seed never-seen ids)
 //   [(viewMode)] + options.viewMode ──► level (linkedSignal: whichever changed last, or the user's zoom)
 //   options.view / panel width / initialScroll ──► view, panelWidthPx, initialScrollPending (linkedSignal)
 //   options + level + i18n + theme metrics ──► config  (resolveConfig, bound by GantryComponent)
 //   now (the minute clock)            ──► nowDay (quantizeNow: once per local day, or hour on hour scales)
-//   tasks + config + nowDay (+ viewport width for fitToWidth) ──► timeline (buildTimeline)
+//   tasks + config + nowDay (+ viewport width for fitToWidth, + the sync group's shared range)
+//                                     ──► timeline (buildTimeline) ──► naturalRange (own range + extent)
 //   timeline + now                    ──► todayX (the exact tick; null when hidden)
-//   tasks + collapsed + sort          ──► visibleRows
+//   tasks + config + nowDay           ──► critical (CPM), rollups (computeRollups, `options.rollup`)
+//   tasks + collapsed + rollups + sort ──► allRows (applyRollups before sortTree) ──► visibleRows
+//   config + critical + rollups + nowDay ──► rowStyle (createStyleResolver), barSegments (rollupSegments)
 //   visibleRows + timeline            ──► rowGeometries, geometryById (computeRowGeometries)
 //   scrollTop + viewport height + focused / dragged row ──► vWindow ──► mountedGeometries, windowSpan
 //   scrollLeft + viewport width + timeline ──► hWindow ──► tierWindows, bandWindow, lineWindow
@@ -35,11 +39,14 @@
 //  chart's handlers: `zoomAnchorX` (a zoom gesture's anchor, consumed by
 //  the chart's scroll sync through core `anchoredScrollLeft`),
 //  `scrollRequest` (`fitToScreen`'s scroll, applied once the new timeline
-//  painted), `hoveredBarId` and `focusVisibleBarId` (the bar overlay).
+//  painted), `hoveredBarId` and `focusVisibleBarId` (the bar overlay),
+//  `hoveredRowId` (the row hover), `mainWidth` (the measured main area:
+//  the toolbar layout) and `shared` (a sync group's range and extent).
 //  Nothing in this service touches the DOM.
 // ─────────────────────────────────────────────────────────────
 
-import { Injectable, signal, computed, linkedSignal, inject } from '@angular/core';
+import { Injectable, PLATFORM_ID, signal, computed, linkedSignal, inject, untracked } from '@angular/core';
+import { isPlatformServer } from '@angular/common';
 
 import {
   type GanttTask,
@@ -93,6 +100,21 @@ import {
   fitZoomLevel,
   themeMetrics,
   LightTheme,
+  computeCriticalPath,
+  computeRollups,
+  applyRollups,
+  rollupSegments,
+  createStyleResolver,
+  taskOwnStyle,
+  type BarSegment,
+  type CPMResult,
+  type GanttRollupInfo,
+  type NaturalTimelineRange,
+  type ResolvedRollupOptions,
+  type ResolvedStyleOptions,
+  type SharedTimelineRange,
+  type StyleResolver,
+  type TimelineRange,
   type ChartState,
   type LegendItem,
   type LegendPlacement,
@@ -176,12 +198,68 @@ const sameChartState = (a: ChartState, b: ChartState): boolean =>
 /** Zoom level without `[viewMode]` and `options.viewMode` */
 const DEFAULT_LEVEL = 'Month';
 
+/**
+ * Viewport width the server renders the horizontal window with (core `computeHorizontalWindow`'s
+ * `fallbackWidth`): SSR mounts the header cells, bands and lines around the scroll position instead
+ * of the whole timeline. The browser measures the real width after the first render.
+ */
+const SERVER_VIEWPORT_WIDTH = 1024;
+
+const NO_CRITICAL: ReadonlySet<string> = new Set();
+const NO_ROLLUPS: ReadonlyMap<string, GanttRollupInfo> = new Map();
+/** Without `rollup.segments`: no bar has child segments */
+const NO_SEGMENTS = (): BarSegment[] | null => null;
+
+/** Same dates (by time value), either may be null */
+const sameRange = (a: TimelineRange | null | undefined, b: TimelineRange | null | undefined): boolean =>
+  a === b || (!!a && !!b && a.start.getTime() === b.start.getTime() && a.end.getTime() === b.end.getTime());
+
+/** Same natural range and extent (by date value): a rebuilt timeline with the same own range reports nothing */
+const sameNaturalRange = (a: NaturalTimelineRange, b: NaturalTimelineRange): boolean =>
+  sameRange(a.range, b.range) && sameRange(a.extent, b.extent);
+
+/** Same shared range and extent (by date value): an equal patch from the sync group rebuilds nothing */
+const sameShared = (a: SharedTimelineRange | null, b: SharedTimelineRange | null): boolean =>
+  a === b || (!!a && !!b && sameRange(a.range, b.range) && sameRange(a.extent, b.extent));
+
+/** The config fields the rollups depend on */
+interface RollupInput {
+  readonly rollup: ResolvedRollupOptions | false;
+  readonly endDateMode: ResolvedGanttConfig['endDateMode'];
+  readonly normalizeDateOnly: boolean;
+}
+
+/** Same rollup options, field by field (a callback colour by reference) */
+const sameRollup = (a: ResolvedRollupOptions | false, b: ResolvedRollupOptions | false): boolean =>
+  a === b ||
+  (!!a && !!b && a.progress === b.progress && a.dates === b.dates && a.color === b.color && a.segments === b.segments);
+
+/** The config fields the style resolver depends on */
+interface StyleInput {
+  readonly styles: ResolvedStyleOptions;
+  readonly endDateMode: ResolvedGanttConfig['endDateMode'];
+  readonly normalizeDateOnly: boolean;
+}
+
+/** Same style layers (each layer by reference): a zoom or a new labels bundle keeps the resolver */
+const sameStyles = (a: ResolvedStyleOptions, b: ResolvedStyleOptions): boolean =>
+  a === b ||
+  (a.task === b.task &&
+    a.group === b.group &&
+    a.milestone === b.milestone &&
+    a.parent === b.parent &&
+    a.rule === b.rule &&
+    a.levels.length === b.levels.length &&
+    a.levels.every((level, i) => level === b.levels[i]));
+
 @Injectable()
 export class GanttLayoutService {
   /** Scroll offsets of the timeline viewport (written by the scroll listeners) */
   private readonly scroll = inject(GanttScrollService);
   /** The task being dragged or resized: its row stays mounted */
   private readonly drag = inject(GanttDragService);
+  /** Rendering on the server: the horizontal window assumes `SERVER_VIEWPORT_WIDTH` */
+  private readonly server = isPlatformServer(inject(PLATFORM_ID));
 
   // ══════════════════════════════════════════════════════════
   //  Sources (bound once by GantryComponent)
@@ -218,17 +296,27 @@ export class GanttLayoutService {
   /** Tasks shown: the consumer's, with local edits (drag, `updateTask`, `appendTasks`) until a new source */
   readonly tasks = linkedSignal<GanttTask[]>(() => this.sourceTasks());
 
-  /** Every task id the sources have shown and the `task.collapsed` ids new in the latest one (core `seedCollapsed`) */
+  /**
+   * Every task id the sources have shown and the ids new in the latest one that start collapsed
+   * (core `seedCollapsed`): `task.collapsed`, and with `groupBar.collapsed` every new parent. The
+   * option is read when the tasks change, as the Web Component's `setTasks`: turning it on later
+   * collapses no parent already seen.
+   */
   private readonly collapseSeed = linkedSignal<GanttTask[], CollapseSeed>({
     source: this.sourceTasks,
-    computation: (tasks, prev) => seedCollapsed(tasks, prev?.value.seen),
+    computation: (tasks, prev) =>
+      seedCollapsed(
+        tasks,
+        prev?.value.seen,
+        untracked(() => this.boundConfig()?.groupBar.collapsed ?? false),
+      ),
   });
 
   /**
    * Collapsed task ids — toggled by the task list, the API and a restored state. A source collapses
-   * its `task.collapsed` ids the chart has never seen; an id seen before keeps the user's expand
-   * state, across a new series, a data-source reset or an empty series in between (the Web
-   * Component's rule).
+   * its `task.collapsed` ids (with `groupBar.collapsed`, its parents too) the chart has never seen;
+   * an id seen before keeps the user's expand state, across a new series, a data-source reset or an
+   * empty series in between (the Web Component's rule).
    */
   readonly collapsedIds = linkedSignal<CollapseSeed, Set<string>>({
     source: this.collapseSeed,
@@ -298,8 +386,28 @@ export class GanttLayoutService {
   /** Row that holds the keyboard focus (task-list row or bar): it stays mounted while scrolled away (`null` = none) */
   readonly focusedRowId = signal<string | null>(null);
 
+  /**
+   * Width of the chart's main area (px, `.gantry-main`), measured by GantryComponent: the panel's
+   * percentage width, the splitter's range, the responsive breakpoint and the toolbar layout.
+   * 0 = not measured.
+   */
+  readonly mainWidth = signal<number>(0);
+
   /** Task id of the bar under a fine pointer (`null` = none): its grips show in the bar overlay */
   readonly hoveredBarId = signal<string | null>(null);
+
+  /**
+   * Task id of the row under a mouse or pen, in either pane (`null` = none): the row hover tint
+   * (`rect.gantt-row-hover`, `.gantt-tl-row--hover`). Cleared on leave, scroll and drag start.
+   */
+  readonly hoveredRowId = signal<string | null>(null);
+
+  /**
+   * Range and extent shared by the charts of a sync group (`null` outside a group): the timeline
+   * covers the union (`buildTimeline({ shared })`), "fit to screen" fits the shared extent. Written
+   * by the chart's sync member; an equal value (by date) changes nothing.
+   */
+  readonly shared = signal<SharedTimelineRange | null>(null, { equal: sameShared });
 
   /** Task id of the bar focused from the keyboard (`null` = none, or focused by a pointer): its focus ring shows */
   readonly focusVisibleBarId = signal<string | null>(null);
@@ -327,6 +435,9 @@ export class GanttLayoutService {
     this.i18nSource.set(i18n);
   }
 
+  /** The resolved options, `null` before any is bound or set (`cfg` throws instead) */
+  private readonly boundConfig = (): ResolvedGanttConfig | null => this.configSource()?.() ?? this.config();
+
   /** Column catalogue and built-ins (bound to the column service) — used to sort by a column */
   private readonly columnsSource = signal<(() => readonly ColumnDef[]) | null>(null);
   private readonly builtinsSource = signal<(() => readonly ColumnDef[]) | null>(null);
@@ -353,9 +464,46 @@ export class GanttLayoutService {
     }),
   );
 
-  /** All rows (DFS flat, including hidden); a sort reorders siblings at every level */
+  /** The config fields the rollups depend on (a zoom or a theme change keeps them) */
+  private readonly rollupInput = computed<RollupInput>(
+    () => {
+      const c = this.boundConfig();
+      return {
+        rollup: c?.rollup ?? false,
+        endDateMode: c?.endDateMode ?? 'exclusive',
+        normalizeDateOnly: c?.normalizeDateOnly ?? true,
+      };
+    },
+    {
+      equal: (a, b) =>
+        sameRollup(a.rollup, b.rollup) &&
+        a.endDateMode === b.endDateMode &&
+        a.normalizeDateOnly === b.normalizeDateOnly,
+    },
+  );
+
+  /**
+   * Rolled-up values of every parent by id (core `computeRollups`: progress, dates, status and
+   * colour from the children), empty without `options.rollup`. Statuses are read at `nowDay`, so
+   * the rollups are rebuilt once a day, not on every clock tick.
+   */
+  readonly rollups = computed<ReadonlyMap<string, GanttRollupInfo>>(() => {
+    const { rollup, endDateMode, normalizeDateOnly } = this.rollupInput();
+    if (!rollup) return NO_ROLLUPS;
+    return computeRollups(this.tasks(), rollup, { now: this.nowDay(), dates: { endDateMode, normalizeDateOnly } });
+  });
+
+  /**
+   * All rows (DFS flat, including hidden): each rolled-up parent row carries a copy of its task with
+   * the rolled-up values (core `applyRollups`, before the sort, so columns sort by them); a sort
+   * reorders siblings at every level. Events and `getSelectedTasks()` stay raw (`rollupSource`).
+   */
   readonly allRows = computed<GanttFlatRow[]>(() => {
-    const rows = flattenTree(this.tasks(), this.collapsedIds());
+    const rows = applyRollups(
+      flattenTree(this.tasks(), this.collapsedIds()),
+      this.rollups(),
+      this.rollupInput().rollup,
+    );
     const sort = this.sort();
     if (!sort) return rows;
     const column = findColumn(this.columnsSource()?.() ?? [], this.builtinsSource()?.() ?? [], sort.key);
@@ -395,7 +543,103 @@ export class GanttLayoutService {
       viewportWidth: config.fitToWidth ? this.viewportWidth() : undefined,
       i18n: this.i18nSource()?.() ?? this.i18n(),
       now: this.nowDay(),
+      // A sync group's union (null outside a group): same start and px per day, same x for a date
+      shared: this.shared(),
     });
+  });
+
+  /**
+   * The chart's own range and task extent (`TimelineModel.range` / `.extent`, core `timelineRange`):
+   * what a sync group member reports, never the shared timeline it draws (no feedback loop).
+   * Compared by date, so a timeline rebuilt with the same own range changes nothing.
+   */
+  readonly naturalRange = computed<NaturalTimelineRange>(
+    () => {
+      const { range, extent } = this.timeline();
+      return { range, extent };
+    },
+    { equal: sameNaturalRange },
+  );
+
+  /** Only these config fields affect the critical path (the config itself changes with the zoom, labels, metrics…) */
+  private readonly cpmConfig = computed(
+    () => {
+      const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
+      return { criticalPath, endDateMode, normalizeDateOnly };
+    },
+    {
+      equal: (a, b) =>
+        a.criticalPath === b.criticalPath &&
+        a.endDateMode === b.endDateMode &&
+        a.normalizeDateOnly === b.normalizeDateOnly,
+    },
+  );
+
+  /** CPM result (critical ids, float), `null` while `options.criticalPath` is off */
+  readonly critical = computed<CPMResult | null>(() => {
+    const cfg = this.cpmConfig();
+    return cfg.criticalPath ? computeCriticalPath(this.tasks(), cfg) : null;
+  });
+
+  /** Ids of the tasks on the critical path (empty while it is off) */
+  readonly criticalIds = computed<ReadonlySet<string>>(() => this.critical()?.criticalIds ?? NO_CRITICAL);
+
+  /** The config fields the style resolver depends on: `styles` (each layer by reference) and the date reading */
+  private readonly styleInput = computed<StyleInput>(
+    () => {
+      const { styles, endDateMode, normalizeDateOnly } = this.cfg();
+      return { styles, endDateMode, normalizeDateOnly };
+    },
+    {
+      equal: (a, b) =>
+        sameStyles(a.styles, b.styles) &&
+        a.endDateMode === b.endDateMode &&
+        a.normalizeDateOnly === b.normalizeDateOnly,
+    },
+  );
+
+  /**
+   * A row's resolved style (core `createStyleResolver`, memoised per row object): `options.styles`
+   * by kind, parent and level, the rolled-up colour, `styles.rule`, the task's flat fields and
+   * `task.style`. Rebuilt when the styles, the critical path, the rollups or the day change (never
+   * on a clock tick, a zoom or a scroll); without any layer a row's style is its task's own. Bars
+   * (`computeBarVisual`), custom bars (`ctx.style`), rows, the task list and the tooltip read it.
+   */
+  readonly rowStyle = computed<StyleResolver>(() => {
+    const { styles, endDateMode, normalizeDateOnly } = this.styleInput();
+    return createStyleResolver({
+      config: { styles, endDateMode, normalizeDateOnly },
+      critical: this.criticalIds(),
+      rollups: this.rollups(),
+      now: this.nowDay(),
+    });
+  });
+
+  /** Every row by task id, hidden ones included (the children of a collapsed parent: its segments' styles) */
+  private readonly allRowsById = computed(() => new Map(this.allRows().map(r => [r.task.id, r])));
+
+  /**
+   * Child segments of a bar (core `rollupSegments`, passed to `computeBarVisual`): with
+   * `rollup.segments`, a collapsed rolled-up parent's direct children in their own colours, clipped
+   * to its bar; `null` for every other row, and always without `rollup.segments`.
+   */
+  readonly barSegments = computed<(geo: RowGeometry) => BarSegment[] | null>(() => {
+    const cfg = this.cfg();
+    if (!cfg.rollup || !cfg.rollup.segments) return NO_SEGMENTS;
+    const rollups = this.rollups();
+    const { toX } = this.timeline();
+    const styleOf = this.rowStyle();
+    const rowById = this.allRowsById();
+    const childStyle = (child: GanttTask) => {
+      const row = rowById.get(child.id);
+      return row ? styleOf(row) : taskOwnStyle(child);
+    };
+    return geo => {
+      const { row } = geo;
+      const info = row.hasChildren && row.isCollapsed ? rollups.get(row.task.id) : undefined;
+      if (!info) return null;
+      return rollupSegments(info, { toX, cfg, styleOf: childStyle, bar: { x: geo.barX, width: geo.barWidth } });
+    };
   });
 
   /** x of the today line for the exact clock tick, `null` when hidden (`showToday: false`) or out of range */
@@ -572,7 +816,8 @@ export class GanttLayoutService {
   /**
    * Mounted pixel range `[x0, x1]` of the timeline: the viewport ± half its width, snapped outwards
    * to `HORIZONTAL_WINDOW_QUANTUM` (256 px), so a scroll inside one chunk changes nothing downstream.
-   * The whole timeline while the viewport is not measured.
+   * The whole timeline while the viewport is not measured in the browser; on the server, the window
+   * of a `SERVER_VIEWPORT_WIDTH` viewport (SSR mounts fewer header cells, bands and lines).
    */
   readonly hWindow = computed<HorizontalWindow>(
     () =>
@@ -581,6 +826,7 @@ export class GanttLayoutService {
         viewportWidth: this.viewportWidth(),
         totalWidth: this.timeline().totalWidth,
         quantum: HORIZONTAL_WINDOW_QUANTUM,
+        fallbackWidth: this.server ? SERVER_VIEWPORT_WIDTH : undefined,
       }),
     { equal: sameHorizontalWindow },
   );
@@ -660,13 +906,15 @@ export class GanttLayoutService {
   /**
    * "Fit to screen": the finest zoom level at which every task fits the viewport (core
    * `fitZoomLevel`), then — once that timeline has painted — a scroll to the first task
-   * (`scrollRequest`, core `fitScrollLeft`). Returns the level, or `null` when there is nothing to
-   * fit (no task, viewport not measured).
+   * (`scrollRequest`, core `fitScrollLeft`). Inside a sync group the tasks of every member fit
+   * (`sharedExtent`). Returns the level, or `null` when there is nothing to fit (no task, viewport
+   * not measured).
    */
   fitToScreen(): string | null {
+    const tl = this.timeline();
     const level = fitZoomLevel({
       levels: this.cfg().zoomLevels,
-      extent: this.timeline().extent,
+      extent: tl.sharedExtent ?? tl.extent,
       viewportWidth: this.viewportWidth(),
     });
     if (level === null) return null;

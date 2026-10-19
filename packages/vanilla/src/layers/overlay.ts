@@ -9,8 +9,8 @@
  *   (`graph.laneHeight` > 0, D12) their labels are in the header's lane, not over the bars.
  * - The today line (`line.gantt-today`, before `g.gantt-arrows`) and the ghost
  *   (`rect.gantt-drag-preview`, last in the SVG) are single persistent nodes, attached only while
- *   shown. The ghost is patched in O(1) from `computeDragGhostVisual` (`graph.ghostVisual`), with
- *   its movement label (`text.gantt-drag-preview-label`) right before it.
+ *   shown. The ghost is patched in O(1) from `computeDragGhostVisual` (`graph.ghostVisual`); the
+ *   drag readout chip (`layers/readout.ts`) shows the move.
  */
 
 import { computeAnnotationVisuals, type AnnotationVisual } from '@gantryjs/core';
@@ -40,15 +40,6 @@ export function createOverlayLayer(ctx: LayerContext): Layer {
 
   // The ghost's opacity covers fill and stroke (core's look): no separate fill opacity
   setAttr(dom.ghost, 'fill-opacity', null);
-  const ghostLabel = s('text', {
-    class: 'gantt-drag-preview-label',
-    'font-weight': 600,
-    'text-anchor': 'middle',
-    'dominant-baseline': 'auto',
-    'pointer-events': 'none',
-  });
-  setStyleProp(ghostLabel, 'font-family', 'var(--gantt-font)');
-  setStyleProp(ghostLabel, 'user-select', 'none');
 
   return {
     paint() {
@@ -126,10 +117,9 @@ export function createOverlayLayer(ctx: LayerContext): Layer {
         setAttr(dom.today, 'y2', bottom);
       }
 
-      // Drag ghost (last in the SVG) and its movement label (right before it)
+      // Drag ghost (last in the SVG)
       const ghost = G.ghostVisual();
       showNode(dom.svg, dom.ghost, ghost !== null);
-      showNode(dom.svg, ghostLabel, !!ghost?.label, dom.ghost);
       if (!ghost) return;
       const el = dom.ghost;
       setAttr(el, 'x', ghost.x);
@@ -142,14 +132,6 @@ export function createOverlayLayer(ctx: LayerContext): Layer {
       setAttr(el, 'stroke-width', ghost.strokeWidth);
       setStyleProp(el, 'fill', ghost.paint);
       setStyleProp(el, 'stroke', ghost.paint);
-      const label = ghost.label;
-      if (label) {
-        setAttr(ghostLabel, 'x', label.x);
-        setAttr(ghostLabel, 'y', label.y);
-        setAttr(ghostLabel, 'font-size', label.fontPx);
-        setStyleProp(ghostLabel, 'fill', label.paint);
-        setText(ghostLabel, label.text);
-      }
     },
   };
 }

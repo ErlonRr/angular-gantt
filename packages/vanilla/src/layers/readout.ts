@@ -9,7 +9,8 @@
  *                                                      container, attached while a preview shows
  *
  * Shown while `dragPreview` carries the new dates (a pointer drag or resize, a keyboard move) and
- * its ghost is drawn. Text: core `formatDragReadout(dragPreview, …)`; place: core
+ * its ghost is drawn. Text: core `formatDragReadout(dragPreview, …)`, its dates in
+ * `formats.readoutFormat` when set (else core's default for the scale unit); place: core
  * `placeDragReadout(ghost, { scrollLeft, viewportWidth, scrollTop, headerHeight, viewportHeight,
  * width })` in the viewport's scroll content, written as the `--x` / `--y` custom properties and
  * `data-align` (`readout.css.ts` translates the chip by 0 / -50% / -100%, so its real width is
@@ -33,13 +34,14 @@ export function createReadoutLayer(ctx: LayerContext): Layer {
       const ghost = preview ? G.ghostVisual() : null;
       let text = '';
       if (preview && ghost) {
-        const { labels, locale } = G.i18n();
+        const { labels, locale, formats } = G.i18n();
         const row = G.geoById().get(preview.taskId)?.row;
         text = formatDragReadout(preview, {
           labels,
           locale,
           dates: G.config(),
           unit: preview.unit,
+          format: formats.readoutFormat,
           milestone: !!row && barKind(row.barType) === 'milestone',
         });
       }

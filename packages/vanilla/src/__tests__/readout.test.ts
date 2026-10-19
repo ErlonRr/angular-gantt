@@ -1,7 +1,8 @@
 // The drag readout chip (Phase 9 step 4.4, `layers/readout.ts`): `div.gantt-drag-readout`, attached
 // at the end of the timeline viewport only while `dragPreview` carries the new dates (pointer drag
-// or keyboard move mode), with core `formatDragReadout` as its text and core `placeDragReadout`
-// written as `--x` / `--y` + `data-align`. The scroll offsets are read only while it shows.
+// or keyboard move mode), with core `formatDragReadout` as its text (dates in
+// `formats.readoutFormat` when set, Phase 10 step 4.4) and core `placeDragReadout` written as
+// `--x` / `--y` + `data-align`. The scroll offsets are read only while it shows.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   DRAG_READOUT_HEIGHT,
@@ -11,6 +12,7 @@ import {
   formatDragReadout,
   placeDragReadout,
   type DragPreview,
+  type GanttOptions,
   type GanttTask,
 } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
@@ -28,7 +30,7 @@ const TASKS = (): GanttTask[] => [
 let el: GantryElement;
 
 /** Mounts with the timeline viewport measured 600 × 300 px (happy-dom has no layout). */
-function mount(options = { viewMode: ViewMode.Day, initialScroll: false }): GantryElement {
+function mount(options: GanttOptions = { viewMode: ViewMode.Day, initialScroll: false }): GantryElement {
   el = document.createElement('gantry-element');
   el.style.height = '400px';
   Object.assign(el, { tasks: TASKS(), options });
@@ -54,8 +56,15 @@ const move = (p: DragPreview | null) => {
 /** What the region should write for the current preview. */
 function expected(p: DragPreview, milestone = false) {
   const { graph: G, inputs: I } = getEngine(el);
-  const { labels, locale } = G.i18n();
-  const text = formatDragReadout(p, { labels, locale, dates: G.config(), unit: p.unit, milestone });
+  const { labels, locale, formats } = G.i18n();
+  const text = formatDragReadout(p, {
+    labels,
+    locale,
+    dates: G.config(),
+    unit: p.unit,
+    format: formats.readoutFormat,
+    milestone,
+  });
   const place = placeDragReadout(G.ghostVisual()!, {
     scrollLeft: I.scrollLeft(),
     viewportWidth: 600,
@@ -124,6 +133,31 @@ describe('drag readout', () => {
     expect(chip().textContent).toMatch(/^3 Mar 09:00 – 17:00 · /);
   });
 
+  it('writes its dates in formats.readoutFormat, on every scale, and the default again once it is unset', () => {
+    mount({ viewMode: ViewMode.Day, initialScroll: false, formats: { readoutFormat: 'YYYY-MM-DD' } });
+    const p = preview('a', new Date(2026, 2, 3), new Date(2026, 2, 10));
+    move(p);
+    expect(chip().textContent).toBe(expected(p).text);
+    expect(chip().textContent).toMatch(/^2026-03-03 – 2026-03-10 · /);
+    // A milestone: its date alone, in the same format
+    move(preview('m', new Date(2026, 2, 17), new Date(2026, 2, 17)));
+    expect(chip().textContent).toBe('2026-03-17');
+
+    // Hour scales: the format wins over the time-only end of the default
+    el.options = { viewMode: ViewMode.Hour, initialScroll: false, formats: { readoutFormat: 'D/M HH:mm' } };
+    flush(el);
+    const hours = preview('a', new Date(2026, 2, 3, 9), new Date(2026, 2, 3, 17), 120, 'hour');
+    move(hours);
+    expect(chip().textContent).toBe(expected(hours).text);
+    expect(chip().textContent).toMatch(/^3\/3 09:00 – 3\/3 17:00 · /);
+
+    // Unset: core's default for the scale unit again
+    el.options = { viewMode: ViewMode.Hour, initialScroll: false };
+    flush(el);
+    move({ ...hours, x: 140 });
+    expect(chip().textContent).toMatch(/^3 Mar 09:00 – 17:00 · /);
+  });
+
   it('reads the scroll only while it shows: idle scrolls re-run nothing, a scroll while dragging keeps it in view', () => {
     mount();
     const { dom, regionRuns } = getEngine(el);
@@ -146,6 +180,36 @@ describe('drag readout', () => {
     expect(place.align).toBe('start');
     expect(chip().getAttribute('data-align')).toBe('start');
     expect(chip().style.getPropertyValue('--x')).toBe(`${place.x}px`);
+  });
+
+  it('draws the ghost at its bar’s styled height and radius (styles.levels) and places the chip by it', () => {
+    mount({ viewMode: ViewMode.Day, initialScroll: false, styles: { levels: [{ height: '70%', radius: 9 }] } });
+    const { graph: G } = getEngine(el);
+    const geo = G.geoById().get('a')!;
+    const p = { ...preview('a', new Date(2026, 2, 3), new Date(2026, 2, 10)), y: geo.y, height: geo.height };
+    move(p);
+    const bar = el.getBarVisual('a')!;
+    const ghost = G.ghostVisual()!;
+    expect(bar.height).toBeCloseTo(geo.height * 0.7);
+    expect([ghost.y, ghost.height, ghost.rx]).toEqual([bar.y, bar.height, 9]);
+    const rect = el.shadowRoot!.querySelector('.gantt-drag-preview')!;
+    expect(rect.getAttribute('height')).toBe(String(bar.height));
+    expect(rect.getAttribute('rx')).toBe('9');
+    // The chip is placed by that ghost, not by one at the default 60 %
+    const { place } = expected(p);
+    expect(chip().style.getPropertyValue('--y')).toBe(`${place.y}px`);
+    const unstyled = placeDragReadout(
+      { ...ghost, y: geo.y + (geo.height - geo.height * 0.6) / 2, height: geo.height * 0.6 },
+      {
+        scrollLeft: 0,
+        viewportWidth: 600,
+        scrollTop: 0,
+        headerHeight: G.headerHeight(),
+        viewportHeight: 300,
+        width: dragReadoutWidth(chip().textContent),
+      },
+    );
+    expect(place.y).not.toBe(unstyled.y);
   });
 
   it('styles the chip from core’s look: 20 px tall, translated by its alignment, no pointer', () => {

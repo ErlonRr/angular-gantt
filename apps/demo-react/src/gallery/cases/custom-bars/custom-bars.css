@@ -1,0 +1,35 @@
+/*
+ * Forced colours (Windows High Contrast): the chart paints its own bars with system colours, but a
+ * renderBar SVG keeps its paints. The epic's nodes carry `part` names (epicBar.ts), so page CSS
+ * reaches them inside the chart's shadow root with ::part(), and wins over their CSSOM paints.
+ */
+@media (forced-colors: active) {
+  gantry-element::part(epic-body) {
+    fill: ButtonFace;
+    stroke: ButtonText;
+  }
+  gantry-element::part(epic-selected) {
+    stroke: Highlight;
+    stroke-width: 2.5px;
+  }
+  gantry-element::part(epic-track) {
+    fill: GrayText;
+    opacity: 1;
+  }
+  gantry-element::part(epic-progress) {
+    fill: ButtonText;
+  }
+  gantry-element::part(epic-risk) {
+    fill: ButtonText;
+    stroke: ButtonFace;
+  }
+  gantry-element::part(epic-risk-text) {
+    fill: ButtonFace;
+  }
+  gantry-element::part(epic-label) {
+    fill: ButtonText;
+  }
+  gantry-element::part(epic-label-outside) {
+    fill: CanvasText;
+  }
+}

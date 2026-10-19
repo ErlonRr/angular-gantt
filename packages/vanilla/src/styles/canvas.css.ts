@@ -1,14 +1,21 @@
 /**
  * @file canvas.css.ts
- * Timeline body (SVG canvas): its box, draggable bars, the resize cursor, bar labels and the bar
- * overlay (D4): the keyboard focus ring and the resize grips, painted by the bars region over
- * the focused / hovered bar (the focused bar draws no outline of its own).
+ * Timeline body (SVG canvas): its box, the hovered row's tint, draggable bars, the resize cursor,
+ * bar labels and the bar overlay (D4): the keyboard focus ring and the resize grips, painted by
+ * the bars region over the focused / hovered bar (the focused bar draws no outline of its own).
+ *
+ * The row hover (Gantry 2 phase 10, D4): rect.gantt-row-hover, placed by the hover region over the
+ * row under a mouse or pen pointer, takes its fill from the theme variable here (no CSSOM paint),
+ * so rowHoverBg transparent turns it off.
  */
 
 export const CANVAS_CSS = `
     /* ── Canvas box (sized by the static layer) ─────────── */
     .gantry-canvas-container { position: relative; }
     .gantry-canvas-container > svg { display: block; overflow: visible; }
+
+    /* ── Row hover (the task list's row gets the same tint) ── */
+    .gantt-row-hover { fill: var(--gantt-row-hover-bg); }
 
     /* ── Bars ───────────────────────────────────────────── */
     .gantt-bar-draggable { cursor: grab; }

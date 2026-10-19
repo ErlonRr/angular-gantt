@@ -1,0 +1,12 @@
+/*
+ * In forced colours (Windows High Contrast) the system colours replace the cells' backgrounds. The
+ * avatar and the meter fill carry `part` names (cells.ts), so page CSS reaches them with ::part().
+ */
+@media (forced-colors: active) {
+  gantry-element::part(avatar) {
+    border: 1px solid CanvasText;
+  }
+  gantry-element::part(meter-fill) {
+    background: CanvasText;
+  }
+}

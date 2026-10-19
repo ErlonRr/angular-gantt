@@ -31,7 +31,7 @@ export const DRAG_READOUT_FONT_PX = 11;
 export const DRAG_READOUT_PAD_X = 6;
 /** Border-box height of the chip (px) */
 export const DRAG_READOUT_HEIGHT = 20;
-/** Space between the dragged bar (and its "+3d" label) and the chip (px) */
+/** Space between the dragged bar's ghost and the chip (px) */
 export const DRAG_READOUT_GAP = 4;
 /** Smallest distance kept to the visible edges of the timeline (px) */
 export const DRAG_READOUT_EDGE = 4;
@@ -93,7 +93,7 @@ export function dragReadoutWidth(text: string, fontPx = DRAG_READOUT_FONT_PX): n
 
 /** The ghost of the dragged bar (`computeDragGhostVisual`), or any box in canvas px. */
 export interface DragReadoutAnchor extends Pick<GhostVisual, 'x' | 'y' | 'width' | 'height'> {
-  /** The ghost's "+3d" label: the chip goes above it */
+  /** The ghost's label, if a custom ghost has one: the chip goes above it (the built-in ghost has none since 2.0) */
   label?: Pick<GhostLabel, 'y' | 'fontPx'> | null | undefined;
 }
 
@@ -135,7 +135,7 @@ export interface DragReadoutPlacement {
 /**
  * Where the readout chip goes, in the coordinates of the timeline viewport's scroll content (the
  * chip is absolutely positioned inside `.gantry-canvas-viewport`, where the canvas starts below
- * the sticky header): centred above the dragged bar's ghost and its "+3d" label, pushed against
+ * the sticky header): centred above the dragged bar's ghost (and its label, if any), pushed against
  * the visible edge when centring would clip it (or when the ghost is out of view, e.g. during
  * auto-scroll), and below the bar when the sticky header leaves no room above. Rounded.
  */

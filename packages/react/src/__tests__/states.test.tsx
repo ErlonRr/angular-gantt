@@ -7,7 +7,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot, hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { GANTRY_EVENTS, GANTRY_PROPERTIES, type GantryProperties } from '@gantryjs/vanilla';
-import { Gantry, ViewMode, type GantryElement, type GanttTask, type RetryEvent } from '../index';
+import { Gantry, ViewMode, createGanttSyncGroup, type GantryElement, type GanttTask, type RetryEvent } from '../index';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -33,6 +33,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   renderBar: () => null,
   loading: true,
   errorMessage: 'Couldn’t load the plan',
+  syncGroup: createGanttSyncGroup(),
 };
 
 let host: HTMLDivElement | undefined;

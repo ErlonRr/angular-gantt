@@ -5,10 +5,12 @@ import { AppThemeService } from '../../shell/app-theme.service';
 import { IconComponent } from '../../shell/icon.component';
 import { EXAMPLES } from '../../shell/demo-registry';
 import { EpicBarComponent } from '../../gantt-custom/epic-bar.component';
+import { GalleryIndexComponent } from '../../gallery/gallery-index.component';
 import { PREVIEWS } from './previews';
 
 /**
- * /examples: one card per example page, each with a live preview of its idea.
+ * /examples: one card per example page, each with a live preview of its idea, then the gallery
+ * (every case in all five frameworks, `GalleryIndexComponent`).
  *
  * Accessibility: a card is an `<article>` whose only interactive element is the title link;
  * the link's `::after` covers the card, so a click anywhere opens the example. The preview
@@ -21,7 +23,7 @@ import { PREVIEWS } from './previews';
   // Unscoped so the icon's <svg> can be sized: page-local `exs-` classes only (the previews'
   // charts render in the light DOM, element selectors would reach them)
   encapsulation: ViewEncapsulation.None,
-  imports: [RouterLink, GantryComponent, IconComponent],
+  imports: [RouterLink, GantryComponent, IconComponent, GalleryIndexComponent],
   // The custom-bar preview draws its epics with the example's bar component
   providers: [provideGanttBar({ type: 'epic', component: EpicBarComponent })],
   template: `
@@ -31,7 +33,9 @@ import { PREVIEWS } from './previews';
         <h1 class="gs-title">Examples</h1>
         <p class="gs-lead">
           Small apps built with the chart: a roadmap, a project board, lazy loading and custom bars. Each page is the
-          Angular binding at work, with its controls and the code that wires it up.
+          Angular binding at work, with its controls and the code that wires it up. Below them, the
+          <a class="gs-link" routerLink="/examples" fragment="gallery">gallery</a> shows every case in all five
+          frameworks.
         </p>
       </div>
     </div>
@@ -79,6 +83,8 @@ import { PREVIEWS } from './previews';
         </article>
       }
     </div>
+
+    <section appGalleryIndex></section>
   `,
   styles: `
     .exs-card {

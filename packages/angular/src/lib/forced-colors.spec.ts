@@ -137,7 +137,7 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
     },
   ],
   [
-    'toolbar',
+    'toolbar (checked radio and menu item, pressed toggle, More menu)',
     GanttToolbarComponent,
     {
       '.gantt-tb-pill[aria-checked=true]': {
@@ -146,12 +146,21 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
         'border-color': 'Highlight',
         color: 'HighlightText',
       },
+      '.gantt-tb-menu-item[aria-checked=true]': {
+        'forced-color-adjust': 'none',
+        'background-color': 'Highlight',
+        'border-color': 'Highlight',
+        color: 'HighlightText',
+      },
+      '.gantt-tb-btn[aria-pressed=true]': { color: 'Highlight', 'border-color': 'Highlight' },
+      '.gantt-tb-menu': { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' },
     },
   ],
   [
     'task list',
     GanttTaskListComponent,
     {
+      '.gantt-tl-row--hover': { 'background-image': 'none' },
       '.gantt-tl-row--selected': {
         'forced-color-adjust': 'none',
         'background-color': 'Highlight !important',
@@ -173,6 +182,7 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
     GanttCanvasComponent,
     {
       '.gantt-rows > rect': { fill: 'Canvas !important' },
+      '.gantt-row-hover': { display: 'none' },
       '.gantt-band': { fill: 'GrayText !important', 'fill-opacity': '0.15' },
       '.gantt-band--intensive': { fill: 'Highlight !important' },
       'pattern > line': { stroke: 'GrayText !important' },
@@ -263,10 +273,8 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
   [
     'drag preview',
     GanttDragPreviewComponent,
-    {
-      '.gantt-drag-preview': { fill: 'Highlight !important', stroke: 'Highlight !important' },
-      '.gantt-drag-preview-label': { fill: 'CanvasText !important' },
-    },
+    // The ghost has no movement label since phase 10 (the drag readout chip shows the move)
+    { '.gantt-drag-preview': { fill: 'Highlight !important', stroke: 'Highlight !important' } },
   ],
   [
     'bar overlay',
@@ -279,7 +287,8 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
   [
     'load more',
     GanttLoadMoreComponent,
-    { '.gantt-spinner': { 'border-color': 'GrayText', 'border-top-color': 'Highlight' } },
+    // The Web Component's footer: no spinner, the loading button GrayText (phase 10 step 7.1)
+    { '.gantt-load-more-btn[aria-disabled=true]': { color: 'GrayText', 'border-color': 'GrayText' } },
   ],
   [
     'dependency arrow',
@@ -295,6 +304,7 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
 /** The built-in bars share `BUILTIN_BAR_STYLES` */
 const BAR_RULES: Record<string, Record<string, string>> = {
   '.gantt-bar-body': { fill: 'ButtonFace !important', stroke: 'ButtonText !important', 'stroke-width': '1.5px' },
+  '.gantt-bar-segment': { fill: 'ButtonFace !important', stroke: 'ButtonText !important', 'stroke-width': '1px' },
   '.gantt-bar-caps': { fill: 'ButtonText !important' },
   '.gantt-bar-label': { fill: 'ButtonText !important' },
   '.gantt-bar-progress': { fill: 'ButtonText !important', 'fill-opacity': '0.45' },
@@ -349,6 +359,24 @@ describe('forced-colors rules (D25)', () => {
       expect(rest, type.name).not.toMatch(SYSTEM);
       expect(rest, type.name).not.toContain('forced-color-adjust');
     }
+  });
+
+  it('opts out of forcing only what has a Highlight background (the Web Component’s six, the menu item included)', () => {
+    const optedOut = ALL.flatMap(type =>
+      Object.entries(forcedRules(type))
+        .filter(([, decls]) => 'forced-color-adjust' in decls)
+        .map(([sel]) => sel),
+    );
+    expect(optedOut.sort()).toEqual(
+      [
+        '.g-cell--current',
+        '.g-marker--today .g-marker-label',
+        '.g-today-pointer',
+        '.gantt-tb-pill[aria-checked=true]',
+        '.gantt-tb-menu-item[aria-checked=true]',
+        '.gantt-tl-row--selected',
+      ].sort(),
+    );
   });
 
   it('the icon takes its control’s (forced) text colour', () => {

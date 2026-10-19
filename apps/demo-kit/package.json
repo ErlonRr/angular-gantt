@@ -2,7 +2,7 @@
   "name": "demo-kit",
   "private": true,
   "version": "0.0.0",
-  "description": "The Gantry site look shared by every demo app: design tokens and components (site.css), the light/dark switch, links, icons, the playground model and the API reference read from the Custom Elements Manifest.",
+  "description": "The Gantry site look shared by every demo app: design tokens and components (site.css), the light/dark switch, links, icons, the playground model, the API reference read from the Custom Elements Manifest, and the examples gallery (cases, data, framework notes, hash router, generated code samples).",
   "type": "module",
   "sideEffects": [
     "*.css"
@@ -14,7 +14,10 @@
     "./site": "./src/site.ts",
     "./icons": "./src/icons.ts",
     "./playground": "./src/playground.ts",
-    "./api": "./src/api.ts"
+    "./api": "./src/api.ts",
+    "./gallery": "./src/gallery/index.ts",
+    "./gallery/catalog": "./src/gallery/catalog.ts",
+    "./gallery/sources": "./src/gallery/sources/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

@@ -7,10 +7,10 @@
  *
  * Shadow tree:
  *
- *   div.gantry-wrapper[part=wrapper][data-view]
+ *   div.gantry-wrapper[part=wrapper][data-view][data-density][data-narrow]   (host region)
  *     div.gantry-toolbar-container[part=toolbar]
  *     div.gantry-main
- *       div.gantry-panel[part=panel] > div.gantry-tasklist-container
+ *       div.gantry-panel[part=panel] > div.gantry-tasklist-container (+ the load-more footer, tasklist region)
  *       div.gantry-splitter[part=splitter]
  *         div.gantry-splitter-handle[role=separator][tabindex=0]
  *         button.gantry-splitter-toggle
@@ -39,6 +39,7 @@
  *
  *   defs                      hatch pattern `gantt-hatch-<uid>` — attached while `style: 'hatch'`
  *   g.gantt-rows              row backgrounds
+ *   rect.gantt-row-hover      the hovered row's tint — attached by the hover region while a row is hovered
  *   g.gantt-bands             non-working time (persistent; band rects keyed by x, windowed horizontally)
  *   g.gantt-grid              minor lines · <!--rows--> row separators · <!--major--> period delimiters
  *   g.gantt-annotations
@@ -49,9 +50,9 @@
  *   g.gantt-annotation-labels
  *   rect.gantt-drag-preview   attached while a bar is dragged
  *
- * The today line, the bar overlay and the drag ghost are single persistent nodes and stay
- * detached while hidden: the paint snapshots and `.gantt-drag-preview` (count 0 after a drop)
- * rely on it.
+ * The today line, the row hover, the bar overlay and the drag ghost are single persistent nodes
+ * and stay detached while hidden: the paint snapshots and `.gantt-drag-preview` (count 0 after a
+ * drop) rely on it.
  *
  * The svg is the bars' listbox (D3): `aria-orientation=vertical` here, its name
  * (`labels.ariaBars`) and `aria-multiselectable` from the bars region.
@@ -101,6 +102,11 @@ export interface Skeleton {
   /** Id of the hatch pattern (unique per element) */
   readonly hatchId: string;
   readonly rows: SVGGElement;
+  /**
+   * The hovered row's tint (`rect.gantt-row-hover`, fill from the stylesheet): detached; the hover
+   * region attaches it right after `rows` (before `bands`) while a row is hovered
+   */
+  readonly rowHover: SVGRectElement;
   /** Non-working bands (persistent group; the static layer reconciles its rects by x) */
   readonly bands: SVGGElement;
   readonly grid: SVGGElement;
@@ -159,6 +165,8 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
 
   const decorative = { 'aria-hidden': 'true', 'pointer-events': 'none' } as const;
   const rows = s('g', { class: 'gantt-rows', 'aria-hidden': 'true' });
+  // Geometry from the hover region; the fill is the stylesheet's `var(--gantt-row-hover-bg)`
+  const rowHover = s('rect', { class: 'gantt-row-hover', x: 0, ...decorative });
   const bands = s('g', { class: 'gantt-bands', ...decorative });
   const gridRowLines = document.createComment('rows');
   const gridMajorLines = document.createComment('major');
@@ -202,7 +210,8 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
     headerSticky,
     canvasContainer,
   );
-  const main = h('div', { class: 'gantry-main' }, panel, splitter, viewport);
+  // `is-settling` (no pane width transition) until a frame after the first render (`layers/host.ts`)
+  const main = h('div', { class: 'gantry-main is-settling' }, panel, splitter, viewport);
   const wrapper = h(
     'div',
     { class: 'gantry-wrapper', attrs: { part: 'wrapper', 'data-view': 'split' } },
@@ -241,6 +250,7 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
     defs,
     hatchId,
     rows,
+    rowHover,
     bands,
     grid,
     gridRowLines,

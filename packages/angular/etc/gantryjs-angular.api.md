@@ -5,17 +5,20 @@
 ```ts
 
 import { BarHit } from '@gantryjs/core';
+import { BarSegment } from '@gantryjs/core';
 import { BarVisual } from '@gantryjs/core';
 import { ChartState } from '@gantryjs/core';
 import { ColumnCellContext } from '@gantryjs/core';
 import { ColumnContext } from '@gantryjs/core';
 import { ColumnDef as ColumnDef_2 } from '@gantryjs/core';
 import { ColumnRenderer } from '@gantryjs/core';
+import { ColumnSortValue } from '@gantryjs/core';
 import { CPMResult } from '@gantryjs/core';
 import { DragPreview } from '@gantryjs/core';
 import { DragReadoutPlacement } from '@gantryjs/core';
 import { DragResult } from '@gantryjs/core';
 import { DragTiming } from '@gantryjs/core';
+import { EchoGuard } from '@gantryjs/core';
 import { GanttAnnotation } from '@gantryjs/core';
 import { GanttBarContext } from '@gantryjs/core';
 import { GanttFlatRow } from '@gantryjs/core';
@@ -23,7 +26,9 @@ import { GanttFormats } from '@gantryjs/core';
 import { GanttI18n } from '@gantryjs/core';
 import { GanttLabels } from '@gantryjs/core';
 import { GanttOptions } from '@gantryjs/core';
+import { GanttRollupInfo } from '@gantryjs/core';
 import { GanttState } from '@gantryjs/core';
+import { GanttSyncGroup } from '@gantryjs/core';
 import { GanttTask } from '@gantryjs/core';
 import { GanttTheme } from '@gantryjs/core';
 import { GanttThemeOverrides } from '@gantryjs/core';
@@ -38,11 +43,13 @@ import { LinesWindow } from '@gantryjs/core';
 import { LoadStateSnapshot } from '@gantryjs/core';
 import { MarkerLane } from '@gantryjs/core';
 import { ModelSignal } from '@angular/core';
+import { NaturalTimelineRange } from '@gantryjs/core';
 import { OutputEmitterRef } from '@angular/core';
 import { PAINTS } from '@gantryjs/core';
 import { Provider } from '@angular/core';
 import { Rect } from '@gantryjs/core';
 import { ResolvedGanttConfig } from '@gantryjs/core';
+import { ResponsiveState } from '@gantryjs/core';
 import { RetryEvent } from '@gantryjs/core';
 import { RowGeometry } from '@gantryjs/core';
 import { ScrollPadding } from '@gantryjs/core';
@@ -51,9 +58,11 @@ import { SelectionChangeEvent } from '@gantryjs/core';
 import { SelectionModifierSource } from '@gantryjs/core';
 import { SelectionPolicy } from '@gantryjs/core';
 import { SelectionState } from '@gantryjs/core';
+import { SharedTimelineRange } from '@gantryjs/core';
 import { Signal } from '@angular/core';
 import { SortDirection } from '@gantryjs/core';
 import { SplitterValue } from '@gantryjs/core';
+import { StyleResolver } from '@gantryjs/core';
 import { TaskDragEvent } from '@gantryjs/core';
 import { TaskResizeEvent } from '@gantryjs/core';
 import { TemplateRef } from '@angular/core';
@@ -131,6 +140,7 @@ export class GantryComponent {
     // (undocumented)
     getSelectedTasks(): GanttTask[];
     getState(): GanttState;
+    protected readonly hostStyle: Signal<Record<string, string>>;
     // Warning: (ae-forgotten-export) The symbol "GanttI18nService" needs to be exported by the entry point gantryjs-angular.d.ts
     //
     // (undocumented)
@@ -145,7 +155,6 @@ export class GantryComponent {
     }>;
     readonly loading: InputSignalWithTransform<boolean, unknown>;
     protected readonly multiselectable: Signal<boolean>;
-    // (undocumented)
     protected onCanvasRowClick(geo: RowGeometry): void;
     // (undocumented)
     protected onCollapseToggle(id: string): void;
@@ -153,6 +162,7 @@ export class GantryComponent {
     protected onFocusOut(event: FocusEvent): void;
     protected onPanelWheel(e: WheelEvent): void;
     protected onRetry(source: RetryEvent['source']): void;
+    protected onRowDblClick(row: GanttFlatRow): void;
     // (undocumented)
     protected onSortColumn(key: string): void;
     // (undocumented)
@@ -179,6 +189,8 @@ export class GantryComponent {
     resetTheme(): void;
     // (undocumented)
     protected readonly resizeEnabled: Signal<boolean>;
+    // Warning: (ae-forgotten-export) The symbol "GanttResponsive" needs to be exported by the entry point gantryjs-angular.d.ts
+    protected readonly responsive: GanttResponsive;
     readonly retry: OutputEmitterRef<RetryEvent>;
     // (undocumented)
     readonly rowClick: OutputEmitterRef<RowGeometry>;
@@ -219,6 +231,7 @@ export class GantryComponent {
     protected readonly splitterDragging: WritableSignal<boolean>;
     protected readonly srAlert: Signal<string>;
     readonly stateChange: OutputEmitterRef<GanttState>;
+    readonly syncGroup: InputSignal<GanttSyncGroup | null | undefined>;
     protected readonly tabStopId: Signal<string>;
     // (undocumented)
     readonly taskDragged: OutputEmitterRef<TaskDragEvent>;
@@ -316,6 +329,11 @@ export class GantryComponent {
             "required": false;
             "isSignal": true;
         };
+        "syncGroup": {
+            "alias": "syncGroup";
+            "required": false;
+            "isSignal": true;
+        };
     }, {
         "viewMode": "viewModeChange";
         "taskDragged": "taskDragged";
@@ -371,6 +389,7 @@ export class GanttColumnDefDirective {
     readonly render: InputSignal<ColumnRenderer | undefined>;
     // (undocumented)
     readonly sortable: InputSignal<boolean | undefined>;
+    readonly sortValue: InputSignal<((row: GanttFlatRow, ctx: ColumnContext) => ColumnSortValue) | undefined>;
     // (undocumented)
     readonly visible: InputSignal<boolean | undefined>;
     // (undocumented)
@@ -412,6 +431,11 @@ export class GanttColumnDefDirective {
             "required": false;
             "isSignal": true;
         };
+        "sortValue": {
+            "alias": "sortValue";
+            "required": false;
+            "isSignal": true;
+        };
         "render": {
             "alias": "render";
             "required": false;
@@ -425,6 +449,7 @@ export class GanttColumnDefDirective {
 // @public (undocumented)
 export class GanttDataSource<T extends GanttTask = GanttTask> {
     constructor(config?: GanttDataSourceConfig<T>);
+    destroy(): void;
     readonly error: Signal<unknown>;
     readonly hasMore: Signal<boolean>;
     readonly isLoading: Signal<boolean>;

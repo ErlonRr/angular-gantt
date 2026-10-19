@@ -30,7 +30,7 @@ through the controls inside it.
   (`labels.announceSelection`) and the data source's load state (`labels.loading`, then `labels.announceLoaded(n)` or
   `labels.allLoaded(n)`); a failed page is still announced once in `.gantt-sr-alert`.
 - When the focused control disappears (its row was removed), focus goes to the timeline viewport (in the table view, to
-  the task list's tab-stop row) instead of the host. Starting a bar drag focuses the timeline viewport.
+  the task list's tab-stop row) instead of the host. A press on a bar focuses that bar.
 - The toolbar is named by `labels.ariaToolbar`.
 
 ### `@gantryjs/core`

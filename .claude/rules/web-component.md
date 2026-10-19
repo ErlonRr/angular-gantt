@@ -12,14 +12,24 @@ paths:
   - `engine/inputs.ts`: input signals. Property setters, attributes, API methods, pointer /
     keyboard / scroll handlers, the ResizeObserver, the clock, the colour-scheme listener and the
     data source write **only** these.
-  - `engine/graph/*.ts`: computeds, one concern per file (chrome, config, rows, timeline,
+  - `engine/graph/*.ts`: computeds, one concern per file (chrome, config, rows, styles, timeline,
     windows, layout, visuals, arrows, horizontal, tasklist, markers, states), built with `node(name, fn, {equals})`
     (`graph/node.ts`) so runs are counted per name. Use equality cut-offs (`structuralEqual`,
     `sameVirtualWindow` (core), …) so unchanged results stop propagating. A new module adds its nodes to its
     own interface; `Graph` in `engine/engine.ts` merges them.
   - `engine/render.ts`: one effect per region on the per-element rAF scheduler, flushed in the
-    fixed `REGIONS` order (host → toolbar → legend → header → static → rows → bars → arrows →
-    overlay → readout → tasklist → states → scroll-commands → focus-restore → lazy-load).
+    fixed `REGIONS` order (host → toolbar → legend → header → static → rows → hover → bars →
+    arrows → overlay → readout → tasklist → states → scroll-commands → focus-restore → lazy-load).
+    Outside the flush: the sync-group link (`layers/sync.ts`, joined from an effect of the
+    connection's owner whenever `syncGroup` changes) and the narrow-width switch
+    (`layers/responsive.ts`, `onWidth()` on every measured width and after `setState`, core
+    `reduceResponsive`, whose state also keeps the view shown; a responsive view change never saves
+    state). The open tooltip's refresh key is task object, critical flag, i18n bundle and the row's
+    resolved style (core `sameTaskStyle`).
+  - Styles: `graph/styles.ts` builds core `createStyleResolver` (`rowStyle(row)`, memoised per row
+    object) and `barSegments`; rows, task list, bars and tooltip read the row's resolved style
+    from it, never `task.style` or the flat colour fields. Rollups (`applyRollups`) run in
+    `graph/rows.ts` before `sortTree`; events carry the consumer's task (`rollupSource`).
   - `layers/*.ts`: the painters. A layer is `{ paint(), disconnect?() }` built once per element
     from a `LayerContext` (`layers/context.ts`); its closure holds its persistent nodes and caches.
     Besides inputs and graph nodes the context gives `ctx.announce` (core `createAnnouncer` on
@@ -32,7 +42,14 @@ paths:
     Pointer: `canvas-pointer.ts` (hit-testing by geometry, core `hitTestBar`), `gestures.ts`
     (`trackPress`: 3 px mouse threshold, 350 ms touch / pen long-press; `bindTouchGuard`),
     `autoscroll.ts`, `drag.ts`, `zoom.ts` (Ctrl/⌘ + wheel, pinch, Safari gestures → `zoomAnchor`
-    with `viewModeOverride`). Keyboard: `keyboard.ts` (one keydown listener, area dispatch through
+    with `viewModeOverride`). A mouse press on a bar focuses it (`preventDefault` +
+    `focus({ preventScroll: true })`; touch / pen focus it when a drag starts), and Escape during
+    a press belongs to the press (window capture listener, consumed, removed when it ends). Row
+    hover: `canvas-pointer.ts` (timeline, `rowIndexAtY`) and the task list's delegated
+    `pointerover` / `pointerleave` write `hoveredRowId` (never on touch or while dragging); it is
+    cleared on pointer leave, drag start, scroll of either pane (unless pressing) and disconnect.
+    `scroll.ts` also holds `viewportSync` (sync groups: echo guard, the queued group scroll,
+    horizontal scroll reports only when `scrollLeft` changed and no group scroll waits). Keyboard: `keyboard.ts` (one keydown listener, area dispatch through
     core `resolveKey`, focus and modality tracking), `grid-keys.ts`, `timeline-keys.ts`,
     `keyboard-edit.ts` (move mode → `dragPreview`). `tooltip-triggers.ts`: focus, Escape (capture
     phase), scroll, outside press and the dismiss rules. Also `splitter.ts`, `column-resize.ts`,
@@ -49,9 +66,10 @@ paths:
   (`dom/keyed.ts`: one list per parent, contiguous before its anchor). The persistent shadow tree
   and SVG layer groups live in `layers/skeleton.ts` (its header comment lists them); never
   re-create the panes or the SVG. Optional nodes (the legend, the state box, the readout chip,
-  the bar overlay, the today line, the drag ghost, the hatch `defs`) are built there detached and
-  attached by their region with `showNode()` only while shown (D27): the paint snapshots rely on
-  it.
+  the bar overlay, the today line, the drag ghost, the hatch `defs`, the row-hover rect) are built
+  there detached and attached by their region with `showNode()` only while shown (D27): the paint
+  snapshots rely on it. The same holds for the nodes a layer owns (the toolbar's More menu while
+  open, `rect.gantt-bar-segment`s only while the visual has segments).
 - **CSS and CSP** (strict `style-src`, Trusted Types): region CSS lives in `styles/*.css.ts` string
   modules, concatenated in cascade order by `styles/base.ts` into one constructable sheet per
   document (adopted; `<style>` + `textContent` fallback in `dom/sheet.ts`); the theme variables are

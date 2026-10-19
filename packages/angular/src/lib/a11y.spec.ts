@@ -474,15 +474,37 @@ describe('focus', () => {
     }
   });
 
-  it('a drag takes keyboard focus to the timeline viewport (Escape cancels it there)', async () => {
+  it('a mouse press focuses the pressed bar, which keeps focus while it drags (Escape cancels the drag there)', async () => {
     const c = await mount();
     await focus(c, row(c, 'c'));
-    await c.set(() => c.drag.state.set({ kind: 'dragging', taskId: 'c' }));
-    expect(document.activeElement).toBe(c.$('.gantry-canvas-viewport'));
+    const bar = c.$('.gantt-bars-layer > [data-task-id="c"]');
+    const svg = c.$('gantt-canvas svg');
+    // The canvas box is at 0,0 in happy-dom: client and canvas coordinates are the same
+    const v = c.gantt.getBarVisual('c')!;
+    const x = v.x + v.width / 2;
+    const pointer = (type: string, clientX: number) =>
+      new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        pointerId: 1,
+        pointerType: 'mouse',
+        clientX,
+        clientY: v.cy,
+      });
+    bar.dispatchEvent(pointer('pointerdown', x));
+    expect(document.activeElement).toBe(bar);
+    // A mouse drags once it has moved 3 px (D13): the bar keeps focus (not the viewport), with no ring
+    await c.set(() => svg.dispatchEvent(pointer('pointermove', x + 4)));
+    expect(c.drag.isPointerDrag()).toBe(true);
+    expect(document.activeElement).toBe(bar);
+    expect(c.layout.focusVisibleBarId()).toBeNull();
 
     await c.set(() =>
-      c.$('.gantry-canvas-viewport').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+      bar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
     );
     expect(c.drag.isActive()).toBe(false);
+    expect(document.activeElement).toBe(bar);
+    svg.dispatchEvent(pointer('pointerup', x + 4));
   });
 });

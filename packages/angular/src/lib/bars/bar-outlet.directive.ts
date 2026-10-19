@@ -32,6 +32,13 @@
 //  changed attributes are written. It also dims the bar being dragged
 //  with an `opacity` style (DRAG_SOURCE_OPACITY), restoring only an
 //  opacity it set itself.
+//
+//  A custom bar's host also gets the classes of its row's style
+//  (`ctx.visual.className`: `options.styles`, `task.style.className`,
+//  the deprecated `task.className`), added and removed one by one next to
+//  the component's own classes; a custom bar reads the whole style in
+//  `ctx.style`. Built-in bars write their whole class attribute themselves
+//  (`GanttBuiltinBar.barClass`).
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -55,12 +62,22 @@ import { DRAG_SOURCE_OPACITY, barRoleDescription, taskAccessibleName } from '@ga
 
 import { type GanttBarContext } from '../types';
 import { type GanttBarBase } from './bar-base';
+import { GanttBuiltinBar } from './builtin-bar';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttTooltipState } from '../tooltip/tooltip-state';
 
 /** Attribute name → value (`null`: the attribute is absent) */
 type HostAttrs = Readonly<Record<string, string | null>>;
+
+const NO_CLASSES: readonly string[] = [];
+
+/** The classes of a `className` value (`null`: none) */
+const classList = (className: string | null): readonly string[] =>
+  className ? className.split(/\s+/).filter(Boolean) : NO_CLASSES;
+
+const sameList = (a: readonly string[], b: readonly string[]): boolean =>
+  a === b || (a.length === b.length && a.every((c, i) => c === b[i]));
 
 @Directive({ selector: '[ganttBarOutlet]' })
 export class GanttBarOutletDirective {
@@ -127,8 +144,17 @@ export class GanttBarOutletDirective {
     };
   });
 
+  /** Classes of the row's style (`visual.className`), for a custom bar's host */
+  private readonly styleClasses = computed(() => classList(this.ganttBarOutletCtx().visual.className), {
+    equal: sameList,
+  });
+
   private ref: ComponentRef<GanttBarBase> | null = null;
   private host: Element | null = null;
+  /** The mounted bar is a custom one (not a `GanttBuiltinBar`): the outlet adds its style classes */
+  private custom = false;
+  /** Style classes added to the current host */
+  private classes: readonly string[] = NO_CLASSES;
   /** This outlet wrote the host's `opacity` */
   private dimmed = false;
   /** Attribute values written on the current host */
@@ -144,10 +170,15 @@ export class GanttBarOutletDirective {
       const dim = this.ganttBarOutletDimmed();
       untracked(() => this.dim(dim));
     });
-    // The host's attributes (rendered on the server too): only the changed ones are written
+    // The host's attributes and a custom bar's style classes (rendered on the server too): only the
+    // changed ones are written
     effect(() => {
       const attrs = { ...this.rowAttrs(), ...this.positionAttrs(), ...this.stateAttrs() };
-      untracked(() => this.stamp(attrs));
+      const classes = this.styleClasses();
+      untracked(() => {
+        this.stamp(attrs);
+        this.stampClasses(classes);
+      });
     });
     inject(DestroyRef).onDestroy(() => this.unmount());
   }
@@ -164,11 +195,23 @@ export class GanttBarOutletDirective {
     this.container.insert(ref.hostView);
     this.ref = ref;
     this.host = host;
+    this.custom = !(type.prototype instanceof GanttBuiltinBar);
     this.dimmed = false;
     // After the component's static host attributes: the outlet's role and names win
     this.written = new Map();
+    this.classes = NO_CLASSES;
     this.stamp({ ...this.rowAttrs(), ...this.positionAttrs(), ...this.stateAttrs() });
+    this.stampClasses(this.styleClasses());
     this.dim(this.ganttBarOutletDimmed());
+  }
+
+  /** A custom bar's host gets the classes of `next` instead of the ones added before (others untouched). */
+  private stampClasses(next: readonly string[]): void {
+    const host = this.host;
+    if (!host || !this.custom || next === this.classes) return;
+    for (const c of this.classes) if (!next.includes(c)) this.renderer.removeClass(host, c);
+    for (const c of next) if (!this.classes.includes(c)) this.renderer.addClass(host, c);
+    this.classes = next;
   }
 
   /** Writes the attributes of `attrs` that differ from the host's (`null` removes one). */

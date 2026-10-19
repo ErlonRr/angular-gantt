@@ -447,13 +447,12 @@ describe('zoom anchoring and announcement', () => {
     const prev = c.layout.timeline();
     const scrollTo = vi.spyOn(c.scroll, 'scrollToX');
     const canvas = c.$('.gantry-canvas-viewport');
+    // The anchor is read from the viewport itself (phase 10), before the zoom moves it
+    const before = canvas.scrollLeft;
     await c.set(() => c.layout.zoomBy(1, 120));
     const next = c.layout.timeline();
     expect(next.pxPerDay).toBeGreaterThan(prev.pxPerDay);
-    expect(scrollTo).toHaveBeenCalledWith(
-      anchoredScrollLeft(prev, next, c.scroll.scrollLeft(), canvas.clientWidth, 120),
-      'instant',
-    );
+    expect(scrollTo).toHaveBeenCalledWith(anchoredScrollLeft(prev, next, before, canvas.clientWidth, 120), 'instant');
     expect(c.layout.zoomAnchorX()).toBeNull();
   });
 

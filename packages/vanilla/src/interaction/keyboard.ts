@@ -8,7 +8,10 @@
  *   mode while it is on (`keyboard-edit.ts`: modal, it takes every key first);
  * - the task list → `'grid'` (`grid-keys.ts`);
  * - anywhere else (the toolbar, which roves with its own listener; the splitter's toggle; the
- *   timeline viewport while no bar is mounted, whose arrow keys scroll natively) → `'any'`.
+ *   timeline viewport while no bar is mounted, whose arrow keys scroll natively) → `'any'`. The
+ *   toolbar's listener sits below the shadow root and runs first: the keys of its More menu (core
+ *   `toolbarMenuKey`) and its roving keys are prevented there, so they never reach this one (an
+ *   Esc that closes the menu does not clear the selection); Tab out of the menu is not prevented.
  * What the area leaves goes to the global shortcuts: Esc (D24: cancels move mode or a pointer
  * drag, else clears the selection — the open tooltip closes first, in the capture phase,
  * `tooltip-triggers.ts`), Ctrl/⌘+A, and + − T F (`characterShortcuts` from the resolved

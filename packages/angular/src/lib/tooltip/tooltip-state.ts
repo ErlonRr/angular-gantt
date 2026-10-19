@@ -15,7 +15,9 @@
 //   - the canvas' pointer handlers: `hover` / `unhover` / `tap`, and
 //     `dismiss` when a drag starts;
 //   - keyboard focus on a bar: `layout.focusVisibleBarId` (written by the
-//     keyboard model) opens the bar's tooltip at once, `null` blurs it;
+//     keyboard model) opens the bar's tooltip at once, `null` blurs it; a
+//     request whose bar is not rendered yet (before the chart's first
+//     render) opens once it is;
 //   - the popover (GanttTooltipComponent): the pointer resting on it,
 //     Escape, a press elsewhere, scrolls (`reanchor`);
 //   - the chart: a drag or keyboard move mode starting dismisses it, so
@@ -23,10 +25,12 @@
 //     `options.tooltip` changing reset it (a new `render` alone doesn't).
 //  The trigger effects are after-render effects (the tooltip is DOM
 //  work: none of this runs on a server); each reads everything but its
-//  trigger untracked.
+//  trigger untracked (the keyboard-focus one also follows the mounted
+//  rows while its bar is missing).
 //
-//  What it gives the popover: the open bar (`shown`: task, row, anchor
-//  element, the pointer x while hovering), the consumer's
+//  What it gives the popover: the open bar (`shown`: task, the row it
+//  opened with, what opened it, the pointer x while hovering; `anchor`:
+//  its bar element), the consumer's
 //  `<ng-template ganttTooltip>` (`template`) and the popover's element id
 //  (`elementId`, unique per chart), from which the bar outlet stamps
 //  `aria-describedby` on the bar whose tooltip shows (`describedBy`). The
@@ -163,18 +167,17 @@ export class GanttTooltipState {
 
     // ── Triggers (the Web Component's tooltip-triggers effects) ──
 
-    // Keyboard focus on a bar (keyboard modality only): opens its tooltip at once; `null` blurs it
+    // Keyboard focus on a bar (keyboard modality only): opens its tooltip at once; `null` blurs it.
+    // After the render, so a request made before the chart's first render finds its bar. One whose
+    // bar is not mounted yet is tried again after each render that changes the mounted rows, until
+    // the bar is there or focus moves on (a run that found it follows nothing more)
     afterRenderEffect(() => {
       const id = this.layout.focusVisibleBarId();
-      untracked(() => {
-        if (id === null) {
-          this.blur();
-          return;
-        }
-        const row = this.layout.geometryById().get(id)?.row;
-        const el = this.findBar(id);
-        if (row && el) this.focus(row, el);
-      });
+      if (id === null) {
+        untracked(() => this.blur());
+        return;
+      }
+      if (!untracked(() => this.focusBar(id))) this.layout.mountedGeometries();
     });
 
     // A drag or keyboard move mode starts: dismissed (it keeps its own Escape). Each session sets a
@@ -318,6 +321,15 @@ export class GanttTooltipState {
   }
 
   // ── Internals ─────────────────────────────────────────────
+
+  /** Keyboard focus on `id`'s bar: opens its tooltip when its row and its bar element are there (`false` when not). */
+  private focusBar(id: string): boolean {
+    const row = this.layout.geometryById().get(id)?.row;
+    const el = this.findBar(id);
+    if (!row || !el) return false;
+    this.focus(row, el);
+    return true;
+  }
 
   /** Records what points at a bar and sends its event (nothing while the tooltip is off). */
   private point(source: TooltipSource, target: Target): void {

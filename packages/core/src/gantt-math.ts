@@ -5,7 +5,7 @@
 //  Fully testable with Vitest / Jest in Node.
 // ─────────────────────────────────────────────────────────────
 
-import { type GanttTask, type GanttLabels, type TimeUnit } from './types';
+import { type GanttTask, type GanttLabels, type TimeUnit, type WeekStart } from './types';
 import { unitStart, periodNext } from './render/scales';
 import { formatDate as formatPattern } from './format/format';
 
@@ -165,7 +165,7 @@ export function snapRange(
   scale: { unit: TimeUnit; step?: number | undefined },
   paddingDays: number,
   includeDate?: Date | null,
-  weekStart: 0 | 1 = 1,
+  weekStart: WeekStart = 1,
   /** Reference "now" for the empty-data fallback range (keeps the result deterministic) */
   now: Date = new Date(),
 ): TimelineRange {

@@ -103,6 +103,7 @@ function expected(c: Chart, p: DragPreview) {
     locale: c.i18n.locale(),
     dates: layout.cfg(),
     unit: p.unit,
+    format: c.i18n.formats().readoutFormat,
     milestone: barKind(row.barType) === 'milestone',
   });
   const ghost = computeDragGhostVisual(

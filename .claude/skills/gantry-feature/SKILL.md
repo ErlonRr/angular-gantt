@@ -49,6 +49,11 @@ File-by-file map: [parity-map.md](parity-map.md).
 
 - Playground control: `apps/demo-kit/src/playground.ts` (`PLAYGROUND_DEFAULTS`, `PLAYGROUND_SECTIONS`,
   `playgroundOptions()`): the vanilla playground and the site's `/playground` both render it.
+- Examples gallery: add or extend a case in all five frameworks — the shared data, options and
+  choice lists in `apps/demo-kit/src/gallery/cases/<id>.ts` (+ `catalog.ts` for a new case), then
+  the Angular, Web Component, React, Vue and Svelte case files with the same controls and labels
+  (paths in `.claude/rules/docs-and-release.md`), then `pnpm gallery:sources`. A difference between
+  bindings the user can notice goes into `apps/demo-kit/src/gallery/framework-notes.ts`.
 - Root `README.md` → "Configuration" (snippet + one-line explanation); theming table for new
   theme keys; package READMEs only when the element/binding API surface changes.
 - `CHANGELOG.md` → `## [Unreleased]`; a `.changeset/*.md` with the right bumps.

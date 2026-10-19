@@ -1,4 +1,17 @@
-import { type Routes } from '@angular/router';
+import { type ResolveFn, type Routes, type UrlSegment } from '@angular/router';
+
+// The gallery catalog loads with the first case page, not with the site (both are lazy)
+const catalog = () => import('demo-kit/gallery/catalog');
+
+/** `examples/:id` matches gallery case ids only (any other id goes back to /examples). */
+const isGalleryCase = (_route: unknown, segments: UrlSegment[]) =>
+  catalog().then(({ isCaseId }) => isCaseId(segments[1]?.path));
+
+const galleryTitle: ResolveFn<string> = route =>
+  catalog().then(({ galleryCase, isCaseId }) => {
+    const id = route.paramMap.get('id');
+    return `${isCaseId(id) ? galleryCase(id).title : 'Example'} — Gantry examples`;
+  });
 
 export const routes: Routes = [
   {
@@ -17,6 +30,14 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/examples/examples-page.component').then(m => m.ExamplesPageComponent),
     title: 'Examples — Gantry',
   },
+  // Gallery cases (demo-kit/gallery): the live Angular example, its code in every framework, its notes
+  {
+    path: 'examples/:id',
+    canMatch: [isGalleryCase],
+    loadComponent: () => import('./gallery/case-page.component').then(m => m.CasePageComponent),
+    title: galleryTitle,
+  },
+  { path: 'examples/:id', redirectTo: 'examples' },
   {
     path: 'theming',
     loadComponent: () => import('./pages/theming/theming-page.component').then(m => m.ThemingPageComponent),

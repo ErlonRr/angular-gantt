@@ -99,13 +99,36 @@ export interface GanttTask {
   /** Custom bar type key — resolved via GanttBarRegistry */
   barType?: string | undefined;
 
-  /** Per-task style overrides */
+  /**
+   * Style of this task's bar and row: the last layer of the style cascade, over the theme,
+   * `options.styles` (kind, parent, level, rule), the rolled-up colour and the flat fields below.
+   */
+  style?: GanttTaskStyle | undefined;
+
+  /**
+   * Bar fill.
+   * @deprecated Use `style.color` (it wins when both are set).
+   */
   barColor?: string | undefined;
+  /**
+   * Row background.
+   * @deprecated Use `style.rowColor` (it wins when both are set).
+   */
   rowColor?: string | undefined;
-  /** Text colour of the bar label */
+  /**
+   * Text colour of the bar label.
+   * @deprecated Use `style.textColor` (it wins when both are set).
+   */
   textColor?: string | undefined;
+  /**
+   * Progress fill.
+   * @deprecated Use `style.progressColor` (it wins when both are set).
+   */
   progressColor?: string | undefined;
-  /** Extra CSS class on the bar element */
+  /**
+   * Extra CSS class on the bar element.
+   * @deprecated Use `style.className` (the classes of both are applied).
+   */
   className?: string | undefined;
 
   /** Planned baseline dates for variance visualisation */
@@ -131,6 +154,103 @@ export interface GanttTask {
 
 /** Lifecycle status of a task (built-in `status` column). */
 export type TaskStatus = 'notStarted' | 'inProgress' | 'overdue' | 'done';
+
+// ─── Task styles and rollup ──────────────────────────────────
+
+/**
+ * Style of a bar and its row. Every field is optional: an unset field falls through to the layer
+ * below (see `GanttStyleOptions` for the cascade).
+ */
+export interface GanttTaskStyle {
+  /** Bar fill (the critical path still paints its own colour) */
+  color?: string | undefined;
+  /** Progress fill, at full opacity */
+  progressColor?: string | undefined;
+  /** Text colour of the label inside the bar */
+  textColor?: string | undefined;
+  /** Row background in both panes (selection and hover still show over it) */
+  rowColor?: string | undefined;
+  /** Extra CSS class on the bar element; the classes of every layer are applied */
+  className?: string | undefined;
+  /** Bar height: px or % of the row height (default: `bar.height` / `groupBar.height`); a milestone's size (default `milestone.size`) */
+  height?: GanttLength | undefined;
+  /** Corner radius in px (default: `bar.radius`); summary bars cap it at 2 px, milestones at a quarter of their size */
+  radius?: number | undefined;
+  /** Label position (default: `bar.label.position`) */
+  label?: 'inside' | 'left' | 'right' | 'auto' | 'none' | undefined;
+}
+
+/** A style after the cascade: what painters and custom bars (`GanttBarContext.style`) receive. */
+export type ResolvedTaskStyle = Readonly<GanttTaskStyle>;
+
+/** What `styles.rule` receives besides the row. */
+export interface GanttStyleRuleContext {
+  /** The rolled-up values of a parent row (`rollup` on), else `null` */
+  rollup: GanttRollupInfo | null;
+  /** The task is on the critical path (`criticalPath` on) */
+  critical: boolean;
+  /** The task's status: `task.status`, else derived from progress, dates and now */
+  status: TaskStatus | (string & {});
+}
+
+/**
+ * Default styles by kind, parent, level and rule. Field by field, later layers win:
+ * theme < `task` / `group` / `milestone` (by bar kind) < `parent` < `levels[depth]` < the rolled-up
+ * colour < `rule(row, ctx)` < the task's flat fields (`barColor`…) < `task.style`. `className`
+ * accumulates across layers. The critical path still overrides the fill.
+ */
+export interface GanttStyleOptions {
+  /** Task bars */
+  task?: GanttTaskStyle | undefined;
+  /** Group (summary) bars */
+  group?: GanttTaskStyle | undefined;
+  /** Milestones */
+  milestone?: GanttTaskStyle | undefined;
+  /** Rows with children, whatever their kind */
+  parent?: GanttTaskStyle | undefined;
+  /** By exact depth: index 0 styles the root rows, 1 their children… */
+  levels?: (GanttTaskStyle | null | undefined)[] | undefined;
+  /** Per-row style, computed once per row object */
+  rule?: ((row: GanttFlatRow, ctx: GanttStyleRuleContext) => GanttTaskStyle | null | undefined) | undefined;
+}
+
+/**
+ * What a parent row rolls up from its direct children (`rollup: true` =
+ * `{ progress: 'duration', dates: true, color: false, segments: false }`).
+ */
+export interface GanttRollupOptions {
+  /**
+   * Parent progress: `'duration'` = the mean of the children's progress weighted by duration
+   * (milestones weigh 0), `'count'` = the plain mean, `false` = the parent's own. Default `'duration'`.
+   */
+  progress?: 'duration' | 'count' | false | undefined;
+  /** Parent dates: the earliest child start and the latest child end (the bar can't be dragged). Default true */
+  dates?: boolean | undefined;
+  /**
+   * Parent colour: `'status'` paints the summary status of the children, a function returns a colour
+   * (or nothing for the default), `false` keeps the styles. Default false.
+   */
+  color?:
+    'status' | false | ((children: readonly GanttTask[], parent: GanttTask) => string | null | undefined) | undefined;
+  /** A collapsed parent draws its children as segments in their own colours. Default false */
+  segments?: boolean | undefined;
+}
+
+/** The rolled-up values of one parent row. */
+export interface GanttRollupInfo {
+  /** Rolled-up progress 0–100, or `null` when progress is not rolled up */
+  progress: number | null;
+  /** Earliest child start, or `null` when dates are not rolled up */
+  start: Date | null;
+  /** Latest child end, or `null` when dates are not rolled up */
+  end: Date | null;
+  /** Summary status of the children */
+  status: TaskStatus;
+  /** Rolled-up colour, or `null` */
+  color: string | null;
+  /** The direct children, in task order */
+  children: readonly GanttTask[];
+}
 
 // ─── Flat model (internal, after tree processing) ─────────────
 
@@ -256,6 +376,7 @@ export interface AnnotationLabel {
   color?: string | undefined;
   fontSize?: string | undefined;
   fontWeight?: string | undefined;
+  /** Extra vertical offset (px) of the label drawn in the canvas while the marker lane is off; positive moves it down. Default 0 */
   offsetY?: number | undefined;
 }
 
@@ -342,6 +463,11 @@ export interface GanttTheme {
   progressOverlay?: string;
   /** Keyboard focus rings (bars, task list, toolbar). Default `'#2563EB'` (light), `'#60A5FA'` (dark) */
   focusRing?: string;
+  /**
+   * Tint over the row under the mouse, in both panes (`'transparent'` turns the hover off).
+   * Default `'rgba(15, 23, 42, 0.04)'` (light), `'rgba(148, 163, 184, 0.08)'` (dark)
+   */
+  rowHoverBg?: string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -382,6 +508,8 @@ export interface GanttLabels {
   /** Splitter toggle button */
   showPanel: string;
   hidePanel: string;
+  /** Toolbar: the menu button holding the controls that don't fit (`toolbar.overflow: 'menu'`) */
+  more: string;
   /** Week label used by `WEEK_FORMATS.label` ("Week 12") */
   week: string;
   // Legend
@@ -492,7 +620,10 @@ export interface GanttLabels {
   announceLinkStart: (name: string) => string;
   announceLinkCreated: (from: string, to: string) => string;
   announceLinkCancel: string;
-  /** Movement shown above the drag ghost, e.g. "+3d" / "-2h" (`amount` in snap units) */
+  /**
+   * Movement of a drag, e.g. "+3d" / "-2h" (`amount` in snap units).
+   * @deprecated Not shown since 2.0: the drag readout (`dragReadout`) shows the new dates and duration.
+   */
   dragDelta: (amount: number, unit: AnnounceUnit) => string;
   /** Readout next to a dragged bar: its formatted date range and duration, e.g. "3 Mar – 6 Mar · 3 days" */
   dragReadout: (range: string, duration: string) => string;
@@ -540,6 +671,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   viewChart: 'Chart only',
   showPanel: 'Show task list',
   hidePanel: 'Hide task list',
+  more: 'More',
   week: 'Week',
   legend: 'Legend',
   today: 'Today',
@@ -644,6 +776,11 @@ export interface GanttFormats {
   dateFormat: string;
   /** Per-view header label overrides — omitted rows use the built-in formatter */
   header?: Partial<Record<ViewMode, GanttHeaderFormats>> | undefined;
+  /**
+   * Format of the dates in the drag readout (dayjs-compatible tokens). Default: by scale unit,
+   * `DRAG_READOUT_FORMAT` (`'D MMM'`) on day scales and `DRAG_READOUT_HOUR_FORMAT` on hour scales.
+   */
+  readoutFormat?: string | undefined;
 }
 
 export const DEFAULT_FORMATS: GanttFormats = {
@@ -664,12 +801,36 @@ export type GanttLength = number | `${number}%`;
 
 export type TimeUnit = 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year';
 
+/** First day of the week: 0 = Sunday, 1 = Monday, 6 = Saturday. */
+export type WeekStart = 0 | 1 | 6;
+
+/**
+ * How weeks are numbered: `'iso'` (ISO-8601: Monday, week 1 holds the year's first Thursday),
+ * `'us'` (Sunday, week 1 holds January 1) or `'locale'` (the locale's own rule through `Intl`,
+ * falling back to ISO).
+ */
+export type WeekNumbering = 'iso' | 'us' | 'locale';
+
+/** A week-numbering rule, as in `Intl.Locale#getWeekInfo()` (with Sunday as 0). */
+export interface WeekRule {
+  /** First day of the week, 0–6 (0 = Sunday) */
+  firstDay: number;
+  /** Days of the new year week 1 must hold, 1–7 (ISO 4, US 1) */
+  minimalDays: number;
+}
+
+/** Row and header heights and the toolbar control size: compact 28 / normal 36 / comfortable 44 px rows. */
+export type GanttDensity = 'compact' | 'normal' | 'comfortable';
+
 export interface ScaleFormatContext {
   unit: TimeUnit;
   step: number;
   locale?: string | undefined;
   labels: GanttLabels;
-  weekStart: 0 | 1;
+  /** First day of the week of the chart */
+  weekStart: WeekStart;
+  /** Week-numbering rule of the chart (`weekNumbering` and `weekStart`) */
+  week: WeekRule;
 }
 
 /** Format string with dayjs-compatible tokens (e.g. `'MMM YYYY'`, `'[W]W'`) or a function of the cell's period. */
@@ -741,7 +902,11 @@ export interface GanttNonWorkingTime {
   workingHours?: GanttHourRange | GanttHourRange[] | Partial<Record<number, GanttHourRange[]>> | undefined;
   /** Highlighted "intensive" hours, drawn in their own colour */
   intensiveHours?: (GanttHourRange & { color?: string | undefined; label?: string | undefined })[] | undefined;
-  /** `'shade'` = tinted, `'hatch'` = diagonal stripes, `'disabled'` = greyed out */
+  /**
+   * `'shade'` = tinted by kind (`weekendBg`, `holidayBg`, `offHoursBg`), `'hatch'` = the tint plus
+   * diagonal stripes, `'disabled'` = greyed out: weekends, holidays without their own colour and
+   * off-hours in one neutral grey (`borderColor`, `--gantt-border`). Default `'shade'`.
+   */
   style?: 'shade' | 'hatch' | 'disabled' | undefined;
   /** Tint the matching header cells too (default true) */
   showInHeader?: boolean | undefined;
@@ -799,6 +964,11 @@ export interface GanttGroupBarOptions {
   /** `'summary'` = thin bracket bar with end caps, `'bar'` = regular bar */
   style?: 'summary' | 'bar' | undefined;
   showProgress?: boolean | undefined;
+  /**
+   * Every parent row starts collapsed (ids the chart has not seen before, like `task.collapsed`).
+   * With `rollup` this is the "only parents" view. Default false.
+   */
+  collapsed?: boolean | undefined;
 }
 
 export interface GanttArrowOptions {
@@ -809,6 +979,8 @@ export interface GanttArrowOptions {
   color?: string | undefined;
   /** Horizontal clearance before the first bend */
   offset?: number | undefined;
+  /** `'orthogonal'` = right-angled path with rounded bends, `'straight'` = one line. Default `'orthogonal'` */
+  routing?: 'orthogonal' | 'straight' | undefined;
 }
 
 export interface GanttPanelOptions {
@@ -849,6 +1021,21 @@ export interface GanttToolbarOptions {
   viewToggle?: boolean | undefined;
   /** "Fit to screen" button: the finest zoom level that shows every task (default true) */
   fit?: boolean | undefined;
+  /** A button that shows / hides the task list, first in the toolbar (default false) */
+  panelToggle?: boolean | undefined;
+  /**
+   * What happens when the controls don't fit the width: `'menu'` moves the zoom levels, then the
+   * views, into a "More" menu; `'wrap'` wraps them onto more lines. Default `'menu'`.
+   */
+  overflow?: 'menu' | 'wrap' | undefined;
+}
+
+/** Below `breakpoint` px of chart width, the chart shows `view`. */
+export interface GanttResponsiveOptions {
+  /** Width in px under which the chart is narrow (default 640) */
+  breakpoint?: number | undefined;
+  /** View shown while narrow (default `'chart'`); a view the user picks while narrow wins */
+  view?: GanttView | undefined;
 }
 
 export interface GanttKeyboardOptions {
@@ -965,8 +1152,16 @@ export interface GanttOptions {
   zoomLevels?: GanttZoomLevel[] | undefined;
   /** Header tiers for the current level (overrides the level's own scales) */
   scales?: GanttScale[] | undefined;
-  /** First day of the week: 1 = Monday (ISO, default), 0 = Sunday */
-  weekStart?: 0 | 1 | undefined;
+  /**
+   * First day of the week: 1 = Monday, 0 = Sunday, 6 = Saturday. Default: the `weekNumbering`
+   * rule's first day (Monday when neither is set).
+   */
+  weekStart?: WeekStart | undefined;
+  /**
+   * Week numbers in the header: `'iso'`, `'us'` or `'locale'` (see `WeekNumbering`); `weekStart`
+   * overrides the rule's first day. Default `'us'` when `weekStart` is 0, otherwise `'iso'`.
+   */
+  weekNumbering?: WeekNumbering | undefined;
   /** Stretch the timeline so it always fills the viewport (default true) */
   fitToWidth?: boolean | undefined;
   /**
@@ -998,8 +1193,26 @@ export interface GanttOptions {
   arrows?: GanttArrowOptions | undefined;
   /** Tree indentation per level in px (default 16) */
   indentSize?: number | undefined;
+  /** Default bar and row styles by kind, parent, level and rule (`task.style` wins over them) */
+  styles?: GanttStyleOptions | undefined;
+  /**
+   * Parent rows roll up progress, dates, colour and segments from their children. `true` =
+   * `{ progress: 'duration', dates: true, color: false, segments: false }`. Default false.
+   */
+  rollup?: boolean | GanttRollupOptions | undefined;
 
   // ── Layout ──
+  /**
+   * Row height, header tiers and toolbar controls: `'compact'` (rows 28, tiers 28 / 24, controls
+   * 28 px), `'normal'` (36, 32 / 28, 32 px) or `'comfortable'` (44, 36 / 32, 36 px). An explicit
+   * `rowHeight`, `headerHeight` or `subHeaderHeight` wins. Default `'normal'`.
+   */
+  density?: GanttDensity | undefined;
+  /**
+   * Below `breakpoint` px of chart width the chart switches to `view` (the switch is never saved
+   * in the state). `false` turns it off. Default `{ breakpoint: 640, view: 'chart' }`.
+   */
+  responsive?: GanttResponsiveOptions | false | undefined;
   panel?: GanttPanelOptions | undefined;
   /** Columns of the full table view (`view: 'table'`) */
   table?: GanttTableOptions | undefined;
@@ -1090,4 +1303,6 @@ export interface GanttBarContext {
   draggable: boolean;
   /** Geometry computed by the core render model (position, size, label…) */
   visual: BarVisual;
+  /** The row's resolved style (the cascade of `options.styles`, rollup and `task.style`) */
+  style: ResolvedTaskStyle;
 }

@@ -48,13 +48,15 @@ function onDragged(e: TaskDragEvent) {
 
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties), in this order: `tasks`,
   `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
-  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`. An
-  omitted prop keeps the element's default (booleans are not cast to `false`), and a prop that
-  becomes `undefined` (or is dropped) restores it.
+  `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`,
+  `syncGroup`. An omitted prop keeps the element's default (booleans are not cast to `false`),
+  and a prop that becomes `undefined` (or is dropped) restores it.
 - **Events** carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`,
   `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry`.
-- **Default slot** — rendered in the element's light DOM, where its slots pick it up:
-  `<div slot="empty">…</div>` replaces the empty-state text (`labels.emptyState`).
+- **Slots** — rendered in the element's light DOM, where its own slots pick them up: the `empty`
+  slot (`<template #empty>…</template>`) in a `<div slot="empty">`, which replaces the empty-state
+  text (`labels.emptyState`), then the default slot as it is (a `<div slot="empty">…</div>`
+  written there works too).
 - **Template ref** — exposes only `element`: the underlying `GantryElement`, with its
   [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is set
   before the element is inserted, so it is there in the parent's `onMounted`.
@@ -68,14 +70,39 @@ All `@gantryjs/core` types and helpers are re-exported.
 
 ```vue
 <Gantry :tasks="tasks" :loading="pending" :error-message="error ? 'Couldn’t load the plan' : null" @retry="refresh()">
-  <div slot="empty">No tasks yet: add one to start.</div>
+  <template #empty>No tasks yet: <button @click="addTask">add one</button> to start.</template>
 </Gantry>
 ```
 
 `loading` shows the loading state and `errorMessage` the error state, whose Retry button emits
 `retry`: `{ source: 'error' }` for the `errorMessage` state (load again yourself), `{ source:
 'dataSource' }` after a failed first `dataSource` page (the element also calls
-`dataSource.retry()`). The `slot="empty"` element replaces the text shown when there are no tasks.
+`dataSource.retry()`). The `#empty` slot replaces the text shown when there are no tasks: the
+component renders it in a `<div slot="empty">`, the element's empty-state slot (with a `v-if` on
+the `<template #empty>`, the built-in text shows while it is false). A `<div slot="empty">` in the
+default slot does the same.
+
+## Synchronised charts
+
+```vue
+<script setup lang="ts">
+import { Gantry, createGanttSyncGroup } from '@gantryjs/vue';
+
+// A plain constant: the charts share this very object (no ref needed)
+const group = createGanttSyncGroup();
+</script>
+
+<template>
+  <Gantry :tasks="design" :sync-group="group" />
+  <Gantry :tasks="build" :sync-group="group" :show-toolbar="false" />
+</template>
+```
+
+Charts given the same `syncGroup` share one timeline: the date range (the union of their plans),
+the zoom level, the horizontal scroll and the task-list width. `createGanttSyncGroup({ zoom,
+scroll, range, panel })` turns parts off (each is `true` by default). The group reaches the
+element as it is, never copied: a group kept in a `ref` or `reactive` is unwrapped with `toRaw`,
+and only replacing it is watched. `null`, or dropping the prop, takes the chart out of the group.
 
 ## Options and behaviour
 
@@ -115,13 +142,15 @@ screen-reader semantics and forced colors behave as in every Gantry binding: see
   that object (`options.panel = { … }`).
 - **`dataSource`**: keep a `GanttDataSource` in a `shallowRef` (or a plain variable); a deep `ref`
   types it without its private members.
+- **`syncGroup`** is passed as it is (unwrapped from a proxy) and watched only for a new group,
+  never deeply.
 - Listeners come off once the element is unmounted; a `state-change` that the element still
   fires while disconnecting (a pending save) is delivered first.
 
 ## Server-side rendering
 
 `<Gantry>` renders on the server without touching the DOM: `renderToString` emits the
-`<gantry-element>` tag with your attributes and default-slot content (no inline style of its own,
+`<gantry-element>` tag with your attributes and slot content (no inline style of its own,
 so the markup needs no `'unsafe-inline'` style policy); the props and listeners are set on the
 client when it hydrates. Importing `@gantryjs/vue` on the server is safe.
 

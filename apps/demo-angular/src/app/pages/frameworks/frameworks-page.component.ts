@@ -11,7 +11,9 @@ import {
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { FRAMEWORK_NOTES } from 'demo-kit/gallery';
 import { FRAMEWORKS, PACKAGES, SITE, type FrameworkId } from 'demo-kit/site';
+import { FrameworkNoteComponent } from '../../gallery/framework-note.component';
 import { CodeBlockComponent } from '../../shell/code-block.component';
 import { InstallBlockComponent } from '../../shell/install-block.component';
 import { TABS } from '../../shell/tabs';
@@ -29,11 +31,14 @@ import {
 
 const isFramework = (id: string | null): id is FrameworkId => FRAMEWORKS.some(f => f.id === id);
 
-/** /frameworks: one tab per binding (`?f=react` opens that tab), then SSR, types, CSP and dates. */
+/**
+ * /frameworks: one tab per binding (`?f=react` opens that tab), the known differences between the
+ * bindings (`FRAMEWORK_NOTES` of demo-kit/gallery), then SSR, types, CSP and dates.
+ */
 @Component({
   selector: 'app-frameworks-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, CodeBlockComponent, InstallBlockComponent, InlineCodeComponent, TABS],
+  imports: [RouterLink, CodeBlockComponent, InstallBlockComponent, InlineCodeComponent, FrameworkNoteComponent, TABS],
   styles: `
     .fw-panel {
       gap: 18px;
@@ -107,6 +112,25 @@ const isFramework = (id: string | null): id is FrameworkId => FRAMEWORKS.some(f 
         <a class="gs-link" routerLink="/api">API reference</a>
       </p>
     </div>
+
+    <section class="gs-section fw-section" id="known-differences" aria-labelledby="fw-differences">
+      <div class="gs-section-head">
+        <div>
+          <h2 class="gs-h2" id="fw-differences">Known differences</h2>
+          <p>
+            Every option behaves the same in every binding. These are the places where the bindings’ own APIs differ,
+            and what to do about them; each case of the
+            <a class="gs-link" routerLink="/examples" fragment="gallery">gallery</a>
+            lists the ones it runs into.
+          </p>
+        </div>
+      </div>
+      <ul class="gs-case-notes">
+        @for (note of notes; track note.id) {
+          <li [appFrameworkNote]="note" [showCases]="true" [id]="'note-' + note.id"></li>
+        }
+      </ul>
+    </section>
 
     <section class="gs-section fw-section" aria-labelledby="fw-ssr">
       <div class="gs-section-head">
@@ -214,6 +238,7 @@ export class FrameworksPageComponent {
   protected readonly cspCode = CSP_CODE;
   protected readonly localeNotes = LOCALE_NOTES;
   protected readonly localeCode = LOCALE_CODE;
+  protected readonly notes = FRAMEWORK_NOTES;
 
   private readonly query = toSignal(this.route.queryParamMap, {
     initialValue: this.route.snapshot.queryParamMap,

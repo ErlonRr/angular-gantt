@@ -79,6 +79,15 @@ Keyboard, touch, zoom, screen-reader and forced-colors behaviour is the same in 
 see [Keyboard and focus](#keyboard-and-focus), [Touch and pointer](#touch-and-pointer),
 [Zoom](#zoom), [Screen readers](#screen-readers) and [Forced colors](#forced-colors) below.
 
+On this page: [Timeline](#timeline-header-tiers-and-zoom) · [Week numbering](#week-numbering) ·
+[Non-working time](#non-working-time-weekends-holidays-working--intensive-hours) ·
+[Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
+[Panel and table](#task-list-panel-table-view-and-saved-state) · [Responsive and density](#responsive-layout-and-density) ·
+[Toolbar](#toolbar-legend-and-markers) · [Tooltip](#tooltip) · [States](#loading-error-and-empty-states) ·
+[Synchronised charts](#synchronised-charts) · [Dates and locales](#dates-locales-and-format-tokens) ·
+[Theming](#theming) · [Styling hooks](#styling-hooks-across-bindings) · [CSP](#content-security-policy) ·
+[SSR](#server-side-rendering-all-bindings) · [Examples](#examples-gallery).
+
 [wc-properties]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#properties
 [wc-attributes]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#attributes
 [wc-events]: https://github.com/ErlonRr/gantryjs/blob/main/packages/vanilla/README.md#events
@@ -135,6 +144,25 @@ options = {
   at the centre of the viewport in place, zoom gestures the date under the pointer (see
   [Zoom](#zoom)), and `prefers-reduced-motion` turns smooth scrolling into an instant jump.
 
+### Week numbering
+
+```ts
+options = {
+  weekNumbering: 'us', // 'iso' · 'us' · 'locale'
+  weekStart: 6, // 1 = Monday, 0 = Sunday, 6 = Saturday; overrides the rule's first day
+};
+```
+
+- `'iso'`: weeks start on Monday and week 1 holds 4 January (the default). `'us'`: weeks start on
+  Sunday and week 1 is the week that holds 1 January. `'locale'`: the rule of `options.locale`
+  (`Intl.Locale#getWeekInfo()`, else ISO).
+- Unset, `weekNumbering` is `'us'` when `weekStart` is `0`, otherwise `'iso'`. Charts that set
+  neither keep their ISO weeks.
+- Under the US rule the days of the week that holds 1 January are week 1 of the new year, even
+  when they fall in December: Sunday 27 December 2026 reads `W1`, not `W53`.
+- Week cells start on `weekStart`, and the `W` / `WW` tokens and `WEEK_FORMATS` follow the rule.
+  Core exports `weekOfYear(date, rule)`, `weekYear(date, rule)` and the rules `ISO_WEEK`, `US_WEEK`.
+
 ### Non-working time (weekends, holidays, working & intensive hours)
 
 ```ts
@@ -144,7 +172,7 @@ options = {
     holidays: [new Date(2026, 11, 25), { start: d1, end: d2, label: 'Shutdown', color: '#fee2e2' }],
     workingHours: { start: 9, end: 18 }, // or per weekday: { 1: [{ start: 9, end: 13 }, { start: 14, end: 18 }] }
     intensiveHours: [{ start: 10, end: 12, label: 'Focus', color: 'rgba(245,158,11,.2)' }],
-    style: 'shade', // 'shade' | 'hatch' | 'disabled'
+    style: 'shade', // 'shade' (tinted by kind) | 'hatch' (+ stripes) | 'disabled' (one neutral grey)
     showInHeader: true,
     minPxPerDay: 12, // hide day shading in dense zoom levels
   },
@@ -170,12 +198,18 @@ options = {
   },
   milestone: { size: 18, shape: 'diamond' }, // diamond | circle | square
   groupBar: { style: 'summary', height: '40%' }, // summary (bracket) | bar
-  arrows: { width: 1.5, headSize: 5, radius: 6, offset: 12, color: '#64748b' },
+  arrows: { width: 1.5, headSize: 5, radius: 6, offset: 12, color: '#64748b', routing: 'orthogonal' }, // or 'straight'
   indentSize: 16,
 };
 ```
 
-Per task: `barColor`, `progressColor`, `textColor`, `rowColor`, `className`, `draggable`.
+`arrows.routing` is `'orthogonal'` (default, right angles with rounded bends) or `'straight'`: one
+line from the exit edge to the entry edge, its head along the line and its lag label beside the
+midpoint.
+
+Per task: `style` (see [Task styles](#task-styles)) and `draggable`; the flat `barColor`,
+`progressColor`, `textColor`, `rowColor` and `className` still work but are deprecated aliases
+of `style.color` / `progressColor` / `textColor` / `rowColor` / `className`.
 For full control replace the bar renderer (`renderBar` in the Web Component / bindings,
 `provideGanttBar` in Angular) — custom renderers receive the computed geometry in `ctx.visual`
 and its colours in `ctx.visual.paint` (see [Theming](#theming)). The chart gives every bar,
@@ -184,6 +218,65 @@ hit-tests it by its visual box, and draws its focus ring and resize grips in an 
 (`g.gantt-bar-overlay`, from `ctx.visual.focusRect` and `ctx.visual.handles.{left,right}.grip`),
 so a renderer draws only the bar. `ctx.visual.handles` is `{ left, right }` (each a `hit` rect
 and a `grip`) or `null` when the bar can't be resized.
+
+### Task styles
+
+```ts
+options = {
+  styles: {
+    task: { radius: 3 }, // by bar kind: task · group · milestone
+    parent: { color: '#475569', textColor: '#fff' }, // every row with children
+    levels: [{ height: '70%' }, null, { color: '#94a3b8' }], // by depth: 0 = root rows
+    rule: (row, { critical, status }) => (status === 'overdue' && !critical ? { color: '#dc2626' } : null),
+  },
+};
+tasks = [
+  { id: '7', name: 'Launch', start, end, style: { color: '#7c3aed', rowColor: '#faf5ff', className: 'launch' } },
+];
+```
+
+A style has `color`, `progressColor`, `textColor`, `rowColor`, `className`, `height`, `radius` and
+`label` (`'inside' | 'left' | 'right' | 'auto' | 'none'`), all optional. Each field is resolved on its
+own, later layers winning:
+
+| Order | Layer                                                                   |
+| ----- | ----------------------------------------------------------------------- |
+| 1     | the theme and the `bar` / `milestone` / `groupBar` options              |
+| 2     | `styles.task` · `styles.group` · `styles.milestone` (by bar kind)       |
+| 3     | `styles.parent` (rows with children)                                    |
+| 4     | `styles.levels[depth]`                                                  |
+| 5     | the rolled-up colour (`rollup.color`)                                   |
+| 6     | `styles.rule(row, { rollup, critical, status })`, computed once per row |
+| 7     | the deprecated flat fields (`task.barColor`, …)                         |
+| 8     | `task.style` (always wins; `task.style` beats the flat fields)          |
+
+`className` accumulates: every layer's classes apply, each once. The critical path still paints
+its own fill. Custom bars get the result in `ctx.style` (`GanttBarContext`), and the built-in
+bars, the row background in both panes, the task-list icon and the tooltip's progress fill read
+the same style.
+
+### Parents: rollup and collapsed groups
+
+```ts
+options = {
+  rollup: true, // = { progress: 'duration', dates: true, color: false, segments: false }
+  // rollup: { progress: 'count', dates: false, color: 'status', segments: true },
+  groupBar: { collapsed: true }, // every parent starts collapsed
+};
+```
+
+- `progress`: `'duration'` (default) is the mean of a parent's direct children weighted by their
+  duration (milestones weigh 0), `'count'` the plain mean, `false` keeps the parent's own.
+- `dates` (default `true`): the parent spans the earliest child start to the latest child end; its
+  bar can't be dragged.
+- `color`: `'status'` paints the children's summary status, a function
+  `(children, parent) => colour | null`, `false` (default) keeps the styles.
+- `segments` (default `false`): a **collapsed** parent draws its children inside its bar, each in
+  its own colour (`rect.gantt-bar-segment`).
+- Rolled-up values reach the task list, sorting, bars, tooltips and accessible names; events
+  (`rowClick`, `getSelectedTasks()`) keep the raw tasks.
+- `groupBar.collapsed` collapses every parent the chart has not seen yet (an explicit
+  `task.collapsed: false` keeps one open). With `rollup` it is the "only parents" view.
 
 ### Task list panel, table view and saved state
 
@@ -219,11 +312,34 @@ columns = [
 - `state-change` / `(stateChange)` / `onStateChange` reports every layout change; `getState()` /
   `setState()` save and restore it from your own backend.
 
+### Responsive layout and density
+
+```ts
+options = {
+  density: 'compact', // 'compact' · 'normal' (default) · 'comfortable'
+  responsive: { breakpoint: 640, view: 'chart' }, // the default; `false` turns it off
+};
+```
+
+| `density`     | Row height | Header tiers | Toolbar controls |
+| ------------- | ---------- | ------------ | ---------------- |
+| `compact`     | 28         | 28 / 24      | 28 px            |
+| `normal`      | 36         | 32 / 28      | 32 px            |
+| `comfortable` | 44         | 36 / 32      | 36 px            |
+
+- An explicit `rowHeight`, `headerHeight` or `subHeaderHeight` wins over the density.
+- Below `responsive.breakpoint` px of **chart width** (not the window) the chart shows
+  `responsive.view` and goes back to the wide view when it widens. A view the user picks while
+  narrow wins until the width crosses the breakpoint again. The forced view is never saved:
+  `getState().view` and `stateChange` keep the wide view.
+- The chart carries `data-density` and, while narrow, `data-narrow` (see
+  [Read-only CSS variables](#read-only-css-variables)).
+
 ### Toolbar, legend and markers
 
 ```ts
 options = {
-  toolbar: { zoom: true, fit: true, today: true, viewToggle: true }, // `false` hides the toolbar
+  toolbar: { zoom: true, fit: true, today: true, viewToggle: true, panelToggle: false, overflow: 'menu' }, // `false` hides the toolbar
   legend: { position: 'bottom' }, // 'bottom' | 'toolbar' (`showLegend` turns the legend on)
   markers: { lane: 'auto' }, // 'auto' | true | false
 };
@@ -239,6 +355,13 @@ annotations = [{ x1: new Date(2026, 2, 2), label: { text: 'Code freeze' }, color
   toolbar is a single tab stop (see [Keyboard and focus](#keyboard-and-focus)); a radio is
   checked by Space, Enter or a click, never by moving focus onto it. Angular's
   `[ganttToolbar]` content sits between Today and the view switch, outside that roving set.
+- **Panel toggle and More menu.** `toolbar.panelToggle` (default `false`) adds a button first
+  that shows / hides the task list (`aria-pressed`; `labels.showPanel` / `hidePanel`): hiding it
+  goes to the chart view (from the table view too), showing it to the split view, as `togglePanel()`.
+  `toolbar.overflow` decides what happens when the controls don't fit the measured width:
+  `'menu'` (default) moves the zoom levels, then the views, then Today into a **More** button
+  (`labels.more`), a WAI-ARIA menu button (↓ / ↑, Home / End, Enter / Space, Esc, Tab and an outside
+  press close it); `'wrap'` wraps them onto more lines. A toolbar that fits renders as it always did.
 - **Legend.** `showLegend` turns it on. It lists the today marker (with `showToday`), every
   annotation and, when those options are on, the critical path and the baseline; each entry
   has a shape as well as a colour. `legend.position: 'bottom'` (default) puts it in a strip
@@ -329,7 +452,84 @@ of the tab order and the accessibility tree), and focus on one of them moves to 
 the toolbar. The task-list header row stays above the box: its first cell is the task list's
 tab stop.
 
-### Dates and time zones
+### Synchronised charts
+
+Charts that share a **sync group** keep one timeline: the date range (the union of their plans, so a
+date sits at the same x in every chart), the zoom level, the horizontal scroll and the task-list
+width. Create the group once, give it to every chart:
+
+```ts
+import { createGanttSyncGroup } from '@gantryjs/core'; // also re-exported by every package
+
+const group = createGanttSyncGroup(); // or { zoom, scroll, range, panel }: each `true` by default
+```
+
+```html
+<!-- Angular -->
+<gantry [series]="design" [syncGroup]="group" />
+<gantry [series]="build" [syncGroup]="group" [showToolbar]="false" />
+```
+
+```js
+// Web Component
+a.syncGroup = group;
+b.syncGroup = group;
+```
+
+```tsx
+<Gantry tasks={design} syncGroup={group} /> // React
+```
+
+```vue
+<Gantry :tasks="design" :sync-group="group" />
+<!-- Vue -->
+```
+
+```svelte
+<Gantry tasks={design} syncGroup={group} /> <!-- Svelte -->
+```
+
+- Range and task extent are unions over the members; zoom level, scroll and panel width are
+  last-writer-wins and go to every member but the one that reported them. `group.setLevel()` and
+  `group.scrollTo()` drive every member.
+- A chart that joins a group that already has a scroll position opens there instead of at
+  `initialScroll`. A scroll the group applied is never sent back, and a zoom level a chart doesn't
+  have is ignored. Applying the group's panel width doesn't save the chart's state (a later save keeps the width shown), and **Fit to screen**
+  fits the group's extent.
+- `null` or `undefined` (the default) is not synchronised. A chart leaves its group when it is
+  destroyed or disconnected, or when the property changes.
+- Keep the group in a plain constant (Svelte: `const` or `$state.raw`, never a deep `$state`): it
+  is passed by identity and never copied.
+
+### Dates, locales and format tokens
+
+Everything user-facing is translatable. Dates are formatted with the platform's `Intl` API from a
+BCP 47 locale and a dayjs-compatible pattern: no locale files to import, no runtime dependency.
+
+```ts
+options = {
+  locale: 'it', // month and day names → Italian
+  formats: { dateFormat: 'D MMM YYYY', readoutFormat: 'ddd D MMM' }, // columns and tooltip · drag readout
+  labels: { todayButton: 'Oggi', more: 'Altro' }, // any subset: the rest stays English
+};
+```
+
+- `locale`: any BCP 47 tag (`'it'`, `'de-CH'`, `'pt-BR'`, `'ja'`); unknown or malformed tags fall
+  back to `'en'`, the default (deterministic output on every machine). The dayjs global locale is
+  not read.
+- Format tokens: `YYYY YY` · `M MM MMM MMMM` · `Q` · `D DD Do` · `d dd ddd dddd` · `H HH h hh` ·
+  `m mm` · `s ss` · `A a` · `W WW` (week number, see [Week numbering](#week-numbering)) ·
+  `[literal text]`. Names come from `Intl` (CLDR), so a few abbreviations differ slightly from
+  dayjs's locale files (German `Mär`).
+- `labels: Partial<GanttLabels>` overrides any UI string (buttons, tooltip, legend, header
+  prefixes `W` / `Q` / `H`, duration text, column headers, aria-labels).
+- `formats.dateFormat` formats the columns and the tooltip; `formats.header` overrides the header
+  labels per zoom level; `formats.readoutFormat` formats the dates of the drag readout (default
+  `'D MMM'`, with the time on hour scales).
+- Angular also takes defaults for every chart below an injector level, see
+  [Internationalisation & date formats](#internationalisation--date-formats).
+
+**Time zones.**
 
 - `new Date('2026-01-05')` (UTC midnight) is read as **that calendar day in local time**
   (`normalizeDateOnly: true`), so bars line up with day cells in every time zone; `parseDate()` helps too.
@@ -353,6 +553,7 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
 | `--gantt-text` / `-sec` / `-muted` | text colours       |     | `--gantt-sel-bg` / `--gantt-sel-border` | selection                     |
 | `--gantt-progress-overlay`         | `progressOverlay`  |     | `--gantt-today-label`                   | derived: current-period label |
 | `--gantt-focus-ring`               | `focusRing`        |     | `--gantt-tooltip-bg` / `-bdr` / `-txt`  | tooltip                       |
+| `--gantt-row-hover-bg`             | `rowHoverBg`       |     |                                         |                               |
 
 - **Focus rings.** Every keyboard focus ring — toolbar controls, task-list rows, cells and header
   cells, the splitter and its toggle, the timeline viewport and the focused bar — is drawn in
@@ -389,6 +590,9 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
   a page-CSS override of `--gantt-bar`, `--gantt-milestone`, `--gantt-critical` or `--gantt-today`
   must also set the matching token. Labels on an explicit `task.barColor` get a concrete readable
   colour; `task.textColor` and `bar.label.color` always win.
+- **Row hover.** The row under a mouse or pen pointer is tinted in both panes with `--gantt-row-hover-bg`
+  (theme key `rowHoverBg`: `rgba(15, 23, 42, 0.04)` light, `rgba(148, 163, 184, 0.08)` dark;
+  `transparent` turns it off). It clears on leave, scroll and drag start, and is hidden in forced colours.
 - **Progress overlay.** Bars without `task.progressColor` / `bar.progress.color` darken their
   progress part with `--gantt-progress-overlay` (theme key `progressOverlay`, `#000000`) at
   `bar.progress.opacity`.
@@ -397,13 +601,85 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
   `themeMetrics(theme)` returns them and `resolveConfig(options, i18n, themeMetrics(theme))`
   reads them. The resolved config holds no colours, so a colour-only theme change leaves the
   layout as it is.
-- **Every token.** All 43 custom properties (the theme keys and the four derived tokens) are
+- **Every token.** All 44 custom properties (the 40 theme keys and the four derived tokens) are
   listed in the Angular [token map](#theming-1) and the Web Component's [CSS custom
   properties][wc-css].
 - **Custom renderers.** `ctx.visual.paint.{body,progress,label}` may be `var()` strings: apply
   them as style properties (`el.style.setProperty('fill', paint)`), or get a concrete colour with
   `resolvePaint(paint, ctx.theme)` (`ctx.theme` is the chart's resolved theme). `themeToCss(theme)`
   lists every custom property a theme writes, the contrast tokens included.
+
+### Read-only CSS variables
+
+The chart publishes its layout as custom properties on its host, to size your own overlays or
+cells against it. They are outputs: set `rowHeight`, `bar.height` and `density` through the options.
+
+| Hook                 | Value                                                            |
+| -------------------- | ---------------------------------------------------------------- |
+| `--gantt-row-height` | the resolved row height (`36px` by default)                      |
+| `--gantt-bar-height` | the resolved bar height (`21.6px` by default)                    |
+| `data-density`       | `compact` · `normal` · `comfortable`                             |
+| `data-narrow`        | present while the chart is narrower than `responsive.breakpoint` |
+
+On the Web Component the two variables live in the host's theme sheet and `data-density` /
+`data-narrow` on the `wrapper` part (inside the shadow root, so page CSS can't select them: use
+the variables, or the `density` and `responsive` options). On Angular all four are on the
+`<gantry>` host, together with `--gantry-control-size` (the toolbar's control size).
+
+### Styling hooks across bindings
+
+| Hook         | Web Component `<gantry-element>`                                                 | Angular `<gantry>`                            |
+| ------------ | -------------------------------------------------------------------------------- | --------------------------------------------- |
+| Theme tokens | `--gantt-*` on the element (page CSS wins)                                       | `--gantt-*` in `[style]` (needs `!important`) |
+| Inner boxes  | `::part(wrapper \| toolbar \| panel \| splitter \| timeline \| legend \| state)` | the `.gantt-*` classes (light DOM)            |
+| Dark theme   | `:state(dark)`                                                                   | class `gantry-dark`                           |
+| Bar dragged  | `:state(dragging)`                                                               | class `gantry-dragging`                       |
+| Loading      | `:state(loading)`                                                                | class `gantry-loading`                        |
+
+React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component column.
+
+### Content Security Policy
+
+- **Web Component**: works under `style-src 'self'; script-src 'self'; require-trusted-types-for
+'script'` with no `'unsafe-inline'` or `'unsafe-eval'`. The shadow tree is built node by node
+  (no `innerHTML`), the CSS is one constructable stylesheet shared by every instance plus a theme
+  sheet per instance, and every style is a CSSOM write. A strict `style-src` needs constructable
+  stylesheets (Chromium 73+, Firefox 101+, Safari 16.4+); there is no nonce option. Details in
+  its [README][wc-csp].
+- **Angular**: the chart binds styles through the CSSOM (`[style]` maps, never `style=""` strings
+  or HTML parsing), so it adds no inline-style requirement of its own. Angular puts the component
+  styles in `<style>` elements: give them the nonce with `ngCspNonce` on the root element or the
+  `CSP_NONCE` token (`providers: [{ provide: CSP_NONCE, useValue: nonce }]`).
+- React, Vue and Svelte inherit the Web Component's policy.
+
+### Server-side rendering (all bindings)
+
+- **Angular**: SSR-safe, the HTML has the rows, bars, theme tokens and the `region` role (see
+  [Server-side rendering](#server-side-rendering)).
+- **React, Vue, Svelte**: `renderToString` / streaming emit the `<gantry-element>` tag with your
+  class, style and children and touch no DOM API; the chart renders once the element is defined
+  and the component hydrates. Reserve the box until then:
+
+  ```css
+  gantry-element:not(:defined) {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  ```
+
+- **Web Component alone**: importing `@gantryjs/vanilla` on the server is safe (the module top level
+  guards `document` / `HTMLElement`); the chart paints in the browser.
+
+### Examples gallery
+
+Twenty runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading…),
+each in **all five** frameworks with the same controls and a code tab. A "Known differences"
+section on the Frameworks page lists what a framework does differently.
+
+- Angular (the site): `/examples`
+- Web Component: `/wc/examples.html`
+- React: `/react/#/examples` · Vue: `/vue/#/examples` · Svelte: `/svelte/#/examples`
 
 ### Keyboard and focus
 
@@ -847,19 +1123,23 @@ columns = computed<ColumnDef[]>(() => [
 ]);
 ```
 
-**c) Declarative `<ng-template ganttColumn>`** inside `<gantry>` (import `GanttColumnDefDirective`):
+**c) Declarative `ganttColumn`** inside `<gantry>` (import `GanttColumnDefDirective`):
 
 ```html
 <gantry [series]="tasks">
   <ng-template ganttColumn="name" label="Initiative" [width]="210" />
-  <ng-template ganttColumn="owner" label="Owner" [width]="120">
+  <ng-container ganttColumn="owner" label="Owner" [width]="120">
     <ng-template let-row>{{ row.task.data?.['owner'] }}</ng-template>
-  </ng-template>
+  </ng-container>
 </gantry>
 ```
 
 Its inputs are `ganttColumn` (the key), `label`, `width`, `minWidth`, `maxWidth`, `visible`,
-`sortable` and `render`; the ones you leave unset come from the built-in column with the same key.
+`sortable`, `sortValue` and `render`; a cell template goes inside an `<ng-container ganttColumn>`
+(an `<ng-template ganttColumn>` can't hold one). The inputs you leave unset come from the column
+with the same key: over one of your `[columns]` a definition overrides only what it sets (a new
+cell keeps the column's sort rule); over a built-in column, a cell of your own sorts only with
+`sortable` / `sortValue`.
 `<gantry>` reads them through a content query, so a column inside `@if` or `<ng-container>` comes
 and goes with it; a `ganttColumn` outside `<gantry>` is ignored.
 
@@ -969,15 +1249,15 @@ milestones `#7C3AED` (see [Theming](#theming)). The 1.x colours are available as
 | `textMuted`        | `--gantt-text-muted`      |     | derived: label on a milestone    | `--gantt-bar-text-on-milestone` |
 | `fontFamily`       | `--gantt-font`            |     | derived: label on a critical bar | `--gantt-bar-text-on-critical`  |
 | `fontSize`         | `--gantt-font-size`       |     | derived: current-period label    | `--gantt-today-label`           |
-| `focusRing`        | `--gantt-focus-ring`      |     |                                  |                                 |
+| `focusRing`        | `--gantt-focus-ring`      |     | `rowHoverBg`                     | `--gantt-row-hover-bg`          |
 
 ---
 
 ## Internationalisation & date formats
 
-Everything user-facing is translatable. Dates are formatted with the platform's `Intl` API from a
-BCP 47 locale and a dayjs-compatible pattern — no locale files to import, no runtime dependency.
-Set per instance via `options`, or as defaults with `provideGantt()`.
+Locales, labels, format tokens and `formats.readoutFormat` are described once, for every binding, in
+[Dates, locales and format tokens](#dates-locales-and-format-tokens). Set them per instance in
+`options`, or as defaults with `provideGantt()`:
 
 ```ts
 <gantry
@@ -992,17 +1272,6 @@ Set per instance via `options`, or as defaults with `provideGantt()`.
     },
   }" />
 ```
-
-- `locale` — any BCP 47 tag (`'it'`, `'de-CH'`, `'pt-BR'`, `'ja'`); unknown or malformed tags fall
-  back to `'en'`. The default is `'en'` (deterministic output on every machine); the dayjs global
-  locale is no longer read, so set `locale` explicitly.
-- Format tokens (dayjs-compatible): `YYYY YY` · `M MM MMM MMMM` · `Q` · `D DD Do` · `d dd ddd dddd` ·
-  `H HH h hh` · `m mm` · `s ss` · `A a` · `W WW` (ISO week) · `[literal text]`. Names come from `Intl`
-  (CLDR), so a few abbreviations differ slightly from dayjs's locale files (e.g. German `Mär`).
-- `labels: Partial<GanttLabels>` — override any UI string (buttons, tooltip, legend,
-  header prefixes `W`/`Q`/`H`, duration text, column headers, aria-labels).
-- `formats: { dateFormat, header }` — `dateFormat` for columns/tooltip; `header`
-  for per-view custom header formatters `(date) => string`.
 
 Defaults for every chart below an injector level: `provideGantt({ locale: 'it', labels: {…}, formats: {…} })`
 (merged per key along the hierarchy, see [Providers & setup](#providers--setup)).
@@ -1067,6 +1336,7 @@ const routes: Routes = [
 | `showLegend`                  | `boolean`                         | `false`                                                                               |
 | `loading`                     | `boolean`                         | `false`: the [loading state](#loading-error-and-empty-states) while there are no rows |
 | `errorMessage`                | `string \| null \| undefined`     | `null`: a non-blank message shows the error state with Retry                          |
+| `syncGroup`                   | `GanttSyncGroup \| null`          | `null`: charts sharing a group share range, zoom, scroll and panel width              |
 
 | Output                     | Payload                                                                                |
 | -------------------------- | -------------------------------------------------------------------------------------- |
@@ -1086,6 +1356,8 @@ const routes: Routes = [
   `zoomIn()` / `zoomOut()` / `setViewMode()`, a restored state or a new `options.viewMode`; it does
   not fire for a value the parent sets through `[viewMode]`, nor on the first render. Between
   `[viewMode]` and `options.viewMode`, the one that changed last wins.
+- **`syncGroup`** takes a `createGanttSyncGroup()` group (see [Synchronised charts](#synchronised-charts)).
+  A chart leaves its group when it is destroyed or the input changes.
 - **`loading` / `errorMessage` / `retry`** drive the chart's
   [loading, error and empty states](#loading-error-and-empty-states); the empty state shows your
   `[ganttEmpty]` content (see [ng-content slots](#ng-content-slots)).
@@ -1101,7 +1373,7 @@ Angular pieces:
 | Export                                                                       | What                                                       |
 | ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `GantryComponent`                                                            | `<gantry>`                                                 |
-| `GanttColumnDefDirective`                                                    | `<ng-template ganttColumn>` column definitions             |
+| `GanttColumnDefDirective`                                                    | `ganttColumn` column definitions                           |
 | `GanttTooltipTemplateDirective`, `GanttTooltipTemplateContext`               | `<ng-template ganttTooltip>` [tooltip content](#tooltip)   |
 | `provideGantt`, `withBars`, `GanttGlobalConfig`, `GanttFeature`              | optional defaults ([Providers & setup](#providers--setup)) |
 | `provideGanttBar`, `GanttBarDef`, `GanttBarBase`                             | [custom bars](#custom-bar-component)                       |

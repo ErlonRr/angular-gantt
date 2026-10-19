@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { createApp, createSSRApp, h, nextTick, ref, shallowReactive, type App, type VNode } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { GANTRY_EVENTS, GANTRY_PROPERTIES, GantryElement, type GantryProperties } from '@gantryjs/vanilla';
-import { Gantry, ViewMode, type GanttTask, type RetryEvent } from '../index';
+import { Gantry, ViewMode, createGanttSyncGroup, type GanttTask, type RetryEvent } from '../index';
 
 type Name = (typeof GANTRY_PROPERTIES)[number];
 
@@ -30,6 +30,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   renderBar: () => null,
   loading: true,
   errorMessage: 'Couldn’t load the plan',
+  syncGroup: createGanttSyncGroup(),
 };
 
 const apps: App[] = [];
@@ -51,7 +52,9 @@ afterEach(() => {
 
 describe('chart-state props', () => {
   it('declares loading and errorMessage after renderBar, as GANTRY_PROPERTIES does', () => {
-    expect(Object.keys(Gantry['props'] as object).slice(-3)).toEqual(['renderBar', 'loading', 'errorMessage']);
+    const keys = Object.keys(Gantry['props'] as object);
+    const at = keys.indexOf('renderBar');
+    expect(keys.slice(at, at + 3)).toEqual(['renderBar', 'loading', 'errorMessage']);
   });
 
   it('forwards loading and errorMessage; undefined (or dropping them) restores the defaults', async () => {

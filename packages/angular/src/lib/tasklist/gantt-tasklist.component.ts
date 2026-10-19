@@ -28,8 +28,19 @@
 //
 //  Chrome and text colours are stylesheet rules on the `--gantt-*` tokens
 //  (the same rules as `styles/tasklist.css.ts`); row backgrounds, status
-//  dots and the icon of a task with `barColor` are `Paint`s bound as CSS
+//  dots and the icon of a styled task are `Paint`s bound as CSS
 //  properties.
+//
+//  Row backgrounds are core `rowPaint` with the row's resolved style
+//  (`layout.rowStyle`: selection, else `rowColor`, else the zebra); the
+//  name cell's icon takes the style's `color` (the stylesheet gives the
+//  others the muted text). The row under a mouse or pen pointer
+//  (`layout.hoveredRowId`, in either pane, D4 of Gantry 2 phase 10) gets
+//  `gantt-tl-row--hover`: the `--gantt-row-hover-bg` tint as a background
+//  image over that background, like the timeline's `rect.gantt-row-hover`.
+//  This list hears it by delegation (one `pointerover` / `pointerleave` on
+//  the rows group, bound after the first render; a touch never hovers, nor
+//  does anything while a bar is dragged).
 //
 //  Rows: the mounted rows of the chart's virtual window plus the pinned
 //  ones (the focused row kept mounted while it scrolls away), each pinned
@@ -65,7 +76,19 @@
 //  width reached so far.
 // ─────────────────────────────────────────────────────────────
 
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, input, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  type ElementRef,
+  afterNextRender,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 
 import { type GanttFlatRow, type ColumnDef } from '../types';
@@ -81,9 +104,12 @@ import {
   type CellVisual,
   type ColumnContext,
   type GridFocusSpot,
+  type StyleResolver,
   type VirtualWindow,
 } from '@gantryjs/core';
 import { GanttI18nService } from '../services/gantt-i18n.service';
+import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { GanttDragService } from '../drag/gantt-drag.service';
 
 @Component({
   selector: 'gantt-tasklist',
@@ -144,12 +170,14 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
     </div>
 
     <!-- ── Task rows ──────────────────────────────────────── -->
-    <div class="gantt-tl-rows" role="rowgroup" [attr.inert]="covered() ? '' : null">
+    <div #rowsEl class="gantt-tl-rows" role="rowgroup" [attr.inert]="covered() ? '' : null">
       <!-- Spacer top (virtual scroll) -->
       <div aria-hidden="true" [style.height.px]="paddingTop()"></div>
 
       <!-- The window's rows and the pinned ones (out of the flow, at their row offset). Their keys are
            the chart's keyboard directive (one listener on the chart) -->
+      @let hoveredId = layout.hoveredRowId();
+      @let styleOf = layout.rowStyle();
       @for (m of rows(); track m.row.task.id) {
         @let row = m.row;
         @let rowId = row.task.id;
@@ -160,6 +188,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [class.gantt-tl-row--selected]="isSelected(row)"
           [class.gantt-tl-row--group]="row.hasChildren"
           [class.gantt-tl-row--pinned]="m.pinnedTop !== null"
+          [class.gantt-tl-row--hover]="rowId === hoveredId"
           [attr.data-task-id]="row.task.id"
           [attr.data-focus-key]="'row:' + row.task.id"
           [attr.tabindex]="rowId === rowStop() ? 0 : -1"
@@ -172,7 +201,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
           [style.top.px]="m.pinnedTop"
           [style.grid-template-columns]="gridTemplate()"
           [style.height.px]="rowHeight()"
-          [style.background-color]="rowBg(row)"
+          [style.background-color]="rowBg(row, styleOf)"
           (click)="onRowClick($event, row)"
           (dblclick)="rowDblClick.emit(row)"
         >
@@ -210,8 +239,8 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
                     <!-- Leaf indent (as wide as the collapse control) -->
                     <span class="gantt-tl-indent"></span>
                   }
-                  <!-- The task's own colour, else the stylesheet's muted text -->
-                  <span class="gantt-tl-icon" aria-hidden="true" [style.color]="row.task.barColor ?? null">{{
+                  <!-- The row style's colour, else the stylesheet's muted text -->
+                  <span class="gantt-tl-icon" aria-hidden="true" [style.color]="styleOf(row).color ?? null">{{
                     taskIcon(row)
                   }}</span>
                   <span class="gantt-tl-ellipsis">{{ nameText(col, row) }}</span>
@@ -283,8 +312,9 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         transition: background-color 0.1s;
         border-bottom: 1px solid var(--gantt-border);
       }
-      .gantt-tl-row:hover {
-        filter: brightness(0.96);
+      /* The hovered row (in either pane): the tint over its background colour */
+      .gantt-tl-row--hover {
+        background-image: linear-gradient(var(--gantt-row-hover-bg), var(--gantt-row-hover-bg));
       }
       .gantt-tl-row--selected {
         box-shadow: inset 3px 0 0 var(--gantt-sel-border, #2563eb);
@@ -396,10 +426,14 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         outline-offset: -2px;
       }
 
-      /* Forced colours (D25): the selected row Highlight / HighlightText over its inline background,
-         opting out of forcing (the Canvas text backplate would hide HighlightText), so its subtree's
-         colours are set here (its focus rings HighlightText); status dots CanvasText */
+      /* Forced colours (D25): the hover tint hidden (row backgrounds stay plain); the selected row
+         Highlight / HighlightText over its inline background, opting out of forcing (the Canvas text
+         backplate would hide HighlightText), so its subtree's colours are set here (its focus rings
+         HighlightText); status dots CanvasText */
       @media (forced-colors: active) {
+        .gantt-tl-row--hover {
+          background-image: none;
+        }
         .gantt-tl-row--selected {
           forced-color-adjust: none;
           background-color: Highlight !important;
@@ -430,9 +464,18 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
 })
 export class GanttTaskListComponent {
   constructor() {
+    const destroyRef = inject(DestroyRef);
     // A resize still running when the list goes: drop its listeners, keep the width reached
-    inject(DestroyRef).onDestroy(() => this.colResize.abort());
+    destroyRef.onDestroy(() => this.colResize.abort());
+    // Browser only (never on the server): the hovered row's listeners, released with the list
+    afterNextRender(() => destroyRef.onDestroy(this.connectHover()));
   }
+
+  /** The chart's layout graph: the hovered row and the rows' resolved styles */
+  protected readonly layout = inject(GanttLayoutService);
+  /** A bar is dragged: no row hovers meanwhile */
+  private readonly drag = inject(GanttDragService);
+  private readonly rowsEl = viewChild.required<ElementRef<HTMLElement>>('rowsEl');
 
   // ── Inputs ────────────────────────────────────────────────
   /** Rows to mount, in DOM order: the virtual window plus the pinned rows (`mountedRows`) */
@@ -546,9 +589,9 @@ export class GanttTaskListComponent {
     return this.selectedIds().has(row.task.id);
   }
 
-  /** Same background as the timeline rows (`rowPaint`: selection > `task.rowColor` > zebra) */
-  protected rowBg(row: GanttFlatRow): string {
-    return rowPaint({ row }, this.isSelected(row));
+  /** Same background as the timeline rows (`rowPaint` with the row's style: selection > `rowColor` > zebra) */
+  protected rowBg(row: GanttFlatRow, styleOf: StyleResolver): string {
+    return rowPaint({ row }, this.isSelected(row), styleOf(row));
   }
 
   protected taskIcon(row: GanttFlatRow): string {
@@ -610,6 +653,35 @@ export class GanttTaskListComponent {
   // ── Column resize ─────────────────────────────────────────
   protected onColResizeStart(event: PointerEvent, col: ColumnDef): void {
     this.colResize.start(event.currentTarget as HTMLElement, event, col);
+  }
+
+  // ── Row hover ─────────────────────────────────────────────
+  /**
+   * Delegated listeners on the rows group (after the first render): the row a mouse or pen enters
+   * is the chart's hovered row (its tint shows in both panes); leaving the rows clears it. A touch
+   * never hovers, and nothing does while a bar is dragged. Returns the release.
+   */
+  private connectHover(): () => void {
+    const rows = this.rowsEl().nativeElement;
+    const listeners = new AbortController();
+    const { signal } = listeners;
+    rows.addEventListener(
+      'pointerover',
+      e => {
+        if (e.pointerType === 'touch' || this.drag.isPointerDrag()) return;
+        const row = e.target instanceof Element ? e.target.closest('.gantt-tl-row') : null;
+        this.layout.hoveredRowId.set(row?.parentElement === rows ? row.getAttribute('data-task-id') : null);
+      },
+      { passive: true, signal },
+    );
+    rows.addEventListener(
+      'pointerleave',
+      e => {
+        if (e.pointerType !== 'touch') this.layout.hoveredRowId.set(null);
+      },
+      { passive: true, signal },
+    );
+    return () => listeners.abort();
   }
 }
 

@@ -48,6 +48,7 @@ export const LightTheme: Readonly<Required<GanttTheme>> = {
   statusDone: '#15803D',
   progressOverlay: '#000000',
   focusRing: '#2563EB',
+  rowHoverBg: 'rgba(15, 23, 42, 0.04)',
 };
 
 export const DarkTheme: Readonly<Required<GanttTheme>> = {
@@ -90,6 +91,7 @@ export const DarkTheme: Readonly<Required<GanttTheme>> = {
   statusDone: '#4ADE80',
   progressOverlay: '#000000',
   focusRing: '#60A5FA',
+  rowHoverBg: 'rgba(148, 163, 184, 0.08)',
 };
 
 /**
@@ -168,6 +170,7 @@ export const THEME_CSS_VARS: ReadonlyArray<readonly [keyof GanttTheme, string]> 
   ['statusDone', '--gantt-status-done'],
   ['progressOverlay', '--gantt-progress-overlay'],
   ['focusRing', '--gantt-focus-ring'],
+  ['rowHoverBg', '--gantt-row-hover-bg'],
 ];
 
 /** Parse a CSS length like `'4px'` / `'6'` to px (fallback when not numeric). */

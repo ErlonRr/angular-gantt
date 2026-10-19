@@ -1,7 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  Tests — toolbar model (Phase 9, step 2.6): groups and classes (the
 //  painters' paint keys), focus keys, radio semantics, icons, the roving
-//  tab stop and the arrow-key moves.
+//  tab stop and the arrow-key moves. Phase 10 step 2.5: the panel toggle
+//  group, the pressed / haspopup / expanded states and the new icons
+//  (the overflow layout is in toolbar-overflow.test.ts).
 // ─────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from 'vitest';
@@ -14,6 +16,8 @@ import {
   TOOLBAR_ICON_STROKE,
   TOOLBAR_ICON_VIEWBOX,
   buildToolbar,
+  taskListShown,
+  togglePanelView,
   toolbarFocusMove,
   toolbarItems,
   toolbarTabStop,
@@ -28,6 +32,8 @@ const ALL: ResolvedToolbar = {
   today: true,
   viewToggle: true,
   fit: true,
+  panelToggle: false,
+  overflow: 'menu',
 };
 
 const LEVELS: GanttZoomLevel[] = ['Hour', 'Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
@@ -90,7 +96,9 @@ describe('buildToolbar — groups', () => {
   it('returns no group without a toolbar or with every part off', () => {
     expect(buildToolbar(input({ toolbar: false }))).toEqual([]);
     expect(
-      buildToolbar(input({ toolbar: { zoom: false, viewModes: false, today: false, viewToggle: false, fit: false } })),
+      buildToolbar(
+        input({ toolbar: { ...ALL, zoom: false, viewModes: false, today: false, viewToggle: false, fit: false } }),
+      ),
     ).toEqual([]);
   });
 
@@ -148,8 +156,17 @@ describe('buildToolbar — controls', () => {
       text: 'Today',
       ariaLabel: null,
       title: null,
+      pressed: null,
+      haspopup: null,
+      expanded: null,
       action: { type: 'today' },
     });
+  });
+
+  it('leaves the toggle and popup states off every default control (no attribute: unchanged paint)', () => {
+    for (const item of toolbarItems(buildToolbar(input()))) {
+      expect([item.pressed, item.haspopup, item.expanded]).toEqual([null, null, null]);
+    }
   });
 
   it('makes zoom levels text radios with exactly the current level checked', () => {
@@ -257,6 +274,99 @@ describe('buildToolbar — controls', () => {
   });
 });
 
+describe('buildToolbar — panel toggle (toolbar.panelToggle)', () => {
+  const PANEL: ResolvedToolbar = { ...ALL, panelToggle: true };
+
+  it('is off by default: no panel group, the four groups as before', () => {
+    expect(buildToolbar(input()).map(g => g.key)).toEqual(['zoom', 'levels', 'today', 'views']);
+    expect(resolveConfig({}).toolbar).toMatchObject({ panelToggle: false });
+  });
+
+  it('adds the panel group first, before the zoom buttons', () => {
+    const groups = buildToolbar(input({ toolbar: PANEL }));
+    expect(groups.map(g => [g.key, g.className, g.role, g.ariaLabel])).toEqual([
+      ['panel', 'gantt-tb-group gantt-tb-panel-group', null, null],
+      ['zoom', 'gantt-tb-group', null, null],
+      ['levels', 'gantt-tb-group gantt-tb-pills', 'radiogroup', 'Zoom level'],
+      ['today', 'gantt-tb-group', null, null],
+      ['views', 'gantt-tb-group gantt-tb-pills gantt-tb-views', 'radiogroup', 'View'],
+    ]);
+    expect(keysOf(toolbarItems(groups))[0]).toBe('panel');
+  });
+
+  it('is an aria-pressed icon button named by ariaTaskList, titled hidePanel while the task list shows', () => {
+    const split = buildToolbar(input({ toolbar: PANEL, view: 'split' }))[0].items;
+    expect(split).toEqual([
+      {
+        focusKey: 'panel',
+        className: 'gantt-tb-btn gantt-tb-panel',
+        role: null,
+        checked: null,
+        icon: 'panel',
+        text: null,
+        ariaLabel: 'Tasks',
+        title: 'Hide task list',
+        pressed: true,
+        haspopup: null,
+        expanded: null,
+        action: { type: 'togglePanel' },
+      },
+    ]);
+    const chart = buildToolbar(input({ toolbar: PANEL, view: 'chart' }))[0].items[0];
+    expect([chart.pressed, chart.title, chart.ariaLabel]).toEqual([false, 'Show task list', 'Tasks']);
+    // The table view shows the task list too
+    expect(buildToolbar(input({ toolbar: PANEL, view: 'table' }))[0].items[0].pressed).toBe(true);
+  });
+
+  it('says what a press does in every view: togglePanelView hides a shown task list, shows a hidden one', () => {
+    expect(taskListShown('split')).toBe(true);
+    expect(taskListShown('table')).toBe(true);
+    expect(taskListShown('chart')).toBe(false);
+    // From the table view, hiding the task list leaves the timeline alone (not the split view)
+    expect(togglePanelView('split')).toBe('chart');
+    expect(togglePanelView('table')).toBe('chart');
+    expect(togglePanelView('chart')).toBe('split');
+    for (const view of ['split', 'table', 'chart'] as const) {
+      const [item] = buildToolbar(input({ toolbar: PANEL, view }))[0].items;
+      const after = togglePanelView(view);
+      // Pressed while the list shows, and a press hides it; not pressed, a press shows it
+      expect(item.pressed, view).toBe(taskListShown(view));
+      expect(taskListShown(after), view).toBe(!item.pressed);
+      expect(item.title, view).toBe(item.pressed ? DEFAULT_LABELS.hidePanel : DEFAULT_LABELS.showPanel);
+    }
+  });
+
+  it('reads its strings from the labels', () => {
+    const labels = { ...DEFAULT_LABELS, ariaTaskList: 'Attività', showPanel: 'Mostra', hidePanel: 'Nascondi' };
+    const [shown] = buildToolbar(input({ toolbar: PANEL, labels }))[0].items;
+    const [hidden] = buildToolbar(input({ toolbar: PANEL, labels, view: 'chart' }))[0].items;
+    expect([shown.ariaLabel, shown.title, hidden.title]).toEqual(['Attività', 'Nascondi', 'Mostra']);
+  });
+
+  it('stands alone when every other part is off, and joins the roving set first', () => {
+    const lone = buildToolbar(
+      input({ toolbar: { ...PANEL, zoom: false, viewModes: false, today: false, viewToggle: false, fit: false } }),
+    );
+    expect(lone.map(g => g.key)).toEqual(['panel']);
+    const items = toolbarItems(buildToolbar(input({ toolbar: PANEL })));
+    expect(toolbarTabStop(items, null)).toBe('panel');
+    expect(toolbarFocusMove(items, 'panel', 'move.right')).toBe('zoom-out');
+    expect(toolbarFocusMove(items, 'panel', 'move.left')).toBe('view:chart');
+  });
+
+  it('follows the resolved option', () => {
+    const cfg = resolveConfig({ toolbar: { panelToggle: true } });
+    const groups = buildToolbar({
+      toolbar: cfg.toolbar,
+      zoomLevels: cfg.zoomLevels,
+      labels: DEFAULT_LABELS,
+      viewMode: cfg.level.name,
+      view: cfg.view,
+    });
+    expect(groups.map(g => g.key)).toEqual(['panel', 'zoom', 'levels', 'today', 'views']);
+  });
+});
+
 // ─── Icons ────────────────────────────────────────────────────
 
 type Point = [number, number];
@@ -324,7 +434,17 @@ function pathPoints(d: string): { points: Point[]; radii: number[] } {
 }
 
 describe('toolbar icons', () => {
-  const ICONS: ToolbarIcon[] = ['zoomIn', 'zoomOut', 'fit', 'today', 'viewSplit', 'viewTable', 'viewChart'];
+  const ICONS: ToolbarIcon[] = [
+    'zoomIn',
+    'zoomOut',
+    'fit',
+    'today',
+    'viewSplit',
+    'viewTable',
+    'viewChart',
+    'panel',
+    'more',
+  ];
 
   it('defines every icon on a 16 px grid, stroked with currentColor at 1.5 px', () => {
     expect(TOOLBAR_ICON_VIEWBOX).toBe('0 0 16 16');
@@ -357,6 +477,26 @@ describe('toolbar icons', () => {
     expect(new Set(drawings).size).toBe(ICONS.length);
     expect(TOOLBAR_ICONS.zoomIn.slice(0, TOOLBAR_ICONS.zoomOut.length)).toEqual(TOOLBAR_ICONS.zoomOut);
     expect(TOOLBAR_ICONS.zoomIn.length).toBe(TOOLBAR_ICONS.zoomOut.length + 1);
+  });
+
+  it('draws the panel as the view frame with a sidebar line, and More as three dots in a row', () => {
+    expect(TOOLBAR_ICONS.panel[0]).toBe(TOOLBAR_ICONS.viewSplit[0]);
+    expect(TOOLBAR_ICONS.panel).toHaveLength(2);
+    expect(pathPoints(TOOLBAR_ICONS.panel[1]).points).toEqual([
+      [6, 2.5],
+      [6, 13.5],
+    ]);
+    const dots = TOOLBAR_ICONS.more.map(d => pathPoints(d));
+    expect(dots).toHaveLength(3);
+    for (const { points, radii } of dots) {
+      // A closed circle (two half arcs) of radius 0.75: a solid 3 px dot once stroked at 1.5 px
+      expect(points[0]).toEqual(points.at(-1));
+      expect(radii).toEqual([0.75, 0.75, 0.75, 0.75]);
+      expect(points.every(([, y]) => y === 8)).toBe(true);
+    }
+    // Evenly spaced, centred on the 16 px grid
+    const centres = dots.map(({ points }) => points[0][0] + 0.75);
+    expect(centres).toEqual([3.5, 8, 12.5]);
   });
 
   it('keeps the magnifier ring a closed circle around (7, 7)', () => {
@@ -413,7 +553,9 @@ describe('toolbarFocusMove', () => {
 
   it('stays on a lone control and ignores vertical moves and empty toolbars', () => {
     const lone = toolbarItems(
-      buildToolbar(input({ toolbar: { zoom: false, viewModes: false, today: true, viewToggle: false, fit: false } })),
+      buildToolbar(
+        input({ toolbar: { ...ALL, zoom: false, viewModes: false, today: true, viewToggle: false, fit: false } }),
+      ),
     );
     expect(toolbarFocusMove(lone, 'today', 'move.right')).toBe('today');
     expect(toolbarFocusMove(items, 'today', 'move.up')).toBeNull();

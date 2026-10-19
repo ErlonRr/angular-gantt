@@ -311,12 +311,15 @@ describe('canvas layers', () => {
       handles: null,
       focusRect: { x: 7, y: 2, width: 106, height: 26, rx: 7 },
       hitBox: { x: 10, y: 5, width: 100, height: 20 },
+      className: null,
+      segments: null,
       ...over,
     });
     const parts = (g: Element) => [...g.children].map(c => c.getAttribute('class'));
 
     it('adds and removes the optional parts in painting order, keeping the others in place', () => {
-      const g = createBar(visual(), { fontPx: 12, selected: false, className: 'mine', draggable: true });
+      // The row style's classes are the visual's (`visual.className`)
+      const g = createBar(visual({ className: 'mine' }), { fontPx: 12, selected: false, draggable: true });
       expect(g.getAttribute('class')).toBe('gantt-bar gantt-bar--task mine gantt-bar-draggable');
       expect(parts(g)).toEqual(['gantt-bar-body', 'gantt-bar-progress', 'gantt-bar-label']);
       const [body, , label] = [...g.children] as SVGElement[];
@@ -528,7 +531,7 @@ describe('canvas layers', () => {
       expect($$(el, '.gantt-annotation-labels > *')).toHaveLength(0);
     });
 
-    it('patches the persistent today line and shows the core ghost (with its movement label) only while dragging', () => {
+    it('patches the persistent today line and shows the core ghost (no movement label) only while dragging', () => {
       el = mount({ tasks: plan(10), options: { viewMode: ViewMode.Day, initialScroll: false } });
       const { dom, graph: G } = getEngine(el);
       const today = $(el, '.gantt-today');
@@ -548,12 +551,11 @@ describe('canvas layers', () => {
       expect(ghost.hasAttribute('fill-opacity')).toBe(false);
       expect(ghost.style.getPropertyValue('fill')).toBe(PAINTS.ghost);
       expect(ghost.style.getPropertyValue('stroke')).toBe(PAINTS.ghost);
-      const label = ghost.previousElementSibling!;
-      expect(label.getAttribute('class')).toBe('gantt-drag-preview-label');
-      expect(label.textContent).toBe('+2d');
-      expect(label.getAttribute('text-anchor')).toBe('middle');
+      // No movement label next to the ghost: the drag readout chip shows the move
+      expect(v.label).toBeNull();
+      expect($(el, '.gantt-drag-preview-label')).toBeNull();
 
-      // A further move patches the same two nodes
+      // A further move patches the same node
       const canvas = $(el, '.gantry-canvas-container')!;
       const px = G.timeline().pxPerDay;
       canvas.dispatchEvent(
@@ -561,13 +563,12 @@ describe('canvas layers', () => {
       );
       flush(el);
       expect($(el, '.gantt-drag-preview')).toBe(ghost);
-      expect(ghost.previousElementSibling).toBe(label);
-      expect(label.textContent).toBe('+3d');
+      expect(ghost.getAttribute('x')).toBe(String(v.x + px));
+      expect($(el, '.gantt-drag-preview-label')).toBeNull();
 
       canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x0 + 3 * px, pointerId: 1, pointerType: 'mouse' }));
       flush(el);
       expect($$(el, '.gantt-drag-preview')).toHaveLength(0);
-      expect(label.isConnected).toBe(false);
       expect($(el, '.gantt-today')).toBe(today);
     });
   });

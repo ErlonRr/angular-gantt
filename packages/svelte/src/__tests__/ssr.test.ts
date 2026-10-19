@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'svelte/server';
 import { GANTRY_EVENTS, GANTRY_PROPERTIES } from '@gantryjs/vanilla';
-import { Gantry, ViewMode, type GanttTask } from '../index';
+import { Gantry, ViewMode, createGanttSyncGroup, type GanttTask } from '../index';
 import EmptyState from './EmptyState.svelte';
 
 const TASKS: GanttTask[] = [
@@ -34,6 +34,7 @@ describe('<Gantry> on the server', () => {
         renderBar: () => null,
         loading: true,
         errorMessage: 'Offline',
+        syncGroup: createGanttSyncGroup(),
         onTaskDragged: () => {},
         onRetry: () => {},
         onSelectionChange: () => {},

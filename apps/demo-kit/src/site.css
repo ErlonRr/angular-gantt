@@ -1262,6 +1262,384 @@ a.gs-card:hover {
   font-size: 15px;
 }
 
+/* ── Examples gallery ─────────────────────────────────────── */
+
+/*
+ * Index: a jump list of categories, then each category's heading and a grid of cards. A card's
+ * title links to the case; its framework links open the same case in each demo app.
+ */
+.gs-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+.gs-gallery-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 36px;
+  padding: 0;
+  list-style: none;
+}
+.gs-gallery-cat-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--gs-border);
+  border-radius: 999px;
+  background: var(--gs-surface);
+  color: var(--gs-text);
+  font-size: 14px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.gs-gallery-cat-link:hover {
+  border-color: var(--gs-border-strong);
+  background: var(--gs-surface-2);
+}
+.gs-gallery-cat {
+  scroll-margin-top: calc(var(--gs-header-h) + 16px);
+}
+.gs-gallery-cat-head {
+  margin-bottom: 14px;
+}
+.gs-gallery-cat-head p {
+  margin: 4px 0 0;
+  color: var(--gs-muted);
+  font-size: 15px;
+}
+.gs-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gs-gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  background: var(--gs-surface);
+  box-shadow: var(--gs-shadow-sm);
+}
+.gs-gallery-card p {
+  margin: 0;
+  color: var(--gs-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+.gs-gallery-card-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 16.5px;
+  font-weight: 680;
+  letter-spacing: -0.005em;
+  line-height: 1.35;
+}
+.gs-gallery-card-title a {
+  color: inherit;
+  text-decoration: none;
+  border-radius: 4px;
+}
+.gs-gallery-card-title a:hover {
+  color: var(--gs-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.gs-gallery-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* The same case in each framework: small pills (24 px and more: WCAG 2.5.8) */
+.gs-gallery-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: auto 0 0;
+  padding: 8px 0 0;
+  list-style: none;
+}
+.gs-gallery-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--gs-border);
+  border-radius: 999px;
+  color: var(--gs-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.gs-gallery-link:hover {
+  border-color: var(--gs-border-strong);
+  color: var(--gs-text);
+}
+.gs-gallery-link[aria-current='page'] {
+  border-color: var(--gs-accent-solid);
+  background: var(--gs-accent-soft);
+  color: var(--gs-accent);
+}
+
+/*
+ * A case page: the live case, then where else it runs, its code, its framework notes and the
+ * pager. Sections are closer together than the site's.
+ */
+.gs-case-section {
+  margin-top: 48px;
+}
+.gs-case-section > .gs-h2 {
+  margin-bottom: 14px;
+}
+.gs-case-live {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 18px;
+  color: var(--gs-muted);
+  font-size: 14px;
+}
+.gs-case-live > p {
+  margin: 0;
+  font-weight: 600;
+}
+.gs-case-live .gs-gallery-links {
+  margin: 0;
+  padding: 0;
+}
+.gs-case-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 880px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.gs-case-note {
+  padding: 12px 16px;
+  border: 1px solid var(--gs-border);
+  border-left: 3px solid var(--gs-accent-solid);
+  border-radius: var(--gs-radius-sm);
+  background: var(--gs-surface);
+  scroll-margin-top: calc(var(--gs-header-h) + 16px);
+}
+.gs-case-note p {
+  margin: 0;
+  color: var(--gs-muted);
+  font-size: 15px;
+}
+.gs-case-note p + p {
+  margin-top: 6px;
+}
+.gs-case-note strong {
+  color: var(--gs-text);
+}
+.gs-case-note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+.gs-case-note p.gs-case-note-meta {
+  margin-bottom: 8px;
+  color: var(--gs-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.gs-case-pager {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 56px;
+}
+.gs-case-pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  background: var(--gs-surface);
+  color: var(--gs-text);
+  font-weight: 650;
+  text-decoration: none;
+}
+.gs-case-pager-link:hover {
+  border-color: var(--gs-border-strong);
+  background: var(--gs-surface-2);
+}
+.gs-case-pager-link span {
+  color: var(--gs-muted);
+  font-size: 13px;
+  font-weight: 550;
+}
+.gs-case-pager-link--next {
+  grid-column: 2;
+  align-items: flex-end;
+  text-align: end;
+}
+@media (max-width: 640px) {
+  .gs-case-pager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .gs-case-pager-link--next {
+    grid-column: auto;
+  }
+}
+
+/*
+ * The live case (every framework): `div.gs-case` > `div.gs-case-controls` (the case's own
+ * controls), then the chart `.gs-chart.gs-case-chart`, or several in `div.gs-case-stack`.
+ */
+.gs-case {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.gs-case-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.gs-case-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--gs-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.gs-case-control .gs-select {
+  width: auto;
+  min-width: 160px;
+}
+.gs-case-chart {
+  height: clamp(420px, calc(100vh - 360px), 680px);
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  overflow: hidden;
+}
+.gs-case-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.gs-case-stack .gs-case-chart {
+  height: 300px;
+}
+.gs-case-caption {
+  margin: 0 0 6px;
+  color: var(--gs-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+.gs-case-hint {
+  margin: 0;
+  color: var(--gs-muted);
+  font-size: 14px;
+}
+.gs-case-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--gs-muted);
+  font-size: 13.5px;
+}
+.gs-case-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* A colour sample: the case sets `background-color` */
+.gs-case-swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background-color: var(--gs-surface-3);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.12);
+}
+/* Page content next to a chart (the density case's side list) */
+.gs-case-split {
+  display: grid;
+  grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .gs-case-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* A container whose width the case sets (the responsive case) */
+.gs-case-frame {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+/* The keyboard case's key map */
+.gs-case-keys {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+.gs-case-keys dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gs-case-keys dd {
+  margin: 0;
+  color: var(--gs-muted);
+}
+.gs-kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 6px;
+  border: 1px solid var(--gs-border-strong);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--gs-surface-2);
+  color: var(--gs-text);
+  font-family: var(--gs-font-mono);
+  font-size: 12.5px;
+  text-align: center;
+}
+/* Custom empty-state content inside a chart */
+.gs-case-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
 /* ── Focus and motion ─────────────────────────────────────── */
 
 .gs-skip:focus-visible,
@@ -1280,6 +1658,10 @@ a.gs-card:hover {
 .gs-color:focus-visible,
 .gs-switch input:focus-visible,
 .gs-link:focus-visible,
+.gs-gallery-cat-link:focus-visible,
+.gs-gallery-card-title a:focus-visible,
+.gs-gallery-link:focus-visible,
+.gs-case-pager-link:focus-visible,
 .gs-footer a:focus-visible,
 .gs-prose a:focus-visible,
 a.gs-card:focus-visible,
@@ -1323,5 +1705,11 @@ a.gs-card:focus-visible,
   }
   .gs-switch input {
     border: 1px solid ButtonText;
+  }
+  .gs-case-swatch {
+    forced-color-adjust: none;
+  }
+  .gs-gallery-link[aria-current='page'] {
+    border-color: Highlight;
   }
 }

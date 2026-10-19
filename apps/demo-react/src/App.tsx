@@ -1,6 +1,7 @@
 import { useRef, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { Gantry, ViewMode, type GantryElement, type GanttTask } from '@gantryjs/react';
 import { createDemoData } from '@gantryjs/core/demo';
+import { galleryHash } from 'demo-kit/gallery';
 import { PACKAGES, SITE } from 'demo-kit/site';
 import { getTheme, onThemeChange, toggleTheme } from 'demo-kit/theme';
 import { Icon } from './Icon';
@@ -47,6 +48,22 @@ export default function App() {
             <span className="gs-version">v{SITE.version}</span>
             <span className="gs-badge">React</span>
           </div>
+          <nav className="gs-nav" aria-label="Primary">
+            <ul className="gs-nav-list">
+              <li>
+                <a className="gs-nav-link" href="#/" aria-current="page">
+                  <Icon name="home" />
+                  <span>Home</span>
+                </a>
+              </li>
+              <li>
+                <a className="gs-nav-link" href={galleryHash()}>
+                  <Icon name="examples" />
+                  <span>Examples</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
           <div className="gs-header-actions">
             <button
               type="button"

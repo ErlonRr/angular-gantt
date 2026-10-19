@@ -13,7 +13,11 @@
 //   - the task list → `'grid'` (`a11y/grid-keys.ts`);
 //   - anywhere else (the toolbar, which roves with its own listener; the
 //     splitter's toggle; the timeline viewport while no bar is mounted,
-//     whose arrow keys scroll natively) → `'any'`.
+//     whose arrow keys scroll natively) → `'any'`. The toolbar's listener
+//     (on `<gantt-toolbar>`, inside this host) runs first: the keys of its
+//     More menu (core `toolbarMenuKey`) and its roving keys are prevented
+//     there, so they never reach this one (an Esc that closes the menu does
+//     not clear the selection); Tab out of the menu is not prevented.
 //
 //  What the area leaves goes to the global shortcuts: Esc (D24: cancels
 //  move mode or a pointer drag, else clears the selection — an open

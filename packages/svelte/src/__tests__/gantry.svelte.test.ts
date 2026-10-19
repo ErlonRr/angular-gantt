@@ -7,7 +7,15 @@ import { afterEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { flushSync, mount, tick, unmount, type ComponentProps } from 'svelte';
 import { types } from 'node:util';
 import { GANTRY_EVENTS, GANTRY_PROPERTIES, type GantryProperties } from '@gantryjs/vanilla';
-import { Gantry, GanttDataSource, ViewMode, type GantryElement, type GanttOptions, type GanttTask } from '../index';
+import {
+  Gantry,
+  GanttDataSource,
+  ViewMode,
+  createGanttSyncGroup,
+  type GantryElement,
+  type GanttOptions,
+  type GanttTask,
+} from '../index';
 import Bound from './Bound.svelte';
 
 type Name = (typeof GANTRY_PROPERTIES)[number];
@@ -38,6 +46,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   renderBar: () => null,
   loading: true,
   errorMessage: 'Couldn’t load the plan',
+  syncGroup: createGanttSyncGroup(),
 };
 
 const proto = customElements.get('gantry-element')!.prototype as unknown as Record<string, unknown>;
@@ -105,6 +114,8 @@ describe('<Gantry> (Svelte binding)', () => {
     expect(el.renderBar).toBe(SAMPLE.renderBar);
     expect(el.loading).toBe(true);
     expect(el.errorMessage).toBe(SAMPLE.errorMessage);
+    // Not copied: the group is shared by identity
+    expect(el.syncGroup).toBe(SAMPLE.syncGroup);
     // No prop leaks into the attributes (and no inline style)
     expect(el.getAttributeNames().filter(a => a !== 'role' && a !== 'aria-label')).toEqual([]);
   });
@@ -223,6 +234,7 @@ describe('<Gantry> (Svelte binding)', () => {
       expect(el.renderBar).toBeUndefined();
       expect(el.loading).toBe(false);
       expect(el.errorMessage).toBeNull();
+      expect(el.syncGroup).toBeNull();
     });
 
     it('a prop never set leaves the element its own value (an attribute, a property set on the element)', () => {

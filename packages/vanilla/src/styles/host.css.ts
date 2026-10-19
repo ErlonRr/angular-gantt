@@ -39,7 +39,9 @@ export const HOST_CSS = `
       scrollbar-color: var(--gantt-scrollbar-thumb) var(--gantt-scrollbar-track);
     }
     .gantry-main.is-resizing .gantry-panel,
-    .gantry-main.is-resizing .gantry-canvas-viewport { transition: none; }
+    .gantry-main.is-resizing .gantry-canvas-viewport,
+    .gantry-main.is-settling .gantry-panel,
+    .gantry-main.is-settling .gantry-canvas-viewport { transition: none; }
 
     /* ── Timeline ───────────────────────────────────────── */
     .gantry-canvas-viewport {

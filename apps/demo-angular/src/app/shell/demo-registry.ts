@@ -48,9 +48,9 @@ export class Roadmap {
 }
 
 // Or declare a column inside <gantry> (GanttColumnDefDirective):
-// <ng-template ganttColumn="owner" label="Owner" [width]="120">
+// <ng-container ganttColumn="owner" label="Owner" [width]="120">
 //   <ng-template let-row>{{ row.task.data?.['owner'] }}</ng-template>
-// </ng-template>`,
+// </ng-container>`,
   },
   {
     path: 'demo',

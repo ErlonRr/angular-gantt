@@ -42,6 +42,20 @@ describe('Gantry.svelte props', () => {
     expect(destructured().filter(name => !known.has(name))).toEqual([]);
   });
 
+  it('maps every GANTRY_PROPERTIES name to its own prop in the `properties` record', () => {
+    for (const name of GANTRY_PROPERTIES) {
+      expect(source, name).toMatch(new RegExp(`\\n\\s*${name}: \\(\\) => ${name},`));
+    }
+  });
+
+  it('copies only the data props: syncGroup and the others pass by identity', () => {
+    const match = /const COPIED[^=]*=\s*new Set\(\[([^\]]*)\]\)/.exec(source);
+    if (!match) throw new Error('no `const COPIED = new Set([…])` in Gantry.svelte');
+    const copied = match[1]!.split(',').map(entry => entry.trim().replace(/^'|'$/g, ''));
+    expect(copied).toEqual(['tasks', 'columns', 'annotations', 'options']);
+    expect(copied).not.toContain('syncGroup');
+  });
+
   it('destructures the snippets (never attributes) and leaves style to the rest', () => {
     const names = destructured();
     expect(names).toEqual(expect.arrayContaining(['empty', 'children']));

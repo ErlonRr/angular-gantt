@@ -18,12 +18,22 @@ import type {
   GanttTooltipRenderContext,
   TimeUnit,
   GanttI18n,
+  GanttDensity,
+  GanttFlatRow,
+  GanttRollupOptions,
+  GanttStyleOptions,
+  GanttStyleRuleContext,
+  GanttTaskStyle,
+  ResolvedTaskStyle,
+  WeekRule,
+  WeekStart,
 } from '../types';
 import { DEFAULT_ZOOM_LEVELS, findZoomLevel, levelPxPerDay, withLegacyHeaderFormats } from './scales';
 import type { ThemeMetrics } from './theme';
 import { themeVar, type Paint } from './paint';
 import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
+import { resolveWeek } from '../format/week';
 
 export interface ResolvedLine {
   /** Explicit `GanttLineStyle.color`, else the theme token (`var(--gantt-grid-line)`…) */
@@ -60,6 +70,51 @@ export interface ResolvedToolbar {
   viewToggle: boolean;
   /** "Fit to screen" button */
   fit: boolean;
+  /** Show / hide task list button, first in the toolbar */
+  panelToggle: boolean;
+  /** Controls that don't fit: into the "More" menu, or wrapped */
+  overflow: 'menu' | 'wrap';
+}
+
+/** Row height, header tier heights and toolbar control size of a `density`. */
+export interface DensityMetrics {
+  readonly rowHeight: number;
+  /** [upper tiers, bottom tier] */
+  readonly tierHeights: readonly [number, number];
+  /** Toolbar control size in px (`--gantry-control-size`) */
+  readonly controlSize: number;
+}
+
+/** The `density` table; `'normal'` is the 1.x geometry. */
+export const DENSITY_METRICS: Readonly<Record<GanttDensity, DensityMetrics>> = {
+  compact: { rowHeight: 28, tierHeights: [28, 24], controlSize: 28 },
+  normal: { rowHeight: 36, tierHeights: [32, 28], controlSize: 32 },
+  comfortable: { rowHeight: 44, tierHeights: [36, 32], controlSize: 36 },
+};
+
+/** `responsive` with its defaults: below `breakpoint` px the chart shows `view`. */
+export interface ResolvedResponsive {
+  breakpoint: number;
+  view: GanttView;
+}
+
+/** `options.styles` with every layer present (an empty style where none is set). */
+export interface ResolvedStyleOptions {
+  task: ResolvedTaskStyle;
+  group: ResolvedTaskStyle;
+  milestone: ResolvedTaskStyle;
+  parent: ResolvedTaskStyle;
+  /** By exact depth; `null` where a level has no style */
+  levels: readonly (ResolvedTaskStyle | null)[];
+  rule: ((row: GanttFlatRow, ctx: GanttStyleRuleContext) => GanttTaskStyle | null | undefined) | null;
+}
+
+/** `options.rollup` with every field set (`true` = the defaults). */
+export interface ResolvedRollupOptions {
+  progress: 'duration' | 'count' | false;
+  dates: boolean;
+  color: 'status' | false | ((children: readonly GanttTask[], parent: GanttTask) => string | null | undefined);
+  segments: boolean;
 }
 
 /**
@@ -71,12 +126,20 @@ export interface ResolvedGanttConfig {
   level: GanttZoomLevel;
   scales: GanttScale[];
   pxPerDay: number;
-  weekStart: 0 | 1;
+  /** First day of the week cells (`weekStart`, else the `weekNumbering` rule's first day) */
+  weekStart: WeekStart;
+  /** Week-numbering rule of the header labels; its `firstDay` is `weekStart` */
+  week: WeekRule;
   fitToWidth: boolean;
   initialScroll: InitialScroll;
   timelinePadding: number;
-  /** [upper tiers, bottom tier] default heights */
+  /** `density` (default `'normal'`) */
+  density: GanttDensity;
+  /** Toolbar control size in px, from the density */
+  controlSize: number;
+  /** [upper tiers, bottom tier] default heights (explicit heights, else the density's) */
   tierHeights: [number, number];
+  /** `rowHeight`, else the density's */
   rowHeight: number;
   indentSize: number;
   gridLines: {
@@ -103,8 +166,19 @@ export interface ResolvedGanttConfig {
     handles: { hitSize: number };
   };
   milestone: { size?: number | undefined; shape: 'diamond' | 'circle' | 'square' };
-  groupBar: { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean };
-  arrows: { width: number; headSize: number; radius: number; color?: string | undefined; offset: number };
+  groupBar: { height: GanttLength; style: 'summary' | 'bar'; showProgress: boolean; collapsed: boolean };
+  arrows: {
+    width: number;
+    headSize: number;
+    radius: number;
+    color?: string | undefined;
+    offset: number;
+    routing: 'orthogonal' | 'straight';
+  };
+  /** Style layers by kind, parent, level and rule */
+  styles: ResolvedStyleOptions;
+  /** Rollup of parent rows, or `false` */
+  rollup: ResolvedRollupOptions | false;
   panel: {
     width: GanttLength;
     minWidth: number;
@@ -118,6 +192,8 @@ export interface ResolvedGanttConfig {
   /** Explicit table-view column keys; null = derive */
   table: { columns: string[] | null };
   view: GanttView;
+  /** Narrow-width view switch, or `false` */
+  responsive: ResolvedResponsive | false;
   toolbar: ResolvedToolbar | false;
   showToday: boolean;
   baseline: boolean;
@@ -155,6 +231,35 @@ const line = (style: GanttLineStyle | false | undefined, fallback: ResolvedLine)
         width: style?.width ?? fallback.width,
         dash: style?.dash ?? fallback.dash,
       };
+
+/** The style of an unset layer. */
+const NO_STYLE: ResolvedTaskStyle = Object.freeze({});
+
+function resolveStyles(o: GanttStyleOptions | undefined): ResolvedStyleOptions {
+  return {
+    task: o?.task ?? NO_STYLE,
+    group: o?.group ?? NO_STYLE,
+    milestone: o?.milestone ?? NO_STYLE,
+    parent: o?.parent ?? NO_STYLE,
+    levels: Array.from(o?.levels ?? [], level => level ?? null),
+    rule: o?.rule ?? null,
+  };
+}
+
+function resolveRollup(r: boolean | GanttRollupOptions | undefined): ResolvedRollupOptions | false {
+  if (!r) return false;
+  const o: GanttRollupOptions = r === true ? {} : r;
+  return {
+    progress: o.progress ?? 'duration',
+    dates: o.dates ?? true,
+    color: o.color ?? false,
+    segments: o.segments ?? false,
+  };
+}
+
+/** A known `density`, else `'normal'` (untyped callers). */
+const densityOf = (d: GanttDensity | undefined): GanttDensity =>
+  d === 'compact' || d === 'comfortable' ? d : 'normal';
 
 /** Epoch day of a date (local calendar). */
 const epochDay = (d: Date) => Math.floor(calendarDays(d));
@@ -217,18 +322,25 @@ export function resolveConfig(
   const level = findZoomLevel(zoomLevels, options.viewMode);
   const scales = options.scales?.length ? options.scales : withLegacyHeaderFormats(level, i18n);
   const toolbar = options.toolbar;
+  const density = densityOf(options.density);
+  const sizes = DENSITY_METRICS[density];
+  const week = resolveWeek(options.weekNumbering, options.weekStart, i18n?.locale ?? options.locale);
+  const responsive = options.responsive;
 
   return {
     zoomLevels,
     level,
     scales,
     pxPerDay: levelPxPerDay(options.scales?.length ? { ...level, scales } : level),
-    weekStart: options.weekStart ?? 1,
+    weekStart: week.start,
+    week: week.rule,
     fitToWidth: options.fitToWidth ?? true,
     initialScroll: options.initialScroll ?? 'auto',
     timelinePadding: options.timelinePadding ?? 7,
-    tierHeights: [options.headerHeight ?? 32, options.subHeaderHeight ?? 28],
-    rowHeight: options.rowHeight ?? 36,
+    density,
+    controlSize: sizes.controlSize,
+    tierHeights: [options.headerHeight ?? sizes.tierHeights[0], options.subHeaderHeight ?? sizes.tierHeights[1]],
+    rowHeight: options.rowHeight ?? sizes.rowHeight,
     indentSize: options.indentSize ?? 16,
     gridLines: {
       minor: line(options.gridLines?.minor, { paint: themeVar('gridLine'), width: 1 }),
@@ -261,6 +373,7 @@ export function resolveConfig(
       height: options.groupBar?.height ?? (options.groupBar?.style === 'bar' ? '60%' : '40%'),
       style: options.groupBar?.style ?? 'summary',
       showProgress: options.groupBar?.showProgress ?? true,
+      collapsed: options.groupBar?.collapsed ?? false,
     },
     arrows: {
       width: options.arrows?.width ?? 1.25,
@@ -268,7 +381,10 @@ export function resolveConfig(
       radius: options.arrows?.radius ?? 4,
       color: options.arrows?.color,
       offset: options.arrows?.offset ?? 12,
+      routing: options.arrows?.routing ?? 'orthogonal',
     },
+    styles: resolveStyles(options.styles),
+    rollup: resolveRollup(options.rollup),
     panel: {
       width: options.panel?.width ?? options.panelWidth ?? '30%',
       minWidth: options.panel?.minWidth ?? 120,
@@ -280,6 +396,8 @@ export function resolveConfig(
     },
     table: { columns: options.table?.columns ?? null },
     view: options.view ?? 'split',
+    responsive:
+      responsive === false ? false : { breakpoint: responsive?.breakpoint ?? 640, view: responsive?.view ?? 'chart' },
     toolbar:
       toolbar === false
         ? false
@@ -289,6 +407,8 @@ export function resolveConfig(
             today: toolbar?.today ?? true,
             viewToggle: toolbar?.viewToggle ?? true,
             fit: toolbar?.fit ?? true,
+            panelToggle: toolbar?.panelToggle ?? false,
+            overflow: toolbar?.overflow ?? 'menu',
           },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,

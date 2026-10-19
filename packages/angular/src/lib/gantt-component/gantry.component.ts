@@ -47,6 +47,15 @@
 //  Live regions: `.gantt-sr-live` (polite, debounced: selection count,
 //  data-source load state, zoom level) and `.gantt-sr-alert` (a failed
 //  page while rows are shown; with none, the error state box says it).
+//
+//  Host (phase 10): `data-view`, `data-density` and `data-narrow` (while
+//  below `responsive.breakpoint`); the host style map carries the theme
+//  tokens, the read-only layout variables (`--gantt-row-height`,
+//  `--gantt-bar-height`: core `layoutCssVars`) and the toolbar's
+//  `--gantry-control-size`. The responsive view switch
+//  (`layout/responsive.ts`) hears the measured width and the user's view
+//  picks; the sync member (`sync/gantt-sync.ts`) follows `[syncGroup]`
+//  and hears the level, panel width and scroll changes.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -60,6 +69,7 @@ import {
   computed,
   effect,
   inject,
+  type Signal,
   viewChild,
   contentChildren,
   linkedSignal,
@@ -100,6 +110,7 @@ import {
   writeStoredState,
   normalizeState,
   viewFromState,
+  togglePanelView,
   resolvePanelWidth,
   clampPanelWidth,
   availablePanelWidth,
@@ -110,11 +121,13 @@ import {
   CLOCK_INTERVAL,
   themeMetrics,
   sameThemeMetrics,
-  computeCriticalPath,
   tabStopIndex,
   timelineScrollPadding,
+  layoutCssVars,
+  rollupSource,
   type BarVisual,
   type CPMResult,
+  type GanttSyncGroup,
   type LoadStateSnapshot,
   type ResolvedGanttConfig,
   type RetryEvent,
@@ -150,12 +163,32 @@ import { GanttBarFocusService } from '../bars/bar-focus.service';
 import { findFocusKey, focusIntoView, focusKeyOf, isInert } from '../a11y/grid-keys';
 import { GanttTooltipTemplateDirective } from '../tooltip/gantt-tooltip-template.directive';
 import { bindZoomGestures } from '../scroll/zoom-gestures';
+import { GanttResponsive } from '../layout/responsive';
+import { GanttSync } from '../sync/gantt-sync';
 
 /** The control inside the chart that received focus last (focus restore when it is removed) */
 interface FocusRecord {
   readonly el: Element;
   /** The load-more footer around it: the footer keeps focus on its own buttons */
   readonly footer: Element | null;
+}
+
+/** Same CSS property map (same keys, same values) */
+function sameStyleMap(a: Readonly<Record<string, string>>, b: Readonly<Record<string, string>>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(k => a[k] === b[k]);
+}
+
+/** A row as events carry it: a rolled-up parent's row with its raw task (core `rollupSource`) */
+function rawRow(row: GanttFlatRow): GanttFlatRow {
+  const task = rollupSource(row.task);
+  return task === row.task ? row : { ...row, task };
+}
+
+/** A row geometry as events carry it: its row with the raw task */
+function rawGeometry(geo: RowGeometry): RowGeometry {
+  const row = rawRow(geo.row);
+  return row === geo.row ? geo : { ...geo, row };
 }
 
 @Component({
@@ -171,6 +204,8 @@ interface FocusRecord {
     GanttDragService,
     GanttAnnouncer,
     GanttBarFocusService,
+    GanttResponsive,
+    GanttSync,
   ],
   hostDirectives: [GanttKeyboardDirective],
   imports: [
@@ -189,10 +224,14 @@ interface FocusRecord {
     role: 'region',
     '[attr.aria-label]': 'i18n.labels().ariaChart',
     '[attr.data-view]': 'layout.view()',
+    // The row, tier and control sizes in use (`density`); present while narrower than `responsive.breakpoint`
+    '[attr.data-density]': 'cfg().density',
+    '[attr.data-narrow]': "responsive.narrow() ? '' : null",
     // Busy while loading (the skeleton, or the consumer's `loading` over shown rows)
     '[attr.aria-busy]': "layout.chartState().busy ? 'true' : null",
-    // Every --gantt-* token of the theme (rendered on the server too); chrome reads them in :host
-    '[style]': 'themeSvc.style()',
+    // Every --gantt-* token of the theme, the read-only layout variables and the control size
+    // (rendered on the server too); chrome reads them in :host
+    '[style]': 'hostStyle()',
     '[class.gantry-dark]': 'themeSvc.isDark()',
     '[class.gantry-dragging]': 'dragSvc.isActive()',
     // The consumer's `loading` or a data-source page loading (the Web Component's :state(loading))
@@ -214,6 +253,7 @@ interface FocusRecord {
         (viewModeChange)="setViewMode($event)"
         (scrollToToday)="scrollToToday()"
         (viewChange)="setView($event)"
+        (togglePanel)="togglePanel()"
       >
         <ng-content select="[ganttToolbar]" />
       </gantt-toolbar>
@@ -249,7 +289,7 @@ interface FocusRecord {
           [style.padding-bottom.px]="panelBottomPad()"
           (collapseToggle)="onCollapseToggle($event)"
           (rowClick)="onTaskListRowClick($event)"
-          (rowDblClick)="rowDblClick.emit($event)"
+          (rowDblClick)="onRowDblClick($event)"
           (columnWidthChange)="colSvc.setColumnWidth($event.key, $event.width)"
           (columnResizeEnd)="saveState()"
           (sortColumn)="onSortColumn($event)"
@@ -342,7 +382,7 @@ interface FocusRecord {
           (taskDragged)="onTaskDragged($event)"
           (taskResized)="onTaskResized($event)"
           (rowClick)="onCanvasRowClick($event)"
-          (rowDblClick)="rowDblClick.emit($event)"
+          (rowDblClick)="onRowDblClick($event)"
         />
         <!-- Drag readout chip (pointer drag and keyboard move mode), attached while it shows the new dates -->
         @if (dragReadout(); as readout) {
@@ -585,6 +625,10 @@ export class GantryComponent {
   protected readonly dragReadout = injectDragReadout(this.dragSvc.preview);
   protected readonly announcer = inject(GanttAnnouncer);
   protected readonly barFocus = inject(GanttBarFocusService);
+  /** The narrow-width view switch (`options.responsive`): `data-narrow`, the persisted view */
+  protected readonly responsive = inject(GanttResponsive);
+  /** The chart's member of `[syncGroup]` */
+  private readonly sync = inject(GanttSync);
   /** The chart's keyboard (host directive): bound in the constructor, connected after the first render */
   private readonly keyboard = inject(GanttKeyboardDirective, { self: true });
   private readonly doc = inject(DOCUMENT);
@@ -635,6 +679,12 @@ export class GantryComponent {
   readonly viewMode: ModelSignal<ViewMode | (string & {}) | undefined> = model<ViewMode | (string & {}) | undefined>(
     undefined,
   );
+  /**
+   * A sync group (core `createGanttSyncGroup`) shared with other charts: they keep the same
+   * timeline range, zoom level, horizontal scroll and panel width (each can be turned off in the
+   * group's options). Passed by reference; `null` (default) leaves the group.
+   */
+  readonly syncGroup = input<GanttSyncGroup | null | undefined>(null);
 
   // ── Outputs ───────────────────────────────────────────────
   readonly taskDragged = output<TaskDragEvent>();
@@ -678,7 +728,8 @@ export class GantryComponent {
   protected readonly resizeEnabled = computed(() => this.options().enableResize ?? this.enableResize());
 
   // ── Panel / splitter ──────────────────────────────────────
-  private readonly mainWidth = signal<number>(0);
+  /** Width of the main area (measured; the layout graph's, so the toolbar and responsive read it too) */
+  private readonly mainWidth = this.layout.mainWidth;
   protected readonly splitterDragging = signal(false);
   /** Width transitions start after the first measured render (no 300px → 30% slide on load) */
   protected readonly panelAnimated = signal(false);
@@ -796,32 +847,18 @@ export class GantryComponent {
   private readonly storage = (): Storage | null => this.doc.defaultView?.localStorage ?? null;
 
   // ── Critical path ─────────────────────────────────────────
-  /** Only these config fields affect the critical path (cfg itself changes with options, i18n, theme metrics…) */
-  private readonly cpmConfig = computed(
-    () => {
-      const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
-      return { criticalPath, endDateMode, normalizeDateOnly };
-    },
-    {
-      equal: (a, b) =>
-        a.criticalPath === b.criticalPath &&
-        a.endDateMode === b.endDateMode &&
-        a.normalizeDateOnly === b.normalizeDateOnly,
-    },
-  );
-  /** CPM result (critical ids, float), `null` when the critical path is off */
-  protected readonly cpm = computed<CPMResult | null>(() => {
-    const cfg = this.cpmConfig();
-    return cfg.criticalPath ? computeCriticalPath(this.layout.tasks(), cfg) : null;
-  });
-  readonly criticalIds = computed<ReadonlySet<string>>(() => this.cpm()?.criticalIds ?? new Set());
+  /** CPM result (critical ids, float), `null` when the critical path is off (the layout graph's: row styles read it) */
+  protected readonly cpm: Signal<CPMResult | null> = this.layout.critical;
+  readonly criticalIds: Signal<ReadonlySet<string>> = this.layout.criticalIds;
 
   // ── Bar visuals (@gantryjs/core) ────────────────────────────
   /**
    * Bar visual of a row geometry, memoised per geometry. A new memo starts whenever an input of
    * `computeBarVisual` changes (config, timeline, critical path, theme metrics, drag / resize
-   * flags); a scroll, a selection or a colour-only theme change reuses every visual. Serves any
-   * visible row, mounted or not (the canvas, its arrows and `getBarVisual`).
+   * flags, row styles, segments); a scroll, a selection or a colour-only theme change reuses every
+   * visual. Serves any visible row, mounted or not (the canvas, its arrows and `getBarVisual`).
+   * Each bar gets its row's resolved style (`layout.rowStyle`) and, with `rollup.segments`, a
+   * collapsed parent its children's segments (`layout.barSegments`).
    */
   protected readonly barVisual = computed<BarVisualOf>(() => {
     const cfg = this.cfg();
@@ -829,6 +866,8 @@ export class GantryComponent {
     const { fontPx, barTextColor } = this.themeMetrics();
     const crit = this.criticalIds();
     const resizable = this.dragEnabled() && this.resizeEnabled();
+    const styleOf = this.layout.rowStyle();
+    const segmentsOf = this.layout.barSegments();
     const memo = new WeakMap<RowGeometry, BarVisual>();
     return geo => {
       let v = memo.get(geo);
@@ -842,12 +881,33 @@ export class GantryComponent {
           barTextColor,
           isCritical: crit.has(task.id),
           resizable: resizable && task.draggable !== false,
+          style: styleOf(geo.row),
+          segments: segmentsOf(geo),
         });
         memo.set(geo, v);
       }
       return v;
     };
   });
+
+  // ── Host style ────────────────────────────────────────────
+  /**
+   * The read-only layout variables (`--gantt-row-height`, `--gantt-bar-height`: core
+   * `layoutCssVars`) and the toolbar control size of the density (`--gantry-control-size`).
+   * Compared by value: only a row height, bar height or density change rewrites them.
+   */
+  private readonly layoutStyle = computed<Readonly<Record<string, string>>>(
+    () => {
+      const cfg = this.cfg();
+      return { ...Object.fromEntries(layoutCssVars(cfg)), '--gantry-control-size': `${cfg.controlSize}px` };
+    },
+    { equal: sameStyleMap },
+  );
+  /** The host's style map: the theme tokens (`themeToCss`), then the layout variables */
+  protected readonly hostStyle = computed<Record<string, string>>(() => ({
+    ...this.themeSvc.style(),
+    ...this.layoutStyle(),
+  }));
 
   constructor() {
     // Bind the inputs into the services once: everything downstream is computed / linkedSignal
@@ -900,7 +960,9 @@ export class GantryComponent {
     // Zoom level changes → [(viewMode)] + viewModeChange (unless the parent set it) + persisted state.
     // The first render reports nothing. Created BEFORE the stateKey restore below, so its first run
     // records the level of the inputs: a restored zoom level is then a change like any other (it
-    // syncs the model and emits once), as the Web Component's `view-mode-change`.
+    // syncs the model and emits once), as the Web Component's `view-mode-change`. A level the sync
+    // group applied (a zoom made in another chart) is emitted and saved but not announced: the chart
+    // the user zoomed announces it, not every member.
     effect(() => {
       const level = this.layout.level();
       untracked(() => {
@@ -909,8 +971,9 @@ export class GantryComponent {
         this._shownLevel = level;
         if (first) return;
         if (this.viewMode() !== level) this.viewMode.set(level);
-        this.announcer.zoom(this.layout.levelLabel());
+        if (!this.sync.takeGroupLevel(level)) this.announcer.zoom(this.layout.levelLabel());
         this.saveState();
+        this.sync.reportLevel(level);
       });
     });
 
@@ -924,6 +987,14 @@ export class GantryComponent {
         if (saved) this.setState(saved, false);
       });
     });
+
+    // [syncGroup] → join / leave the group (after the stateKey restore: the group's level and panel
+    // width win over a restored state); the chart leaves when it is destroyed
+    effect(() => {
+      const group = this.syncGroup() ?? null;
+      untracked(() => this.sync.connect(group));
+    });
+    this.destroyRef.onDestroy(() => this.sync.disconnect());
 
     // Data-source failures → loadError output (once per failure)
     effect(() => {
@@ -953,26 +1024,20 @@ export class GantryComponent {
       });
     });
 
-    // A pointer drag (pointer-down on a draggable bar) takes keyboard focus to the timeline: Escape
-    // cancels it there (a keyboard move keeps focus on its bar)
-    afterRenderEffect(() => {
-      if (this.dragSvc.isPointerDrag()) {
-        untracked(() => this.canvasEl()?.nativeElement.focus({ preventScroll: true }));
-      }
-    });
-
     // After every render: a focused control that went away hands focus back to the chart
     // (nothing tracks every node a render can remove: consumer cells and toolbar content too)
     afterEveryRender(() => this.restoreFocus());
 
-    // After each render: apply `initialScroll` once rows exist, keep the anchor date in place, then
-    // apply a scroll request (`fitToScreen`) on the timeline it targets
+    // After each render: a scroll request (`fitToScreen`) on the timeline it targets, else a scroll
+    // the sync group sent, else `initialScroll` once rows exist, else keep the anchor date in place
     afterRenderEffect(() => {
       const tl = this.layout.timeline();
       const hasRows = this.hasRows();
       const view = this.layout.view();
       const pending = this.layout.initialScrollPending();
       const request = this.layout.scrollRequest();
+      // Tracked so that a group scroll alone schedules this
+      this.sync.pendingScroll();
       untracked(() => this.syncHorizontalScroll(tl, hasRows, view, pending, request));
     });
 
@@ -1014,7 +1079,11 @@ export class GantryComponent {
         this.canvasSB.set(canvas.offsetHeight - canvas.clientHeight);
       }
       if (panel) this.panelSB.set(panel.offsetHeight - panel.clientHeight);
-      if (main) this.mainWidth.set(main.clientWidth);
+      if (main) {
+        this.mainWidth.set(main.clientWidth);
+        // The responsive view switch hears every measured width (never during a render)
+        this.responsive.onWidth(main.clientWidth);
+      }
     };
     measure();
     // Width transitions start one frame after the measured render
@@ -1141,11 +1210,17 @@ export class GantryComponent {
   protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent | KeyboardEvent }): void {
     this.selSvc.handleClick(e.row.task.id, e.event, this.layout.visibleRows(), this.cfg().selection);
     const geo = this.layout.geometryById().get(e.row.task.id);
-    if (geo) this.rowClick.emit(geo);
+    if (geo) this.rowClick.emit(rawGeometry(geo));
   }
 
+  /** A row clicked in the timeline (a rolled-up parent's row carries its raw task: events stay raw) */
   protected onCanvasRowClick(geo: RowGeometry): void {
-    this.rowClick.emit(geo);
+    this.rowClick.emit(rawGeometry(geo));
+  }
+
+  /** A row double-clicked in either pane (a rolled-up parent's row carries its raw task) */
+  protected onRowDblClick(row: GanttFlatRow): void {
+    this.rowDblClick.emit(rawRow(row));
   }
 
   protected onSortColumn(key: string): void {
@@ -1203,13 +1278,14 @@ export class GantryComponent {
       /* synthetic event */
     }
     const move = (ev: PointerEvent) =>
-      this.layout.panelWidthPx.set(clampPanelWidth(startW + ev.clientX - startX, cfg.panel, available));
+      this.resizePanel(clampPanelWidth(startW + ev.clientX - startX, cfg.panel, available));
     const end = () => {
       el.removeEventListener('pointermove', move);
       el.removeEventListener('pointerup', end);
       el.removeEventListener('pointercancel', end);
       this.splitterDragging.set(false);
       this.saveState();
+      this.reportPanelWidth();
     };
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', end);
@@ -1234,16 +1310,50 @@ export class GantryComponent {
       e.preventDefault();
       const available = availablePanelWidth(this.mainWidth());
       const step = e.key === 'ArrowLeft' ? -SPLITTER_KEY_STEP : SPLITTER_KEY_STEP;
-      this.layout.panelWidthPx.set(clampPanelWidth(this.panelPx() + step, this.cfg().panel, available));
+      this.resizePanel(clampPanelWidth(this.panelPx() + step, this.cfg().panel, available));
       this.saveState();
+      this.reportPanelWidth();
     }
   }
 
+  /** The splitter set the panel width to `px` (pointer or keys). */
+  private resizePanel(px: number): void {
+    this.layout.panelWidthPx.set(px);
+  }
+
   /**
-   * First render with data → `initialScroll`; later timeline changes keep the anchor date in place
-   * (`anchoredScrollLeft`: the zoom anchor, else the centre; a new range start keeps the left edge);
-   * then a pending scroll request (`fitToScreen` → `fitScrollLeft`).
+   * The width the user chose, for the other charts of the sync group (none chosen yet: nothing): when
+   * a splitter drag ends or a key moved it. A width the group applied is neither saved nor reported.
    */
+  private reportPanelWidth(): void {
+    const width = this.layout.panelWidthPx();
+    if (width !== null) this.sync.reportPanel(width);
+  }
+
+  /**
+   * After a render (the Web Component's scroll-commands region), for the timeline just rendered:
+   * - a scroll request made before it (`fitToScreen` → `fitScrollLeft`) wins, and replaces a group
+   *   scroll waiting for this render (the chart's own scroll is reported);
+   * - then a scroll the sync group sent: an instant jump whose scroll event is an echo, in place of
+   *   `initialScroll` when it comes first (joining a group that has a scroll) and of the anchoring;
+   * - then, on the first render with data, `initialScroll`;
+   * - otherwise a new timeline keeps its anchor date in place (`anchoredScrollLeft` from the
+   *   viewport's real `scrollLeft`: the zoom anchor, else the centre; a new range start keeps the
+   *   left edge). Inside a group, the anchoring after a level the group applied and a start
+   *   correction at the chart's scroll limit stay out of the group (`GanttSync.correct`).
+   * The table view hides the timeline: nothing scrolls, a group scroll waits for the timeline.
+   */
+  /**
+   * The timeline viewport's width once the panel has the width the layout wants: on the first
+   * render the measurement (`earlyRead`) may still resize the panel, which the DOM shows one render
+   * later. The Web Component measures before its first paint, so it never sees the provisional one.
+   */
+  private settledViewportWidth(canvas: HTMLElement, view: GanttView): number {
+    const panel = this.panelEl()?.nativeElement;
+    const shown = view === 'split' && panel ? Number.parseFloat(panel.style.width) : NaN;
+    return Number.isFinite(shown) ? Math.max(0, canvas.clientWidth - (this.panelPx() - shown)) : canvas.clientWidth;
+  }
+
   private syncHorizontalScroll(
     tl: TimelineModel,
     hasRows: boolean,
@@ -1251,32 +1361,37 @@ export class GantryComponent {
     pending: boolean,
     request: GanttScrollRequest | null,
   ): void {
+    // A level the group applied concerns the timeline rendered now only (read and cleared on every run)
+    const groupLevel = this.sync.takeLevelCorrection();
     const canvas = this.canvasEl()?.nativeElement;
     if (!canvas || view === 'table') return;
     const prev = this._paintedTimeline;
     this._paintedTimeline = tl;
-    if (pending) {
+    // A zoom anchor serves the one new timeline it was set for
+    const anchorX = this.layout.zoomAnchorX();
+    if (prev && prev !== tl) this.layout.zoomAnchorX.set(null);
+    if (request === 'fit') {
+      this.layout.scrollRequest.set(null);
+      this.layout.initialScrollPending.set(false);
+      this.sync.dropScroll();
+      const left = fitScrollLeft(tl, canvas.clientWidth);
+      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+    } else if (this.sync.applyScroll()) {
+      this.layout.initialScrollPending.set(false);
+    } else if (pending) {
       if (!hasRows) return;
       this.layout.initialScrollPending.set(false);
       const left = initialScrollLeft({
         timeline: tl,
         initialScroll: this.cfg().initialScroll,
-        viewportWidth: canvas.clientWidth,
+        viewportWidth: this.settledViewportWidth(canvas, view),
         now: new Date(),
       });
       if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
-      return;
-    }
-    if (prev && prev !== tl) {
-      const anchorX = this.layout.zoomAnchorX();
-      this.layout.zoomAnchorX.set(null);
-      const left = anchoredScrollLeft(prev, tl, this.scrollSvc.scrollLeft(), canvas.clientWidth, anchorX);
-      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
-    }
-    if (request === 'fit') {
-      this.layout.scrollRequest.set(null);
-      const left = fitScrollLeft(tl, canvas.clientWidth);
-      if (left !== null) this.scrollSvc.scrollToX(left, 'instant');
+    } else if (prev && prev !== tl) {
+      // The viewport's own offset: the scroll signal lags behind a scroll whose event is not out yet
+      const left = anchoredScrollLeft(prev, tl, canvas.scrollLeft, canvas.clientWidth, anchorX);
+      if (left !== null) this.sync.correct(prev, tl, left, canvas.clientWidth, groupLevel);
     }
   }
 
@@ -1307,16 +1422,25 @@ export class GantryComponent {
     this.layout.level.set(mode);
   }
 
-  /** Switch view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). */
+  /**
+   * Switch view: `'split'`, `'table'` (task list only) or `'chart'` (timeline only). On a narrow
+   * chart (`options.responsive`) the view picked wins until the width crosses the breakpoint again.
+   */
   setView(view: GanttView): void {
+    // The view shown already: nothing changes, and it is no pick (as in the Web Component)
     if (view === this.layout.view()) return;
     this.layout.view.set(view);
+    // A view picked while narrow wins until the width crosses back
+    this.responsive.userView(view);
     this.saveState();
   }
 
-  /** Collapse / expand the task list; expanding restores its last width. */
+  /**
+   * Hide / show the task list (core `togglePanelView`): from `'split'` or `'table'` to the timeline
+   * alone, from `'chart'` back to `'split'` at the panel's last width.
+   */
   togglePanel(): void {
-    this.setView(this.layout.view() === 'split' ? 'chart' : 'split');
+    this.setView(togglePanelView(this.layout.view()));
   }
 
   scrollToToday(behavior: ScrollBehavior = 'smooth'): void {
@@ -1413,12 +1537,17 @@ export class GantryComponent {
     this.themeSvc.resetTheme();
   }
 
-  /** Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). */
+  /**
+   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). While the
+   * chart is narrow (`options.responsive`) the view is the wide one, not the forced one.
+   */
   getState(): GanttState {
+    const shown = this.layout.view();
+    const view = this.responsive.persistedView(shown);
     return {
-      panelWidth: this.layout.panelWidthPx() ?? (this.layout.view() === 'split' ? this.panelPx() : undefined),
-      panelCollapsed: this.layout.view() === 'chart',
-      view: this.layout.view(),
+      panelWidth: this.layout.panelWidthPx() ?? (shown === 'split' ? this.panelPx() : undefined),
+      panelCollapsed: view === 'chart',
+      view,
       viewMode: this.layout.level(),
       columnWidths: this.colSvc.widths(),
       collapsedIds: [...this.layout.collapsedIds()],
@@ -1429,9 +1558,15 @@ export class GantryComponent {
   /** Restore a state snapshot (e.g. from your backend); invalid fields are ignored. */
   setState(snapshot: GanttState, emit = true): void {
     const state = normalizeState(snapshot);
-    if (state.panelWidth != null) this.layout.panelWidthPx.set(state.panelWidth);
+    if (state.panelWidth != null) {
+      this.layout.panelWidthPx.set(state.panelWidth);
+      this.sync.reportPanel(state.panelWidth);
+    }
     const view = viewFromState(state);
     if (view) this.layout.view.set(view);
+    // A view restored while narrow becomes the wide view at once (not after the next render), as
+    // in the Web Component: `view` and `getState()` are right as soon as this returns
+    this.responsive.recheck();
     if (state.viewMode) this.layout.level.set(state.viewMode);
     if (state.columnWidths) this.colSvc.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) this.layout.collapsedIds.set(new Set(state.collapsedIds));

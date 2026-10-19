@@ -20,6 +20,9 @@ export * from './render/window';
 export * from './render/zoom';
 export * from './render/readout';
 export * from './render/markers';
+export * from './render/styles';
+export * from './render/layout-vars';
+export * from './gantt-rollup';
 export * from './state/selection';
 export * from './state/view';
 export * from './state/tooltip';
@@ -27,6 +30,9 @@ export * from './state/legend';
 export * from './state/collapse';
 export * from './state/toolbar';
 export * from './state/chart-state';
+export * from './state/sync';
+export * from './state/responsive';
+export * from './state/menu';
 export {
   GANTT_STATE_VERSION,
   STATE_STORAGE_PREFIX,
@@ -45,14 +51,11 @@ export {
   resolveFormatLocale,
   DEFAULT_FORMAT_LOCALE,
   dateNames,
-  isoWeek,
-  isoWeekYear,
-  quarterOf,
-  dayOfYear,
-  isLeapYear,
   type FormatToken,
   type DateNameKind,
 } from './format';
+// ISO week / quarter arithmetic and the week-numbering rules (`resolveWeek`)
+export * from './format/week';
 export * from './interaction/keymap';
 export * from './interaction/grid-nav';
 export * from './interaction/keyboard-edit';

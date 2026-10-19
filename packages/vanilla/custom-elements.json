@@ -207,6 +207,11 @@
               "default": "#2563EB"
             },
             {
+              "description": "Tint over the row under the mouse, in both panes (`rowHoverBg`; `transparent` turns the hover off).",
+              "name": "--gantt-row-hover-bg",
+              "default": "rgba(15, 23, 42, 0.04)"
+            },
+            {
               "description": "Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).",
               "name": "--gantt-bar-text-on-bar",
               "default": "#FFFFFF"
@@ -225,6 +230,16 @@
               "description": "Current-period header label, readable on its 14 % today tint (derived: `todayLabelColor(theme)`).",
               "name": "--gantt-today-label",
               "default": "#964B13"
+            },
+            {
+              "description": "Read-only: the row height in px, for page CSS and slotted content (set `options.rowHeight` or `options.density` instead).",
+              "name": "--gantt-row-height",
+              "default": "36px"
+            },
+            {
+              "description": "Read-only: the task bar height in px (set `options.bar.height` instead).",
+              "name": "--gantt-bar-height",
+              "default": "21.6px"
             }
           ],
           "cssParts": [
@@ -385,6 +400,14 @@
               "attribute": "error-message"
             },
             {
+              "kind": "field",
+              "name": "syncGroup",
+              "type": {
+                "text": "GanttSyncGroup | null"
+              },
+              "description": "Synchronises this chart with the other charts of a group (core `createGanttSyncGroup()`): the\ntimeline range, the zoom level, the horizontal scroll and the panel width, each unless the group\nturns it off. The chart joins while connected and leaves when it disconnects or the group\nchanges. `null` (the default): not synchronised. A property only (no attribute)."
+            },
+            {
               "kind": "method",
               "name": "zoomIn",
               "return": {
@@ -412,7 +435,7 @@
                   "text": "void"
                 }
               },
-              "description": "Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest\nwhen none does), then scroll the first task into view. The levels are the chart's: those of\n`options.zoomLevels`, or the built-in presets when it is unset. Nothing happens without tasks\nor before the chart is laid out."
+              "description": "Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest\nwhen none does), then scroll the first task into view. The levels are the chart's: those of\n`options.zoomLevels`, or the built-in presets when it is unset. Inside a sync group the tasks of\nevery chart of the group fit. Nothing happens without tasks or before the chart is laid out."
             },
             {
               "kind": "field",
@@ -476,7 +499,7 @@
                   "text": "void"
                 }
               },
-              "description": "Collapse / expand the task list; expanding restores its last width."
+              "description": "Hide / show the task list (core `togglePanelView`): from `'split'` or `'table'` to the timeline\nalone, from `'chart'` back to `'split'` at the panel's last width."
             },
             {
               "kind": "method",
@@ -555,7 +578,7 @@
                   "text": "GanttTask[]"
                 }
               },
-              "description": "The selected tasks, in task order."
+              "description": "The selected tasks, in task order (as set: a rolled-up parent is its raw task, not its copy)."
             },
             {
               "kind": "method",
@@ -794,7 +817,7 @@
                   "text": "GanttState"
                 }
               },
-              "description": "Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort)."
+              "description": "Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). While the\nchart is narrow (`options.responsive`) the view is the one it shows when wide."
             },
             {
               "kind": "method",

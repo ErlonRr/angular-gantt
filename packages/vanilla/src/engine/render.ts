@@ -4,8 +4,8 @@
  * its own effect, queued on the per-element frame scheduler and flushed once per frame in this
  * order:
  *
- *   host → toolbar → legend → header → static → rows → bars → arrows → overlay → readout
- *        → tasklist → states → scroll-commands → focus-restore → lazy-load
+ *   host → toolbar → legend → header → static → rows → hover → bars → arrows → overlay
+ *        → readout → tasklist → states → scroll-commands → focus-restore → lazy-load
  *
  * A region re-runs only when a signal its layer read changed: a vertical scroll re-runs the
  * windowed regions (rows, bars, arrows, overlay, task list), not the toolbar, legend, header or
@@ -14,7 +14,13 @@
  * run is counted in `runs` (tests and the perf page read it).
  *
  * `readout` (the drag readout chip, after the canvas overlay) and `states` (the loading, error
- * and empty boxes over the chart body, after the task list) paint the Phase 9 chrome.
+ * and empty boxes over the chart body, after the task list) paint the Phase 9 chrome; `hover`
+ * (the hovered row's tint, right after the row backgrounds) the Phase 10 row hover.
+ *
+ * Besides the regions, `Layers` holds the parts driven from outside the flush: the tooltip
+ * (pointer and focus events), the sync-group link (`layers/sync.ts`: the connection's sync effect,
+ * `setState()`, the splitter) and the narrow-width switch (`layers/responsive.ts`: the
+ * ResizeObserver, `options`, `setView()`).
  */
 
 import { effect, type FrameScheduler } from '../reactive';
@@ -25,6 +31,7 @@ import { createLegendLayer } from '../layers/legend';
 import { createHeaderLayer } from '../layers/header';
 import { createStaticLayer } from '../layers/static';
 import { createRowsLayer } from '../layers/rows';
+import { createHoverLayer } from '../layers/hover';
 import { createBarsLayer } from '../layers/bars';
 import { createArrowsLayer } from '../layers/arrows';
 import { createOverlayLayer } from '../layers/overlay';
@@ -35,6 +42,8 @@ import { createScrollCommandsLayer, type ScrollCommands } from '../layers/scroll
 import { createFocusRestoreLayer } from '../layers/focus-restore';
 import { createLazyLoadLayer } from '../layers/lazy-load';
 import { createTooltipLayer, type TooltipLayer } from '../layers/tooltip';
+import { createSyncLayer, type SyncLayer } from '../layers/sync';
+import { createResponsiveLayer, type ResponsiveLayer } from '../layers/responsive';
 import type { Runs } from './graph/node';
 
 /** Flush order of the frame scheduler: one priority per region. */
@@ -45,6 +54,7 @@ export const REGIONS = [
   'header',
   'static',
   'rows',
+  'hover',
   'bars',
   'arrows',
   'overlay',
@@ -57,11 +67,13 @@ export const REGIONS = [
 ] as const;
 export type Region = (typeof REGIONS)[number];
 
-/** Every region's layer, plus the tooltip (driven by pointer events, outside the flush). */
+/** Every region's layer, plus the tooltip, the sync-group link and the narrow-width switch (outside the flush). */
 export type Layers = { readonly [R in Exclude<Region, 'host' | 'scroll-commands'>]: Layer } & {
   readonly host: HostLayer;
   readonly 'scroll-commands': ScrollCommands;
   readonly tooltip: TooltipLayer;
+  readonly sync: SyncLayer;
+  readonly responsive: ResponsiveLayer;
 };
 
 /** Builds every layer (once per element). */
@@ -73,6 +85,7 @@ export function createLayers(ctx: LayerContext): Layers {
     header: createHeaderLayer(ctx),
     static: createStaticLayer(ctx),
     rows: createRowsLayer(ctx),
+    hover: createHoverLayer(ctx),
     bars: createBarsLayer(ctx),
     arrows: createArrowsLayer(ctx),
     overlay: createOverlayLayer(ctx),
@@ -83,6 +96,8 @@ export function createLayers(ctx: LayerContext): Layers {
     'focus-restore': createFocusRestoreLayer(ctx),
     'lazy-load': createLazyLoadLayer(ctx),
     tooltip: createTooltipLayer(ctx),
+    sync: createSyncLayer(ctx),
+    responsive: createResponsiveLayer(ctx),
   };
 }
 

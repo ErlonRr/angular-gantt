@@ -14,6 +14,17 @@
 //  window, the arrows whose span meets the window (`buildArrowIndex`),
 //  annotations and the today line over the window's height.
 //
+//  Row backgrounds are core `rowPaint` with the row's resolved style
+//  (`layout.rowStyle`: selection, else `rowColor`, else the zebra). The
+//  row under a mouse or pen pointer, in either pane (`layout.hoveredRowId`,
+//  D4 of Gantry 2 phase 10), is one `rect.gantt-row-hover` right after
+//  `g.gantt-rows` (x 0, the row's y and height, as wide as the timeline,
+//  `aria-hidden`, `pointer-events: none`), its fill the stylesheet's
+//  `var(--gantt-row-hover-bg)` (`rowHoverBg: 'transparent'` turns it off,
+//  forced colours hide it): over the row backgrounds, under the bands,
+//  grid and bars. Attached only while the hovered row is mounted and the
+//  view is not `table` (the Web Component's `layers/hover.ts`).
+//
 //  The <svg> is a listbox named by `labels.ariaBars` (multi-selectable
 //  with selection + multi-select): bars are its options, stamped by their
 //  outlet (role, name, role description, selection, position in the set,
@@ -48,14 +59,26 @@
 //    the scroll since the press) and auto-scrolls near the viewport's edges
 //    (`GanttScrollService.autoScroll`). A tap (touch / pen, no drag)
 //    toggles the bar's tooltip; a click selects through the `click` event.
-//    `pointercancel`, Escape and the chart's destruction cancel.
+//    `pointercancel`, Escape (the press's own, in the window's capture
+//    phase) and the chart's destruction cancel.
+//  - Focus: a mouse press on a bar (one that can be dragged or not)
+//    prevents the native focus and text selection and focuses that bar
+//    itself, without scrolling (Escape then cancels its drag, the arrow
+//    keys move from it); a touch or pen press focuses the bar once it
+//    drags. The modality stays the pointer's (`GanttBarFocusService`): no
+//    focus ring, no focus tooltip until a key is pressed.
 //  - Hover (mouse and pen): the bar under the pointer is the layout's
 //    `hoveredBarId` (its grips show), its tooltip opens (`tooltip.hover`
 //    from the painted bar under the pointer); off the bars,
-//    `tooltip.unhover()`. The cursor is the host's `data-cursor` attribute
-//    styled by the stylesheet: `ew-resize` on the handles, `grab` on the
-//    body of a bar that can be dragged, `grabbing` / `ew-resize` while
-//    dragging.
+//    `tooltip.unhover()`. The row under the pointer (core `rowIndexAtY`)
+//    is `layout.hoveredRowId` (the row tint of both panes). The cursor is
+//    the host's `data-cursor` attribute styled by the stylesheet:
+//    `ew-resize` on the handles, `grab` on the body of a bar that can be
+//    dragged, `grabbing` / `ew-resize` while dragging. Leaving the canvas,
+//    a drag starting and a scroll of either pane (the content moves under
+//    the pointer) clear the hovered bar, its grips, the hovered row and
+//    the cursor, until the pointer moves again; so does the chart's
+//    destruction.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -99,6 +122,7 @@ import {
   bottomScale,
   gestureKind,
   hitTestBar,
+  rowIndexAtY,
   type ArrowLink,
   type ArrowVisual,
   type BarHit,
@@ -179,6 +203,7 @@ const noop = (): void => undefined;
     @let tl = timeline();
     @let height = layout.totalHeight();
     @let span = layout.windowSpan();
+    @let styleOf = layout.rowStyle();
     <div [style.width.px]="tl.totalWidth" [style.height.px]="height">
       <!-- A listbox of the bars (options). Pointer selection here (press, hover and touch listeners are
            bound after the first render); the keyboard path to bars is the roving-focus model
@@ -218,7 +243,7 @@ const noop = (): void => undefined;
           </defs>
         }
 
-        <!-- Rows: the mounted rows (virtual window + pinned rows) -->
+        <!-- Rows: the mounted rows (virtual window + pinned rows), with their resolved styles -->
         <g class="gantt-rows" aria-hidden="true">
           @for (geo of layout.mountedGeometries(); track geo.row.task.id) {
             <svg:rect
@@ -226,10 +251,23 @@ const noop = (): void => undefined;
               [attr.y]="geo.y"
               [attr.width]="tl.totalWidth"
               [attr.height]="geo.height"
-              [style.fill]="rowPaint(geo, selSvc.isSelected(geo.row.task.id))"
+              [style.fill]="rowPaint(geo, selSvc.isSelected(geo.row.task.id), styleOf(geo.row))"
             />
           }
         </g>
+
+        <!-- The hovered row's tint (fill from the stylesheet), attached while a mounted row is hovered -->
+        @if (hoverGeometry(); as hover) {
+          <svg:rect
+            class="gantt-row-hover"
+            x="0"
+            aria-hidden="true"
+            pointer-events="none"
+            [attr.y]="hover.y"
+            [attr.width]="tl.totalWidth"
+            [attr.height]="hover.height"
+          />
+        }
 
         <!-- Non-working time inside the horizontal window (full height: unchanged by a vertical scroll) -->
         <g class="gantt-bands" aria-hidden="true" pointer-events="none">
@@ -357,6 +395,7 @@ const noop = (): void => undefined;
           [config]="config()"
           [timeline]="tl"
           [fontPx]="fontPx()"
+          [rowStyle]="dragRowStyle()"
         ></g>
       </svg>
       <!-- Task tooltip: one popover per chart, from the first hover on -->
@@ -388,6 +427,10 @@ const noop = (): void => undefined;
       .gantt-annotation-labels text {
         user-select: none;
       }
+      /* The hovered row's tint (the task list's row gets the same one) */
+      .gantt-row-hover {
+        fill: var(--gantt-row-hover-bg);
+      }
       /* The bar overlay's focus ring replaces the bars' own outline */
       .gantt-bars-layer > :focus {
         outline: none;
@@ -408,11 +451,14 @@ const noop = (): void => undefined;
       }
 
       /* Forced colours (D25): SVG paints are not forced (preserve-parent-color) and are inline, so
-         every one is set here with !important: rows Canvas, non-working time GrayText at 0.15
-         (intensive hours Highlight), grid lines GrayText, today Highlight */
+         every one is set here with !important: rows Canvas (the hover tint hidden), non-working time
+         GrayText at 0.15 (intensive hours Highlight), grid lines GrayText, today Highlight */
       @media (forced-colors: active) {
         .gantt-rows > rect {
           fill: Canvas !important;
+        }
+        .gantt-row-hover {
+          display: none;
         }
         .gantt-band {
           fill: GrayText !important;
@@ -555,15 +601,33 @@ export class GanttCanvasComponent {
     return (id ? this.layout.geometryById().get(id) : undefined) ?? null;
   });
 
+  /** The dragged row's resolved style (the ghost's height and radius, as its bar's); `null` while idle */
+  protected readonly dragRowStyle = computed(() => {
+    const geo = this.dragGeometry();
+    return geo ? this.layout.rowStyle()(geo.row) : null;
+  });
+
   /** Theme paints of the body (`var(--gantt-*)`), applied as CSS properties */
   protected readonly paints = PAINTS;
-  /** Row background: selection > `task.rowColor` > zebra (shared with the task list) */
+  /** Row background: selection > the row style's `rowColor` > zebra (shared with the task list) */
   protected readonly rowPaint = rowPaint;
 
   /**
-   * Bar contexts of the mounted rows, in window order. A row whose geometry, visual, theme, flags
-   * and layout parameters are unchanged keeps its previous `ctx` object, so its bar doesn't re-render
-   * (selecting a row changes that row's context only).
+   * Geometry of the hovered row while it shows its tint: a mounted row (window + pinned) outside the
+   * table view. While nothing is hovered it reads only `hoveredRowId` (a scroll or a zoom does not
+   * run it).
+   */
+  protected readonly hoverGeometry = computed<RowGeometry | null>(() => {
+    const id = this.layout.hoveredRowId();
+    if (id === null || this.layout.view() === 'table') return null;
+    return this.layout.mountedGeometries().find(geo => geo.row.task.id === id) ?? null;
+  });
+
+  /**
+   * Bar contexts of the mounted rows, in window order. A row whose geometry, visual, style, theme,
+   * flags and layout parameters are unchanged keeps its previous `ctx` object, so its bar doesn't
+   * re-render (selecting a row changes that row's context only). `style` is the row's resolved
+   * style (`layout.rowStyle`, memoised per row: compared by identity).
    */
   protected readonly contexts = linkedSignal<readonly RowGeometry[], ReadonlyMap<string, GanttBarContext>>({
     source: this.layout.mountedGeometries,
@@ -576,6 +640,7 @@ export class GanttCanvasComponent {
       const crit = this.criticalIds();
       const selected = this.selSvc.selectedIds();
       const dragEnabled = this.enableDrag();
+      const styleOf = this.layout.rowStyle();
       const out = new Map<string, GanttBarContext>();
       for (const geo of geos) {
         const id = geo.row.task.id;
@@ -596,6 +661,7 @@ export class GanttCanvasComponent {
           enableResize: !!visual.handles,
           showBaseline: cfg.baseline,
           visual,
+          style: styleOf(geo.row),
         };
         out.set(id, old && sameBarContext(old, next) ? old : next);
       }
@@ -658,8 +724,11 @@ export class GanttCanvasComponent {
     const host = this.hostEl.nativeElement;
     const viewport = host.closest<HTMLElement>('.gantry-canvas-viewport') ?? host;
     this.viewport = viewport;
-    // Escape is heard on the chart (keys bubble to its host from any of its controls)
-    const keyTarget: EventTarget = host.closest('gantry') ?? viewport;
+    // The task-list pane, the viewport's sibling (its scroll moves the rows under the pointer too)
+    const panel = Array.from(viewport.parentElement?.children ?? []).find(el => el.classList.contains('gantry-panel'));
+    const win = this.doc.defaultView;
+    // Escape cancels a press wherever focus is (the pressed bar has it), before anything else
+    const keyTarget: EventTarget = win ?? host;
     const listeners = new AbortController();
     const { signal } = listeners;
     const invalidate = (): void => {
@@ -670,7 +739,14 @@ export class GanttCanvasComponent {
     svg.addEventListener('pointermove', e => this.onPointerMove(e), { passive: true, signal });
     svg.addEventListener('pointerleave', e => this.onPointerLeave(e), { signal });
     svg.addEventListener('pointerenter', invalidate, { signal });
-    viewport.addEventListener('scroll', invalidate, { passive: true, signal });
+    // A scroll of either pane moves the content under a still pointer: the canvas box is measured
+    // again, and what was hovered is cleared (unless a press is in progress: a drag keeps its cursor)
+    const onContentScroll = (): void => {
+      invalidate();
+      if (!this.current) this.unhover();
+    };
+    viewport.addEventListener('scroll', onContentScroll, { passive: true, signal });
+    panel?.addEventListener('scroll', onContentScroll, { passive: true, signal });
     // A second finger anywhere on the timeline starts a pinch: an undecided press gives way
     viewport.addEventListener(
       'touchstart',
@@ -683,7 +759,6 @@ export class GanttCanvasComponent {
     bindTouchGuard(svg, this.dragging, signal);
     // The page scrolling or resizing moves the canvas too (removed by hand: some DOMs don't tie a
     // window listener to an abort signal)
-    const win = this.doc.defaultView;
     win?.addEventListener('scroll', invalidate, { passive: true, capture: true });
     win?.addEventListener('resize', invalidate, { passive: true });
 
@@ -693,6 +768,9 @@ export class GanttCanvasComponent {
       listeners.abort();
       win?.removeEventListener('scroll', invalidate, { capture: true });
       win?.removeEventListener('resize', invalidate);
+      // No hover survives the chart
+      this.layout.hoveredBarId.set(null);
+      this.layout.hoveredRowId.set(null);
     });
   }
 
@@ -708,13 +786,15 @@ export class GanttCanvasComponent {
     if (e.button !== 0) return;
     this.box = null;
     const hit = this.hitAt(e.clientX, e.clientY);
+    if (!hit) return;
     const mouse = gestureKind(e.pointerType) === 'mouse';
-    // A mouse press on a bar that can't be dragged is a plain click; touch and pen may still tap
-    if (!hit || (mouse && !hit.draggable)) return;
     if (mouse) {
-      // No text selection or native focus: keyboard focus goes to the timeline (Escape cancels the drag)
+      // No text selection or native focus: the pressed bar takes keyboard focus itself, without
+      // scrolling (Escape cancels its drag); the modality stays the pointer's (no focus ring)
       e.preventDefault();
-      this.viewport?.focus({ preventScroll: true });
+      this.focusBar(hit.geo.row.task.id);
+      // A bar that can't be dragged: the press is a plain click (touch and pen may still tap)
+      if (!hit.draggable) return;
     }
     this.scroll0 = this.viewport?.scrollLeft ?? 0;
     const target = e.target;
@@ -755,9 +835,10 @@ export class GanttCanvasComponent {
     if (!current) return;
     this.tooltip.dismiss();
     this.layout.hoveredBarId.set(null);
+    this.layout.hoveredRowId.set(null);
     this.cursor.set(hit.part === 'bar' ? 'grabbing' : 'ew-resize');
-    // A touch drag takes keyboard focus to the timeline too (a mouse press already did)
-    if (g.kind === 'touch') this.viewport?.focus({ preventScroll: true });
+    // A touch or pen drag focuses its bar too (a mouse press already did): Escape cancels it there
+    if (g.kind === 'touch') this.focusBar(hit.geo.row.task.id);
     this.dragSvc.start(hit.geo, hit.part, g.startX, this.dragTiming());
     let lastX = g.x;
     const auto = this.scrollSvc.autoScroll({
@@ -824,16 +905,33 @@ export class GanttCanvasComponent {
     // A finger lifting is not the pointer leaving (a tapped tooltip stays), nor is a press in progress
     if (e.pointerType === 'touch' || this.current) return;
     this.box = null;
-    this.cursor.set(null);
-    this.layout.hoveredBarId.set(null);
+    this.unhover();
     this.tooltip.unhover();
   }
 
-  /** Cursor and grips for a fine pointer at a client position (geometry: the handles reach past the bar). */
+  /**
+   * Cursor, grips and row tint for a fine pointer at a client position (geometry: the handles
+   * reach past the bar).
+   */
   private hoverAt(clientX: number, clientY: number): void {
-    const hit = this.hitAt(clientX, clientY);
+    const { x, y } = this.point(clientX, clientY);
+    const geo = this.geoAt(y);
+    const hit = this.hitOf(geo, x, y);
     this.cursor.set(hoverCursor(hit));
     this.layout.hoveredBarId.set(hit?.geo.row.task.id ?? null);
+    this.layout.hoveredRowId.set(geo?.row.task.id ?? null);
+  }
+
+  /** Nothing is hovered any more: cursor, grips and row tint go (the tooltip has its own rules). */
+  private unhover(): void {
+    this.cursor.set(null);
+    this.layout.hoveredBarId.set(null);
+    this.layout.hoveredRowId.set(null);
+  }
+
+  /** The painted bar of `id` takes keyboard focus, without scrolling (a press on it). */
+  private focusBar(id: string): void {
+    (this.barById(id) as HTMLElement | SVGElement | null)?.focus({ preventScroll: true });
   }
 
   // Click, double-click
@@ -871,9 +969,19 @@ export class GanttCanvasComponent {
     return { x: clientX - this.box.left, y: clientY - this.box.top };
   }
 
-  /** Row geometry under a canvas-relative `y` */
+  /** Row geometry under a canvas-relative `y` (core `rowIndexAtY`) */
   private geoAt(y: number): RowGeometry | undefined {
-    return this.layout.rowGeometries()[Math.floor(y / this.config().rowHeight)];
+    const geos = this.layout.rowGeometries();
+    const i = rowIndexAtY(y, this.config().rowHeight, geos.length);
+    return i === null ? undefined : geos[i];
+  }
+
+  /** The bar of `geo` at canvas `x` / `y` and the part hit (core `hitTestBar`), `null` off it. */
+  private hitOf(geo: RowGeometry | undefined, x: number, y: number): BarPointerHit | null {
+    if (!geo) return null;
+    const part = hitTestBar(this.barVisual()(geo), x, y);
+    if (!part) return null;
+    return { geo, part, draggable: this.enableDrag() && geo.row.task.draggable !== false };
   }
 
   /**
@@ -882,14 +990,10 @@ export class GanttCanvasComponent {
    */
   private hitAt(clientX: number, clientY: number): BarPointerHit | null {
     const { x, y } = this.point(clientX, clientY);
-    const geo = this.geoAt(y);
-    if (!geo) return null;
-    const part = hitTestBar(this.barVisual()(geo), x, y);
-    if (!part) return null;
-    return { geo, part, draggable: this.enableDrag() && geo.row.task.draggable !== false };
+    return this.hitOf(this.geoAt(y), x, y);
   }
 
-  /** The painted bar of `id` (a tap in a handle's reach, outside the bar's own shapes) */
+  /** The painted bar of `id` (a tap in a handle's reach, outside the bar's own shapes; a press focuses it) */
   private barById(id: string): Element | null {
     const layer = this.svgEl()?.nativeElement.querySelector('.gantt-bars-layer');
     for (const child of Array.from(layer?.children ?? [])) if (child.getAttribute('data-task-id') === id) return child;
@@ -913,6 +1017,7 @@ function sameBarContext(a: GanttBarContext, b: GanttBarContext): boolean {
     a.row === b.row &&
     a.geometry === b.geometry &&
     a.visual === b.visual &&
+    a.style === b.style &&
     a.theme === b.theme &&
     a.layoutParams === b.layoutParams &&
     a.isCritical === b.isCritical &&

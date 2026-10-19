@@ -20,20 +20,33 @@
 //  text only (`[textContent]`: a task name never becomes markup). Rows
 //  are keyed by kind + occurrence, so they keep their nodes from one task
 //  to the next; the closed popover keeps its last content. The progress
-//  (`--gantt-tt-progress`) and the fill's paint are style bindings.
+//  (`--gantt-tt-progress`) and the fill's paint are style bindings: the
+//  colour of the row's resolved style (`layout.rowStyle()`, the one its
+//  bar is painted with; the task's own when a `styles.rule` throws), the
+//  critical colour on the critical path.
 //  Custom content replaces the title and the rows: the consumer's
 //  `<ng-template ganttTooltip>` (it wins), else `options.tooltip.render`
 //  — a returned DOM node is appended, a string (or a number) is shown as
 //  text; `null` / `undefined` / `false` keep the built-in content, and so
 //  does a `render` that throws (reported on the console).
 //
+//  While it shows, the content follows its row (the Web Component's
+//  `refresh(row)`): it is built again — the template's context and
+//  `render` included — for a new opening and when the row's task object
+//  (looked up by id in the layout as it is now), its critical flag, its
+//  resolved style (field by field, core `sameTaskStyle`: the progress
+//  colour) or the i18n bundle (labels, locale, formats) change. The
+//  clock, the task index, the float and the config are read when it is
+//  built, never followed: a clock tick builds nothing.
+//
 //  Where it goes is core's `placeTooltip`: below its bar (above it
 //  without room), centred on the pointer while hovering, on the visible
 //  part of the bar otherwise, kept 8 px from the viewport edges, written
 //  as a `translate`. DOM work in after-render effects: showPopover() /
 //  hidePopover() once per opening (the `hidden` attribute alone where the
-//  Popover API is missing), one size measurement per opening, the bar's
-//  box read when it opens and on every scroll or resize.
+//  Popover API is missing), one size measurement per opening and per
+//  content refresh, the bar's box read then (a bar gone dismisses it) and
+//  on every scroll or resize.
 //
 //  Its listeners (the Web Component's tooltip triggers), bound after the
 //  first render and released with it: the pointer resting on it keeps it
@@ -69,10 +82,13 @@ import {
   buildTooltipModel,
   hitTestBar,
   placeTooltip,
+  sameTaskStyle,
   type GanttFlatRow,
+  type GanttI18n,
   type GanttTask,
   type Paint,
   type ResolvedGanttConfig,
+  type ResolvedTaskStyle,
   type TooltipModel,
 } from '@gantryjs/core';
 
@@ -82,7 +98,11 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
 import { type GanttTooltipTemplateContext } from './gantt-tooltip-template.directive';
 import { GanttTooltipState, type ShownTooltip } from './tooltip-state';
 
-/** What the tooltip reads besides the row: how dates are read, the clock, the critical path and the task index */
+/**
+ * What the tooltip reads besides the row: how dates are read, the clock, the critical path and the
+ * task index. Only the critical flag of the row that shows is followed; the rest is read when the
+ * content is built.
+ */
 export interface TooltipContext {
   /** Date reading (`endDateMode`, `normalizeDateOnly`), the baseline rows (`baseline`) and `tooltip.render` */
   readonly config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline' | 'tooltip'>;
@@ -107,8 +127,36 @@ interface TooltipRowView {
   readonly paint: Paint;
 }
 
-/** The row the popover shows and its model */
+/** What the open tooltip's content is built from, besides what is read at build time */
+interface TooltipSource {
+  /** The opening: a new one builds the content again */
+  readonly shown: ShownTooltip;
+  /** Its row as the layout has it now (the row it opened with once it is gone: the state dismisses it) */
+  readonly row: GanttFlatRow;
+  readonly critical: boolean;
+  /** Its row's resolved style (`undefined` while a `styles.rule` throws: the task's own) */
+  readonly style: ResolvedTaskStyle | undefined;
+  /** Labels, locale and formats */
+  readonly i18n: GanttI18n;
+}
+
+/**
+ * Same content: the same opening, task object, critical flag, style fields and i18n bundle (a new
+ * row object alone is not a change, nor a new style object with the same fields).
+ */
+const sameSource = (a: TooltipSource | null, b: TooltipSource | null): boolean =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.shown === b.shown &&
+    a.row.task === b.row.task &&
+    a.critical === b.critical &&
+    sameTaskStyle(a.style, b.style) &&
+    a.i18n === b.i18n);
+
+/** The opening the popover shows, its row and its model */
 interface TooltipView {
+  readonly shown: ShownTooltip;
   readonly row: GanttFlatRow;
   readonly model: TooltipModel;
 }
@@ -289,25 +337,53 @@ export class GanttTooltipComponent {
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
   private readonly customHost = viewChild<ElementRef<HTMLElement>>('customHost');
 
-  /** The row that shows and its model; `null` while closed */
+  /**
+   * What the open tooltip's content follows: the opening, its row as the layout has it now, its
+   * critical flag, its resolved style and the i18n bundle. The cut-off keeps the clock out: a tick
+   * may rebuild the rows (a sort by status) and the context, but not the task, the critical set, the
+   * style fields or the labels (a rolled-up parent gets a new copy only when the day of `now` moves
+   * on).
+   */
+  private readonly source = computed<TooltipSource | null>(
+    () => {
+      const shown = this.state.shown();
+      if (!shown) return null;
+      const row = this.layout.geometryById().get(shown.id)?.row ?? shown.row;
+      return {
+        shown,
+        row,
+        critical: this.context().criticalIds?.has(shown.id) ?? false,
+        style: this.styleOf(row),
+        i18n: this.i18n.bundle(),
+      };
+    },
+    { equal: sameSource },
+  );
+
+  /** The row that shows and its model; `null` while closed. Built again only when `source` changes. */
   private readonly openView = computed<TooltipView | null>(() => {
-    const row = this.state.row();
-    if (!row) return null;
-    const ctx = this.context();
-    const model = buildTooltipModel({
-      task: row.task,
-      hasChildren: row.hasChildren,
-      barType: row.barType,
-      config: ctx.config,
-      labels: this.i18n.labels(),
-      locale: this.i18n.locale(),
-      dateFormat: this.i18n.formats().dateFormat,
-      now: ctx.now,
-      criticalIds: ctx.criticalIds,
-      floatDays: ctx.floatDays,
-      tasksById: ctx.tasksById,
+    const src = this.source();
+    if (!src) return null;
+    const { shown, row, style, i18n } = src;
+    // Read when the content is built, never followed: the clock, the task index, the float, the config
+    return untracked(() => {
+      const ctx = this.context();
+      const model = buildTooltipModel({
+        task: row.task,
+        hasChildren: row.hasChildren,
+        barType: row.barType,
+        config: ctx.config,
+        labels: i18n.labels,
+        locale: i18n.locale,
+        dateFormat: i18n.formats.dateFormat,
+        now: ctx.now,
+        criticalIds: ctx.criticalIds,
+        floatDays: ctx.floatDays,
+        tasksById: ctx.tasksById,
+        style,
+      });
+      return { shown, row, model };
     });
-    return { row, model };
   });
 
   protected readonly open = computed(() => this.openView() !== null);
@@ -320,14 +396,18 @@ export class GanttTooltipComponent {
 
   protected readonly model = computed<TooltipModel | null>(() => this.view()?.model ?? null);
 
-  /** Custom content instead of the title and rows: the template, else `render`'s result (`null`: built-in) */
+  /**
+   * Custom content instead of the title and rows: the template, else `render`'s result (`null`:
+   * built-in). `render` runs when the content is built (an opening or its row's change), never for a
+   * new `render` function alone or a clock tick.
+   */
   protected readonly content = computed<TooltipContent | null>(() => {
     const view = this.view();
     if (!view) return null;
     const { row, model } = view;
     const template = this.state.template();
     if (template) return { template, context: { $implicit: model, model, task: row.task, row } };
-    const render = this.context().config.tooltip.render;
+    const render = untracked(this.context).config.tooltip.render;
     if (!render) return null;
     try {
       // Consumer code: none of the signals it reads belongs to the tooltip
@@ -360,8 +440,8 @@ export class GanttTooltipComponent {
 
   /** The popover is showing (Popover API) */
   private popoverOpen = false;
-  /** The opening measured last, and the popover's border-box size then */
-  private measured: ShownTooltip | null = null;
+  /** The content measured last (an opening or a refresh), and the popover's border-box size then */
+  private measured: TooltipView | null = null;
   private width = 0;
   private height = 0;
 
@@ -375,17 +455,28 @@ export class GanttTooltipComponent {
         if (el && value !== undefined) el.replaceChildren(value);
       },
     });
-    // Open / close the popover, measure it once per opening, place it by its bar
+    // Open / close the popover; measure it and place it by its bar once per opening and once per
+    // content refresh (after the render that wrote the new content)
     afterRenderEffect(() => {
       const shown = this.state.shown();
-      untracked(() => this.follow(shown));
+      const view = this.openView();
+      untracked(() => this.follow(shown, view));
     });
     afterNextRender(() => this.connect());
   }
 
-  private follow(shown: ShownTooltip | null): void {
+  /** The row's resolved style (its bar's); the task's own when a `styles.rule` throws. */
+  private styleOf(row: GanttFlatRow): ResolvedTaskStyle | undefined {
+    try {
+      return this.layout.rowStyle()(row);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private follow(shown: ShownTooltip | null, view: TooltipView | null): void {
     const el = this.host;
-    if (!shown) {
+    if (!shown || !view) {
       if (this.popoverOpen) {
         this.popoverOpen = false;
         try {
@@ -405,14 +496,14 @@ export class GanttTooltipComponent {
         // No Popover API (or not connected): removing `hidden` alone shows it
       }
     }
-    // One layout read per opening; scrolls only re-read the bar's box
-    if (this.measured !== shown) {
-      const box = el.getBoundingClientRect();
-      this.width = box.width;
-      this.height = box.height;
-      this.measured = shown;
-    }
-    const anchor = this.state.anchor();
+    // One layout read per opening and per content refresh; scrolls only re-read the bar's box
+    if (this.measured === view) return;
+    const box = el.getBoundingClientRect();
+    this.width = box.width;
+    this.height = box.height;
+    this.measured = view;
+    // A bar rebuilt since it opened is found again; a bar gone dismisses the tooltip
+    const anchor = this.state.reanchor();
     if (anchor) this.place(shown, anchor);
   }
 
@@ -434,7 +525,7 @@ export class GanttTooltipComponent {
   /** Scrolls and resizes: the open tooltip moves with its bar (closed when the bar is gone). */
   private readonly reposition = (): void => {
     const shown = this.state.shown();
-    if (!shown || this.measured !== shown) return;
+    if (!shown || this.measured?.shown !== shown) return;
     const anchor = this.state.reanchor();
     if (anchor) this.place(shown, anchor);
   };

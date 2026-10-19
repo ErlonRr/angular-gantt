@@ -5,7 +5,9 @@
  *
  * - **Keyboard focus** on a bar: `tooltip.focus()` when `focusVisibleBarId` names a bar (focus
  *   reached from the keyboard, written by the keyboard handlers), `tooltip.blur()` when it goes
- *   back to `null`. A bar focused with the pointer opens nothing.
+ *   back to `null`. A bar focused with the pointer opens nothing. Before the first render no bar
+ *   is mounted: the request is tried once more on the next animation frame, which comes after the
+ *   engine's first flush (its frame was requested when the element connected, before this one).
  * - **Escape** (D24, WCAG 1.4.13): while a tooltip shows, a keydown on the host in the capture
  *   phase dismisses it and consumes the key, before the keyboard handlers clear the selection. A
  *   drag or keyboard move mode dismisses the tooltip when it starts (below) and keeps its own
@@ -18,6 +20,11 @@
  * - **A press elsewhere**: a `pointerdown` outside the tooltip and off the bars dismisses it (a
  *   press on a bar is the canvas pointer handler's: a tap toggles that bar's tooltip). Bars are
  *   hit by geometry, as the pointer handler hits them (core `hitTestBar`).
+ * - **Its row changes**: while a tooltip shows, its row's task object, critical flag, resolved
+ *   style (field by field, core `sameTaskStyle`: the progress colour) and the i18n bundle (labels,
+ *   locale, formats) are followed; when one changes, `tooltip.refresh(row)` writes the content
+ *   again in the next frame, after the bars are painted, so it is placed by the moved bar (a
+ *   custom `render` runs again only then: the clock alone changes none of them).
  * - **Dismiss / reset** without a user gesture: a drag or move mode starts (`dragPreview`),
  *   the bar's row goes away (checked when the tasks, the collapsed rows or the options change),
  *   and `tooltipEnabled` or the resolved rules (`config.tooltip`: `trigger`, `showDelay`,
@@ -28,8 +35,15 @@
  * disposed and every listener goes when `signal` aborts.
  */
 
-import { hitTestBar, type ResolvedGanttConfig } from '@gantryjs/core';
-import { computed, effect, untracked } from '../reactive';
+import {
+  hitTestBar,
+  sameTaskStyle,
+  type GanttFlatRow,
+  type GanttI18n,
+  type ResolvedGanttConfig,
+  type ResolvedTaskStyle,
+} from '@gantryjs/core';
+import { computed, effect, onCleanup, untracked } from '../reactive';
 import type { LayerContext } from '../layers/context';
 import type { TooltipLayer } from '../layers/tooltip';
 
@@ -39,10 +53,47 @@ export interface TooltipTriggerOptions {
   readonly hasRendered: () => boolean;
   /** Aborted when the element disconnects: removes the listeners */
   readonly signal: AbortSignal;
+  /**
+   * Runs the open tooltip's refresh in the frame, after the bars are painted (the engine's frame
+   * scheduler), so a tooltip whose task moved is placed by the repainted bar. Without it the
+   * refresh runs at once.
+   */
+  readonly afterPaint?: ((run: () => void) => void) | undefined;
 }
 
 const sameValues = (a: readonly unknown[], b: readonly unknown[]) =>
   a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
+
+/** What the open tooltip's content is built from, besides the clock and the task index. */
+interface OpenContent {
+  readonly row: GanttFlatRow;
+  readonly critical: boolean;
+  /** The row's resolved style (`undefined` while a `styles.rule` throws: the task's own) */
+  readonly style: ResolvedTaskStyle | undefined;
+  readonly i18n: GanttI18n;
+}
+
+/**
+ * Same content: the same task object, critical flag, style fields and i18n bundle (a new row
+ * object alone is not a change, nor a new style object with the same fields).
+ */
+const sameContent = (a: OpenContent | null, b: OpenContent | null): boolean =>
+  a === b ||
+  (!!a &&
+    !!b &&
+    a.row.task === b.row.task &&
+    a.critical === b.critical &&
+    sameTaskStyle(a.style, b.style) &&
+    a.i18n === b.i18n);
+
+/** `row`'s resolved style, `undefined` while a `styles.rule` throws (the bars region reports it). */
+function styleOf(resolve: (row: GanttFlatRow) => ResolvedTaskStyle, row: GanttFlatRow): ResolvedTaskStyle | undefined {
+  try {
+    return resolve(row);
+  } catch {
+    return undefined;
+  }
+}
 
 /** Typing into a slotted / custom cell input keeps its own Escape. */
 const isEditable = (el: Element | undefined): boolean =>
@@ -61,6 +112,16 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
   };
 
   // ── Keyboard focus on a bar (keyboard modality only) ───────────────────
+  /** Opens the tooltip of `id`'s bar, when its row and its bar element are there. */
+  const focusBar = (id: string): void => {
+    try {
+      const row = G.geoById.peek().get(id)?.row;
+      const el = barElement(id);
+      if (row && el) tooltip.focus(row, el);
+    } catch {
+      // invalid options: nothing is rendered
+    }
+  };
   effect(() => {
     const id = I.focusVisibleBarId();
     untracked(() => {
@@ -68,14 +129,16 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
         tooltip.blur();
         return;
       }
-      if (!opts.hasRendered()) return;
-      try {
-        const row = G.geoById.peek().get(id)?.row;
-        const el = barElement(id);
-        if (row && el) tooltip.focus(row, el);
-      } catch {
-        // invalid options: nothing is rendered
+      if (opts.hasRendered()) {
+        focusBar(id);
+        return;
       }
+      // Not painted yet: once more after the first render (cancelled when focus moves meanwhile)
+      if (!win) return;
+      const frame = win.requestAnimationFrame(() => {
+        if (opts.hasRendered()) focusBar(id);
+      });
+      onCleanup(() => win.cancelAnimationFrame(frame));
     });
   });
 
@@ -119,6 +182,36 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
       }
     });
   });
+
+  // ── The open tooltip follows its row ────────────────────────────────────
+  // Graph nodes are read only while a tooltip shows. The cut-off keeps the clock out: a tick may
+  // rebuild the rows (a sort by status) but not their tasks, the critical set, the style fields or
+  // the labels (a rolled-up parent gets a new copy only when `nowDay` moves on: its status may
+  // change then).
+  const openContent = computed(
+    (): OpenContent | null => {
+      const id = tooltip.visibleId();
+      if (id === null) return null;
+      try {
+        const row = G.geoById().get(id)?.row;
+        // A row gone is the dismiss rule's (above)
+        if (!row) return null;
+        const critical = G.critical()?.criticalIds.has(id) ?? false;
+        return { row, critical, style: styleOf(G.rowStyle(), row), i18n: G.i18n() };
+      } catch {
+        return null; // invalid options: nothing is rendered
+      }
+    },
+    { equals: sameContent },
+  );
+  effect(
+    () => {
+      const content = openContent();
+      // The tooltip compares with what it wrote: opening it (a new id) writes nothing again
+      if (content) untracked(() => tooltip.refresh(content.row));
+    },
+    { scheduler: opts.afterPaint },
+  );
 
   // ── Escape closes the tooltip first (D24) ───────────────────────────────
   host.addEventListener(

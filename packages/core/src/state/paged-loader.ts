@@ -73,11 +73,14 @@ export class PagedLoader<T> {
     return this._page;
   }
 
-  /** Listen to every change of items, loading, `hasMore` or error. Returns the unsubscribe function. */
-  subscribe(listener: () => void): () => void {
+  /**
+   * Listen to every change of items, loading, `hasMore` or error. Returns the unsubscribe function.
+   * Bound to the loader, so it can be passed on as is (React's `useSyncExternalStore(source.subscribe, …)`).
+   */
+  readonly subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
-  }
+  };
 
   /**
    * Fetch the next page. No-op (resolving with the in-flight load, if any) while

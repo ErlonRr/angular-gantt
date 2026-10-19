@@ -12,6 +12,12 @@
  * the press: released, cancelled (`pointercancel`, Escape, `cancel()`, the connection's signal),
  * or handed to the browser's pan.
  *
+ * Escape belongs to the press while it lasts: it is heard in the capture phase on `keyTarget`
+ * (the window), cancels the press and is consumed there, before the chart's keyboard (its
+ * focus-visible tracking, the tooltip's Escape, the shortcuts) and the page see it. The pressed bar
+ * holds keyboard focus (a mouse press focuses it), so the key would otherwise make its focus
+ * visible and open its focus tooltip, or clear the selection, instead of cancelling the drag.
+ *
  * `bindTouchGuard` is the non-passive `touchmove` listener that keeps the browser from panning
  * while a touch drags a bar: it must exist before the touch starts (browsers decide at
  * `touchstart` whether a touch sequence can be cancelled), so it is bound once per connection and
@@ -32,7 +38,10 @@ import {
 export interface PressOptions {
   /** Receives the press's moves and release (a mouse press that may drag captures the pointer to it) */
   readonly target: HTMLElement;
-  /** Where Escape is heard (the host: keys bubble out of the shadow tree) */
+  /**
+   * Where Escape is heard, in the capture phase: the window (it hears every key first, wherever
+   * focus is). The key is consumed while the press lasts.
+   */
   readonly keyTarget: EventTarget;
   /** The press may become a drag: a mouse press captures the pointer, a touch press arms the long-press timer */
   readonly draggable: boolean;
@@ -65,6 +74,13 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const listeners = new AbortController();
   const { signal } = listeners;
+  /** Escape cancels the press and goes no further (see the file comment) */
+  const onKey = (e: Event): void => {
+    if (!active || (e as KeyboardEvent).key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    cancel();
+  };
 
   const capture = (): void => {
     try {
@@ -78,6 +94,8 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
     active = false;
     clearTimeout(timer);
     listeners.abort();
+    // Removed by hand: not every window implementation honours the `signal` option
+    opts.keyTarget.removeEventListener('keydown', onKey, { capture: true });
     try {
       if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
     } catch {
@@ -138,8 +156,8 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
     { signal },
   );
   target.addEventListener('pointercancel', e => mine(e) && cancel(), { signal });
-  // Escape abandons the press (a drag is also cancelled by the keyboard shortcuts)
-  opts.keyTarget.addEventListener('keydown', e => (e as KeyboardEvent).key === 'Escape' && cancel(), { signal });
+  // Escape abandons the press, before anything else hears it
+  opts.keyTarget.addEventListener('keydown', onKey, { capture: true });
   // A held finger opens the context menu (or selects text) on some devices: not on a bar it drags
   if (draggable && g.kind === 'touch') target.addEventListener('contextmenu', e => e.preventDefault(), { signal });
   opts.signal.addEventListener('abort', cancel, { signal });

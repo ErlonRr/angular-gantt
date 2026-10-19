@@ -2,6 +2,7 @@
 import { computed, onUnmounted, ref, shallowRef, useTemplateRef } from 'vue';
 import { Gantry, ViewMode, type GanttTask, type TaskDragEvent, type TaskResizeEvent } from '@gantryjs/vue';
 import { createDemoData } from '@gantryjs/core/demo';
+import { galleryHash } from 'demo-kit/gallery';
 import { PACKAGES, SITE } from 'demo-kit/site';
 import { getTheme, onThemeChange, toggleTheme, type SiteTheme } from 'demo-kit/theme';
 import { Icon } from './Icon';
@@ -60,6 +61,16 @@ function skip() {
           <span class="gs-version">v{{ SITE.version }}</span>
           <span class="gs-badge">Vue</span>
         </div>
+        <nav class="gs-nav" aria-label="Primary">
+          <ul class="gs-nav-list">
+            <li>
+              <a class="gs-nav-link" href="#/" aria-current="page"><Icon name="home" /><span>Home</span></a>
+            </li>
+            <li>
+              <a class="gs-nav-link" :href="galleryHash()"><Icon name="examples" /><span>Examples</span></a>
+            </li>
+          </ul>
+        </nav>
         <div class="gs-header-actions">
           <button type="button" class="gs-icon-btn" aria-label="Dark theme" :aria-pressed="dark" @click="toggleTheme()">
             <Icon :name="dark ? 'sun' : 'moon'" />

@@ -17,10 +17,20 @@ paths:
 - Geometry goes in `src/render/`: `scales.ts` (tiers, formats, zoom presets), `timeline.ts`
   (range, delimiters, bands, row geometry), `bars.ts` (with handles, `focusRect`, `hitBox`,
   `hitTestBar`), `arrows.ts`, `drag.ts`, `markers.ts` (marker lane, annotations), `zoom.ts`,
-  `viewport.ts`, `readout.ts`, `columns.ts`, `paint.ts`, `theme.ts`. UI state machines and models go
-  in `src/state/` (`tooltip.ts`, `toolbar.ts`, `chart-state.ts`, `legend.ts`, `selection.ts`, …),
-  input reducers in `src/interaction/` (`keymap.ts`, `grid-nav.ts`, `timeline-nav.ts`, `roving.ts`,
-  `key-selection.ts`, `keyboard-edit.ts`, `gesture.ts`, `autoscroll.ts`, `announce.ts`).
+  `viewport.ts`, `readout.ts`, `columns.ts`, `paint.ts`, `theme.ts`, `styles.ts` (the task-style
+  resolver; `task-style.ts` is its import-cycle-free leaf), `layout-vars.ts` (the read-only layout
+  CSS variables). Rollups (summary parents computed from their children) live in
+  `src/gantt-rollup.ts`. UI state machines and models go
+  in `src/state/` (`tooltip.ts`, `toolbar.ts`, `menu.ts`, `responsive.ts`, `sync.ts` (sync groups),
+  `chart-state.ts`, `legend.ts`, `selection.ts`, …), input reducers in `src/interaction/`
+  (`keymap.ts`, `grid-nav.ts`, `timeline-nav.ts`, `roving.ts`, `key-selection.ts`,
+  `keyboard-edit.ts`, `gesture.ts`, `autoscroll.ts`, `announce.ts`, `scroll-sync.ts`).
+- Task styles have one precedence, resolved only by `createStyleResolver`: theme < bar kind
+  (`styles.task` / `group` / `milestone`) < `styles.parent` < `styles.levels[depth]` < rollup colour <
+  `styles.rule(row, ctx)` < the deprecated flat fields (`barColor`, `rowColor`, `textColor`,
+  `progressColor`, `className`) < `task.style`; `className` accumulates, the critical path still
+  overrides the fill. `null` / `undefined` never override; bindings paint the resolved style and
+  never read task colours themselves.
 - Core owns no timers: a machine returns what to schedule (`reduceTooltip` → `timer` ms, the
   gesture machine → the long-press is the binding's timer) or takes them injected
   (`createAnnouncer(write, { set, clear })`). Numbers both bindings need (`DRAG_THRESHOLD_PX`,

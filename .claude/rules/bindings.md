@@ -26,7 +26,8 @@ paths:
   values go through `toRaw` (no clones); array props are watched `deep: 1` and copied only after an in-place change;
   `options` is watched `deep: 1` and a reactive one always goes over as a one-level copy (the element compares new
   options with the object it holds); prop types are checked against `GantryProperties` (`satisfies` + an exact
-  `expectTypeOf` test); emits are the camel-cased event names.
+  `expectTypeOf` test); emits are the camel-cased event names. The `#empty` slot renders as
+  `div[slot=empty]` (stable symbol key) before the default slot's nodes.
 - Svelte 5: runes only. `Gantry.svelte` destructures props explicitly and maps every name to a getter in the
   `properties` / `callbacks` records, whose types require every key, so a new `GANTRY_PROPERTIES` / `GANTRY_EVENTS`
   name fails svelte-check until it is destructured (`props.test.ts` checks the destructuring too). The listener effect
@@ -34,7 +35,8 @@ paths:
   `untrack`. Only the data props (`tasks`, `columns`, `annotations`, `options`) are copied one level with `shallow()`,
   never `$state.snapshot` (`dataSource`, `renderBar`, flags pass as they are); recommend `$state.raw` for big plans.
   `hydration.test.ts` renders with `svelte/server` through the `svelte-server:` import (vitest.config.ts) and
-  hydrates. `undefined` is forwarded once a prop has been set. Built with `svelte-package` (the package `files`
+  hydrates. `undefined` is forwarded once a prop has been set. Objects with live getters (`syncGroup`, `dataSource`)
+  are never copied: `shallow()` would freeze their state. Built with `svelte-package` (the package `files`
   exclude `dist/__tests__`); test types come from `src/__tests__/tsconfig.json`.
 - All three: a prop never set is not written (attributes and imperative values survive); listeners are attached before
   the first property assignment so events fired by it reach the callbacks; tests live in `src/__tests__/` (Vitest

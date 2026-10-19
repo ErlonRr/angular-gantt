@@ -182,8 +182,9 @@ export interface AnnotationVisual {
   line: { x: number; y1: number; y2: number; strokeWidth: number; dash: string; opacity: number };
   /**
    * The label drawn in the canvas, above the bars: only while the marker lane is off (the lane
-   * shows the labels otherwise). `fontSize` is `label.fontSize` or the chart font size − 1,
-   * `fontWeight` is `label.fontWeight` or 600.
+   * shows the labels otherwise). `y` is `ANNOTATION_LABEL_OFFSET.y` below the top of the window
+   * plus `label.offsetY` (px, default 0; positive moves it down). `fontSize` is `label.fontSize`
+   * or the chart font size − 1, `fontWeight` is `label.fontWeight` or 600.
    */
   label: {
     text: string;
@@ -194,6 +195,10 @@ export interface AnnotationVisual {
     paint: Paint;
   } | null;
 }
+
+/** `AnnotationLabel.offsetY` as a finite number of px (0 when unset or not finite). */
+const labelOffsetY = (offsetY: number | undefined): number =>
+  typeof offsetY === 'number' && Number.isFinite(offsetY) ? offsetY : 0;
 
 /**
  * What the canvas draws for each annotation: the region and the line, between `span.top` and
@@ -231,7 +236,7 @@ export function computeAnnotationVisuals(
           ? {
               text: label.text,
               x: x + ANNOTATION_LABEL_OFFSET.x,
-              y: top + ANNOTATION_LABEL_OFFSET.y,
+              y: top + ANNOTATION_LABEL_OFFSET.y + labelOffsetY(label.offsetY),
               fontSize: label.fontSize ?? fontPx - 1,
               fontWeight: label.fontWeight ?? 600,
               paint: label.color ?? paint,

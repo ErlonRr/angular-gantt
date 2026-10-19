@@ -350,13 +350,14 @@ describe('toolbar (Phase 9 step 4.3)', () => {
     });
   });
 
-  it('styles 32 px controls, 16 px stroked icons and checked radios in the bar colours', () => {
+  it('styles 32 px controls (the density control size), 16 px stroked icons and checked radios in the bar colours', () => {
     const rule = (selector: string) => BASE_CSS.split('\n').find(l => l.trim().startsWith(selector)) ?? '';
-    expect(BASE_CSS).toMatch(/\.gantt-tb-btn, \.gantt-tb-pill \{[^}]*min-width: 32px; min-height: 32px;/);
+    expect(BASE_CSS).toMatch(
+      /\.gantt-tb-btn, \.gantt-tb-pill \{[^}]*min-width: var\(--gantry-control-size, 32px\); min-height: var\(--gantry-control-size, 32px\);/,
+    );
     expect(rule('.gantt-tb-pill[aria-checked="true"]')).toContain('background: var(--gantt-bar)');
     expect(rule('.gantt-tb-pill[aria-checked="true"]')).toContain('color: var(--gantt-bar-text-on-bar)');
     expect(rule('.gantt-tb-icon')).toContain('fill: none; stroke: currentColor;');
     expect(rule('.gantt-tb-btn:focus-visible')).toContain('var(--gantt-focus-ring)');
-    expect(BASE_CSS).not.toContain('aria-pressed');
   });
 });

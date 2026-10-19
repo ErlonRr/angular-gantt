@@ -3,13 +3,14 @@
 //  Visual geometry of task bars, summary (group) bars and milestones.
 // ─────────────────────────────────────────────────────────────
 
-import type { RowGeometry, GanttTask } from '../types';
+import type { RowGeometry, GanttTask, GanttLength, ResolvedTaskStyle } from '../types';
 import type { ResolvedGanttConfig } from './config';
 import { resolveLength } from './config';
 import { taskSpan } from './timeline';
 import { readableOn } from './contrast';
 import { CONTRAST_CSS_VARS } from './theme';
 import { PAINTS, themeVar, type Paint } from './paint';
+import { taskOwnStyle } from './task-style';
 
 /** Narrowest task bar (px) that still gets resize handles. */
 export const HANDLE_MIN_BAR_WIDTH = 12;
@@ -46,10 +47,10 @@ export interface BarLabel {
   inside: boolean;
 }
 
-/** Which theme fill a bar uses (explicit `task.barColor` keeps the tone of its kind). */
+/** Which theme fill a bar uses (an explicit `style.color` keeps the tone of its kind). */
 export type BarTone = 'default' | 'milestone' | 'critical';
 
-/** Paints of a bar: theme tokens (`var(--gantt-*)`) or explicit task / option colours. */
+/** Paints of a bar: theme tokens (`var(--gantt-*)`) or explicit style / option colours. */
 export interface BarPaint {
   body: Paint;
   progress: Paint;
@@ -79,6 +80,16 @@ export interface BarHandle {
 /** What a pointer position hits on a bar (`hitTestBar`). */
 export type BarHit = 'left' | 'right' | 'bar';
 
+/**
+ * One child segment drawn inside a collapsed parent's bar (`rollup.segments`): `x` and `width` in
+ * timeline coordinates; it spans the bar's `y` and `height` with the bar's `rx`.
+ */
+export interface BarSegment {
+  x: number;
+  width: number;
+  paint: Paint;
+}
+
 export interface BarVisual {
   kind: BarKind;
   /** Bounding box (milestones: the shape's box) */
@@ -92,7 +103,7 @@ export interface BarVisual {
   /** SVG path of the bar body */
   path: string;
   tone: BarTone;
-  /** Colours: theme tokens or explicit task / option colours (`resolvePaint` turns them into hex) */
+  /** Colours: theme tokens or explicit style / option colours (`resolvePaint` turns them into hex) */
   paint: BarPaint;
   progress: { path: string; opacity: number } | null;
   label: BarLabel | null;
@@ -115,6 +126,16 @@ export interface BarVisual {
    * Clipped to the row.
    */
   hitBox: Rect;
+  /**
+   * Extra classes of the bar element: the resolved style's `className` (every layer's classes,
+   * `task.className` included, each once), or `null`
+   */
+  className: string | null;
+  /**
+   * Child segments of a collapsed rolled-up parent (`rollup.segments`), clipped to the bar, in
+   * input order; `null` without segments and for milestones
+   */
+  segments: BarSegment[] | null;
 }
 
 export interface BarVisualInput {
@@ -126,10 +147,28 @@ export interface BarVisualInput {
   /** Font size used for label fitting (`themeMetrics(theme).fontPx`; default 12) */
   fontPx?: number | undefined;
   /**
-   * Preferred label colour on explicit `task.barColor` fills (`themeMetrics(theme).barTextColor`;
+   * Preferred label colour on explicit `style.color` fills (`themeMetrics(theme).barTextColor`;
    * default `'#FFFFFF'`). Theme fills use the `--gantt-bar-text-on-*` contrast tokens instead.
    */
   barTextColor?: string | undefined;
+  /**
+   * The row's resolved style (`createStyleResolver`): fill, progress and label colours, height,
+   * corner radius, label position and classes. Default: the task's own style (`taskOwnStyle`:
+   * its deprecated flat fields under `task.style`), without `options.styles`.
+   */
+  style?: ResolvedTaskStyle | undefined;
+  /** Child segments to draw inside the bar (`rollupSegments`); clipped to the bar, ignored for milestones */
+  segments?: readonly BarSegment[] | null | undefined;
+}
+
+const LABEL_POSITIONS: ReadonlySet<string> = new Set(['inside', 'left', 'right', 'auto', 'none']);
+
+/**
+ * Height in px of a task or group bar in a row `rowHeight` tall: `len` (px or % of the row; 60 %
+ * when unreadable), at least 4 px and at most the row height − 2.
+ */
+export function resolveBarHeight(len: GanttLength | undefined, rowHeight: number): number {
+  return Math.max(4, Math.min(rowHeight - 2, resolveLength(len, rowHeight, rowHeight * 0.6)));
 }
 
 /** Rough text width (no DOM measuring): average glyph ≈ 0.56em. */
@@ -184,18 +223,25 @@ export function barKind(barType: string): BarKind {
   return barType === 'milestone' ? 'milestone' : barType === 'group' ? 'group' : 'task';
 }
 
+/**
+ * Geometry and paints of a row's bar. The resolved `style` gives the fill (the critical path
+ * still paints the critical colour), the progress and label colours, the height (milestones: the
+ * size), the corner radius (in place of `bar.radius`), the label position and the classes.
+ */
 export function computeBarVisual(input: BarVisualInput): BarVisual {
   const { geo, cfg, toX, isCritical = false } = input;
   const task = geo.row.task;
+  const style = input.style ?? taskOwnStyle(task);
   const kind = barKind(geo.row.barType);
   const fontPx = input.fontPx ?? 12;
   const rh = geo.height;
   const cy = geo.y + rh / 2;
+  const radius = typeof style.radius === 'number' && style.radius >= 0 ? style.radius : cfg.bar.radius;
 
   const tone: BarTone = isCritical ? 'critical' : kind === 'milestone' ? 'milestone' : 'default';
   const bodyPaint: Paint = isCritical
     ? themeVar('criticalColor')
-    : (task.barColor ?? (kind === 'milestone' ? themeVar('milestoneColor') : themeVar('barColor')));
+    : (style.color ?? (kind === 'milestone' ? themeVar('milestoneColor') : themeVar('barColor')));
   const barTextColor = input.barTextColor ?? DEFAULT_BAR_TEXT;
 
   let x: number, y: number, width: number, height: number, rx: number, path: string;
@@ -204,20 +250,21 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
   let capDepth = 0;
 
   if (kind === 'milestone') {
-    const size = cfg.milestone.size ?? Math.round(rh * 0.45);
+    const size =
+      style.height != null ? resolveBarHeight(style.height, rh) : (cfg.milestone.size ?? Math.round(rh * 0.45));
     x = geo.barX - size / 2;
     y = cy - size / 2;
     width = height = size;
-    rx = Math.min(cfg.bar.radius, size / 4);
+    rx = Math.min(radius, size / 4);
     path = milestonePath(cfg.milestone.shape, geo.barX, cy, size, rx);
   } else {
     const isSummary = kind === 'group' && cfg.groupBar.style === 'summary';
-    const lenSpec = kind === 'group' ? cfg.groupBar.height : cfg.bar.height;
-    height = Math.max(4, Math.min(rh - 2, resolveLength(lenSpec, rh, rh * 0.6)));
+    const lenSpec = style.height ?? (kind === 'group' ? cfg.groupBar.height : cfg.bar.height);
+    height = resolveBarHeight(lenSpec, rh);
     width = Math.max(geo.barWidth, cfg.bar.minWidth);
     x = geo.barX;
     y = cy - height / 2;
-    rx = isSummary ? Math.min(cfg.bar.radius, 2) : cfg.bar.radius;
+    rx = isSummary ? Math.min(radius, 2) : radius;
     path = roundedRectPath(x, y, width, height, rx);
     if (isSummary) {
       // Downward end caps: the classic "bracket" summary bar
@@ -237,12 +284,12 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
         : false;
   const pct = Math.min(Math.max(task.progress ?? 0, 0), 100);
   // Theme bars darken with the progress-overlay token (at `bar.progress.opacity`)
-  const progressPaint: Paint = task.progressColor ?? cfg.bar.progress.color ?? PAINTS.progressOverlay;
+  const progressPaint: Paint = style.progressColor ?? cfg.bar.progress.color ?? PAINTS.progressOverlay;
   if (showProgress && pct > 0) {
     const pw = (width * pct) / 100;
     progress = {
       path: roundedRectPath(x, y, pw, height, rx, pw >= width - rx ? rx : 0),
-      opacity: task.progressColor || cfg.bar.progress.color ? 1 : cfg.bar.progress.opacity,
+      opacity: style.progressColor || cfg.bar.progress.color ? 1 : cfg.bar.progress.opacity,
     };
   }
 
@@ -277,16 +324,17 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
   }
   if (hitBox.y + hitBox.height > geo.y + rh) hitBox.height = Math.max(0, geo.y + rh - hitBox.y);
 
-  const label = computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx);
   const opt = cfg.bar.label;
+  const position = style.label && LABEL_POSITIONS.has(style.label) ? style.label : opt.position;
+  const label = computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx, position);
   // Explicit colours win; theme fills use the contrast tokens, explicit fills a concrete readable colour
   const insidePaint: Paint =
-    task.textColor ??
+    style.textColor ??
     opt.color ??
     (tone === 'critical'
       ? `var(${CONTRAST_CSS_VARS.critical})`
-      : task.barColor != null
-        ? readableOn(task.barColor, barTextColor)
+      : style.color != null
+        ? readableOn(style.color, barTextColor)
         : tone === 'milestone'
           ? `var(${CONTRAST_CSS_VARS.milestone})`
           : `var(${CONTRAST_CSS_VARS.bar})`);
@@ -314,7 +362,25 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     handles,
     focusRect,
     hitBox,
+    className: style.className || null,
+    segments: kind === 'milestone' ? null : clipSegments(input.segments, x, width),
   };
+}
+
+/** Segments clipped to the bar `[x, x + width]`; the empty ones dropped; `null` when none is left. */
+function clipSegments(
+  segments: readonly BarSegment[] | null | undefined,
+  x: number,
+  width: number,
+): BarSegment[] | null {
+  if (!segments?.length) return null;
+  const out: BarSegment[] = [];
+  for (const seg of segments) {
+    const left = Math.max(seg.x, x);
+    const right = Math.min(seg.x + seg.width, x + width);
+    if (right > left) out.push({ x: left, width: right - left, paint: seg.paint });
+  }
+  return out.length ? out : null;
 }
 
 /**
@@ -368,9 +434,10 @@ function computeLabel(
   box: { x: number; y: number; width: number; height: number; cy: number },
   cfg: ResolvedGanttConfig,
   fontPx: number,
+  position: ResolvedGanttConfig['bar']['label']['position'],
 ): BarLabel | null {
   const opt = cfg.bar.label;
-  if (opt.position === 'none') return null;
+  if (position === 'none') return null;
   const text = opt.template?.(task) ?? task.name;
   if (!text) return null;
 
@@ -384,7 +451,6 @@ function computeLabel(
 
   // Milestones and thin summary bars can't hold text: label beside them
   const canHold = kind === 'task' || (kind === 'group' && cfg.groupBar.style === 'bar') || box.height >= fontPx + 2;
-  let position = opt.position;
   if (kind === 'milestone' || !canHold) position = position === 'left' ? 'left' : 'right';
 
   if (position === 'left' || position === 'right') return outside(position);

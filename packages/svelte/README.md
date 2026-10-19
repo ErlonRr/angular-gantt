@@ -54,7 +54,7 @@ field — see [Configuration](https://github.com/ErlonRr/gantryjs#configuration)
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties):
   `tasks`, `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`,
   `enableResize`, `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`,
-  `errorMessage`. Each is set as an element property, and only when it changes.
+  `errorMessage`, `syncGroup`. Each is set as an element property, and only when it changes.
 - **Callback props** receive the [event](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#events)
   `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`,
   `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry`. The listeners are attached before the first
@@ -92,6 +92,26 @@ component renders it in a `<div slot="empty">`, the element's empty-state slot.
 Use the `empty` snippet rather than a `<div slot="empty">` child: an element with a `slot`
 attribute directly inside `<Gantry>` is a legacy named slot to Svelte and is never rendered.
 
+### Synchronised charts
+
+```svelte
+<script lang="ts">
+  import { Gantry, createGanttSyncGroup } from '@gantryjs/svelte';
+
+  // A plain constant, not `$state` (which would wrap the group in a proxy)
+  const group = createGanttSyncGroup();
+</script>
+
+<Gantry tasks={design} syncGroup={group} />
+<Gantry tasks={build} syncGroup={group} showToolbar={false} />
+```
+
+Charts given the same `syncGroup` share one timeline: the date range (the union of their plans),
+the zoom level, the horizontal scroll and the task-list width. `createGanttSyncGroup({ zoom,
+scroll, range, panel })` turns parts off (each is `true` by default). The group reaches the
+element as it is, never copied. To switch groups, keep the current one in `$state.raw`; `null`,
+or `undefined` once a group was set, takes the chart out of the group.
+
 ### Options and behaviour
 
 `options` takes every `GanttOptions` field, documented once for every binding in
@@ -124,8 +144,8 @@ top, never a deep clone. So:
 For large plans, keep tasks in **`$state.raw`** and assign a new array: no proxy per task, and the
 element receives your objects as they are.
 
-The other props — `dataSource` (a `GanttDataSource` or a plain config object), `renderBar` and the
-flags — are passed as they are, never copied.
+The other props — `dataSource` (a `GanttDataSource` or a plain config object), `renderBar`,
+`syncGroup` and the flags — are passed as they are, never copied.
 
 ## Server-side rendering
 

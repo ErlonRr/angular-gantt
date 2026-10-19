@@ -7,7 +7,7 @@
 // No static import of the element module here: the first test creates an element before
 // `<gantry-element>` is defined, then loads the module.
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
-import type { GanttTask } from '@gantryjs/core';
+import { createGanttSyncGroup, type GanttTask } from '@gantryjs/core';
 import type { GantryElement } from '../gantry.element';
 import type { GanttDataSource as DataSourceClass } from '../datasource/gantt-datasource';
 import { getEngine } from '../engine/registry';
@@ -105,6 +105,8 @@ describe('<gantry-element> properties and lifecycle', () => {
         // Appended in Phase 9 (the chart states)
         'loading',
         'errorMessage',
+        // Appended in Phase 10 (synchronised charts; no attribute)
+        'syncGroup',
       ]);
       expect(Object.keys(DEFAULTS)).toEqual(names);
     });
@@ -143,6 +145,7 @@ describe('<gantry-element> properties and lifecycle', () => {
         renderBar: () => null,
         loading: true,
         errorMessage: 'Server unreachable',
+        syncGroup: createGanttSyncGroup(),
       };
       const I = getEngine(el).inputs;
       const value = (name: PropertyName): unknown =>

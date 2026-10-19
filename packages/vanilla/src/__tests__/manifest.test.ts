@@ -3,10 +3,11 @@
 // stale). These tests hold it to the element's own tables: attributes = `observedAttributes`,
 // properties and methods = the public accessors and methods, events = `GANTRY_EVENTS`, parts and
 // custom states = what the element renders and sets, CSS properties = `themeToCss()` tokens with
-// the light theme's values as defaults.
+// the light theme's values as defaults, then the read-only layout variables with the default
+// config's values.
 import { readFileSync } from 'node:fs';
 import { describe, it, expect, afterEach } from 'vitest';
-import { LightTheme, themeToCss, type GanttTask } from '@gantryjs/core';
+import { LightTheme, resolveBarHeight, resolveConfig, themeToCss, type GanttTask } from '@gantryjs/core';
 import { GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
 import { OBSERVED_ATTRIBUTES, PROPERTY_TABLE, propertyOfAttribute, VIEW_MODE_ATTR } from '../engine/props';
@@ -167,16 +168,25 @@ describe('custom-elements.json', () => {
     for (const state of element.cssStates) expect(state.description, state.name).toBeTruthy();
   });
 
-  it('lists every themeToCss() token as a CSS property, in order, with the light theme as default', () => {
-    const tokens = themeToCss(LightTheme);
-    expect(element.cssProperties).toHaveLength(43);
-    expect(element.cssProperties.map(p => [p.name, p.default])).toEqual(tokens.map(([name, value]) => [name, value]));
+  /** `themeToCss(LightTheme)`, then the read-only layout variables of the default config */
+  const cssProps = () => {
+    const cfg = resolveConfig();
+    return [
+      ...themeToCss(LightTheme).map(([name, value]) => [name, value]),
+      ['--gantt-row-height', `${cfg.rowHeight}px`],
+      ['--gantt-bar-height', `${resolveBarHeight(cfg.bar.height, cfg.rowHeight)}px`],
+    ];
+  };
+
+  it('lists every themeToCss() token, then the read-only layout variables, as CSS properties with their defaults', () => {
+    expect(element.cssProperties).toHaveLength(46);
+    expect(element.cssProperties.map(p => [p.name, p.default])).toEqual(cssProps());
     for (const prop of element.cssProperties) expect(prop.description, prop.name).toBeTruthy();
   });
 
   it('takes the CSS properties from the @cssprop JSDoc, which matches themeToCss() without regenerating', () => {
     const source = read('../gantry.element.ts');
     const jsdoc = [...source.matchAll(/@cssprop \[(--[\w-]+)=([^\]]*)\]/g)].map(([, name, value]) => [name, value]);
-    expect(jsdoc).toEqual(themeToCss(LightTheme).map(([name, value]) => [name, value]));
+    expect(jsdoc).toEqual(cssProps());
   });
 });

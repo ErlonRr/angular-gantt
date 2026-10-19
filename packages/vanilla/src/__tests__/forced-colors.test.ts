@@ -141,6 +141,9 @@ describe('forced-colors sheet', () => {
     ['.gantt-bar-grip', { fill: 'Canvas', stroke: 'Highlight' }],
     ['.gantry-splitter-handle:focus-visible::before', { 'background-color': 'Highlight', width: '3px' }],
     ['.gantt-tb-pill[aria-checked="true"]', { 'background-color': 'Highlight', color: 'HighlightText' }],
+    ['.gantt-tb-menu-item[aria-checked="true"]', { 'background-color': 'Highlight', color: 'HighlightText' }],
+    ['.gantt-tb-btn[aria-pressed="true"]', { color: 'Highlight', 'border-color': 'Highlight' }],
+    ['.gantt-tb-menu', { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' }],
     // Tooltip, readout chip, state box, skeleton
     ['.gantt-tooltip', { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' }],
     ['.gantt-drag-readout', { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' }],
@@ -161,6 +164,7 @@ describe('forced-colors sheet', () => {
       '.g-marker--today .g-marker-label',
       '.gantt-tl-row--selected',
       '.gantt-tb-pill[aria-checked="true"]',
+      '.gantt-tb-menu-item[aria-checked="true"]',
       '.g-today-pointer',
     ])
       expect(forced(selector).get('forced-color-adjust'), selector).toBe('none');
@@ -175,6 +179,7 @@ describe('forced-colors sheet', () => {
         '.g-marker--today .g-marker-label',
         '.g-today-pointer',
         '.gantt-tb-pill[aria-checked="true"]',
+        '.gantt-tb-menu-item[aria-checked="true"]',
         '.gantt-tl-row--selected',
       ].sort(),
     );

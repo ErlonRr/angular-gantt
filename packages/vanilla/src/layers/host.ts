@@ -20,10 +20,16 @@
  * lands with its whole focus ring in the timeline (core `timelineScrollPadding`).
  *
  * The host region is busy (`aria-busy`, `ctx.setBusy`) while `graph.chartState.busy`.
+ *
+ * The wrapper also carries the root attributes both bindings share (§3c): `data-view`,
+ * `data-density` (`options.density`), `data-narrow` (present while the chart is narrower than
+ * `responsive.breakpoint`, `inputs.narrow`) and the private `--gantry-control-size` (the density's
+ * toolbar control size, read by the toolbar's CSS). The read-only `--gantt-row-height` /
+ * `--gantt-bar-height` are on the host instead, in the theme sheet (`graph/layout.ts` `layoutCss`).
  */
 
 import { SPLITTER_TOGGLE_OFFSET, timelineScrollPadding } from '@gantryjs/core';
-import { setAttr, setStyleProp, setText } from '../dom/patch';
+import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
 
 export interface HostLayer extends Layer {
@@ -37,6 +43,22 @@ export interface HostLayer extends Layer {
 
 export function createHostLayer(ctx: LayerContext): HostLayer {
   const { inputs: I, graph: G, dom } = ctx;
+  // Pane widths don't animate until a frame after the first render: options assigned after the
+  // element connected (the React and Svelte wrappers) would slide the panel from its default width,
+  // and the first scroll (`initialScroll`) would read the viewport mid-slide. As Angular's.
+  let settleFrame = 0;
+  let settled = false;
+  const settle = (): void => {
+    if (settled || settleFrame) return;
+    const win = dom.main.ownerDocument.defaultView;
+    const done = (): void => {
+      settleFrame = 0;
+      settled = true;
+      toggleClass(dom.main, 'is-settling', false);
+    };
+    if (win?.requestAnimationFrame) settleFrame = win.requestAnimationFrame(done);
+    else done();
+  };
   const panes = (): void => {
     setAttr(dom.wrapper, 'data-view', I.viewOverride());
     setStyleProp(dom.panel, 'width', `${G.panelPx()}px`);
@@ -73,6 +95,9 @@ export function createHostLayer(ctx: LayerContext): HostLayer {
       setAttr(dom.toggle, 'title', label);
       setAttr(dom.toggle, 'aria-label', label);
       setAttr(dom.toggle, 'aria-expanded', String(!collapsed));
+      setAttr(dom.wrapper, 'data-density', cfg.density);
+      setAttr(dom.wrapper, 'data-narrow', I.narrow());
+      setStyleProp(dom.wrapper, '--gantry-control-size', `${cfg.controlSize}px`);
       // Inherited by the toggle (`top: var(--gantry-toggle-top)`) and the timeline header box
       // (`min-height: var(--gantry-header-h)`); on the wrapper, so a string `style` on the host
       // can't wipe them
@@ -86,6 +111,14 @@ export function createHostLayer(ctx: LayerContext): HostLayer {
       setStyleProp(dom.viewport, 'scroll-padding-bottom', `${pad.bottom}px`);
       setStyleProp(dom.viewport, 'scroll-padding-left', `${pad.left}px`);
       setStyleProp(dom.panel, 'scroll-padding-top', `${headerHeight}px`);
+      settle();
+    },
+    disconnect() {
+      // A reconnect settles again (its options may arrive after it, too)
+      if (settleFrame) dom.main.ownerDocument.defaultView?.cancelAnimationFrame(settleFrame);
+      settleFrame = 0;
+      settled = false;
+      toggleClass(dom.main, 'is-settling', true);
     },
   };
 }

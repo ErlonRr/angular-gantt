@@ -14,11 +14,16 @@
  * from the same inputs.
  *
  *   inputs ──▶ chrome (i18n, theme, metrics) ──▶ config ──▶ rows ──▶ timeline ──▶ windows
- *                                                    │                   └──▶ markers ──▶ layout
+ *                                                    │        └──▶ styles └──▶ markers ──▶ layout
  *                                                    └──▶ states         ├──▶ visuals ──▶ arrows
  *                                                                        ├──▶ horizontal
  *                                                                        └──▶ tasklist
  *   graph ──▶ region effects (engine/render.ts) ──▶ layers/* ──▶ DOM
+ *
+ * Outside the flush: the sync-group link (`layers/sync.ts`) joins `syncGroup` from an effect of the
+ * connection's owner; the narrow-width switch (`layers/responsive.ts`) hears every measured width.
+ * Both write inputs only. Rolled-up parent rows (`graph/rows.ts`) leave through the events with
+ * their raw task (`rowEvent`).
  */
 
 import {
@@ -36,10 +41,12 @@ import {
 import {
   announceLoadState,
   bottomScale,
+  rollupSource,
   taskSpan,
   seedCollapsed,
   CLOCK_INTERVAL,
   type DragTiming,
+  type GanttFlatRow,
   type GanttTask,
   type ResolvedGanttConfig,
   type TimelineModel,
@@ -64,6 +71,7 @@ import { nodeFactory, type Runs } from './graph/node';
 import { chromeGraph, themeEffects, type ChromeGraph } from './graph/chrome';
 import { configGraph, type ConfigGraph } from './graph/config';
 import { rowsGraph, type RowsGraph } from './graph/rows';
+import { stylesGraph, type StylesGraph } from './graph/styles';
 import { timelineGraph, type TimelineGraph } from './graph/timeline';
 import { windowsGraph, type WindowsGraph } from './graph/windows';
 import { markersGraph, type MarkersGraph } from './graph/markers';
@@ -81,7 +89,7 @@ import { announceEffects, createLiveAnnouncer } from './announce';
  * is built from, plus read-only views of the UI state painters read.
  */
 export interface CoreGraph
-  extends ChromeGraph, ConfigGraph, RowsGraph, TimelineGraph, WindowsGraph, MarkersGraph, LayoutGraph {
+  extends ChromeGraph, ConfigGraph, RowsGraph, StylesGraph, TimelineGraph, WindowsGraph, MarkersGraph, LayoutGraph {
   readonly sort: ReadonlySignal<SortState | null>;
   /** Panel width the user chose (`null` = from `panel.width`) */
   readonly panelW: ReadonlySignal<number | null>;
@@ -130,8 +138,18 @@ export interface Engine {
   adopt(): void;
   /** Runs the queued frame work now (no-op while disconnected). */
   flushSync(): void;
-  /** Sets the tasks; `task.collapsed` seeds the collapsed state of ids not seen before. */
+  /**
+   * Sets the tasks; `task.collapsed` (and `groupBar.collapsed` for the ids with children) seeds the
+   * collapsed state of ids not seen before (core `seedCollapsed`).
+   */
   setTasks(tasks: GanttTask[]): void;
+  /**
+   * The options were assigned: when `groupBar.collapsed` is on now but was off when tasks were
+   * seeded, and nothing has been painted yet, the groups of those tasks collapse as if the tasks
+   * had been set after the options (the framework wrappers and an upgrading element assign `tasks`
+   * before `options`). Once a model is painted only new ids are seeded, by `setTasks`.
+   */
+  seedCollapsedGroups(): void;
   /**
    * Sets (or clears) the data source. While connected the engine mirrors it (items, footer state,
    * failures reported once through `load-error` and the alert region) and starts it per
@@ -149,10 +167,11 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   const columns = createColumns(inputs.optionsIn, inputs.columnsIn, chrome.i18n);
   const config = configGraph(inputs, chrome, node);
   const rows = rowsGraph(inputs, chrome, config, columns, node);
+  const styles = stylesGraph({ ...config, ...rows }, node);
   const timeline = timelineGraph(inputs, chrome, config, rows, node);
   const windows = windowsGraph(inputs, config, rows, timeline, node);
   const markers = markersGraph(inputs, { ...chrome, ...config, ...timeline }, node);
-  const base = { ...chrome, ...config, ...rows, ...timeline, ...windows, ...markers };
+  const base = { ...chrome, ...config, ...rows, ...styles, ...timeline, ...windows, ...markers };
   const core: CoreGraph = { ...base, ...layoutGraph(inputs, base, node), sort: inputs.sort, panelW: inputs.panelW };
   const visuals = { ...core, ...visualsGraph(inputs, core, node) };
   const graph: Graph = {
@@ -181,6 +200,15 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   });
   const selection = createSelection(inputs.selection, e => hooks.emit('selection-change', e));
   const announce = createLiveAnnouncer(dom.srLive);
+  /**
+   * Every event the layers and interactions fire: a row leaves with its raw task, never a
+   * rolled-up parent's copy (the events and `getSelectedTasks()` stay raw, core `rollupSource`).
+   */
+  const emit: Emit = (type, detail) =>
+    hooks.emit(
+      type,
+      (type === 'row-click' || type === 'row-dblclick' ? rowEvent(detail as GanttFlatRow) : detail) as typeof detail,
+    );
   const ctx: LayerContext = {
     host,
     shadow,
@@ -191,24 +219,42 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     drag,
     selection,
     focus: createFocusTracker(shadow),
-    emit: hooks.emit,
+    emit,
     saveState: hooks.saveState,
     announce,
     setBusy: hooks.setBusy,
     rowClick(row, event) {
       const ids = graph.visibleRows.peek().map(r => r.task.id);
       selection.handleClick(row.task.id, event, ids, graph.config.peek().selection);
-      hooks.emit('row-click', row);
+      emit('row-click', row);
     },
+    // The layer exists once `layers` is built (only called from event handlers)
+    sync: { reportPanel: px => layers.sync.reportPanel(px) },
   };
   const layers = createLayers(ctx);
 
-  /** Task ids seen so far: `task.collapsed` seeds the collapsed state of new ids only (core `seedCollapsed`) */
+  /** `groupBar.collapsed` of the options (`false` while they are invalid: the render reports them) */
+  const collapseGroups = (): boolean => {
+    try {
+      return graph.config.peek().groupBar.collapsed;
+    } catch {
+      return false;
+    }
+  };
+  /** Collapses the ids of `tasks` that start collapsed (core `seedCollapsed`); returns the ids seen */
+  const seed = (tasks: GanttTask[], seen: ReadonlySet<string> | undefined, groups: boolean): ReadonlySet<string> => {
+    const { seen: next, collapse } = seedCollapsed(tasks, seen, groups);
+    if (collapse.length) inputs.collapsedIds.update(ids => new Set([...ids, ...collapse]));
+    return next;
+  };
+  /** Task ids seen so far: `task.collapsed` / `groupBar.collapsed` seed the collapsed state of new ids only */
   let seenIds: ReadonlySet<string> | undefined;
+  /** Some tasks were seeded while `groupBar.collapsed` was off (see `seedCollapsedGroups`) */
+  let seededWithoutGroups = false;
   const setTasks = (tasks: GanttTask[]): void => {
-    const seed = seedCollapsed(tasks, seenIds);
-    seenIds = seed.seen;
-    if (seed.collapse.length) inputs.collapsedIds.update(ids => new Set([...ids, ...seed.collapse]));
+    const groups = collapseGroups();
+    seenIds = seed(tasks, seenIds, groups);
+    if (!groups && tasks.length) seededWithoutGroups = true;
     inputs.tasksIn.set(tasks);
   };
 
@@ -257,7 +303,10 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     if (ds.loadedCount === 0 && ds.autoStart) void ds.loadNext();
   };
 
-  /** Writes the panes' sizes into the engine (connect and ResizeObserver only, D9). */
+  /**
+   * Writes the panes' sizes into the engine (connect and ResizeObserver only, D9), then hands the
+   * chart width to the narrow-width switch (it may force a view: the observer measures again).
+   */
   const measure = (): void => {
     const { main, viewport, panel } = dom;
     batch(() => {
@@ -270,22 +319,26 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
         canvas: viewport.offsetHeight - viewport.clientHeight,
       });
     });
+    layers.responsive.onWidth(inputs.mainW.peek());
   };
 
   /** What one connection owns besides the region effects (call inside its owner). */
-  const connected = (signal: AbortSignal): void => {
+  const connected = (signal: AbortSignal, scheduler: FrameScheduler<Region>): void => {
     // Interaction: every listener goes when `signal` aborts
     bindScroll(dom.panel, dom.viewport, inputs, signal);
     const hasRendered = () => layers['scroll-commands'].hasRendered();
     bindSplitter(ctx, { hasRendered, signal });
     bindCanvasPointer(ctx, { tooltip: layers.tooltip, hasRendered, signal });
-    bindTooltipTriggers(ctx, { tooltip: layers.tooltip, hasRendered, signal });
+    // The open tooltip's refresh runs once the frame painted its bar (after the scroll commands)
+    const afterPaint = (run: () => void) => scheduler.schedule(run, 'focus-restore');
+    bindTooltipTriggers(ctx, { tooltip: layers.tooltip, hasRendered, signal, afterPaint });
     bindKeyboard(ctx, signal);
     bindFocusTracking(ctx, signal);
 
     // Layout is read here and in the ResizeObserver, never during a render (D9). The first render
-    // needs the host width (panel width), then the timeline viewport beside that panel.
+    // needs the host width (narrow view, panel width), then the timeline viewport beside that panel.
     inputs.mainW.set(dom.main.clientWidth);
+    layers.responsive.onWidth(inputs.mainW.peek());
     try {
       layers.host.panes();
     } catch {
@@ -301,9 +354,18 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     const clock = setInterval(() => inputs.nowTick.set(new Date()), CLOCK_INTERVAL);
     onCleanup(() => clearInterval(clock));
 
-    // Screen-reader announcements (selection count, zoom level) from the state found now on; the
+    // The sync group: joined while connected, again whenever `syncGroup` changes (`null` leaves).
+    // Before the announcements: a level the group applies on joining is not announced. Effects the
+    // sync layer creates in `connect()` belong to this effect (disposed on a change or disconnect).
+    effect(() => {
+      const group = inputs.syncGroup();
+      untracked(() => layers.sync.connect(group));
+    });
+    onCleanup(() => layers.sync.disconnect());
+
+    // Screen-reader announcements (selection count, zoom level) from the first render on; the
     // load state is announced by the data-source subscription below (`syncDataSource`)
-    announceEffects(inputs, graph, announce);
+    announceEffects(inputs, graph, announce, level => layers.sync.takeGroupLevel(level), hasRendered);
     onCleanup(() => announce.cancel());
 
     // Mirror the data source while connected (a new one replaces the old subscription)
@@ -362,9 +424,9 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       const connection = new AbortController();
       runWithOwner(scope, () => {
         onCleanup(() => connection.abort());
-        themeEffects(inputs, chrome, themeSheet);
+        themeEffects(inputs, chrome, themeSheet, graph.layoutCss);
         registerRegions(layers, scheduler, regionRuns);
-        connected(connection.signal);
+        connected(connection.signal, scheduler);
       });
     },
     disconnect() {
@@ -377,6 +439,11 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       frame?.flushSync();
     },
     setTasks,
+    seedCollapsedGroups() {
+      if (!seededWithoutGroups || layers['scroll-commands'].hasRendered() || !collapseGroups()) return;
+      seededWithoutGroups = false;
+      seed(inputs.tasksIn.peek(), undefined, true);
+    },
     setDataSource(ds) {
       const same = ds === inputs.dataSource.peek();
       reportedLoadError = null;
@@ -387,6 +454,12 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       if (ds && same && owner) startDataSource(ds);
     },
   };
+}
+
+/** A row as the events carry it: a rolled-up parent's row with its raw task (core `rollupSource`). */
+function rowEvent(row: GanttFlatRow): GanttFlatRow {
+  const task = rollupSource(row.task);
+  return task === row.task ? row : { ...row, task };
 }
 
 /** Scale of the current timeline for a drag that starts now. */

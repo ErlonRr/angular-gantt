@@ -3,8 +3,10 @@
 // progress through the CSSOM; opened and closed by core's tooltip machine (`reduceTooltip`, with
 // the resolved `options.tooltip`), anchored to its bar by core `placeTooltip` (one measurement per
 // opening), `aria-describedby` on that bar while it shows, custom content from
-// `options.tooltip.render`, one timer cleared on hide() / destroy(). The layer is driven directly
-// (as `interaction/canvas-pointer.ts` and `interaction/tooltip-triggers.ts` do).
+// `options.tooltip.render`, one timer cleared on hide() / destroy(). Phase 10 step 4.4: the
+// progress colour of the row's resolved style, and `refresh(row)` (content written again only for a
+// new task object, critical flag or i18n bundle). The layer is driven directly (as
+// `interaction/canvas-pointer.ts` and `interaction/tooltip-triggers.ts` do).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   DEFAULT_LABELS,
@@ -203,6 +205,62 @@ describe('tooltip layer', () => {
     expect(fill.style.getPropertyValue('background-color').toUpperCase()).toBe('#FDE68A');
     // The stylesheet turns the number into the fill width
     expect(TOOLTIP_CSS).toContain('inline-size: calc(var(--gantt-tt-progress, 0) * 1%)');
+  });
+
+  it('takes the progress colour from the row style its bar is painted with: styles, then task.style; critical wins', () => {
+    const tasks = PLAN();
+    tasks[1] = { ...tasks[1], style: { color: '#22C55E' } };
+    el = mount({ tasks, options: { styles: { task: { color: '#0EA5E9' } } } });
+    const fill = () =>
+      tipOf(el).querySelector<HTMLElement>('.gantt-tooltip-fill')!.style.getPropertyValue('background-color');
+    open(el, 'a');
+    expect(fill().toUpperCase()).toBe('#0EA5E9');
+    // The bar's own fill is the same paint
+    expect(getEngine(el).graph.rowStyle.peek()(rowOf(el, 'a')).color).toBe('#0EA5E9');
+    layerOf(el).hover(rowOf(el, 'b'), barOf(el, 'b'), 100);
+    expect(fill().toUpperCase()).toBe('#22C55E');
+    // The deprecated flat field still beats a kind style
+    layerOf(el).hover(rowOf(el, 'c'), barOf(el, 'c'), 100);
+    expect(fill().toUpperCase()).toBe('#FDE68A');
+
+    el.options = { criticalPath: true, styles: { task: { color: '#0EA5E9' } } };
+    flush(el);
+    layerOf(el).hover(rowOf(el, 'b'), barOf(el, 'b'), 100);
+    expect(fill()).toBe(themeVar('criticalColor'));
+  });
+
+  it('refresh(row) writes the content again only for a new task object, critical flag or i18n bundle', () => {
+    const render = vi.fn((): unknown => null);
+    el = mount({ tasks: PLAN(), options: { tooltip: { render } } });
+    const layer = layerOf(el);
+    const tip = open(el, 'a');
+    const measure = vi.spyOn(tip, 'getBoundingClientRect');
+    expect(render).toHaveBeenCalledTimes(1);
+    const row = rowOf(el, 'a');
+
+    // The same task (even in a new row object): nothing to write
+    layer.refresh(row);
+    layer.refresh({ ...row });
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(measure).not.toHaveBeenCalled();
+    // Another task's row, or while closed: ignored
+    layer.refresh({ ...rowOf(el, 'b'), task: { ...rowOf(el, 'b').task, name: 'Other' } });
+    expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Task a');
+
+    // A new task object: written again, measured again, still open on the same bar
+    layer.refresh({ ...row, task: { ...row.task, name: 'Renamed', progress: 80 } });
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(measure).toHaveBeenCalledTimes(1);
+    expect(tip.hidden).toBe(false);
+    expect(tip.querySelector('.gantt-tooltip-title')!.textContent).toBe('Renamed');
+    expect(texts(tip, 'dd.gantt-tooltip-value')).toContain('80%');
+    expect(barOf(el, 'a').getAttribute('aria-describedby')).toBe(tip.id);
+    expect(layer.visibleId()).toBe('a');
+
+    layer.hide();
+    layer.refresh({ ...row, task: { ...row.task, name: 'Closed' } });
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(tip.hidden).toBe(true);
   });
 
   it('sits by its bar (core placeTooltip): on the pointer while hovering, centred on focus; one measurement per opening', () => {

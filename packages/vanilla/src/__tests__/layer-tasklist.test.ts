@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { TaskType, ViewMode, type GanttFlatRow, type GanttState, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
+import { TASKLIST_CSS } from '../styles/tasklist.css';
 import '../index';
 
 /** Runs the element's queued frame work now. */
@@ -348,6 +349,11 @@ describe('task-list layer', () => {
       });
       const footer = $(el, '.gantt-tl-load-more')!;
       const button = $<HTMLButtonElement>(el, '.gantt-load-more-btn')!;
+      // Next to the treegrid, never inside it: a treegrid may only hold rows (axe aria-required-children)
+      expect(footer.parentElement!.classList.contains('gantry-panel')).toBe(true);
+      expect(footer.closest('[role="treegrid"]')).toBeNull();
+      // Sized by its content (Angular's box), not one row tall
+      expect(footer.style.getPropertyValue('height')).toBe('');
       expect(el.tasks).toHaveLength(40);
       expect(el.hasAttribute('aria-busy')).toBe(false);
       expect(button.hasAttribute('aria-disabled')).toBe(false);
@@ -381,13 +387,34 @@ describe('task-list layer', () => {
       button.click();
       await release();
       await settled(footer, getEngine(el).graph.i18n().labels.allLoaded(80));
-      expect(footer.children).toHaveLength(0);
+      // The done text, as Angular's: div.gantt-load-done
+      expect([...footer.children].map(c => c.className)).toEqual(['gantt-load-done']);
       expect(footer.getAttribute('tabindex')).toBe('-1');
       expect(footer.dataset['focusKey']).toBe('load-more');
 
       el.dataSource = null;
       flush(el);
       expect($(el, '.gantt-tl-load-more')).toBeNull();
+    });
+
+    it('has Angular’s look: a bordered, padded box; a full-width button the toolbar’s control size tall', () => {
+      const rule = (selector: string) =>
+        new RegExp(`(^|\\n)\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\{([^}]*)\\}`).exec(
+          TASKLIST_CSS,
+        )?.[2] ?? '';
+      const footer = rule('.gantt-tl-load-more');
+      expect(footer).toContain('padding: 8px 12px;');
+      expect(footer).toContain('border-top: 1px solid var(--gantt-border);');
+      expect(footer).toContain('background-color: var(--gantt-panel-bg);');
+      expect(footer).toContain('font-size: var(--gantt-font-size);');
+      const button = rule('.gantt-load-more-btn');
+      expect(button).toContain('min-height: var(--gantry-control-size, 32px);');
+      expect(button).toContain('padding: 0 12px;');
+      expect(button).toContain('background-color: transparent;');
+      expect(button).toContain('font-size: var(--gantt-font-size);');
+      expect(rule('.gantt-tl-load-more > .gantt-load-more-btn')).toContain('width: 100%;');
+      expect(rule('.gantt-load-error')).toContain('justify-content: center;');
+      expect(rule('.gantt-load-done')).toContain('font-size: 11px;');
     });
   });
 });

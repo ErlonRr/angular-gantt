@@ -27,6 +27,15 @@
 //  touch drags a bar. The canvas (`layout/gantt-canvas.component.ts`)
 //  decides what a drag, a drop and a tap do.
 //
+//  Escape belongs to the press while it lasts (Gantry 2 phase 10, the Web
+//  Component's `interaction/gestures.ts`): it is heard in the capture phase
+//  on `keyTarget` (the window), cancels the press and is consumed there,
+//  before the chart's keyboard (its focus-visible tracking, the tooltip's
+//  Escape, the shortcuts) and the page see it. The pressed bar holds
+//  keyboard focus (a mouse press focuses it), so the key would otherwise
+//  make its focus visible and open its focus tooltip, or clear the
+//  selection, instead of cancelling the drag.
+//
 //  External previews (keyboard move mode, Gantry 2 phase 9): another
 //  session (core `KeyboardEditSession`) owns the dates and only borrows
 //  the drag's visuals — the ghost, the dimmed source bar, the row pinned
@@ -181,7 +190,10 @@ export class GanttDragService {
 export interface PressOptions {
   /** Receives the press's moves and release (a press that may drag captures the pointer to it) */
   readonly target: Element;
-  /** Where Escape is heard (the chart's host element) */
+  /**
+   * Where Escape is heard, in the capture phase: the window (it hears every key first, wherever
+   * focus is). The key is consumed while the press lasts.
+   */
   readonly keyTarget: EventTarget;
   /** The press may become a drag: a mouse press captures the pointer, a touch press arms the long-press timer */
   readonly draggable: boolean;
@@ -205,9 +217,9 @@ export interface Press {
 
 /**
  * Starts tracking the press `down` (a `pointerdown` the caller decided to handle) through core's
- * gesture machine. The press owns its listeners (moves, release, `pointercancel`, Escape, the
- * long-press context menu) and its long-press timer until it ends: released, cancelled or handed
- * to the browser's pan. Browser only (an event handler).
+ * gesture machine. The press owns its listeners (moves, release, `pointercancel`, Escape in the
+ * capture phase of `keyTarget`, the long-press context menu) and its long-press timer until it
+ * ends: released, cancelled or handed to the browser's pan. Browser only (an event handler).
  */
 export function trackPress(down: PointerEvent, opts: PressOptions): Press {
   const { target, draggable } = opts;
@@ -219,6 +231,13 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
   let timer: number | undefined;
   const listeners = new AbortController();
   const { signal } = listeners;
+  /** Escape cancels the press and goes no further (see the file comment) */
+  const onKey = (e: Event): void => {
+    if (!active || (e as KeyboardEvent).key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    cancel();
+  };
 
   const capture = (): void => {
     try {
@@ -232,6 +251,8 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
     active = false;
     if (timer !== undefined) win?.clearTimeout(timer);
     listeners.abort();
+    // Removed by hand: not every window implementation honours the `signal` option
+    opts.keyTarget.removeEventListener('keydown', onKey, { capture: true });
     try {
       if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
     } catch {
@@ -292,8 +313,8 @@ export function trackPress(down: PointerEvent, opts: PressOptions): Press {
     { signal },
   );
   target.addEventListener('pointercancel', e => mine(e) && cancel(), { signal });
-  // Escape abandons the press (a drag is also cancelled by the chart's keyboard shortcuts)
-  opts.keyTarget.addEventListener('keydown', e => (e as KeyboardEvent).key === 'Escape' && cancel(), { signal });
+  // Escape abandons the press, before anything else hears it
+  opts.keyTarget.addEventListener('keydown', onKey, { capture: true });
   // A held finger opens the context menu (or selects text) on some devices: not on a bar it drags
   if (draggable && g.kind === 'touch') target.addEventListener('contextmenu', e => e.preventDefault(), { signal });
 

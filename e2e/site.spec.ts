@@ -1,6 +1,9 @@
 // The demo site around the charts (apps/demo-kit look): every page loads without errors, has one
 // h1, the right nav item, a working skip link and theme switch, no axe violations outside the
-// charts (a11y.spec.ts covers their inside) and no horizontal scroll on a phone.
+// charts (a11y.spec.ts covers their inside) and no horizontal scroll on a phone. The composed site
+// (the Vite apps copied under /wc/, /react/, /vue/ and /svelte/ of the Angular site by
+// scripts/compose-site.mjs, as deployed): every app and its gallery load from their subpath, and the
+// links between a case on the site and the same case in each app work both ways.
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
@@ -15,6 +18,7 @@ const ROUTES: readonly { path: string; nav: string; current: 'page' | 'true' }[]
   { path: '/', nav: 'Home', current: 'page' },
   { path: '/playground', nav: 'Playground', current: 'page' },
   { path: '/examples', nav: 'Examples', current: 'page' },
+  { path: '/examples/responsive', nav: 'Examples', current: 'true' },
   { path: '/theming', nav: 'Theming', current: 'page' },
   { path: '/frameworks', nav: 'Frameworks', current: 'page' },
   { path: '/api', nav: 'API', current: 'page' },
@@ -23,6 +27,19 @@ const ROUTES: readonly { path: string; nav: string; current: 'page' | 'true' }[]
   { path: '/lazy', nav: 'Examples', current: 'true' },
   { path: '/custom-bar', nav: 'Examples', current: 'true' },
 ];
+
+/**
+ * The Vite apps on the composed site: their home page (and its h1) and their gallery index, under
+ * the Angular site's origin (`DEMO_BASE` and `frameworkCaseUrl` of apps/demo-kit/src/site.ts).
+ */
+const COMPOSED: readonly { name: string; home: string; h1: string; gallery: string }[] = [
+  { name: 'Web Component', home: '/wc/', h1: 'Try every option', gallery: '/wc/examples.html' },
+  { name: 'React', home: '/react/', h1: 'Gantry in React', gallery: '/react/#/examples' },
+  { name: 'Vue', home: '/vue/', h1: 'Gantry in Vue', gallery: '/vue/#/examples' },
+  { name: 'Svelte', home: '/svelte/', h1: 'Gantry in Svelte', gallery: '/svelte/#/examples' },
+];
+/** The gallery's case count (apps/demo-kit/src/gallery/catalog.ts) */
+const CASE_COUNT = 20;
 
 /** The other demo apps: one page each, same shell without the site nav. */
 const APPS: readonly { name: string; url: string }[] = [
@@ -178,3 +195,41 @@ for (const app of APPS) {
     });
   });
 }
+
+test.describe('composed site (the Vite apps under the Angular site)', () => {
+  for (const app of COMPOSED) {
+    test(`${app.name}: home and gallery load from ${app.home}`, async ({ page }) => {
+      // Assets loaded from the site root instead of the subpath would 404: the pageErrors fixture fails
+      await open(page, `${SITE}${app.home}`);
+      await expect(page.locator('h1')).toHaveText(app.h1);
+      await open(page, `${SITE}${app.gallery}`);
+      await expect(page.locator('h1')).toHaveText('Examples');
+      await expect(page.locator('.gs-gallery-card')).toHaveCount(CASE_COUNT);
+    });
+  }
+
+  test('a case on the site links the same case in every app, and each app links back', async ({ page }) => {
+    const nav = () => page.getByRole('navigation', { name: 'This example in every framework' });
+    await open(page, `${SITE}/examples/tree`);
+    const title = await page.locator('h1').innerText();
+    const links = await nav()
+      .getByRole('link')
+      .evaluateAll(ls => ls.map(l => ({ label: l.textContent?.trim() ?? '', href: l.getAttribute('href') ?? '' })));
+    expect(links.map(l => l.label)).toEqual(['Angular', ...COMPOSED.map(a => a.name)]);
+
+    for (const app of COMPOSED) {
+      await open(page, `${SITE}/examples/tree`);
+      await nav().getByRole('link', { name: app.name, exact: true }).click();
+      await expect(page).toHaveURL(url => url.href.startsWith(`${SITE}${app.home}`));
+      await expect(page.locator('h1')).toHaveText(title);
+      await expect(
+        page.locator('.gs-case').locator(CHARTS).locator('.gantt-bars-layer > [data-task-id]').first(),
+      ).toBeVisible();
+      await expect(nav().locator('[aria-current="page"]')).toHaveText(app.name);
+      // Back to the site's page of the case
+      await nav().getByRole('link', { name: 'Angular', exact: true }).click();
+      await expect(page).toHaveURL(`${SITE}/examples/tree`);
+      await expect(page.locator('h1')).toHaveText(title);
+    }
+  });
+});

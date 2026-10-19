@@ -1,8 +1,8 @@
 /**
  * @file canvas-pointer.ts
  * Pointer interaction on the timeline canvas: pressing a bar (drag, resize, tap), hovering it
- * (cursor, grips, tooltip), clicking and double-clicking a row; it also binds the zoom gestures
- * (`interaction/zoom.ts`) and the touch guard.
+ * (cursor, grips, tooltip) and its row (the row tint), clicking and double-clicking a row; it also
+ * binds the zoom gestures (`interaction/zoom.ts`) and the touch guard.
  *
  * Bars are hit by geometry, like Angular: the row under the pointer's `y`, then core `hitTestBar`
  * on that row's visual in canvas coordinates (the handles first, then the bar's hit box), so
@@ -14,11 +14,19 @@
  *   press) and auto-scrolls near the viewport's edges (`interaction/autoscroll.ts`); the touch
  *   guard keeps the browser from panning meanwhile. A tap (touch / pen, no drag) toggles the bar's
  *   tooltip; a click selects through the `click` event. `pointercancel` and Escape cancel.
+ * - **Focus**: a mouse press on a bar (one that can be dragged or not) prevents the native focus
+ *   and text selection and focuses that bar itself, without scrolling (Escape then cancels its
+ *   drag, the arrow keys move from it); a touch or pen press focuses the bar once it drags. The
+ *   modality stays the pointer's (`interaction/keyboard.ts`): no focus ring, no focus tooltip
+ *   until a key is pressed.
  * - **Hover** (mouse and pen): the bar under the pointer is `hoveredBarId` (its grips show), its
- *   tooltip opens (`tooltip.hover`); off the bars, `tooltip.unhover()`. The cursor is a
- *   `data-cursor` attribute styled by the stylesheet (`styles/gestures.css.ts`): `ew-resize` on
- *   the handles and `grab` on the body of a bar that can be dragged; `grabbing` / `ew-resize`
- *   while dragging (the same cursors as Angular).
+ *   tooltip opens (`tooltip.hover`); off the bars, `tooltip.unhover()`. The row under the pointer
+ *   (core `rowIndexAtY`) is `hoveredRowId` (the row tint of both panes, `layers/hover.ts`). The
+ *   cursor is a `data-cursor` attribute styled by the stylesheet (`styles/gestures.css.ts`):
+ *   `ew-resize` on the handles and `grab` on the body of a bar that can be dragged; `grabbing` /
+ *   `ew-resize` while dragging (the same cursors as Angular). Leaving the canvas, a drag starting
+ *   and a scroll of either pane (the content moves under the pointer) clear the hovered bar, its
+ *   grips, the hovered row and the cursor, until the pointer moves again.
  *
  * Handlers may read layout (they run outside the flush). The canvas box is measured once and
  * kept until something can move it — a scroll (of the viewport or the page), a resize, the
@@ -29,6 +37,7 @@
 import {
   gestureKind,
   hitTestBar,
+  rowIndexAtY,
   type BarHit,
   type GanttFlatRow,
   type GestureState,
@@ -94,7 +103,6 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
     }
     return { x: clientX - box.left, y: clientY - box.top };
   };
-  viewport.addEventListener('scroll', invalidate, { passive: true, signal });
   // The page scrolling or resizing moves the canvas too (removed by hand: some DOMs don't tie a
   // window listener to an abort signal)
   const view = canvas.ownerDocument.defaultView;
@@ -108,23 +116,31 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
   }
   on('pointerenter', invalidate);
 
-  /** Row geometry under a canvas-relative `y` (none while the options are invalid: the render reports them) */
+  /**
+   * Row geometry under a canvas-relative `y` (core `rowIndexAtY`; none while the options are
+   * invalid: the render reports them)
+   */
   const geoAt = (y: number): RowGeometry | undefined => {
     try {
-      return G.geometries.peek()[Math.floor(y / G.config.peek().rowHeight)];
+      const geos = G.geometries.peek();
+      const i = rowIndexAtY(y, G.config.peek().rowHeight, geos.length);
+      return i === null ? undefined : geos[i];
     } catch {
       return undefined;
     }
   };
 
-  /** The bar under a client position and the part hit (core `hitTestBar`), `null` off the bars. */
-  const hitAt = (clientX: number, clientY: number): BarPointerHit | null => {
-    const { x, y } = point(clientX, clientY);
-    const geo = geoAt(y);
+  /** The bar of `geo` at canvas `x` / `y` and the part hit (core `hitTestBar`), `null` off it. */
+  const hitOf = (geo: RowGeometry | undefined, x: number, y: number): BarPointerHit | null => {
     if (!geo) return null;
     const part = hitTestBar(G.barVisual.peek()(geo), x, y);
     if (!part) return null;
     return { geo, part, draggable: I.enableDrag.peek() && geo.row.task.draggable !== false };
+  };
+  /** The bar under a client position and the part hit, `null` off the bars. */
+  const hitAt = (clientX: number, clientY: number): BarPointerHit | null => {
+    const { x, y } = point(clientX, clientY);
+    return hitOf(geoAt(y), x, y);
   };
 
   /** The bar (`[data-task-id]` in the bars layer) an event target belongs to: the tooltip's anchor */
@@ -145,11 +161,31 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
   const setHovered = (id: string | null): void => {
     if (I.hoveredBarId.peek() !== id) I.hoveredBarId.set(id);
   };
-  /** Cursor and grips for a fine pointer at a client position (geometry: the handles reach past the bar). */
+  const setHoveredRow = (id: string | null): void => {
+    if (I.hoveredRowId.peek() !== id) I.hoveredRowId.set(id);
+  };
+  /**
+   * Cursor, grips and row tint for a fine pointer at a client position (geometry: the handles
+   * reach past the bar).
+   */
   const hoverAt = (clientX: number, clientY: number): void => {
-    const hit = hitAt(clientX, clientY);
+    const { x, y } = point(clientX, clientY);
+    const geo = geoAt(y);
+    const hit = hitOf(geo, x, y);
     setCursor(hoverCursor(hit));
     setHovered(hit?.geo.row.task.id ?? null);
+    setHoveredRow(geo?.row.task.id ?? null);
+  };
+  /** Nothing is hovered any more: cursor, grips and row tint go (the tooltip has its own rules). */
+  const unhover = (): void => {
+    setCursor(null);
+    setHovered(null);
+    setHoveredRow(null);
+  };
+
+  /** The painted bar of `id` takes keyboard focus, without scrolling (a press on it). */
+  const focusBar = (id: string): void => {
+    (barById(id) as HTMLElement | SVGElement | null)?.focus({ preventScroll: true });
   };
 
   // ── Press: drag, resize, tap ───────────────────────────────
@@ -171,9 +207,10 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
     if (!current) return;
     tooltip.dismiss();
     setHovered(null);
+    setHoveredRow(null);
     setCursor(hit.part === 'bar' ? 'grabbing' : 'ew-resize');
-    // A touch drag takes keyboard focus to the timeline too (a mouse press already did)
-    if (g.kind === 'touch') viewport.focus({ preventScroll: true });
+    // A touch or pen drag focuses its bar too (a mouse press already did): Escape cancels it there
+    if (g.kind === 'touch') focusBar(hit.geo.row.task.id);
     drag.start(hit.geo, hit.part, g.startX);
     let lastX = g.x;
     const auto = createAutoScroll({
@@ -206,19 +243,22 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
     if (e.button !== 0) return;
     invalidate();
     const hit = hitAt(e.clientX, e.clientY);
+    if (!hit) return;
     const mouse = gestureKind(e.pointerType) === 'mouse';
-    // A mouse press on a bar that can't be dragged is a plain click; touch and pen may still tap
-    if (!hit || (mouse && !hit.draggable)) return;
     if (mouse) {
-      // No text selection or native focus: keyboard focus goes to the timeline (Escape cancels the drag)
+      // No text selection or native focus: the pressed bar takes keyboard focus itself, without
+      // scrolling (Escape cancels its drag); the modality stays the pointer's (no focus ring)
       e.preventDefault();
-      viewport.focus({ preventScroll: true });
+      focusBar(hit.geo.row.task.id);
+      // A bar that can't be dragged: the press is a plain click (touch and pen may still tap)
+      if (!hit.draggable) return;
     }
     scroll0 = viewport.scrollLeft;
     const target = e.target;
     const press = trackPress(e, {
       target: canvas,
-      keyTarget: ctx.host,
+      // Escape cancels the press wherever focus is (the pressed bar has it), before anything else
+      keyTarget: view ?? ctx.host,
       draggable: hit.draggable,
       signal,
       onDragStart: g => dragStart(hit, g),
@@ -292,12 +332,29 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
     { passive: true },
   );
 
+  // A scroll of either pane moves the content under a still pointer: the canvas box is measured
+  // again, and what was hovered is cleared (unless a press is in progress: a drag keeps its cursor)
+  const onContentScroll = (): void => {
+    invalidate();
+    if (!current) unhover();
+  };
+  viewport.addEventListener('scroll', onContentScroll, { passive: true, signal });
+  dom.panel.addEventListener('scroll', onContentScroll, { passive: true, signal });
+  // Disconnected: no hover survives (a chart moved in the page is hovered again by the next move)
+  signal.addEventListener(
+    'abort',
+    () => {
+      setHovered(null);
+      setHoveredRow(null);
+    },
+    { once: true },
+  );
+
   on('pointerleave', e => {
     // A finger lifting is not the pointer leaving (a tapped tooltip stays), nor is a press in progress
     if (e.pointerType === 'touch' || current) return;
     invalidate();
-    setCursor(null);
-    setHovered(null);
+    unhover();
     tooltip.unhover();
   });
 }

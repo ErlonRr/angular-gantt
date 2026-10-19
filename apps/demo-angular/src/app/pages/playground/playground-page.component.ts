@@ -26,10 +26,13 @@ import {
   decodeState,
   encodeState,
   playgroundCode,
+  playgroundCommand,
   playgroundOptions,
+  valueText,
   withValue,
   type PlaygroundControl,
   type PlaygroundKey,
+  type PlaygroundState,
 } from 'demo-kit/playground';
 import { FRAMEWORKS, type FrameworkId } from 'demo-kit/site';
 import { AppThemeService } from '../../shell/app-theme.service';
@@ -208,7 +211,8 @@ function days(n: number): string {
                   } @else if (c.kind === 'range') {
                     <div class="gs-field-row">
                       <label class="gs-label" [for]="'pg-' + c.key">{{ c.label }}</label>
-                      <output class="gs-value" [attr.for]="'pg-' + c.key">{{ state()[c.key] }}{{ c.unit }}</output>
+                      <!-- The range carries the value with its unit (aria-valuetext): not read twice -->
+                      <output class="gs-value" aria-hidden="true" [attr.for]="'pg-' + c.key">{{ rangeText(c) }}</output>
                     </div>
                     <input
                       type="range"
@@ -218,7 +222,7 @@ function days(n: number): string {
                       [max]="c.max"
                       [step]="c.step ?? 1"
                       [value]="state()[c.key]"
-                      [attr.aria-valuetext]="state()[c.key] + (c.unit ?? '')"
+                      [attr.aria-valuetext]="rangeText(c)"
                       [attr.aria-describedby]="'pg-' + c.key + '-hint'"
                       (input)="set(c.key, +range.value)"
                       #range
@@ -312,7 +316,7 @@ export class PlaygroundPageComponent {
   }
 
   protected set(key: PlaygroundKey, value: unknown): void {
-    this.state.update(s => withValue(s, key, value));
+    this.apply(withValue(this.state(), key, value));
   }
 
   /** A `<select>` value is text: map it back to the choice (some are numbers). */
@@ -323,7 +327,20 @@ export class PlaygroundPageComponent {
   }
 
   protected reset(): void {
-    this.state.set({ ...PLAYGROUND_DEFAULTS });
+    this.apply({ ...PLAYGROUND_DEFAULTS });
+  }
+
+  /** A range control's value with its unit (`600 ms`), the same text as the Web Component playground. */
+  protected rangeText(control: PlaygroundControl): string {
+    const value = Number(this.state()[control.key]);
+    return control.kind === 'range' ? valueText(value, control.unit) : String(value);
+  }
+
+  /** Shows `next`, and runs what the options alone don't change on the rows already shown. */
+  private apply(next: PlaygroundState): void {
+    const command = playgroundCommand(this.state(), next);
+    this.state.set(next);
+    if (command) this.chart()[command]();
   }
 
   protected setFramework(id: FrameworkId): void {

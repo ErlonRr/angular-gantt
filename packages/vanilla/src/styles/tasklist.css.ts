@@ -13,6 +13,15 @@
  * Pinned rows: a focused row kept mounted outside the virtual window is positioned absolutely
  * at its row offset (`top` is set through the CSSOM).
  *
+ * Row hover (D4): the row under a mouse or pen pointer in either pane (`gantt-tl-row--hover`, set
+ * by the task-list region from `hoveredRowId`) gets the `--gantt-row-hover-bg` tint as a background
+ * image, so its background colour (selection, row colour, zebra) stays visible under it; the
+ * timeline draws the same tint (`rect.gantt-row-hover`).
+ *
+ * The load-more footer (the treegrid's sibling) is Angular's `gantt-load-more` look: a top border, 8 /
+ * 12 px padding, the panel background; its button is full width and the toolbar's control size tall
+ * (`--gantry-control-size`: 28 / 32 / 36 px by density, WCAG 2.5.8), in the chart font.
+ *
  * Focus (`--gantt-focus-ring`): rows, cells, header cells, collapse toggles and the footer show an
  * inset ring (cells and the panel clip anything outside them), the load-more button an outer one;
  * keyboard focus only (`:focus-visible`).
@@ -52,16 +61,24 @@ export const TASKLIST_CSS = `
       font-size: 10px; line-height: 1; cursor: pointer; touch-action: manipulation; color: var(--gantt-text-sec);
     }
     .gantt-collapse-btn:hover { opacity: .75; }
-    .gantt-tl-load-more { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 12px; color: var(--gantt-text-sec); }
-    .gantt-load-error { display: flex; align-items: center; gap: 8px; }
-    .gantt-load-more-btn {
-      padding: 3px 10px; font-size: 12px; border-radius: 4px; cursor: pointer;
-      border: 1px solid var(--gantt-border); background: var(--gantt-panel-bg); color: var(--gantt-text-sec);
+    /* Load-more footer: the same box and button as Angular's gantt-load-more */
+    .gantt-tl-load-more {
+      padding: 8px 12px; border-top: 1px solid var(--gantt-border); background-color: var(--gantt-panel-bg);
+      font-family: var(--gantt-font); font-size: var(--gantt-font-size); color: var(--gantt-text-sec);
     }
-    .gantt-load-more-btn[aria-disabled="true"] { cursor: default; }
+    .gantt-load-error { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .gantt-load-done { padding: 4px 0; text-align: center; font-size: 11px; color: var(--gantt-text-muted); }
+    .gantt-load-more-btn {
+      box-sizing: border-box; min-height: var(--gantry-control-size, 32px); margin: 0; padding: 0 12px;
+      border: 1px solid var(--gantt-border); border-radius: 4px; background-color: transparent; color: var(--gantt-text-sec);
+      font-family: var(--gantt-font); font-size: var(--gantt-font-size); cursor: pointer;
+    }
+    .gantt-tl-load-more > .gantt-load-more-btn { display: block; width: 100%; }
+    .gantt-load-more-btn:hover { background-color: var(--gantt-row-bg-alt); }
+    .gantt-load-more-btn[aria-disabled="true"] { cursor: default; background-color: transparent; }
     .gantt-col-resize { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
     .gantt-col-resize:hover { background: var(--gantt-sel-border); opacity: .6; }
-    .gantt-tl-row:hover { filter: brightness(0.97); }
+    .gantt-tl-row--hover { background-image: linear-gradient(var(--gantt-row-hover-bg), var(--gantt-row-hover-bg)); }
     .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border); }
     .gantt-tl-row--pinned { position: absolute; left: 0; right: 0; z-index: 1; }
     .gantt-tl-row:focus-visible, .gantt-tl-cell:focus-visible, .gantt-tl-col-header:focus-visible,

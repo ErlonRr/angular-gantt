@@ -21,6 +21,20 @@ afterEach(() => {
 });
 
 describe('PagedLoader', () => {
+  it('subscribe is bound: passed on unbound it still listens and unsubscribes', async () => {
+    const { fetcher } = pages(5);
+    const loader = new PagedLoader({ fetcher, pageSize: 10 });
+    const { subscribe } = loader;
+    const listener = vi.fn();
+    const unsubscribe = subscribe(listener);
+    await loader.loadNext();
+    expect(listener).toHaveBeenCalled();
+    listener.mockClear();
+    unsubscribe();
+    loader.reset();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('loads pages in order and stops after a short page', async () => {
     const { calls, fetcher } = pages(25);
     const loader = new PagedLoader({ fetcher, pageSize: 10 });

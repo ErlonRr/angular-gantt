@@ -14,7 +14,8 @@
 //  and a failing paged data source; it records the chart's outputs in
 //  `window.__GANTRY_EVENTS__` (the Web Component's event names) and
 //  exposes `window.__GANTRY_API__` to change inputs and reach the
-//  component.
+//  component. `box` replaces the 1150 × 700 host size (the narrow
+//  scenarios of phase 10).
 // ─────────────────────────────────────────────────────────────
 
 import { afterNextRender, ChangeDetectionStrategy, Component, signal, viewChild } from '@angular/core';
@@ -53,6 +54,8 @@ interface GantryFixture {
   tooltipTemplate?: boolean;
   /** A paged data source serving `tasks` (the series stays empty) whose first `failures` fetches reject */
   dataSource?: { failures: number; pageSize?: number };
+  /** The host's size in px, instead of 1150 × 700 */
+  box?: { width: number; height: number };
 }
 
 /** What `window.__GANTRY_API__.set()` changes (dates as local ISO strings, like the fixture). */
@@ -124,6 +127,8 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         [enableResize]="true"
         [tooltipEnabled]="true"
         [showLegend]="true"
+        [style.width.px]="box?.width"
+        [style.height.px]="box?.height"
         (taskDragged)="record('task-dragged', $event)"
         (taskResized)="record('task-resized', $event)"
         (selectionChange)="record('selection-change', $event)"
@@ -151,6 +156,8 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         [enableResize]="true"
         [tooltipEnabled]="true"
         [showLegend]="true"
+        [style.width.px]="box?.width"
+        [style.height.px]="box?.height"
         (taskDragged)="record('task-dragged', $event)"
         (taskResized)="record('task-resized', $event)"
         (selectionChange)="record('selection-change', $event)"
@@ -167,7 +174,8 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
   `,
   // A fixed box at the top left, above the site shell: what the tests measure (scrolling, windowed
   // rows and columns) never depends on the page around it. e2e/paint.spec.ts gives the Web
-  // Component the same box, so both bindings mount the same rows and columns.
+  // Component the same box, so both bindings mount the same rows and columns. `box` overrides its
+  // size through the host's inline style.
   styles: [
     `
       gantry {
@@ -186,6 +194,8 @@ export class FixtureComponent {
   private readonly gantt = viewChild.required(GantryComponent);
 
   protected readonly emptyContent = this.fixture.emptyContent;
+  /** The host's size, when the fixture sets one (else the stylesheet's 1150 × 700) */
+  protected readonly box = this.fixture.box;
   protected readonly tooltipTemplate = this.fixture.tooltipTemplate === true;
   /** The fixture's data source (its tasks are served page by page; the series stays empty) */
   protected readonly dataSource = this.fixture.dataSource ? this.createDataSource(this.fixture.dataSource) : null;

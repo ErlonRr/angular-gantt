@@ -9,7 +9,15 @@
 //  The host's classes are the Web Component's (`paint/bars.ts`):
 //  `gantt-bar` first (the paint-snapshot key), then `gantt-bar--<kind>`,
 //  `gantt-bar--critical` on the critical path (forced-colors mode dashes
-//  it), `task.className` and `gantt-bar-draggable`.
+//  it), the row style's classes (`visual.className`: `options.styles`,
+//  `task.style.className`, the deprecated `task.className`) and
+//  `gantt-bar-draggable`.
+//
+//  A collapsed rolled-up parent (`rollup.segments`) shows its children as
+//  segments right after the body: one `rect.gantt-bar-segment` per
+//  `visual.segments` entry (x / width from the segment, the bar's y,
+//  height and rx, the segment's paint as `fill`), attached only while the
+//  visual has segments (D26 of Gantry 2 phase 10).
 // ─────────────────────────────────────────────────────────────
 
 import { Directive, computed } from '@angular/core';
@@ -22,6 +30,12 @@ export const BUILTIN_BAR_TEMPLATE = `
     <svg:path class="gantt-bar-body" [attr.d]="v.path" [style.fill]="v.paint.body"
       [style.stroke]="ctx().isSelected ? paints.selectionStroke : null"
       [attr.stroke-width]="ctx().isSelected ? 1.5 : null"/>
+    @if (v.segments; as segments) {
+      @for (seg of segments; track $index) {
+        <svg:rect class="gantt-bar-segment" [attr.x]="seg.x" [attr.y]="v.y" [attr.width]="seg.width"
+          [attr.height]="v.height" [attr.rx]="v.rx" [style.fill]="seg.paint" pointer-events="none"/>
+      }
+    }
     @if (v.caps) {
       <svg:path class="gantt-bar-caps" [attr.d]="v.caps" [style.fill]="v.paint.body"/>
     }
@@ -47,11 +61,13 @@ export const BUILTIN_BAR_STYLES = `
   :host(.gantt-bar-draggable) { cursor: grab; }
   .gantt-bar-label { user-select: none; font-family: var(--gantt-font); }
   .gantt-bar-label--outside { font-weight: 500; }
-  /* Forced colours (D25), over the inline paints: ButtonFace bars outlined in ButtonText, caps and
-     inside labels ButtonText, progress ButtonText at 0.45 (the inside label stays readable),
-     outside labels CanvasText, the critical path dashed, the selected bar's outline Highlight */
+  /* Forced colours (D25), over the inline paints: ButtonFace bars outlined in ButtonText, rolled-up
+     child segments ButtonFace with a 1 px ButtonText outline (each child outlined), caps and inside
+     labels ButtonText, progress ButtonText at 0.45 (the inside label stays readable), outside labels
+     CanvasText, the critical path dashed, the selected bar's outline Highlight */
   @media (forced-colors: active) {
     .gantt-bar-body { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1.5px; }
+    .gantt-bar-segment { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1px; }
     .gantt-bar-caps, .gantt-bar-label { fill: ButtonText !important; }
     .gantt-bar-progress { fill: ButtonText !important; fill-opacity: 0.45; }
     .gantt-bar-label--outside { fill: CanvasText !important; }
@@ -73,12 +89,15 @@ export abstract class GanttBuiltinBar extends GanttBarBase {
    */
   protected readonly paints: typeof PAINTS = PAINTS;
 
-  /** The host's classes: `gantt-bar gantt-bar--<kind>[ gantt-bar--critical][ className][ gantt-bar-draggable]` */
+  /**
+   * The host's classes: `gantt-bar gantt-bar--<kind>[ gantt-bar--critical][ visual.className][ gantt-bar-draggable]`
+   * (the row style's classes come from the visual, never from the task)
+   */
   protected readonly barClass = computed(() => {
-    const { visual, isCritical, row, draggable } = this.ctx();
+    const { visual, isCritical, draggable } = this.ctx();
     let cls = `gantt-bar gantt-bar--${visual.kind}`;
     if (isCritical) cls += ' gantt-bar--critical';
-    if (row.task.className) cls += ` ${row.task.className}`;
+    if (visual.className) cls += ` ${visual.className}`;
     if (draggable) cls += ' gantt-bar-draggable';
     return cls;
   });

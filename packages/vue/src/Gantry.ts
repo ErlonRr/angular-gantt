@@ -2,9 +2,10 @@
  * @file Gantry.ts
  * Vue 3 binding of `<gantry-element>`. A render-function component (`h()`), so consumers need no
  * `isCustomElement` compiler option. It only forwards: props → element properties, element events
- * → emits, the default slot → the element's light DOM (`<div slot="empty">`), the element → the
- * template ref (`expose({ element })`). No inline style: `:host` sizes the element (block,
- * 100% × 100%), so the server markup has no `style` attribute of its own (strict CSP).
+ * → emits, the slots → the element's light DOM (the `empty` slot in a `<div slot="empty">`, then
+ * the default slot as it is), the element → the template ref (`expose({ element })`). No inline
+ * style: `:host` sizes the element (block, 100% × 100%), so the server markup has no `style`
+ * attribute of its own (strict CSP).
  *
  * Lifecycle, through a directive on the element (`bridge`):
  * - `created`: the element exists but Vue has neither patched nor inserted it. The event listeners
@@ -37,6 +38,8 @@ import {
   type ObjectDirective,
   type PropType,
   type ShallowRef,
+  type SlotsType,
+  type VNode,
 } from 'vue';
 import {
   GANTRY_EVENTS,
@@ -49,7 +52,7 @@ import {
   type GanttDataSourceConfig,
   type VanillaColumnDef,
 } from '@gantryjs/vanilla';
-import type { GanttAnnotation, GanttOptions, GanttTask } from '@gantryjs/core';
+import type { GanttAnnotation, GanttOptions, GanttSyncGroup, GanttTask } from '@gantryjs/core';
 
 type PropertyName = (typeof GANTRY_PROPERTIES)[number];
 
@@ -90,12 +93,29 @@ const props = {
   renderBar: optional(Function as PropType<GanttBarRenderer>),
   loading: optional(Boolean),
   errorMessage: optional(String as PropType<string | null>),
+  // A group shared by several charts: passed by identity (never copied, never deep-watched)
+  syncGroup: optional(Object as PropType<GanttSyncGroup | null>),
 } satisfies PropTypes;
 
 /** Array props, watched one level deep (`push`, `splice`, `list[i] = …` re-render the chart). */
 const isList = (key: PropertyName): boolean => (props[key].type as unknown) === Array;
 /** Props watched one level deep: the arrays, and `options` (`options.viewMode = …` on a reactive object). */
 const isDeep = (key: PropertyName): boolean => isList(key) || key === 'options';
+
+/**
+ * The slots, both rendered in the element's light DOM: `empty` inside a `<div slot="empty">` (the
+ * element's empty-state slot), then `default` as it is (`<div slot="empty">…</div>` works there too).
+ */
+type GantrySlots = SlotsType<{
+  default?: () => VNode[];
+  empty?: () => VNode[];
+}>;
+
+/**
+ * Key of the `<div slot="empty">` wrapper: when the `empty` slot comes or goes, the default slot's
+ * first node (a `<div>` too, say) keeps its own DOM node instead of being patched into the wrapper.
+ */
+const EMPTY_KEY = Symbol('gantry-empty');
 
 /** What the template ref exposes (`expose({ element })`). */
 interface ExposedBindings {
@@ -116,12 +136,14 @@ function unwrap(value: unknown): unknown {
  * (`tasks`, `columns`, `annotations`) and `options` are watched one level deep, so `tasks.push(…)`
  * on a reactive array or `options.viewMode = …` on a reactive object re-renders the chart. The
  * template ref exposes `element`: the `GantryElement` with its
- * imperative API (`zoomIn()`, `scrollToToday()`, `getSelectedTasks()`, …). The default slot is
- * rendered inside the element: `<div slot="empty">…</div>` replaces the empty-state text.
+ * imperative API (`zoomIn()`, `scrollToToday()`, `getSelectedTasks()`, …). The `empty` slot
+ * (`<template #empty>…</template>`) replaces the empty-state text; the default slot is rendered
+ * inside the element as it is (`<div slot="empty">…</div>` works too).
  */
 export const Gantry = defineComponent({
   name: 'Gantry',
   props,
+  slots: Object as GantrySlots,
   emits: Object.fromEntries(Object.keys(GANTRY_EVENTS).map(type => [camel(type), null])) as unknown as Emits,
   setup(props, { emit, expose, slots }): ExposedBindings {
     const element = shallowRef<GantryElement | null>(null);
@@ -174,8 +196,15 @@ export const Gantry = defineComponent({
       },
     };
 
-    // The default slot goes into the element's light DOM (its own slots: `slot="empty"`)
-    const render = () => withDirectives(h('gantry-element', null, slots['default']?.()), [[bridge]]);
+    // The light DOM of the element, where its own slots pick the content up: the `empty` slot in a
+    // `<div slot="empty">`, then the default slot (one flat list: no fragment markers on the server)
+    const render = () => {
+      const children: VNode[] = [];
+      if (slots.empty) children.push(h('div', { slot: 'empty', key: EMPTY_KEY }, slots.empty()));
+      const rest = slots.default?.();
+      if (rest) children.push(...rest);
+      return withDirectives(h('gantry-element', null, children), [[bridge]]);
+    };
     // Vue types a setup() that returns its render function as exposing nothing: typed as the
     // binding it exposes, `InstanceType<typeof Gantry>` (a template ref) has `element`
     return render as unknown as ExposedBindings;

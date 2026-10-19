@@ -1,7 +1,9 @@
 /**
  * @file rows.ts
- * Rows region: the row backgrounds (zebra, row colour, selection: `rowPaint`) of the mounted rows
- * — the virtual window plus the pinned rows — keyed by task id, and their horizontal separators.
+ * Rows region: the row backgrounds (core `rowPaint`: selection, else the row style's `rowColor`,
+ * else the zebra) of the mounted rows — the virtual window plus the pinned rows — keyed by task
+ * id, and their horizontal separators. The hover tint is the hover region's (`layers/hover.ts`),
+ * drawn over these backgrounds, so a row colour stays visible under it.
  *
  * The separators sit in `g.gantt-grid` between its two comment markers (above the minor lines,
  * under the period delimiters the static layer owns). They are keyed by task id too, by hand
@@ -44,6 +46,7 @@ export function createRowsLayer(ctx: LayerContext): Layer {
       const geos = G.mountedGeometries();
       const width = G.timeline().totalWidth;
       const selected = I.selection().selected;
+      const styleOf = G.rowStyle();
       const hz = G.config().gridLines.horizontal;
       const keys = rowKeys(geos);
 
@@ -56,7 +59,7 @@ export function createRowsLayer(ctx: LayerContext): Layer {
           setAttr(rect, 'y', geo.y);
           setAttr(rect, 'width', width);
           setAttr(rect, 'height', geo.height);
-          setStyleProp(rect, 'fill', rowPaint(geo, selected.has(geo.row.task.id)));
+          setStyleProp(rect, 'fill', rowPaint(geo, selected.has(geo.row.task.id), styleOf(geo.row)));
         },
       );
 

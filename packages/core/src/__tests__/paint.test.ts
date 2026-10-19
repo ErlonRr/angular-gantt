@@ -562,6 +562,25 @@ describe('band merging with paints', () => {
   });
 });
 
+describe("nonWorkingTime.style 'disabled'", () => {
+  it('greys out weekends, holidays without a colour and off-hours alike; intensive and explicit colours stay', () => {
+    const base = OPTION_SETS[1][1];
+    const disabled = (o: GanttOptions): GanttOptions => ({
+      ...o,
+      nonWorkingTime: { ...o.nonWorkingTime, style: 'disabled' },
+    });
+    const days = fixture(LightTheme, disabled(base)).timeline.bands;
+    const kinds = (bands: TimeBand[], kind: string) => new Set(bands.filter(b => b.kind === kind).map(b => b.paint));
+    expect(kinds(days, 'weekend')).toEqual(new Set(['var(--gantt-border)']));
+    expect(kinds(days, 'holiday')).toEqual(new Set(['var(--gantt-border)', '#ff000022']));
+    expect(kinds(days, 'custom')).toEqual(new Set(['#00ff0022', 'var(--gantt-weekend-bg)']));
+
+    const hours = fixture(LightTheme, disabled(OPTION_SETS[2][1])).timeline.bands;
+    expect(kinds(hours, 'off-hours')).toEqual(new Set(['var(--gantt-border)']));
+    expect(kinds(hours, 'intensive')).toEqual(new Set(['var(--gantt-intensive-bg)', '#ffaa0033']));
+  });
+});
+
 describe('custom renderer helpers', () => {
   it('resolvePaint accepts the bar context theme (a GanttTheme, as custom renderers get it)', () => {
     const ctxTheme: GanttBarContext['theme'] = { ...DarkTheme };

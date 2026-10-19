@@ -2,6 +2,7 @@
 // control is described by a hint that names the option it sets (`nonWorkingTime.weekends`).
 import {
   PLAYGROUND_SECTIONS,
+  valueText,
   type PlaygroundControl,
   type PlaygroundKey,
   type PlaygroundState,
@@ -38,12 +39,6 @@ export function buildOptionsForm(root: HTMLElement, onChange: OnChange): Options
     root.append(group);
   });
   return { sync: state => controls.forEach(c => c.sync(state)) };
-}
-
-/** `36 px`, `60%`, `9 h`. */
-function withUnit(value: number, unit: string | undefined): string {
-  if (!unit) return String(value);
-  return unit === '%' ? `${value}%` : `${value} ${unit}`;
 }
 
 function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
@@ -85,7 +80,8 @@ function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
       // The input carries the value with its unit (aria-valuetext): the visible output is not read twice
       const output = h('output', { class: 'gs-value', for: id, 'aria-hidden': 'true' });
       const show = (value: number) => {
-        const text = withUnit(value, c.unit);
+        // `36 px`, `60%`: the same text as the site's playground
+        const text = valueText(value, c.unit);
         output.textContent = text;
         input.setAttribute('aria-valuetext', text);
       };

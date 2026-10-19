@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { createSSRApp, h } from 'vue';
 import { renderToString } from 'vue/server-renderer';
-import { Gantry, ViewMode, type GanttTask } from '../index';
+import { Gantry, ViewMode, createGanttSyncGroup, type GanttTask } from '../index';
 
 const tasks: GanttTask[] = [
   { id: 'a', name: 'Design', start: new Date(2026, 0, 5), end: new Date(2026, 0, 20), progress: 60 },
@@ -30,6 +30,7 @@ describe('server rendering', () => {
           darkMode: 'auto',
           showToolbar: false,
           renderBar: () => null,
+          syncGroup: createGanttSyncGroup(),
           onTaskDragged: () => undefined,
         }),
     });

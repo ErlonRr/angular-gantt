@@ -26,7 +26,14 @@ import { BrowserTestingModule, platformBrowserTesting } from '@angular/platform-
 import { provideServerRendering, renderApplication } from '@angular/platform-server';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttDataSource } from './datasource/gantt-datasource';
-import { TaskType, type GanttAnnotation, type GanttOptions, type GanttTask } from '@gantryjs/core';
+import {
+  TaskType,
+  buildTimeline,
+  resolveConfig,
+  type GanttAnnotation,
+  type GanttOptions,
+  type GanttTask,
+} from '@gantryjs/core';
 
 const day = (d: number) => new Date(2026, 4, d);
 const TASKS: GanttTask[] = [
@@ -35,6 +42,9 @@ const TASKS: GanttTask[] = [
   { id: 'b', name: 'Build', parentId: 'g', start: day(11), end: day(25), dependency: 'a' },
   { id: 'm', name: 'Release', type: TaskType.Milestone, start: day(29), end: day(29), dependency: 'b' },
 ];
+/** A year at the Day level: far wider than the server's assumed viewport */
+const LONG_TASKS: GanttTask[] = [{ id: 'y', name: 'Year', start: new Date(2026, 0, 1), end: new Date(2026, 11, 31) }];
+const LONG_OPTIONS: GanttOptions = { initialScroll: false, viewMode: 'Day', showToday: false };
 
 @Component({
   selector: 'app-root',
@@ -49,6 +59,7 @@ const TASKS: GanttTask[] = [
       [showLegend]="true"
     />
     <gantry id="paged" style="height: 300px" [dataSource]="dataSource" [options]="options" />
+    <gantry id="long" style="height: 200px" [series]="longTasks" [options]="longOptions" />
   `,
 })
 class SsrHost {
@@ -57,6 +68,8 @@ class SsrHost {
   readonly annotations: GanttAnnotation[] = [{ x1: day(18), label: { text: 'Freeze' } }];
   readonly options: GanttOptions = { initialScroll: false, criticalPath: true };
   readonly dataSource = new GanttDataSource({ data: TASKS });
+  readonly longTasks = LONG_TASKS;
+  readonly longOptions = LONG_OPTIONS;
 }
 
 /** Browser APIs that must not run during a server render: each records the call and throws */
@@ -149,13 +162,19 @@ describe('server-side rendering', () => {
     expect(calls).toEqual([]);
     expect(html).toContain('<gantry');
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const charts = [...doc.querySelectorAll<HTMLElement>('gantry')];
+    const charts = [...doc.querySelectorAll<HTMLElement>('gantry:not(#long)')];
     expect(charts).toHaveLength(2);
     for (const chart of charts) {
       expect(chart.querySelectorAll('.gantt-bars-layer [data-task-id]').length).toBeGreaterThanOrEqual(1);
       expect(chart.querySelectorAll('.g-cell').length).toBeGreaterThan(0);
       expect(chart.querySelectorAll('.gantt-tl-row')).toHaveLength(TASKS.length);
       expect(chart.getAttribute('style')).toContain('--gantt-bar:');
+      // Phase 10: the density, and the read-only layout variables and control size next to the theme tokens
+      expect(chart.getAttribute('data-density')).toBe('normal');
+      expect(chart.hasAttribute('data-narrow')).toBe(false);
+      expect(chart.getAttribute('style')).toContain('--gantt-row-height: 36px');
+      expect(chart.getAttribute('style')).toContain('--gantt-bar-height: 21.6px');
+      expect(chart.getAttribute('style')).toContain('--gantry-control-size: 32px');
       // The bars' ARIA is stamped on the server too: a listbox of options with names
       expect(chart.querySelector('gantt-canvas svg')?.getAttribute('role')).toBe('listbox');
       const bars = [...chart.querySelectorAll('.gantt-bars-layer > [data-task-id]')];
@@ -178,6 +197,14 @@ describe('server-side rendering', () => {
     expect(doc.querySelectorAll('.gantt-tooltip')).toHaveLength(0);
     expect(doc.querySelectorAll('.gantt-drag-readout, [aria-describedby]')).toHaveLength(0);
     expect(doc.body.querySelector(':scope > .gantt-tooltip')).toBeNull();
+
+    // The server windows the header like a 1024 px viewport at scrollLeft 0 (phase 10: core
+    // `fallbackWidth`), instead of mounting the whole timeline
+    const long = doc.querySelector('#long')!;
+    const all = buildTimeline({ tasks: LONG_TASKS, config: resolveConfig(LONG_OPTIONS) }).tiers.at(-1)!.cells;
+    const mounted = long.querySelectorAll('.g-tier:last-child .g-cell');
+    expect(mounted.length).toBeGreaterThan(0);
+    expect(mounted.length).toBeLessThan(all.length / 4);
   });
 
   it('puts the test environment back (the DOM classes are the test document’s again)', () => {

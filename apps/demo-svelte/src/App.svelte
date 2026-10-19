@@ -8,6 +8,7 @@
     type TaskResizeEvent,
   } from '@gantryjs/svelte';
   import { createDemoData } from '@gantryjs/core/demo';
+  import { galleryHash } from 'demo-kit/gallery';
   import { PACKAGES, SITE } from 'demo-kit/site';
   import { getTheme, onThemeChange, toggleTheme } from 'demo-kit/theme';
   import Icon from './Icon.svelte';
@@ -55,6 +56,16 @@
         <span class="gs-version">v{SITE.version}</span>
         <span class="gs-badge">Svelte</span>
       </div>
+      <nav class="gs-nav" aria-label="Primary">
+        <ul class="gs-nav-list">
+          <li>
+            <a class="gs-nav-link" href="#/" aria-current="page"><Icon name="home" /><span>Home</span></a>
+          </li>
+          <li>
+            <a class="gs-nav-link" href={galleryHash()}><Icon name="examples" /><span>Examples</span></a>
+          </li>
+        </ul>
+      </nav>
       <div class="gs-header-actions">
         <button type="button" class="gs-icon-btn" aria-label="Dark theme" aria-pressed={dark} onclick={toggleTheme}>
           <Icon name={dark ? 'sun' : 'moon'} />

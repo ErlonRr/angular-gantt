@@ -7,7 +7,8 @@
 #
 # Targets / ports: vanilla 4171 · react 4172 · vue 4175 · svelte 4174 · angular 4180
 # (vue avoids 4173, Vite's default preview port, so a stray `vite preview` is never mistaken for it)
-# (Angular routes: / roadmap · /demo · /lazy 120 tasks · /custom-bar)
+# (Angular routes: / roadmap · /demo · /lazy 120 tasks · /custom-bar · /examples/<case>; the demo apps
+#  already built are composed under it too: /wc/ /react/ /vue/ /svelte/, as on the deployed site)
 # Demos resolve @gantryjs/* from source, so no package build is needed first.
 set -euo pipefail
 
@@ -56,6 +57,11 @@ start_one() {
   echo "• building $t…"
   if [[ $t == angular ]]; then
     (cd "$ROOT" && pnpm_cmd build:app >"$STATE/$t.build.log" 2>&1) || { echo "  ✗ build failed, see $STATE/$t.build.log" >&2; return 1; }
+    # Like the deployed site: the demo apps already built (`start` builds them first) under /wc/ /react/ /vue/ /svelte/
+    if compgen -G "$ROOT/apps/demo-*/dist/index.html" >/dev/null; then
+      (cd "$ROOT" && node scripts/compose-site.mjs --allow-missing >>"$STATE/$t.build.log" 2>&1) ||
+        { echo "  ✗ composing the site failed, see $STATE/$t.build.log" >&2; return 1; }
+    fi
     # vite preview gives SPA fallback, so deep links like /lazy work
     (cd "$ROOT" && {
       nohup npx vite preview --outDir dist/gantry-demo/browser --port "$port" --strictPort \

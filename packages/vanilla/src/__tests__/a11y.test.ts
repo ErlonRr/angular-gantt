@@ -182,8 +182,8 @@ describe('<gantry-element> accessibility', () => {
       // A mouse drags once it has moved 3 px (D13)
       canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x + 4, clientY: v.cy, pointerId: 1 }));
       expect(internals.states.has('dragging')).toBe(true);
-      // The press takes keyboard focus to the timeline (Escape cancels the drag)
-      expect(el.shadowRoot!.activeElement).toBe($(el, '.gantry-canvas-viewport'));
+      // The press focuses the pressed bar (Escape cancels the drag)
+      expect(el.shadowRoot!.activeElement).toBe(bar);
       canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x + 4, pointerId: 1 }));
       expect(internals.states.has('dragging')).toBe(false);
     });

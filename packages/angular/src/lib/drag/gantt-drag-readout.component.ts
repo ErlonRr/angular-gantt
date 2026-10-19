@@ -11,12 +11,14 @@
 //
 //    div.gantt-drag-readout[aria-hidden][data-align]   placed with --x / --y
 //
-//  Text: core `formatDragReadout(preview, …)` (a milestone shows its date
-//  only, hour scales the time). Place: core `placeDragReadout(ghost,
-//  { scrollLeft, viewportWidth, scrollTop, headerHeight, viewportHeight,
-//  width })` in the viewport's scroll content, written as the `--x` /
-//  `--y` custom properties and `data-align` (the stylesheet translates the
-//  chip by 0 / -50% / -100%, so its real width is never measured).
+//  Text: core `formatDragReadout(preview, …)`, its dates in
+//  `formats.readoutFormat` when set, else core's default for the scale
+//  unit (a milestone shows its date only, hour scales the time). Place:
+//  core `placeDragReadout(ghost, { scrollLeft, viewportWidth, scrollTop,
+//  headerHeight, viewportHeight, width })` in the viewport's scroll
+//  content, written as the `--x` / `--y` custom properties and
+//  `data-align` (the stylesheet translates the chip by 0 / -50% / -100%,
+//  so its real width is never measured).
 //  `aria-hidden`: the live region announces the result instead. The
 //  scroll offsets are read only while a preview exists.
 // ─────────────────────────────────────────────────────────────
@@ -60,10 +62,12 @@ export function injectDragReadout(preview: Signal<DragPreview | null>): Signal<D
     const p = preview();
     const geo = p ? layout.geometryById().get(p.taskId) : undefined;
     if (!p || !geo) return null;
-    return computeDragGhostVisual(p, geo, layout.cfg(), layout.timeline().toX, i18n.bundle(), layout.fontPx());
+    // At its bar's height: the row's resolved style, as the canvas draws the ghost
+    const style = layout.rowStyle()(geo.row);
+    return computeDragGhostVisual(p, geo, layout.cfg(), layout.timeline().toX, i18n.bundle(), layout.fontPx(), style);
   });
 
-  /** The new dates and duration (`formatDragReadout`); `''` without them */
+  /** The new dates and duration (`formatDragReadout`, dates in `formats.readoutFormat` when set); `''` without them */
   const text = computed(() => {
     const p = preview();
     if (!p) return '';
@@ -73,6 +77,7 @@ export function injectDragReadout(preview: Signal<DragPreview | null>): Signal<D
       locale: i18n.locale(),
       dates: layout.cfg(),
       unit: p.unit,
+      format: i18n.formats().readoutFormat,
       milestone: !!row && barKind(row.barType) === 'milestone',
     });
   });

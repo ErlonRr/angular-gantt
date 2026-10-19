@@ -11,7 +11,7 @@ configurable open-source Gantt — every option behaves identically in every bin
       ├── @gantryjs/vue     Vue 3.5 render-function wrapper                packages/vue
       └── @gantryjs/svelte  Svelte 5 runes wrapper                         packages/svelte
 apps/demo-angular  the Gantry site (Angular) · apps/demo-*  Vite demos (demo-vanilla = options playground)
-apps/demo-kit  the demos' shared look (site.css, gs- classes), theme switch, playground model
+apps/demo-kit  the demos' shared look (site.css, gs- classes), theme switch, playground model, examples gallery
 ```
 
 ## Architecture (read before changing rendering)
@@ -34,7 +34,9 @@ pnpm 10.33 workspace. If `pnpm` fails (unconfigured mise shim) use `npx -y pnpm@
 | Typecheck packages, demos, e2e and the Angular projects                                                                                   | `pnpm typecheck`                                                                             |
 | Lint (type-checked TS, Angular templates + a11y, Svelte, Vue, React hooks, core rules)                                                    | `pnpm lint`                                                                                  |
 | Format (Prettier; formatting-only commits go in `.git-blame-ignore-revs`)                                                                 | `pnpm format` · `pnpm format:check`                                                          |
-| Build everything (packages → @gantryjs/angular → showcase → demos)                                                                        | `pnpm build`                                                                                 |
+| Build everything (packages → @gantryjs/angular → site → demos → composed site)                                                            | `pnpm build`                                                                                 |
+| Deployed site only (Vercel: Angular site + the four Vite demos under /wc/ /react/ /vue/ /svelte/)                                         | `pnpm build:site`                                                                            |
+| Examples gallery: regenerate the code tabs' sources after editing case files · CI check                                                   | `pnpm gallery:sources` · `pnpm gallery:check`                                                |
 | Angular library only (needs `@gantryjs/core` built)                                                                                       | `pnpm --filter @gantryjs/core build && pnpm build:lib`                                       |
 | Dev servers                                                                                                                               | `pnpm dev:angular` · `dev:vanilla` (playground) · `dev:react` · `dev:vue` · `dev:svelte`     |
 | Browser QA, Playwright (alignment, drag, panel, table view, parity, console errors)                                                       | `pnpm build && pnpm e2e` (`-g vanilla` to filter) — or `/gantry-visual-qa`                   |
@@ -61,7 +63,8 @@ calling UI work done.
 - Accessibility is part of done: roles, `aria-*`, keyboard paths and focus styles for anything interactive.
 - Demo pages use `demo-kit` (`site.css` `gs-` classes, never element selectors: the Angular chart
   renders in the light DOM). A new option gets a control in `PLAYGROUND_SECTIONS`
-  (`apps/demo-kit/src/playground.ts`), which both playgrounds render.
+  (`apps/demo-kit/src/playground.ts`), which both playgrounds render, and every feature has an
+  examples-gallery case in all five frameworks (`.claude/rules/docs-and-release.md`).
 - Loop breaker: if a build or test fails twice with the same error, stop and report instead of retrying.
 
 ## Gotchas

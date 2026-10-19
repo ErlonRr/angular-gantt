@@ -83,7 +83,7 @@ bootstrapApplication(AppComponent, {
   content
 - Selection: single / Ctrl-click / Shift-range / keyboard
 - Custom bars (`GanttBarBase` + `provideGanttBar` at application, route or component level) and
-  custom panel columns (`<ng-template ganttColumn>`)
+  custom panel columns (`ganttColumn` definitions with an `<ng-template let-row>` cell)
 - Lazy loading (`GanttDataSource`: paging, automatic retries, error state with Retry, `loadError` output)
 - Views: Hour / Day / Week / Month / Quarter / Year with zoom, two-way `[(viewMode)]`
 - Rows windowed vertically, header cells, bands and grid lines horizontally
@@ -115,6 +115,9 @@ The Angular API:
 - [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs), the
   [public API](https://github.com/ErlonRr/gantryjs#public-api) and the
   [content slots](https://github.com/ErlonRr/gantryjs#ng-content-slots)
+- [Synchronised charts](https://github.com/ErlonRr/gantryjs#synchronised-charts) (`[syncGroup]`),
+  [task styles](https://github.com/ErlonRr/gantryjs#task-styles) and
+  [responsive layout and density](https://github.com/ErlonRr/gantryjs#responsive-layout-and-density)
 - [Tooltip](https://github.com/ErlonRr/gantryjs#tooltip) and
   [loading, error and empty states](https://github.com/ErlonRr/gantryjs#loading-error-and-empty-states)
 - [Theming](https://github.com/ErlonRr/gantryjs#theming-1),

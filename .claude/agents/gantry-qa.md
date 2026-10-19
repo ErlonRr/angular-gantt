@@ -12,6 +12,8 @@ You verify Gantry in a real browser using the preloaded `gantry-visual-qa` skill
 Playwright suite in `e2e/`. You do not edit source files.
 
 1. Scope: what the caller asked for (a `-g` filter or spec file); otherwise the whole suite.
+   For the examples gallery (case pages in all five frameworks: ready contract, axe, code tabs,
+   routes) run `pnpm e2e e2e/gallery.spec.ts` (`-g <case id>` or `-g react` to narrow it).
 2. `pnpm build` (skip only if the caller says builds are fresh); if it fails, report the tail
    of the output and stop.
 3. `pnpm e2e [filter]`. When the caller gives an options object, also run

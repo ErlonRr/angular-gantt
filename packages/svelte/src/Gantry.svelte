@@ -14,7 +14,10 @@
   attribute trips the recommended `svelte/no-useless-children-snippet` lint rule.
 -->
 <script module lang="ts">
-  /** The data props, copied one level (`shallow`); the others (`dataSource`, `renderBar`, …) pass as they are */
+  /**
+   * The data props, copied one level (`shallow`); the others (`dataSource`, `renderBar`,
+   * `syncGroup`, …) pass as they are: a sync group is shared by identity between the charts.
+   */
   const COPIED: ReadonlySet<string> = new Set(['tasks', 'columns', 'annotations', 'options']);
 
   /**
@@ -63,6 +66,7 @@
     renderBar,
     loading,
     errorMessage,
+    syncGroup,
     onTaskDragged,
     onTaskResized,
     onSelectionChange,
@@ -95,6 +99,7 @@
     renderBar: () => renderBar,
     loading: () => loading,
     errorMessage: () => errorMessage,
+    syncGroup: () => syncGroup,
   };
   const callbacks: { [K in keyof Required<GantryEventCallbacks>]: () => GantryEventCallbacks[K] } = {
     onTaskDragged: () => onTaskDragged,

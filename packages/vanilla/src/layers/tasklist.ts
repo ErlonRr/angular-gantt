@@ -11,14 +11,26 @@
  *         div.gantt-tl-cell (name)                 span.gantt-tl-name > button.gantt-collapse-btn |
  *                                                  span.gantt-tl-indent · span.gantt-tl-icon · span.gantt-tl-ellipsis
  *         div.gantt-tl-cell (other columns)        span.gantt-tl-status-dot? · span.gantt-tl-ellipsis
- *     div.gantt-tl-load-more                       attached while a data source feeds rows
- *                                                  (`graph.chartState.footer`)
+ *   div.gantt-tl-load-more                         the treegrid's next sibling in the panel, attached
+ *                                                  while a data source feeds rows (`graph.chartState.footer`):
+ *                                                  outside the treegrid, which may only hold rows (as in Angular)
+ *     button.gantt-load-more-btn                   "Load more", "Loading…" (aria-disabled) — full width, the
+ *                                                  toolbar's control size tall (`--gantry-control-size`)
+ *     | div.gantt-load-error > span + button.gantt-load-more-btn   a failed page: the message and Retry
+ *     | div.gantt-load-done                        everything loaded (`labels.allLoaded`)
+ *                                                  The same DOM and look as Angular's `gantt-load-more`
  *
  * ARIA (treegrid): the header row is `aria-rowindex=1`; header cells and cells carry
  * `aria-colindex` (1-based column position); rows carry `aria-rowindex`, `aria-level`,
  * `aria-posinset` / `aria-setsize` (their place among their siblings, core `reindexVisible`),
  * `aria-selected` and, for groups, `aria-expanded`. Without rows, or while the first data-source
  * page loads or failed, the chart's state box (`layers/states.ts`) shows instead of the footer.
+ *
+ * Row backgrounds are core `rowPaint` with the row's resolved style (`graph.rowStyle`: selection,
+ * else `rowColor`, else the zebra); the name cell's icon takes the style's `color` (the stylesheet
+ * gives the others the muted text). The row under a mouse or pen pointer (`hoveredRowId`, in either
+ * pane, D4) gets `gantt-tl-row--hover`: the `--gantt-row-hover-bg` tint as a background image over
+ * that background, like the timeline's `rect.gantt-row-hover` (`layers/hover.ts`).
  *
  * Rows are keyed by task id, so a row keeps its node (and keyboard focus) across scrolls,
  * selections, sorts and collapses; rows leaving the window go to a pool the next new rows come
@@ -38,15 +50,16 @@
  * Collapse toggles are `tabindex=-1` (the row expands with →). The keys themselves are
  * `interaction/grid-keys.ts`.
  *
- * Listeners are delegated: one click / dblclick on the rows group, one click / pointerdown on the
- * header row, one focusin on the list (where its tab stop goes), one click on the footer. Column
+ * Listeners are delegated: one click / dblclick and one pointerover / pointerleave (the hovered
+ * row; a touch never hovers) on the rows group, one click / pointerdown on the header row, one
+ * focusin on the list (where its tab stop goes), one click on the footer. Column
  * resizing captures the pointer on the handle (`interaction/column-resize.ts`) and is aborted when
  * the element disconnects.
  *
  * Class names and element order are the paint-snapshot keys and the e2e contract, shared with
  * Angular's task list: keep them. Styles and text colours live in `styles/tasklist.css.ts`; what
  * varies per column or row (grid template, heights, alignment, indent, row and status paints, the
- * icon colour of a task with `barColor`) goes through the CSSOM.
+ * icon colour of a styled task) goes through the CSSOM.
  */
 
 import {
@@ -59,6 +72,7 @@ import {
   type GanttFlatRow,
   type GanttLabels,
   type GridFocusSpot,
+  type StyleResolver,
 } from '@gantryjs/core';
 import { h } from '../dom/h';
 import { createPool, reconcile } from '../dom/keyed';
@@ -138,6 +152,8 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   const headParts = new WeakMap<Element, HeadParts>();
   /** Column key of each cell */
   const cellKeys = new WeakMap<Element, string>();
+  /** The name cell's icon of each row element (`null`: no name column) */
+  const rowIcons = new WeakMap<Element, HTMLElement | null>();
 
   // ── Persistent nodes ─────────────────────────────────────
   setAttr(root, 'class', 'gantt-tasklist gantry-tasklist-container');
@@ -155,7 +171,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   });
   const footerMessage = h('span');
   const footerError = h('div', { class: 'gantt-load-error' }, footerMessage);
-  const footerDone = document.createTextNode('');
+  const footerDone = h('div', { class: 'gantt-load-done' });
   let footerKind: FooterKind | null = null;
   /** The row that held focus last: it keeps the tab stop while mounted, so Tab returns to it */
   let lastFocusedId: string | null = null;
@@ -192,6 +208,17 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   body.addEventListener('dblclick', e => {
     const row = rowOf(e.target);
     if (row) ctx.emit('row-dblclick', row);
+  });
+  // The hovered row (mouse and pen; never while a bar is dragged): its tint shows in both panes
+  const hover = (id: string | null): void => {
+    if (I.hoveredRowId.peek() !== id) I.hoveredRowId.set(id);
+  };
+  body.addEventListener('pointerover', e => {
+    if (e.pointerType === 'touch' || ctx.drag.state.peek().kind !== 'idle') return;
+    hover(rowOf(e.target)?.task.id ?? null);
+  });
+  body.addEventListener('pointerleave', e => {
+    if (e.pointerType !== 'touch') hover(null);
   });
   // The keys are `interaction/grid-keys.ts`; this only records where the list's tab stop goes
   root.addEventListener('focusin', e => {
@@ -342,8 +369,6 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         setAttr(lead, 'aria-label', row.isCollapsed ? env.labels.ariaExpand(name) : env.labels.ariaCollapse(name));
         setText(lead, row.isCollapsed ? '▶' : '▼');
       }
-      // The icon takes the task's own colour; the stylesheet gives every other one the muted text
-      setStyleProp(p.icon, 'color', row.task.barColor ?? null);
       setText(p.icon, row.hasChildren ? '▤' : row.barType === 'milestone' ? '◆' : '▬');
       setText(p.text, text);
     } else {
@@ -367,11 +392,14 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     grid: string,
     rowHeight: number,
     selected: ReadonlySet<string>,
+    hoveredId: string | null,
+    styleOf: StyleResolver,
     env: CellEnv,
     tabStop: boolean,
   ): void => {
     const id = row.task.id;
     const isSelected = selected.has(id);
+    const style = styleOf(row);
     setAttr(el, 'data-task-id', id);
     setAttr(el, 'data-focus-key', `row:${id}`);
     setAttr(el, 'tabindex', tabStop ? 0 : -1);
@@ -384,30 +412,40 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     toggleClass(el, 'gantt-tl-row--selected', isSelected);
     toggleClass(el, 'gantt-tl-row--group', row.hasChildren);
     toggleClass(el, 'gantt-tl-row--pinned', pinnedTop !== null);
+    toggleClass(el, 'gantt-tl-row--hover', id === hoveredId);
     setStyleProp(el, 'top', pinnedTop === null ? null : `${pinnedTop}px`);
     setStyleProp(el, 'grid-template-columns', grid);
     setStyleProp(el, 'height', `${rowHeight}px`);
-    setStyleProp(el, 'background-color', rowPaint({ row }, isSelected));
+    setStyleProp(el, 'background-color', rowPaint({ row }, isSelected, style));
 
     const prev = rowState.get(el);
     if (prev?.row !== row || !sameEnv(prev.env, env)) {
+      let icon: HTMLElement | null = null;
       reconcile(
         el,
         env.cols,
         uniqueKeys((c: VanillaColumnDef) => c.key),
         createCell,
-        (cell, col, i) => updateCell(cell, col, i + 1, row, env),
+        (cell, col, i) => {
+          updateCell(cell, col, i + 1, row, env);
+          const p = cellParts.get(cell);
+          if (p?.kind === 'name') icon ??= p.icon;
+        },
       );
+      rowIcons.set(el, icon);
     }
     rowState.set(el, { row, env });
+    // The icon takes the style's colour (patched on every paint: the style may change without the
+    // row, e.g. options.styles); the stylesheet gives every other one the muted text
+    const icon = rowIcons.get(el);
+    if (icon) setStyleProp(icon, 'color', style.color ?? null);
   };
 
   // ── Footer (lazy data source) ────────────────────────────
   // It holds no live region: the element announces failures in its own `.gantt-sr-alert`. Every
   // state keeps an element with `data-focus-key="load-more"`, so focus survives Retry / Load more.
-  const paintFooter = (state: GanttLoadMoreState, labels: GanttLabels, rowHeight: number): void => {
+  const paintFooter = (state: GanttLoadMoreState, labels: GanttLabels): void => {
     const kind: FooterKind = state.isLoading ? 'loading' : state.error ? 'error' : state.hasMore ? 'more' : 'done';
-    setStyleProp(footer, 'height', `${rowHeight}px`);
     setAttr(footer, 'aria-busy', kind === 'loading' ? 'true' : null);
     setAttr(footer, 'tabindex', kind === 'done' ? -1 : null);
     setAttr(footer, 'data-focus-key', kind === 'done' ? 'load-more' : null);
@@ -433,6 +471,8 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
       const rowCount = G.visibleRows().length;
       const { labels } = G.i18n();
       const selected = I.selection().selected;
+      const hoveredId = I.hoveredRowId();
+      const styleOf = G.rowStyle();
       const sort = I.sort();
       const ds = I.dataSource();
       const loadState = I.loadState();
@@ -488,7 +528,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         uniqueKeys((m: MountedRow) => m.row.task.id),
         () => pool.acquire(),
         (el, m) => {
-          updateRow(el, m, grid, cfg.rowHeight, selected, env, m === rowStop);
+          updateRow(el, m, grid, cfg.rowHeight, selected, hoveredId, styleOf, env, m === rowStop);
           if (m === stop) stopRowEl = el;
         },
         bottom,
@@ -503,8 +543,8 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
 
       // Only under rows (or "Load more" before the first page): the state box covers the others
       const showFooter = !!ds && !!loadState && G.chartState().footer;
-      showNode(root, footer, showFooter);
-      if (showFooter && loadState) paintFooter(loadState, labels, cfg.rowHeight);
+      showNode(dom.panel, footer, showFooter);
+      if (showFooter && loadState) paintFooter(loadState, labels);
     },
     disconnect() {
       resize.abort();

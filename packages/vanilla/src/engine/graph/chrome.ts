@@ -61,10 +61,17 @@ export function chromeGraph(I: Inputs, node: NodeFactory): ChromeGraph {
 /**
  * The theme's effects while connected (create them inside the connection's owner): follow
  * `prefers-color-scheme` in `'auto'` mode, and write the variables into `sheet` whenever they
- * change. Neither is a render effect: the variables repaint the chart by themselves. (The host
- * shows the dark theme as its `:state(dark)` custom state, set by the element.)
+ * change — the theme's, and the read-only layout variables `layoutCss` (`--gantt-row-height`,
+ * `--gantt-bar-height`, `graph/layout.ts`). None is a render effect: the variables repaint the
+ * chart by themselves. (The host shows the dark theme as its `:state(dark)` custom state, set by
+ * the element.)
  */
-export function themeEffects(I: Inputs, chrome: ChromeGraph, sheet: ThemeSheet): void {
+export function themeEffects(
+  I: Inputs,
+  chrome: ChromeGraph,
+  sheet: ThemeSheet,
+  layoutCss: ReadonlySignal<ThemeCssEntries>,
+): void {
   effect(() => {
     if (I.darkModeIn() !== 'auto' || typeof window === 'undefined' || !window.matchMedia) return;
     const mql = window.matchMedia('(prefers-color-scheme: dark)');
@@ -74,4 +81,13 @@ export function themeEffects(I: Inputs, chrome: ChromeGraph, sheet: ThemeSheet):
     onCleanup(() => mql.removeEventListener('change', onChange));
   });
   effect(() => sheet.write(chrome.themeCss()));
+  effect(() => {
+    let entries: ThemeCssEntries;
+    try {
+      entries = layoutCss();
+    } catch {
+      return; // invalid options: the render reports them
+    }
+    sheet.write(entries);
+  });
 }

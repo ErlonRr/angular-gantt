@@ -4,8 +4,8 @@
 //  non-working-time bands, "today" and per-row bar geometry.
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttTask, GanttFlatRow, RowGeometry, GanttI18n, TimeUnit } from '../types';
-import { calendarDays, fromCalendarDays, snapRange, toLocalDay, addDays } from '../gantt-math';
+import type { GanttTask, GanttFlatRow, RowGeometry, GanttI18n, TimeUnit, WeekStart } from '../types';
+import { calendarDays, fromCalendarDays, snapRange, toLocalDay, addDays, type TimelineRange } from '../gantt-math';
 import { bottomScale, buildTiers, periodNext, unitAdd, unitBoundaries, unitStart, type ScaleTier } from './scales';
 import type { ResolvedGanttConfig } from './config';
 import { themeVar, type Paint } from './paint';
@@ -23,8 +23,16 @@ export interface TimeBand {
 }
 
 export interface TimelineModel {
+  /** First date of the timeline (x 0): the natural range's start, or the shared range's when earlier */
   start: Date;
+  /** Last date of the timeline: the range's end, extended to fill the viewport with `fitToWidth` */
   end: Date;
+  /**
+   * The chart's own range before the shared range and the viewport fill: its tasks (and today
+   * with `showToday`), padded and snapped to the bottom scale — what {@link timelineRange}
+   * returns, and what a sync group member reports.
+   */
+  range: TimelineRange;
   pxPerDay: number;
   totalWidth: number;
   headerHeight: number;
@@ -38,9 +46,26 @@ export interface TimelineModel {
   todayX: number;
   /** Earliest start and latest end of the tasks as drawn (null without tasks) */
   extent: { start: Date; end: Date } | null;
+  /**
+   * Union of {@link extent} and the shared extent of a sync group (`TimelineInput.shared`), or
+   * `null` outside a group / while the group has no extent. "Fit to screen" inside a group fits
+   * `sharedExtent ?? extent`.
+   */
+  sharedExtent: { start: Date; end: Date } | null;
   /** Calendar date → timeline x (closures: safe to pass around unbound) */
   toX: (date: Date) => number;
   toDate: (x: number) => Date;
+}
+
+/**
+ * Range and extent shared by the charts of a sync group (`GanttSyncState` fits): unions over
+ * the members' {@link timelineRange} results.
+ */
+export interface SharedTimelineRange {
+  /** Union of the members' natural ranges: the timeline covers at least this range */
+  range?: TimelineRange | null | undefined;
+  /** Union of the members' task extents (→ `TimelineModel.sharedExtent`) */
+  extent?: TimelineRange | null | undefined;
 }
 
 export interface TimelineInput {
@@ -50,6 +75,29 @@ export interface TimelineInput {
   viewportWidth?: number | undefined;
   i18n?: GanttI18n | undefined;
   now?: Date | undefined;
+  /**
+   * Range shared with other charts (a sync group): the timeline starts at the earlier and ends at
+   * the later of its own range and `shared.range`, so charts with the same start and px per day
+   * place every date at the same x.
+   */
+  shared?: SharedTimelineRange | null | undefined;
+}
+
+export interface TimelineRangeInput {
+  tasks: readonly GanttTask[];
+  config: Pick<
+    ResolvedGanttConfig,
+    'scales' | 'timelinePadding' | 'showToday' | 'weekStart' | 'endDateMode' | 'normalizeDateOnly'
+  >;
+  now?: Date | undefined;
+}
+
+/** A chart's natural range (see {@link timelineRange}). */
+export interface NaturalTimelineRange {
+  /** Tasks, baselines (and today with `showToday`), padded by `timelinePadding`, snapped to the bottom scale */
+  range: TimelineRange;
+  /** Earliest start and latest end of the tasks as drawn (null without tasks) */
+  extent: TimelineRange | null;
 }
 
 // ─── Task dates as drawn ──────────────────────────────────────
@@ -77,18 +125,24 @@ export function spanEndToTaskEnd(end: Date, config: Pick<ResolvedGanttConfig, 'e
 const isMidnight = (d: Date) =>
   d.getHours() === 0 && d.getMinutes() === 0 && d.getSeconds() === 0 && d.getMilliseconds() === 0;
 
-// ─── Timeline model ───────────────────────────────────────────
+// ─── Natural range ────────────────────────────────────────────
 
-export function buildTimeline(input: TimelineInput): TimelineModel {
-  const { config: cfg, i18n, now = new Date() } = input;
-  const bottom = bottomScale(cfg.scales);
-  const step = bottom.step ?? 1;
-
+/**
+ * A chart's natural range: the extent of its tasks as drawn, and the range that covers the
+ * tasks, their baselines and (with `showToday`) `now`, padded by `timelinePadding` and snapped
+ * to whole cells of the bottom scale. It is the timeline before any shared range and before the
+ * viewport fill (`TimelineModel.range` / `.extent`).
+ *
+ * A sync group member reports this, never the timeline it draws: the group's union then has no
+ * feedback loop, and a member that leaves takes its range out of the union.
+ */
+export function timelineRange(input: TimelineRangeInput): NaturalTimelineRange {
+  const { config: cfg, now = new Date() } = input;
   const spans = input.tasks.map(t => {
     const s = taskSpan(t, cfg);
     return { start: s.start, end: s.end, baseline: t.baseline } as GanttTask;
   });
-  let extent: TimelineModel['extent'] = null;
+  let extent: TimelineRange | null = null;
   for (const s of spans) {
     if (!extent) extent = { start: s.start, end: s.end };
     else {
@@ -96,9 +150,44 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
       if (s.end > extent.end) extent.end = s.end;
     }
   }
-  const range = snapRange(spans, bottom, cfg.timelinePadding, cfg.showToday ? now : null, cfg.weekStart, now);
-  const start = range.start;
-  let end = range.end;
+  const range = snapRange(
+    spans,
+    bottomScale(cfg.scales),
+    cfg.timelinePadding,
+    cfg.showToday ? now : null,
+    cfg.weekStart,
+    now,
+  );
+  return { range, extent };
+}
+
+/** A copy of `r` when both its dates are valid, else `null` (shared input is not trusted blindly). */
+const validRange = (r: TimelineRange | null | undefined): TimelineRange | null =>
+  r && Number.isFinite(r.start.getTime()) && Number.isFinite(r.end.getTime())
+    ? { start: new Date(r.start.getTime()), end: new Date(r.end.getTime()) }
+    : null;
+
+/** Earliest start and latest end of `a` and `b` (either may be null). */
+function unionRange(a: TimelineRange | null, b: TimelineRange | null): TimelineRange | null {
+  if (!a || !b) return a ?? b;
+  return { start: a.start <= b.start ? a.start : b.start, end: a.end >= b.end ? a.end : b.end };
+}
+
+// ─── Timeline model ───────────────────────────────────────────
+
+export function buildTimeline(input: TimelineInput): TimelineModel {
+  const { config: cfg, i18n, now = new Date() } = input;
+  const bottom = bottomScale(cfg.scales);
+  const step = bottom.step ?? 1;
+
+  const { range, extent } = timelineRange({ tasks: input.tasks, config: cfg, now });
+  // Inside a sync group: start at the earliest and end at the latest of the shared and own ranges
+  const sharedRange = validRange(input.shared?.range);
+  const sharedExtentIn = validRange(input.shared?.extent);
+  const covered = sharedRange ? (unionRange(range, sharedRange) ?? range) : range;
+  const start = covered.start;
+  let end = covered.end;
+  const sharedExtent = sharedExtentIn ? unionRange(extent && { ...extent }, sharedExtentIn) : null;
 
   const pxPerDay = cfg.pxPerDay;
   // The range, scale cells, bands and `now` are local dates: they are placed without date-only
@@ -122,6 +211,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     pxPerDay,
     heights: cfg.tierHeights,
     weekStart: cfg.weekStart,
+    week: cfg.week,
     locale: i18n?.locale,
     labels: i18n?.labels,
     now,
@@ -148,6 +238,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
   return {
     start,
     end,
+    range,
     pxPerDay,
     totalWidth,
     headerHeight: tiers.reduce((h, t) => h + t.height, 0),
@@ -157,6 +248,7 @@ export function buildTimeline(input: TimelineInput): TimelineModel {
     bands: computeTimeBands(start, end, pxPerDay, cfg, localX),
     todayX: todayX >= 0 && todayX <= totalWidth ? todayX : -1,
     extent,
+    sharedExtent,
     toX,
     toDate,
   };
@@ -169,6 +261,8 @@ const WEEKEND = themeVar('weekendBg');
 const HOLIDAY = themeVar('holidayBg');
 const OFF_HOURS = themeVar('offHoursBg');
 const INTENSIVE = themeVar('intensiveBg');
+/** `nonWorkingTime.style: 'disabled'`: one neutral grey for all non-working time */
+const DISABLED = themeVar('borderColor');
 
 /**
  * Shaded bands for weekends, holidays, off-hours, intensive hours and the
@@ -213,6 +307,8 @@ export function computeTimeBands(
 
   const hourScale = pxPerDay / 24 >= HOUR_SCALE_MIN_PX_PER_HOUR;
   const days = unitBoundaries(start, end, 'day', 1, 1);
+  // 'disabled' greys out weekends, holidays (unless they have their own colour) and off-hours alike
+  const greyed = nw?.style === 'disabled';
 
   for (const day of days) {
     const next = unitAdd(day, 'day', 1);
@@ -221,11 +317,11 @@ export function computeTimeBands(
     const custom = cfg.highlightTime?.(day, 'day');
 
     if (holiday) {
-      push(day, next, 'holiday', holiday.color ?? HOLIDAY, { label: holiday.label });
+      push(day, next, 'holiday', holiday.color ?? (greyed ? DISABLED : HOLIDAY), { label: holiday.label });
       continue;
     }
     if (nw?.weekends.has(day.getDay())) {
-      push(day, next, 'weekend', WEEKEND);
+      push(day, next, 'weekend', greyed ? DISABLED : WEEKEND);
       continue;
     }
     if (custom)
@@ -240,10 +336,10 @@ export function computeTimeBands(
       const ranges = nw.workingHours(day.getDay());
       let cursor = 0;
       for (const r of ranges) {
-        if (r.start > cursor) push(at(day, cursor), at(day, r.start), 'off-hours', OFF_HOURS);
+        if (r.start > cursor) push(at(day, cursor), at(day, r.start), 'off-hours', greyed ? DISABLED : OFF_HOURS);
         cursor = Math.max(cursor, r.end);
       }
-      if (cursor < 24) push(at(day, cursor), next, 'off-hours', OFF_HOURS);
+      if (cursor < 24) push(at(day, cursor), next, 'off-hours', greyed ? DISABLED : OFF_HOURS);
     }
     for (const r of nw.intensive) {
       push(at(day, r.start), at(day, r.end), 'intensive', r.color ?? INTENSIVE, { label: r.label });
@@ -289,6 +385,6 @@ export function computeRowGeometries(
 }
 
 /** Start of the bottom-tier cell containing `date` (for snapping). */
-export function snapToUnit(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1 = 1): Date {
+export function snapToUnit(date: Date, unit: TimeUnit, step = 1, weekStart: WeekStart = 1): Date {
   return unitStart(date, unit, step, weekStart);
 }

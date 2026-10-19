@@ -11,10 +11,12 @@ import {
   type DragPreview,
   type GanttAnnotation,
   type GanttOptions,
+  type GanttSyncGroup,
   type GanttTask,
   type GanttThemeOverrides,
   type GanttView,
   type SelectionState,
+  type SharedTimelineRange,
   type SortDirection,
 } from '@gantryjs/core';
 import { signal, type WritableSignal } from '../reactive';
@@ -68,6 +70,8 @@ export interface Inputs {
   readonly loading: WritableSignal<boolean>;
   /** `errorMessage`: a non-blank string shows the error state with that message (`null` = none) */
   readonly errorMessage: WritableSignal<string | null>;
+  /** `syncGroup`: the group this chart joins while connected (`layers/sync.ts`), `null` = none */
+  readonly syncGroup: WritableSignal<GanttSyncGroup | null>;
 
   // ── Theme ───────────────────────────────────────────────
   /** `prefers-color-scheme: dark` (followed while `darkMode` is `'auto'` and connected) */
@@ -99,12 +103,29 @@ export interface Inputs {
   /** Bar under a fine pointer (mouse / pen hover): its grips show (`g.gantt-bar-overlay`) */
   readonly hoveredBarId: WritableSignal<string | null>;
   /**
+   * Row under a mouse or pen pointer, in either pane (`rect.gantt-row-hover` and
+   * `.gantt-tl-row--hover`, the hover region); `null` on leave, scroll and drag start. Never touch.
+   */
+  readonly hoveredRowId: WritableSignal<string | null>;
+  /**
    * Bar that holds keyboard focus reached from the keyboard (the last input was a key, not a
    * pointer): its focus ring and grips show (`g.gantt-bar-overlay`). `null` otherwise.
    */
   readonly focusVisibleBarId: WritableSignal<string | null>;
-  /** Panel width the user chose (splitter, restored state), in px; `null` = from `panel.width` */
+  /** Panel width the user chose (splitter, restored state, sync group), in px; `null` = from `panel.width` */
   readonly panelW: WritableSignal<number | null>;
+  /**
+   * Range and extent shared by the charts of the sync group (`layers/sync.ts` writes the group's
+   * unions here; `buildTimeline({ shared })`), `null` outside a group. Equal dates do not notify.
+   */
+  readonly shared: WritableSignal<SharedTimelineRange | null>;
+  /**
+   * The chart is narrower than `responsive.breakpoint` (`layers/responsive.ts`, core
+   * `reduceResponsive`): `data-narrow` on the wrapper.
+   */
+  readonly narrow: WritableSignal<boolean>;
+  /** The toolbar's More menu is open (`toolbar.overflow: 'menu'`, core `reduceMenu`) */
+  readonly menuOpen: WritableSignal<boolean>;
   /** Data-source footer state (`null` without a data source) */
   readonly loadState: WritableSignal<GanttLoadMoreState | null>;
   /** The clock: ticks every minute while connected (today line, statuses) */
@@ -184,6 +205,7 @@ export function createInputs(): Inputs {
     dataSource: signal(fresh<GanttDataSource | null>('dataSource')),
     loading: flag(fresh<boolean>('loading')),
     errorMessage: signal(fresh<string | null>('errorMessage')),
+    syncGroup: signal(fresh<GanttSyncGroup | null>('syncGroup')),
     prefersDark: flag(false),
     apiTheme: signal<GanttThemeOverrides>({}),
     viewModeOverride: signal('Month'),
@@ -195,8 +217,12 @@ export function createInputs(): Inputs {
     focusedRowId: signal<string | null>(null),
     zoomAnchor: signal<number | null>(null),
     hoveredBarId: signal<string | null>(null),
+    hoveredRowId: signal<string | null>(null),
     focusVisibleBarId: signal<string | null>(null),
     panelW: signal<number | null>(null),
+    shared: signal<SharedTimelineRange | null>(null, { equals: structuralEqual }),
+    narrow: flag(false),
+    menuOpen: flag(false),
     loadState: signal<GanttLoadMoreState | null>(null, { equals: structuralEqual }),
     // The engine's clock: the one place that reads the time
     nowTick: signal(new Date(), { equals: sameTime }),

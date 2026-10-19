@@ -156,8 +156,8 @@ curated.
   viewport ± half its width, in 256 px chunks), as in `<gantry-element>` in the same release: DOM queries see only
   the mounted ones; `.g-header` keeps the full width.
 - The task list uses the Web Component's markup (classed spans, 24 × 24 px collapse targets, the column resize handle
-  inside its header cell; see the task-list changeset). The drag ghost label has the class
-  `gantt-drag-preview-label`, the load-more sentinel `gantt-load-sentinel`.
+  inside its header cell; see the task-list changeset). The load-more sentinel has the class `gantt-load-sentinel`;
+  the drag ghost has no label any more (the drag readout chip shows the move).
 
 ### Rendering and performance
 

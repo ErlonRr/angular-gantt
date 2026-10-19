@@ -44,6 +44,11 @@
  * Chart states (Phase 9): `loading` and `errorMessage` (and the data source's first page) decide
  * whether the body shows the chart, a loading skeleton, an error with Retry (`retry` event) or the
  * empty state (`slot="empty"` content, else `labels.emptyState`); see core `resolveChartState`.
+ *
+ * Phase 10: `syncGroup` links charts that share one timeline (`layers/sync.ts`); below
+ * `responsive.breakpoint` the chart switches its view (`layers/responsive.ts`; the forced view is
+ * never persisted: `getState()` reports the wide view); rolled-up parent rows (`options.rollup`)
+ * carry derived copies of their tasks, while `tasks`, the events and `getSelectedTasks()` stay raw.
  */
 
 import {
@@ -52,6 +57,7 @@ import {
   type GanttAnnotation,
   type GanttThemeOverrides,
   type GanttState,
+  type GanttSyncGroup,
   type GanttView,
   type ViewMode,
   zoomStep,
@@ -66,6 +72,7 @@ import {
   viewFromOptions,
   viewFromState,
   initialScrollChanged,
+  togglePanelView,
   STATE_SAVE_DELAY,
 } from '@gantryjs/core';
 import { createRoot, effect, runWithOwner, untracked, type WritableSignal } from './reactive';
@@ -83,6 +90,7 @@ import {
   type PropertyName,
 } from './engine/props';
 import { scrollToRow, scrollToX } from './interaction/scroll';
+import { closeToolbarMenu } from './layers/toolbar';
 import { GanttDataSource } from './datasource/gantt-datasource';
 import type {
   GanttBarRenderer,
@@ -257,10 +265,13 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-status-done=#15803D] - Status dot: done (`statusDone`).
  * @cssprop [--gantt-progress-overlay=#000000] - Progress fill inside theme-coloured bars, drawn at `bar.progress.opacity` (`progressOverlay`).
  * @cssprop [--gantt-focus-ring=#2563EB] - Keyboard focus rings (`focusRing`).
+ * @cssprop [--gantt-row-hover-bg=rgba(15, 23, 42, 0.04)] - Tint over the row under the mouse, in both panes (`rowHoverBg`; `transparent` turns the hover off).
  * @cssprop [--gantt-bar-text-on-bar=#FFFFFF] - Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-milestone=#FFFFFF] - Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-critical=#FFFFFF] - Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).
  * @cssprop [--gantt-today-label=#964B13] - Current-period header label, readable on its 14 % today tint (derived: `todayLabelColor(theme)`).
+ * @cssprop [--gantt-row-height=36px] - Read-only: the row height in px, for page CSS and slotted content (set `options.rowHeight` or `options.density` instead).
+ * @cssprop [--gantt-bar-height=21.6px] - Read-only: the task bar height in px (set `options.bar.height` instead).
  */
 // eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
 export class GantryElement extends BaseElement {
@@ -547,6 +558,19 @@ export class GantryElement extends BaseElement {
     this.#set('errorMessage', v);
   }
 
+  /**
+   * Synchronises this chart with the other charts of a group (core `createGanttSyncGroup()`): the
+   * timeline range, the zoom level, the horizontal scroll and the panel width, each unless the group
+   * turns it off. The chart joins while connected and leaves when it disconnects or the group
+   * changes. `null` (the default): not synchronised. A property only (no attribute).
+   */
+  get syncGroup(): GanttSyncGroup | null {
+    return this.#engine.inputs.syncGroup.peek();
+  }
+  set syncGroup(v: GanttSyncGroup | null | undefined) {
+    this.#set('syncGroup', v);
+  }
+
   /** Writes a property into the engine (`undefined` = the default). */
   #set<K extends PropertyName>(name: K, value: GantryProperties[K] | null): void {
     const v = orDefault(name, value);
@@ -581,18 +605,37 @@ export class GantryElement extends BaseElement {
       case 'tooltipEnabled':
         if (!v) engine.layers.tooltip.hide();
         break;
+      case 'showToolbar':
+        // The toolbar goes away: its More menu closes (it comes back closed, as Angular's)
+        if (!v) closeToolbarMenu(engine.dom);
+        break;
     }
     // The other properties write the input of the same name (`darkMode` → `darkModeIn`); the
     // lifecycle tests round-trip every table entry
     (I[(name === 'darkMode' ? 'darkModeIn' : name) as keyof Inputs] as WritableSignal<unknown>).set(v);
   }
 
+  /** Whether the resolved options have a toolbar (`false` while they are invalid: nothing renders). */
+  #toolbarConfigured(): boolean {
+    try {
+      return this.#engine.graph.config.peek().toolbar !== false;
+    } catch {
+      return false;
+    }
+  }
+
   #setOptions(opts: GanttOptions): void {
-    const { inputs: I, layers } = this.#engine;
+    const engine = this.#engine;
+    const { inputs: I, layers } = engine;
     const prev = I.optionsIn.peek();
     this.#options = opts;
     // Locale, columns, theme and config follow in the graph; equal options change nothing
     I.optionsIn.set(opts);
+    // `toolbar: false` (or options that resolve to no toolbar): its More menu closes, as with
+    // `showToolbar = false`
+    if (!this.#toolbarConfigured()) closeToolbarMenu(engine.dom);
+    // `groupBar.collapsed` set after the tasks, before the first paint: their groups start collapsed
+    engine.seedCollapsedGroups();
     if (opts.darkMode != null) this.darkMode = opts.darkMode;
     if (opts.enableDrag != null) I.enableDrag.set(opts.enableDrag);
     if (opts.enableResize != null) I.enableResize.set(opts.enableResize);
@@ -607,6 +650,8 @@ export class GantryElement extends BaseElement {
       const saved = readStoredState(storage, opts.stateKey);
       if (saved) this.setState(saved, false);
     }
+    // `responsive` or the view may have changed: the narrow-width switch looks again (last width)
+    layers.responsive.onWidth(I.mainW.peek());
   }
 
   // ── Public API ────────────────────────────────────────────
@@ -629,14 +674,16 @@ export class GantryElement extends BaseElement {
   /**
    * Zoom to the finest zoom level at which every task fits the timeline viewport (the coarsest
    * when none does), then scroll the first task into view. The levels are the chart's: those of
-   * `options.zoomLevels`, or the built-in presets when it is unset. Nothing happens without tasks
-   * or before the chart is laid out.
+   * `options.zoomLevels`, or the built-in presets when it is unset. Inside a sync group the tasks of
+   * every chart of the group fit. Nothing happens without tasks or before the chart is laid out.
    */
   fitToScreen(): void {
     const { inputs: I, graph: G, layers, dom, ctx } = this.#engine;
+    const timeline = G.timeline.peek();
     const level = fitZoomLevel({
       levels: G.config.peek().zoomLevels,
-      extent: G.timeline.peek().extent,
+      // Inside a sync group: the group's extent (core `fitScrollLeft` scrolls to it too)
+      extent: timeline.sharedExtent ?? timeline.extent,
       viewportWidth: I.canvasW.peek(),
     });
     if (level === null) return;
@@ -671,15 +718,20 @@ export class GantryElement extends BaseElement {
   }
   /** Switch the view: task list and timeline, the task list only, or the timeline only. */
   setView(view: GanttView): void {
-    const { inputs: I } = this.#engine;
+    const { inputs: I, layers } = this.#engine;
     if (view === I.viewOverride.peek()) return;
     I.viewOverride.set(view);
+    // A view picked while narrow wins until the width crosses back
+    layers.responsive.onUserView(view);
     this.#saveState();
   }
 
-  /** Collapse / expand the task list; expanding restores its last width. */
+  /**
+   * Hide / show the task list (core `togglePanelView`): from `'split'` or `'table'` to the timeline
+   * alone, from `'chart'` back to `'split'` at the panel's last width.
+   */
   togglePanel(): void {
-    this.setView(this.view === 'split' ? 'chart' : 'split');
+    this.setView(togglePanelView(this.view));
   }
 
   /** Centre today in the timeline viewport. */
@@ -715,7 +767,7 @@ export class GantryElement extends BaseElement {
     this.#scrollToDateNow(geo.row.task.start, behavior);
   }
 
-  /** The selected tasks, in task order. */
+  /** The selected tasks, in task order (as set: a rolled-up parent is its raw task, not its copy). */
   getSelectedTasks(): GanttTask[] {
     const { inputs: I, graph: G } = this.#engine;
     const ids = I.selection.peek().selected;
@@ -802,10 +854,13 @@ export class GantryElement extends BaseElement {
     return this.#engine.graph.critical.peek()?.criticalIds ?? new Set();
   }
 
-  /** Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). */
+  /**
+   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). While the
+   * chart is narrow (`options.responsive`) the view is the one it shows when wide.
+   */
   getState(): GanttState {
     const { inputs: I, graph: G, columns, layers } = this.#engine;
-    const view = I.viewOverride.peek();
+    const view = layers.responsive.persistedView(I.viewOverride.peek());
     const panelPx = layers['scroll-commands'].hasRendered() ? G.panelPx.peek() : 0;
     return {
       panelWidth: I.panelW.peek() ?? (panelPx || undefined),
@@ -823,11 +878,16 @@ export class GantryElement extends BaseElement {
    * @param emit - `false`: neither fire `state-change` nor persist under `options.stateKey`.
    */
   setState(state: GanttState, emit = true): void {
-    const { inputs: I, columns } = this.#engine;
+    const { inputs: I, columns, layers } = this.#engine;
     state = normalizeState(state);
-    if (state.panelWidth != null) I.panelW.set(state.panelWidth);
+    if (state.panelWidth != null) {
+      I.panelW.set(state.panelWidth);
+      layers.sync.reportPanel(state.panelWidth);
+    }
     const view = viewFromState(state);
     if (view) I.viewOverride.set(view);
+    // A view restored while narrow becomes the wide view at once (not at the next resize)
+    layers.responsive.onWidth(I.mainW.peek());
     if (state.viewMode) I.viewModeOverride.set(state.viewMode);
     if (state.columnWidths) columns.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) I.collapsedIds.set(new Set(state.collapsedIds));

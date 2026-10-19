@@ -6,26 +6,29 @@
 //
 //  It paints `computeDragGhostVisual` from @gantryjs/core (shared with
 //  the Web Component): a translucent, dashed copy of the bar at its
-//  snapped position, with the movement ("+3d", "-2h") above it.
+//  snapped position, at the bar's height and radius (the row's resolved
+//  style, `[rowStyle]`). The movement ("+3d", "-2h") is in the drag readout
+//  chip (`div[ganttDragReadout]`), not on the ghost (core's
+//  `GhostVisual.label` is always `null`).
 //  Colours are theme paints (`var(--gantt-*)`) bound as CSS properties.
 // ─────────────────────────────────────────────────────────────
 
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import {
   computeDragGhostVisual,
   themeMetrics,
   LightTheme,
   type GhostVisual,
   type ResolvedGanttConfig,
+  type ResolvedTaskStyle,
   type TimelineModel,
 } from '@gantryjs/core';
 
 import { type DragPreview } from './gantt-drag.service';
-import { GanttI18nService } from '../services/gantt-i18n.service';
 import { DEFAULT_FORMATS, DEFAULT_LABELS, type GanttI18n, type RowGeometry } from '../types';
 
-/** i18n of a preview used outside a chart */
-const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMATS };
+/** `computeDragGhostVisual`'s i18n parameter: core no longer reads it (the ghost has no label) */
+const GHOST_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMATS };
 
 @Component({
   selector: 'g[ganttDragPreview]',
@@ -46,22 +49,6 @@ const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMA
         [style.stroke]="g.paint"
         [attr.stroke-width]="g.strokeWidth"
       />
-
-      <!-- Movement label above the ghost bar (none while the snapped movement is zero) -->
-      @if (g.label; as label) {
-        <svg:text
-          class="gantt-drag-preview-label"
-          [attr.x]="label.x"
-          [attr.y]="label.y"
-          [style.fill]="label.paint"
-          [attr.font-size]="label.fontPx + 'px'"
-          font-weight="600"
-          text-anchor="middle"
-          dominant-baseline="auto"
-        >
-          {{ label.text }}
-        </svg:text>
-      }
     }
   `,
   styles: [
@@ -69,18 +56,11 @@ const DEFAULT_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMA
       :host {
         pointer-events: none;
       }
-      text {
-        font-family: var(--gantt-font);
-        user-select: none;
-      }
-      /* Forced colours (D25): the ghost Highlight, its label CanvasText (inline SVG paints: !important) */
+      /* Forced colours (D25): the ghost Highlight (inline SVG paints: !important) */
       @media (forced-colors: active) {
         .gantt-drag-preview {
           fill: Highlight !important;
           stroke: Highlight !important;
-        }
-        .gantt-drag-preview-label {
-          fill: CanvasText !important;
         }
       }
     `,
@@ -97,8 +77,11 @@ export class GanttDragPreviewComponent {
   readonly timeline = input<TimelineModel | null>(null);
   /** Bar label font size in px (`themeMetrics(theme).fontPx`) */
   readonly fontPx = input<number>(themeMetrics(LightTheme).fontPx);
-
-  private readonly i18n = inject(GanttI18nService, { optional: true });
+  /**
+   * The dragged row's resolved style (`layout.rowStyle()`, the one its bar is painted with): the
+   * ghost takes its height and radius. `null`: the task's own style.
+   */
+  readonly rowStyle = input<ResolvedTaskStyle | null>(null);
 
   /** The ghost model; `null` when idle or when the dragged row or the chart model is missing */
   protected readonly ghost = computed<GhostVisual | null>(() => {
@@ -107,6 +90,6 @@ export class GanttDragPreviewComponent {
     const cfg = this.config();
     const tl = this.timeline();
     if (!preview || !geo || !cfg || !tl) return null;
-    return computeDragGhostVisual(preview, geo, cfg, tl.toX, this.i18n?.bundle() ?? DEFAULT_I18N, this.fontPx());
+    return computeDragGhostVisual(preview, geo, cfg, tl.toX, GHOST_I18N, this.fontPx(), this.rowStyle() ?? undefined);
   });
 }

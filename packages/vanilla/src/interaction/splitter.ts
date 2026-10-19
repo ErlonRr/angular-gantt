@@ -3,7 +3,9 @@
  * The splitter between the task list and the timeline: drag (pointer capture) or Arrow keys to
  * resize the panel, the toggle button or Enter / Space to collapse it. Widths come from the
  * engine (`mainW` measured by the ResizeObserver, `graph.panelPx`); the panel width the user
- * chooses goes to the `panelW` input.
+ * chooses goes to the `panelW` input, is saved, and is reported to the sync group
+ * (`ctx.sync.reportPanel`) when the drag ends or a key moves it — a width the group applied comes
+ * through `layers/sync.ts` instead and is neither saved nor reported.
  */
 
 import { availablePanelWidth, clampPanelWidth, SPLITTER_KEY_STEP } from '@gantryjs/core';
@@ -20,6 +22,11 @@ export function bindSplitter(ctx: LayerContext, opts: SplitterOptions): void {
   const { inputs: I, graph: G, dom, host } = ctx;
   const { splitter, toggle, main } = dom;
   const { signal } = opts;
+  /** The width the user chose, for the other charts of the sync group (none chosen yet: nothing) */
+  const reportWidth = (): void => {
+    const width = I.panelW.peek();
+    if (width !== null) ctx.sync.reportPanel(width);
+  };
   toggle.addEventListener('pointerdown', e => e.stopPropagation(), { signal });
   toggle.addEventListener('click', () => host.togglePanel(), { signal });
 
@@ -48,6 +55,7 @@ export function bindSplitter(ctx: LayerContext, opts: SplitterOptions): void {
         gesture.abort();
         main.classList.remove('is-resizing');
         ctx.saveState();
+        reportWidth();
       };
       const once = { signal: gesture.signal };
       splitter.addEventListener('pointermove', move, once);
@@ -76,6 +84,7 @@ export function bindSplitter(ctx: LayerContext, opts: SplitterOptions): void {
         const step = e.key === 'ArrowLeft' ? -SPLITTER_KEY_STEP : SPLITTER_KEY_STEP;
         I.panelW.set(clampPanelWidth(G.panelPx.peek() + step, cfg.panel, available));
         ctx.saveState();
+        reportWidth();
       }
     },
     { signal },

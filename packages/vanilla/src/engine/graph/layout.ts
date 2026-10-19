@@ -8,11 +8,23 @@
  * The header height is the timeline's header tiers plus the marker lane under them
  * (`graph/markers.ts`): the timeline header, the task-list column header, the sticky offsets
  * (`scroll-padding-top`), the splitter toggle and the vertical window all use it.
+ *
+ * `layoutCss` holds the read-only layout variables of the host (`--gantt-row-height`,
+ * `--gantt-bar-height`, core `layoutCssVars`), written into the `:host` theme sheet with the theme
+ * (`graph/chrome.ts` `themeEffects`), not by a region: page CSS and slotted content read them.
  */
 
-import { resolvePanelWidth, splitterValue, virtualIndexes, type RowGeometry, type SplitterValue } from '@gantryjs/core';
+import {
+  layoutCssVars,
+  resolvePanelWidth,
+  splitterValue,
+  virtualIndexes,
+  type RowGeometry,
+  type SplitterValue,
+} from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
-import type { Inputs } from '../inputs';
+import type { ThemeCssEntries } from '../../styles/theme-sheet';
+import { structuralEqual, type Inputs } from '../inputs';
 import type { ConfigGraph } from './config';
 import type { MarkersGraph } from './markers';
 import type { NodeFactory } from './node';
@@ -38,6 +50,8 @@ export interface LayoutGraph {
   /** Geometries mounted in the canvas: the pinned rows before the window, the window, the pinned rows after it */
   readonly mountedGeometries: ReadonlySignal<RowGeometry[]>;
   readonly windowSpan: ReadonlySignal<WindowSpan>;
+  /** The host's read-only layout variables (`--gantt-row-height`, `--gantt-bar-height`); compares by value */
+  readonly layoutCss: ReadonlySignal<ThemeCssEntries>;
 }
 
 export function layoutGraph(
@@ -75,5 +89,6 @@ export function layoutGraph(
     },
     { equals: (a, b) => a.top === b.top && a.bottom === b.bottom },
   );
-  return { panelPx, splitter, headerHeight, totalHeight, mountedGeometries, windowSpan };
+  const layoutCss = node('layoutCss', () => layoutCssVars(g.config()), { equals: structuralEqual });
+  return { panelPx, splitter, headerHeight, totalHeight, mountedGeometries, windowSpan, layoutCss };
 }

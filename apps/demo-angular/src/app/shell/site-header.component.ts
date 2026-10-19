@@ -9,11 +9,12 @@ import { EXAMPLES } from './demo-registry';
 
 /**
  * Which nav item a URL belongs to: the item's own page is `aria-current="page"`; an example page
- * marks Examples with `aria-current="true"` (its section, not that page).
+ * (a showcase route or a gallery case, `examples/<id>`) marks Examples with `aria-current="true"`
+ * (its section, not that page).
  */
 function navFor(url: string): { id: NavItem['id']; current: 'page' | 'true' } | null {
   const path = url.split(/[?#]/)[0].replace(/^\//, '');
-  if (EXAMPLES.some(e => e.path === path)) return { id: 'examples', current: 'true' };
+  if (EXAMPLES.some(e => e.path === path) || path.startsWith('examples/')) return { id: 'examples', current: 'true' };
   const item = NAV.find(n => n.path === path);
   return item ? { id: item.id, current: 'page' } : null;
 }

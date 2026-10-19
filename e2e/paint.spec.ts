@@ -5,11 +5,23 @@
 // emulates forced colours (Windows High Contrast, D25): its records are the system colours of the
 // forced-colors rules. The last tests check that the Web Component and Angular paint the canvas,
 // the header, the task list, the toolbar, the legend and the tooltip the same, up to the
-// differences in KNOWN_DIFFS.
+// differences in KNOWN_DIFFS. Phase 10 adds `styled` (the task style cascade, rolled-up status
+// colours and segments, straight arrows, compact density) and `narrow` (a 600 × 600 box: the
+// responsive timeline-only view and the toolbar's More button).
 import { test, expect, collectPaints, type Chart, type PaintRecords } from './fixtures';
 import { SCENARIOS, paintFixture, renderFixture, type Scenario, type Target } from './paint-fixture';
 
 const TARGET_LIST: readonly Target[] = ['vanilla', 'angular'];
+
+/** `data-view` of the chart: on the wrapper in the Web Component's shadow root, on Angular's host. */
+function shownView(chart: Chart): Promise<string | null> {
+  return chart.evalRoot(
+    root =>
+      (root instanceof ShadowRoot ? root.querySelector('.gantry-wrapper') : (root as Element))?.getAttribute(
+        'data-view',
+      ) ?? null,
+  );
+}
 
 /** Render `scenario` on `target`, wait until it is stable and collect the computed colours. */
 async function paints(chart: Chart, target: Target, scenario: Scenario): Promise<PaintRecords> {
@@ -22,6 +34,15 @@ async function paints(chart: Chart, target: Target, scenario: Scenario): Promise
 
   if (scenario === 'table') await expect(chart.get('.gantt-tl-cell').first()).toBeVisible();
   else await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeVisible();
+  if (scenario === 'styled') {
+    // The collapsed parent's children are drawn as segments
+    await expect(chart.get('.gantt-bars-layer [data-task-id="build"] .gantt-bar-segment')).toHaveCount(3);
+  }
+  if (scenario === 'narrow') {
+    // Angular measures first and switches after its first frame: wait for the narrow view
+    await expect(chart.get('.gantt-tb-more')).toBeVisible();
+    await expect.poll(() => shownView(chart)).toBe('chart');
+  }
   for (const id of fx.selected) await expect(chart.get(`.gantt-tl-row--selected[data-task-id="${id}"]`)).toHaveCount(1);
   if (scenario === 'tooltip') {
     await chart.get('.gantt-bars-layer [data-task-id="wireframes"] .gantt-bar-body').hover();
@@ -59,7 +80,8 @@ const TOOLTIP = /^tooltip(\/|$)/;
  * The hour scenario mounts only part of its header, bands and grid lines (horizontal windowing,
  * Phase 7 step 3.1): both bindings must mount the same ones and paint them the same. The tooltip
  * scenario adds the open tooltip's title and `<dl>` rows. The forced scenario compares the system
- * colours of both bindings' forced-colors rules (Phase 9 wave 5).
+ * colours of both bindings' forced-colors rules (Phase 9 wave 5). `styled` and `narrow` (phase 10)
+ * compare the canvas and the chrome like the light week.
  */
 const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'light-week', keys: COMPARED },
@@ -69,6 +91,8 @@ const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'hour', keys: TIMELINE },
   { scenario: 'tooltip', keys: new RegExp(`${COMPARED.source}|${TOOLTIP.source}`) },
   { scenario: 'forced', keys: COMPARED },
+  { scenario: 'styled', keys: COMPARED },
+  { scenario: 'narrow', keys: COMPARED },
 ];
 
 /**

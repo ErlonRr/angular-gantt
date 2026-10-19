@@ -288,13 +288,13 @@ describe('DragSession previews carry the new task dates', () => {
     );
     const preview = session.preview(100 + 2 * cfg.pxPerDay);
     const ghost = computeDragGhostVisual(preview, geo, cfg, tl.toX, i18n, 12);
-    expect(ghost.label).not.toBeNull();
+    expect(ghost.label).toBeNull();
     const text = formatDragReadout(preview, opts({ unit: preview.unit }));
     const v = { scrollLeft: 0, viewportWidth: 2000, scrollTop: 0, headerHeight: 48, width: dragReadoutWidth(text) };
     const p = placeDragReadout(ghost, v);
     expect(p.side).toBe('above');
     expect(p.align).toBe('center');
     expect(p.x).toBe(Math.round(ghost.x + ghost.width / 2));
-    expect(p.y).toBe(Math.round(48 + ghost.label!.y - ghost.label!.fontPx - DRAG_READOUT_GAP - DRAG_READOUT_HEIGHT));
+    expect(p.y).toBe(Math.round(48 + ghost.y - DRAG_READOUT_GAP - DRAG_READOUT_HEIGHT));
   });
 });

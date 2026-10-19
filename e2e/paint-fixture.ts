@@ -3,6 +3,7 @@
 // that render it (`renderFixture`). Dates are local ISO strings (no offset) relative to `NOW`,
 // revived into `Date`s inside the page by both drivers (the Web Component `host.evaluate` and the
 // Angular `/fixture` route), so both bindings get identical input.
+import { expect } from '@playwright/test';
 import type { Chart } from './fixtures';
 import { TARGETS } from '../playwright.config';
 
@@ -32,6 +33,9 @@ export interface FixtureTask {
   rowColor?: string;
   baseline?: { start: string; end: string };
   status?: string;
+  /** `GanttTaskStyle` (colours, height, radius, label, className) */
+  style?: Record<string, unknown>;
+  collapsed?: boolean;
 }
 
 /** A day shaded through `options.highlightTime` (functions don't cross into the page, so it travels as data). */
@@ -53,6 +57,8 @@ export interface PaintFixture {
   highlight: FixtureHighlight[];
   darkMode: boolean | 'auto';
   selected: string[];
+  /** The chart's box in px. Default: 1150 × 700 */
+  box?: { width: number; height: number };
 }
 
 /**
@@ -195,10 +201,90 @@ export const PAINT_OPTIONS: Record<string, unknown> = {
 };
 
 /**
+ * The `styled` scenario (Gantry 2 phase 10): every layer of the style cascade (kind, `parent`,
+ * `levels`, the rolled-up status colour, flat fields, `task.style`), a collapsed parent drawn as
+ * its children's segments, straight arrows and compact rows. Critical path off: it would repaint
+ * the fills the cascade resolves. NOW is a Wednesday: day 3–4 and 10–11 are weekends.
+ */
+export const STYLED_TASKS: FixtureTask[] = [
+  // Expanded parent: its colour is the rolled-up status of its children (one overdue → overdue)
+  { id: 'design', name: 'Design', type: 'group', start: day(-6), end: day(6) },
+  { id: 'research', name: 'Research', parentId: 'design', start: day(-6), end: day(-2), progress: 100 },
+  {
+    id: 'wireframes',
+    name: 'Wireframes',
+    parentId: 'design',
+    start: day(-2),
+    end: day(2),
+    progress: 40,
+    dependency: 'research',
+    status: 'overdue',
+    // task.style wins over every layer below it, the flat barColor included
+    barColor: '#0F766E',
+    style: { color: '#FDE68A', progressColor: '#B45309', textColor: '#78350F', radius: 8 },
+  },
+  {
+    id: 'visual',
+    name: 'Visual design',
+    parentId: 'design',
+    start: day(2),
+    end: day(6),
+    dependency: 'wireframes',
+    // A flat field over the level style; task.style adds a row colour, a height and a class
+    progressColor: '#7C2D12',
+    style: { rowColor: '#ECFEFF', height: '60%', label: 'right', className: 'fixture-visual' },
+  },
+  // Collapsed parent: rolled-up dates and status, its children drawn as segments in their own colours
+  { id: 'build', name: 'Build', type: 'group', collapsed: true, start: day(1), end: day(16) },
+  { id: 'api', name: 'API', parentId: 'build', start: day(1), end: day(7), progress: 60, status: 'inProgress' },
+  {
+    id: 'frontend',
+    name: 'Frontend',
+    parentId: 'build',
+    start: day(7),
+    end: day(12),
+    dependency: 'api',
+    style: { color: '#0EA5E9' },
+  },
+  { id: 'qa', name: 'QA', parentId: 'build', start: day(12), end: day(16), dependency: 'frontend' },
+  { id: 'release', name: 'Release', type: 'milestone', start: day(17), end: day(17), dependency: 'build' },
+  {
+    id: 'docs',
+    name: 'Docs',
+    start: day(-4),
+    end: day(5),
+    progress: 20,
+    dependency: [{ taskId: 'research', type: 'SS', lag: 2 }],
+    style: { color: '#1E3A8A', rowColor: '#FEF3C7' },
+  },
+];
+
+export const STYLED_OPTIONS: Record<string, unknown> = {
+  viewMode: 'Week',
+  initialScroll: false,
+  showToday: true,
+  density: 'compact',
+  arrows: { routing: 'straight' },
+  rollup: { color: 'status', segments: true },
+  styles: {
+    task: { color: '#6366F1', radius: 2 },
+    group: { progressColor: '#1F2937' },
+    milestone: { color: '#DB2777' },
+    parent: { textColor: '#FFFFFF', className: 'fixture-parent' },
+    levels: [{ rowColor: '#F8FAFC' }, { color: '#64748B', progressColor: '#334155' }],
+  },
+  panel: { columns: ['name', 'status', 'start', 'progress'] },
+  nonWorkingTime: { weekends: true },
+};
+
+/**
  * `forced` is the light week with a selected bar (`visual`, off the critical path) next to the
  * critical chain, rendered with forced colours emulated (`emulateMedia({ forcedColors: 'active' })`).
+ * `styled` renders `STYLED_TASKS` / `STYLED_OPTIONS`; `narrow` the light week in a 600 × 600 box,
+ * below the responsive breakpoint (640 px): the timeline alone and the toolbar's More button.
  */
-export type Scenario = 'light-week' | 'dark-week' | 'auto-dark' | 'hour' | 'table' | 'tooltip' | 'selected' | 'forced';
+export type Scenario =
+  'light-week' | 'dark-week' | 'auto-dark' | 'hour' | 'table' | 'tooltip' | 'selected' | 'forced' | 'styled' | 'narrow';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -209,7 +295,12 @@ export const SCENARIOS: readonly Scenario[] = [
   'tooltip',
   'selected',
   'forced',
+  'styled',
+  'narrow',
 ];
+
+/** The `narrow` scenario's box */
+export const NARROW_BOX = { width: 600, height: 600 } as const;
 
 /** The fixture each scenario renders. */
 export function paintFixture(scenario: Scenario): PaintFixture {
@@ -233,6 +324,10 @@ export function paintFixture(scenario: Scenario): PaintFixture {
     case 'selected':
     case 'forced':
       return { ...base, selected: ['visual'] };
+    case 'styled':
+      return { ...base, tasks: STYLED_TASKS, options: STYLED_OPTIONS, annotations: [], highlight: [] };
+    case 'narrow':
+      return { ...base, box: NARROW_BOX };
     default:
       return base;
   }
@@ -243,8 +338,8 @@ export type Target = 'vanilla' | 'angular';
 
 /**
  * Replace the playground's element with a fresh one (no playground listeners or state) fed by the
- * fixture, in the same fixed box as the Angular `/fixture` route (1150 × 700 at the top left), so
- * both bindings window the same rows and columns.
+ * fixture, in the same fixed box as the Angular `/fixture` route (1150 × 700 at the top left, or
+ * the fixture's `box`), so both bindings window the same rows and columns.
  */
 async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
   await chart.open(`http://localhost:${TARGETS.vanilla.port}/`);
@@ -265,8 +360,8 @@ async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
       ['top', '0'],
       ['left', '0'],
       ['z-index', '100'],
-      ['width', '1150px'],
-      ['height', '700px'],
+      ['width', `${f.box?.width ?? 1150}px`],
+      ['height', `${f.box?.height ?? 700}px`],
     ]) {
       el.style.setProperty(prop, value);
     }
@@ -296,7 +391,9 @@ async function renderAngular(chart: Chart, fx: PaintFixture): Promise<void> {
   await chart.page.addInitScript(f => {
     (window as Window & { __GANTRY_FIXTURE__?: unknown }).__GANTRY_FIXTURE__ = f;
   }, fx);
-  await chart.open(`http://localhost:${TARGETS.angular.port}/fixture`);
+  await chart.page.goto(`http://localhost:${TARGETS.angular.port}/fixture`);
+  // Attached, not visible: below the responsive breakpoint (`narrow`) the task list is hidden
+  await expect(chart.get('.gantt-tl-row').first()).toBeAttached();
 }
 
 /**

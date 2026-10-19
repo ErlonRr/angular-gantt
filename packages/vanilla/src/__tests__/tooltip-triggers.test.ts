@@ -2,7 +2,9 @@
 // `interaction/tooltip-triggers.ts`): keyboard focus on a bar (`focusVisibleBarId`), Escape in
 // the capture phase (D24, WCAG 1.4.13), the pointer resting on the tooltip, scrolls and resizes, a
 // press elsewhere, a drag or move mode starting, the row going away and option changes. Every
-// listener and effect belongs to the connection.
+// listener and effect belongs to the connection. Phase 10 step 4.4: the open tooltip follows its
+// row (task object, critical flag, i18n bundle; never the clock), and a keyboard focus that came
+// before the first render is tried once more after it.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   TOOLTIP_HIDE_DELAY,
@@ -11,7 +13,9 @@ import {
   ViewMode,
   type DragPreview,
   type GanttFlatRow,
+  type GanttOptions,
   type GanttTask,
+  type GanttTooltipRenderContext,
 } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
 import { getEngine } from '../engine/registry';
@@ -36,6 +40,18 @@ function mount(extra: Partial<GantryElement> = {}): GantryElement {
   flush(el);
   return el;
 }
+
+/** Appends the chart without painting it: its first frame is pending. */
+function connectUnpainted(): GantryElement {
+  el = document.createElement('gantry-element');
+  el.style.height = '400px';
+  Object.assign(el, { tasks: TASKS(), options: { viewMode: ViewMode.Day, initialScroll: false } });
+  document.body.appendChild(el);
+  return el;
+}
+
+/** One animation frame (after the frames requested before it). */
+const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
 const engine = () => getEngine(el);
 const tip = () => el.shadowRoot!.querySelector<HTMLElement>('.gantt-tooltip')!;
@@ -255,6 +271,167 @@ describe('tooltip triggers', () => {
     // A rule that resolves differently resets it
     el.options = { viewMode: ViewMode.Day, initialScroll: false, tooltip: { hideDelay: 400 } };
     expect(tip().hidden).toBe(true);
+  });
+
+  it('a keyboard focus before the first render opens the tooltip once that render is done', async () => {
+    connectUnpainted();
+    keyboardFocus('a');
+    expect(engine().dom.bars.children).toHaveLength(0);
+    expect(tip().hidden).toBe(true);
+    // The engine's first frame paints, then the retry opens it
+    await nextFrame();
+    expect(bar('a')).not.toBeNull();
+    expect(tip().hidden).toBe(false);
+    expect(tip().querySelector('.gantt-tooltip-title')!.textContent).toBe('Alpha');
+    expect(bar('a').getAttribute('aria-describedby')).toBe(tip().id);
+
+    // Painted at once (flushSync): the retry still waits for its frame, then opens it
+    el.remove();
+    connectUnpainted();
+    keyboardFocus('b');
+    flush(el);
+    expect(tip().hidden).toBe(true);
+    await nextFrame();
+    expect(tip().querySelector('.gantt-tooltip-title')!.textContent).toBe('Beta');
+  });
+
+  it('drops the retry when keyboard focus moves before it, and tries once only', async () => {
+    connectUnpainted();
+    const focus = vi.spyOn(engine().layers.tooltip, 'focus');
+    keyboardFocus('a');
+    keyboardFocus(null);
+    await nextFrame();
+    expect(focus).not.toHaveBeenCalled();
+    expect(tip().hidden).toBe(true);
+    await nextFrame();
+    expect(focus).not.toHaveBeenCalled();
+
+    // Moved to another bar before the render: only that one is tried
+    el.remove();
+    connectUnpainted();
+    const next = vi.spyOn(engine().layers.tooltip, 'focus');
+    keyboardFocus('a');
+    keyboardFocus('r');
+    await nextFrame();
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(next.mock.calls[0][0].task.id).toBe('r');
+    await nextFrame();
+    expect(next).toHaveBeenCalledTimes(1);
+
+    // Disconnected before the frame: nothing is tried
+    el.remove();
+    connectUnpainted();
+    const gone = vi.spyOn(engine().layers.tooltip, 'focus');
+    keyboardFocus('a');
+    el.remove();
+    await nextFrame();
+    expect(gone).not.toHaveBeenCalled();
+  });
+
+  it('writes the open tooltip again when its task object, critical flag or labels change, not on clock ticks', () => {
+    // The bars region's run count at each call: a refresh comes after the frame painted the bars
+    const barsRuns: number[] = [];
+    const render = vi.fn((_ctx: GanttTooltipRenderContext): unknown => {
+      barsRuns.push(engine().regionRuns['bars'] ?? 0);
+      return null;
+    });
+    const options: GanttOptions = { viewMode: ViewMode.Day, initialScroll: false, tooltip: { render } };
+    // Beta follows Alpha: the critical chain once the critical path is on
+    const tasks = TASKS().map(t => (t.id === 'b' ? { ...t, dependency: 'a' } : t));
+    mount({ tasks, options });
+    keyboardFocus('b');
+    expect(render).toHaveBeenCalledTimes(1);
+    const title = () => tip().querySelector('.gantt-tooltip-title')!.textContent;
+    const regions = { ...engine().regionRuns };
+    const refresh = vi.spyOn(engine().layers.tooltip, 'refresh');
+
+    // The clock: nothing written again (statuses are read at the next opening)
+    engine().inputs.nowTick.set(new Date(2026, 2, 12, 10));
+    engine().inputs.nowTick.set(new Date(2026, 2, 12, 11));
+    // Other tasks, an equal options object, a collapse elsewhere: the same task, flag and labels
+    const renamed = tasks.map(t => (t.id === 'r' ? { ...t, name: 'Root 2' } : t));
+    el.tasks = renamed;
+    el.options = { ...options };
+    expect(render).toHaveBeenCalledTimes(1);
+    // ...not even asked: the same content stops at the cut-off
+    expect(refresh).not.toHaveBeenCalled();
+    // Reading the row while it shows subscribes no region
+    expect(engine().regionRuns).toEqual(regions);
+
+    // Its task object: written in the next frame, once its bar is repainted (placed by the moved bar)
+    const barsBefore = engine().regionRuns['bars'] ?? 0;
+    el.tasks = renamed.map(t => (t.id === 'b' ? { ...t, name: 'Beta 2', progress: 60 } : t));
+    expect(render).toHaveBeenCalledTimes(1);
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(barsRuns[1]).toBeGreaterThan(barsBefore);
+    expect(render.mock.calls[1][0]).toMatchObject({ task: { name: 'Beta 2' } });
+    expect(title()).toBe('Beta 2');
+    expect(tip().querySelectorAll('dd.gantt-tooltip-value')[3].textContent).toBe('60%');
+    expect(tip().hidden).toBe(false);
+    expect(bar('b').getAttribute('aria-describedby')).toBe(tip().id);
+
+    // The critical flag
+    el.options = { ...options, criticalPath: true };
+    expect(engine().graph.critical.peek()!.criticalIds.has('b')).toBe(true);
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(3);
+    expect(tip().classList.contains('gantt-tooltip--critical')).toBe(true);
+
+    // The labels
+    el.options = { ...options, criticalPath: true, labels: { ttStart: 'From' } };
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(4);
+    expect(tip().querySelector('dt')!.textContent).toBe('From');
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(4);
+
+    // Closed: no longer followed
+    keyboardFocus(null);
+    el.tasks = renamed.map(t => (t.id === 'b' ? { ...t, name: 'Beta 3' } : t));
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(4);
+  });
+
+  it('writes the open tooltip again when its row style changes (the progress colour), not for equal fields', () => {
+    const render = vi.fn((_ctx: GanttTooltipRenderContext): unknown => null);
+    const options: GanttOptions = {
+      viewMode: ViewMode.Day,
+      initialScroll: false,
+      tooltip: { render },
+      styles: { task: { color: '#0EA5E9' } },
+    };
+    mount({ options });
+    keyboardFocus('a');
+    const fill = () =>
+      tip().querySelector<HTMLElement>('.gantt-tooltip-fill')!.style.getPropertyValue('background-color').toUpperCase();
+    expect(fill()).toBe('#0EA5E9');
+    expect(render).toHaveBeenCalledTimes(1);
+    // The opening's own follow-up frame (it writes nothing again)
+    flush(el);
+    const refresh = vi.spyOn(engine().layers.tooltip, 'refresh');
+
+    // Equal styles in new objects: the same fields, nothing written again
+    el.options = { ...options, styles: { task: { color: '#0EA5E9' } } };
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(1);
+    expect(refresh).not.toHaveBeenCalled();
+
+    // A new colour for its row (the task object is the same): written again, after the bars
+    el.options = { ...options, styles: { task: { color: '#22C55E' } } };
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(2);
+    expect(fill()).toBe('#22C55E');
+    expect(engine().layers.tooltip.visibleId()).toBe('a');
+    expect(bar('a').getAttribute('aria-describedby')).toBe(tip().id);
+
+    // Its own style wins over the kind style: written again once more
+    el.tasks = engine()
+      .inputs.tasksIn.peek()
+      .map(t => (t.id === 'a' ? { ...t, style: { color: '#F97316' } } : t));
+    flush(el);
+    expect(render).toHaveBeenCalledTimes(3);
+    expect(fill()).toBe('#F97316');
   });
 
   it('binds nothing while disconnected', () => {

@@ -4,10 +4,11 @@
  * `h()` and appended to the shadow root. Not a region: it is driven by the pointer over the
  * canvas (`interaction/canvas-pointer.ts`: `hover`, `unhover`, `tap`) and by the tooltip triggers
  * (`interaction/tooltip-triggers.ts`: keyboard focus, Escape, the pointer resting on the tooltip,
- * scrolls, a press elsewhere, drags and option changes). D9's exception: it measures its own size
- * once per opening, and reads its bar's box when it opens and when the page or the timeline
- * scrolls. It reads the chart's state from the graph with `peek()`, so hovering never subscribes
- * to anything.
+ * scrolls, a press elsewhere, drags, option changes and its row's changes). D9's exception: it
+ * measures its own size once per opening (and once per content refresh), and reads its bar's box
+ * when it opens, when its content is refreshed and when the page or the timeline scrolls. It reads
+ * the chart's state from the graph with `peek()`, so hovering never subscribes to anything; the
+ * open tooltip's task id is a signal (`visibleId()`), which the triggers follow.
  *
  * When it opens and closes is core's tooltip machine (`reduceTooltip`, with the resolved
  * `options.tooltip`: `trigger`, `showDelay`, `hideDelay`): the layer keeps its state and one timer
@@ -25,11 +26,18 @@
  * name or a label can never become HTML): the title, then a `<dl>` with one `dt` / `dd` group
  * per model row. Rows are keyed by kind, so a row keeps its nodes from one task to the next. The
  * progress row adds a track whose fill gets the progress as `--gantt-tt-progress` (the
- * stylesheet turns it into a width) and the model's progress paint, both through the CSSOM. The
- * critical path is the `gantt-tooltip--critical` class. `options.tooltip.render(ctx)` replaces the
- * title and the `<dl>` with `div.gantt-tooltip-custom`: a returned DOM node is appended, a string
- * (or a number) is shown as text; anything else (`null`, `undefined`, `false`) keeps the built-in
- * content, and so does a `render` that throws (reported on the console).
+ * stylesheet turns it into a width) and the model's progress paint, both through the CSSOM: the
+ * colour of the row's resolved style (`G.rowStyle`, the one its bar is painted with), the critical
+ * colour on the critical path. The critical path is the `gantt-tooltip--critical` class.
+ * `options.tooltip.render(ctx)` replaces the title and the `<dl>` with `div.gantt-tooltip-custom`:
+ * a returned DOM node is appended, a string (or a number) is shown as text; anything else (`null`,
+ * `undefined`, `false`) keeps the built-in content, and so does a `render` that throws (reported
+ * on the console).
+ *
+ * While it shows, the content follows its row: `refresh(row)` writes it again when the row's task
+ * object, its critical flag, its resolved style (field by field, core `sameTaskStyle`) or the i18n
+ * bundle (labels, locale, formats) differ from what it was written from, then measures and places
+ * it again. `render` runs again only then: never on a clock tick.
  *
  *   div.gantt-tooltip[popover=manual][role=tooltip][id]
  *     div.gantt-tooltip-title            built-in content
@@ -44,8 +52,12 @@ import {
   initialTooltipState,
   placeTooltip,
   reduceTooltip,
+  sameTaskStyle,
   tooltipVisibleId,
   type GanttFlatRow,
+  type GanttI18n,
+  type GanttTask,
+  type ResolvedTaskStyle,
   type TooltipEvent,
   type TooltipMachineOptions,
   type TooltipModel,
@@ -56,6 +68,7 @@ import {
 import { h } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
+import { signal } from '../reactive';
 import type { LayerContext } from './context';
 import { showNode } from './skeleton';
 
@@ -81,8 +94,18 @@ export interface TooltipLayer {
   enterTooltip(): void;
   /** The pointer left the tooltip: closes after the hide delay. */
   leaveTooltip(): void;
-  /** Task whose tooltip shows now (open, or closing after the hide delay), else `null`. */
+  /**
+   * Task whose tooltip shows now (open, or closing after the hide delay), else `null`. Tracked: an
+   * effect that reads it runs again when the tooltip opens, closes or moves to another bar.
+   */
   visibleId(): string | null;
+  /**
+   * The open tooltip's row as the chart has it now: writes the content again (the custom `render`
+   * included), measures and places it, when the task object, the critical flag, the resolved style
+   * (its fields) or the i18n bundle differ from what the content was written from. No-op for
+   * another task or while closed.
+   */
+  refresh(row: GanttFlatRow): void;
   /** Places the open tooltip by its bar again (scroll, resize): no size measurement; closes it when the bar is gone. */
   reposition(): void;
   /** Closes now and forgets the pointer and focus (`tooltipEnabled = false`, option change, disconnect). */
@@ -114,6 +137,15 @@ interface Shown {
   readonly id: string;
   anchor: Element;
   readonly pointerX: number | undefined;
+}
+
+/** What the content was written from: a refresh writes it again only when one of these changed. */
+interface Painted {
+  readonly task: GanttTask;
+  readonly critical: boolean;
+  /** The row's resolved style (`undefined`: the task's own, while a `styles.rule` throws) */
+  readonly style: ResolvedTaskStyle | undefined;
+  readonly i18n: GanttI18n;
 }
 
 /** Stable keys for the rows: kind plus occurrence (`date:0`, `date:1`, `progress:0`…). */
@@ -161,8 +193,11 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
   /** The last bar each source pointed at (the machine says which source opened the tooltip) */
   let targets: Partial<Record<TooltipSource, Target>> = {};
   let shown: Shown | null = null;
+  /** `shown?.id`, tracked (`visibleId()`) */
+  const shownId = signal<string | null>(null);
+  let painted: Painted | null = null;
   let destroyed = false;
-  /** Border-box size, measured when the tooltip opens (its content is fixed while it is open) */
+  /** Border-box size, measured when the tooltip opens and when a refresh rewrites its content */
   let width = 0;
   let height = 0;
 
@@ -201,11 +236,21 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     );
   };
 
+  /** The row's resolved style (its bar's); the task's own when a `styles.rule` throws (the bars region reports it). */
+  const styleOf = (row: GanttFlatRow): ResolvedTaskStyle | undefined => {
+    try {
+      return G.rowStyle.peek()(row);
+    } catch {
+      return undefined;
+    }
+  };
+
   /** Writes `row`'s content: the custom `render` result, or the built-in title and rows. */
   const paintContent = (row: GanttFlatRow): void => {
     const config = G.config.peek();
     const i18n = G.i18n.peek();
     const cpm = G.critical.peek();
+    const style = styleOf(row);
     const model = buildTooltipModel({
       task: row.task,
       hasChildren: row.hasChildren,
@@ -218,7 +263,9 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
       criticalIds: cpm?.criticalIds,
       floatDays: cpm?.floatMap,
       tasksById: G.columnCtx.peek().taskById,
+      style,
     });
+    painted = { task: row.task, critical: model.critical, style, i18n };
     let content: Node | string | null = null;
     const render = config.tooltip.render;
     if (render) {
@@ -262,10 +309,18 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     setStyleProp(popover, 'translate', `${p.x}px ${p.y}px`);
   };
 
+  /** One layout read: the tooltip's size (its content just changed). */
+  const measure = (): void => {
+    const box = popover.getBoundingClientRect();
+    width = box.width;
+    height = box.height;
+  };
+
   const close = (): void => {
     if (!shown) return;
     setAttr(shown.anchor, 'aria-describedby', null);
     shown = null;
+    shownId.set(null);
     try {
       popover.hidePopover();
     } catch {
@@ -313,10 +368,10 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     shown = { id, anchor, pointerX: source === 'hover' ? target.x : undefined };
     setAttr(anchor, 'aria-describedby', tooltipId);
     // One layout read per opening; scrolls only re-read the bar's box
-    const box = popover.getBoundingClientRect();
-    width = box.width;
-    height = box.height;
+    measure();
     place();
+    // Last: the triggers start following this row (its content is written already)
+    shownId.set(id);
   };
 
   /** Shows what the machine's state says: the tooltip of `tooltipVisibleId(state)`, or nothing. */
@@ -347,6 +402,22 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
       stopTimer();
     }
     sync();
+  };
+
+  /** Places the open tooltip by its bar again: a rebuilt bar is found again, a bar gone closes it. */
+  const reposition = (): void => {
+    if (!shown) return;
+    if (!shown.anchor.isConnected) {
+      // The bar was rebuilt (a custom bar re-rendered), or its row left the window
+      const again = findBar(shown.id);
+      if (!again) {
+        send({ type: 'dismiss' });
+        return;
+      }
+      shown.anchor = again;
+      setAttr(again, 'aria-describedby', tooltipId);
+    }
+    place();
   };
 
   /** Records what points at a bar and sends its event (nothing while the tooltip is off). */
@@ -384,23 +455,31 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     leaveTooltip() {
       send({ type: 'leaveTooltip' });
     },
-    visibleId() {
-      return shown?.id ?? null;
-    },
-    reposition() {
-      if (!shown) return;
-      if (!shown.anchor.isConnected) {
-        // The bar was rebuilt (a custom bar re-rendered), or its row left the window
-        const again = findBar(shown.id);
-        if (!again) {
-          send({ type: 'dismiss' });
-          return;
-        }
-        shown.anchor = again;
-        setAttr(again, 'aria-describedby', tooltipId);
+    visibleId: () => shownId(),
+    refresh(row) {
+      const id = row.task.id;
+      if (destroyed || shown?.id !== id) return;
+      let critical: boolean;
+      try {
+        critical = G.critical.peek()?.criticalIds.has(id) ?? false;
+      } catch {
+        return; // invalid options: nothing is rendered
       }
-      place();
+      const i18n = G.i18n.peek();
+      if (
+        painted &&
+        painted.task === row.task &&
+        painted.critical === critical &&
+        sameTaskStyle(painted.style, styleOf(row)) &&
+        painted.i18n === i18n
+      ) {
+        return;
+      }
+      paintContent(row);
+      measure();
+      reposition();
     },
+    reposition,
     hide: reset,
     destroy() {
       reset();

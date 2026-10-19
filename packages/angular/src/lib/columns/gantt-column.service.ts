@@ -111,9 +111,11 @@ export class GanttColumnService {
     let base: ColumnDef[] = custom ? mergeColumnDefs(custom, builtins) : builtins;
     if (directives.length) {
       const byKey = new Map(directives.map(d => [d.key, d]));
+      const own = new Set(custom?.map(c => c.key));
       base = base.map(c => {
         const d = byKey.get(c.key);
-        return d ? mergeColumnDefs([d], [c])[0] : c;
+        // Over your own column a definition overrides what it sets; over a built-in, the built-in rules
+        return d ? (own.has(c.key) ? overlayColumn(c, d) : mergeColumnDefs([d], [c])[0]) : c;
       });
     }
     const extra = extraColumns(base, [...directives, ...added]);
@@ -250,6 +252,20 @@ export class GanttColumnService {
     [keys[idx], keys[target]] = [keys[target], keys[idx]];
     this.reorderByKeys(keys);
   }
+}
+
+/**
+ * A `ganttColumn` over a column of your own `columns`: what it sets wins, and its own cell (`render`
+ * or a template) replaces only the cell, so the column keeps its sort rule (`sortable`, `sortValue`).
+ */
+function overlayColumn(base: ColumnDef, d: ColumnDef): ColumnDef {
+  const set = Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) as Partial<ColumnDef>;
+  const { render, cellTemplate, ...rest } = base;
+  const cell =
+    set.render !== undefined || set.cellTemplate !== undefined
+      ? {}
+      : { ...(render ? { render } : {}), ...(cellTemplate ? { cellTemplate } : {}) };
+  return { ...rest, ...cell, ...set };
 }
 
 /** Columns added at runtime or by `ganttColumn` whose key isn't in the catalogue yet */

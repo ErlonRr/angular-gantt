@@ -6,7 +6,7 @@
 //  so the theme reaches pixels only through custom properties.
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttAnnotation, GanttTheme, RowGeometry } from '../types';
+import type { GanttAnnotation, GanttTheme, ResolvedTaskStyle, RowGeometry } from '../types';
 import { CONTRAST_CSS_VARS, THEME_CSS_VARS, todayLabelColor } from './theme';
 import { readableOn } from './contrast';
 
@@ -85,7 +85,7 @@ export const PAINTS: Readonly<{
   rowBgAlt: themeVar('rowBgAlt'),
   /** Background of a selected row */
   rowSelected: themeVar('selectionBg'),
-  /** Progress fill of a bar without `task.progressColor` / `bar.progress.color` (at `bar.progress.opacity`) */
+  /** Progress fill of a bar without a style `progressColor` / `bar.progress.color` (at `bar.progress.opacity`) */
   progressOverlay: themeVar('progressOverlay'),
 });
 
@@ -102,10 +102,20 @@ export const HATCH_PATTERN: Readonly<{ size: number; rotate: number; strokeWidth
     strokeOpacity: 0.35,
   });
 
-/** Background of a row (timeline and task list): selection > `task.rowColor` > zebra. */
-export function rowPaint(geo: Pick<RowGeometry, 'row'>, selected: boolean): Paint {
+/**
+ * Background of a row (timeline and task list): selection > the style's `rowColor` > zebra (the
+ * hover tint is an overlay above it). `style` is the row's resolved style (`createStyleResolver`);
+ * without it, the task's own `style.rowColor`, else its deprecated `rowColor`.
+ */
+export function rowPaint(
+  geo: Pick<RowGeometry, 'row'>,
+  selected: boolean,
+  style?: Pick<ResolvedTaskStyle, 'rowColor'> | null,
+): Paint {
   if (selected) return PAINTS.rowSelected;
-  return geo.row.task.rowColor ?? (geo.row.visibleIndex % 2 === 0 ? PAINTS.rowBg : PAINTS.rowBgAlt);
+  const task = geo.row.task;
+  const rowColor = style ? style.rowColor : (task.style?.rowColor ?? task.rowColor);
+  return rowColor ?? (geo.row.visibleIndex % 2 === 0 ? PAINTS.rowBg : PAINTS.rowBgAlt);
 }
 
 /**

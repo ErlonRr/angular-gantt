@@ -40,9 +40,9 @@ through custom properties. The resolved config no longer carries the theme.
 - `annotationPaint()` gives `isToday` annotations the today colour (the Web Component used to ignore
   `isToday`; Angular already drew them in the today colour), so the line, its region and its legend
   swatch agree in both renderers.
-- New label `dragDelta(amount, unit)` (`'+3d'` / `'-2h'`): the movement shown above the drag ghost is
-  translatable. Like the other new `GanttLabels` members, only objects typed as a full `GanttLabels`
-  need it; `options.labels` stays partial.
+- New label `dragDelta(amount, unit)` (`'+3d'` / `'-2h'`), deprecated in the same release: the drag
+  readout chip shows the move instead. Like the other new `GanttLabels` members, only objects typed as
+  a full `GanttLabels` need it; `options.labels` stays partial.
 - New exports: `Paint`, `ThemeColorKey`, `themeVar`, `isThemeVar`, `resolvePaint`, `PAINTS`,
   `rowPaint`, `annotationPaint`, `statusPaint`, `themeToCss`, `CONTRAST_CSS_VARS`, `ThemeMetrics`,
   `themeMetrics`, `sameThemeMetrics`, `BarTone`, `BarPaint`, `TooltipPaint`, `headerCellBorder`,

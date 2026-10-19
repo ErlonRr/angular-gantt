@@ -1,7 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · render/arrows.ts
-//  Orthogonal dependency arrows (FS / SS / FF / SF + lag) with a U-turn
-//  when the successor starts before the predecessor's exit point.
+//  Dependency arrows (FS / SS / FF / SF + lag). `arrows.routing`:
+//  'orthogonal' (default) = right angles with rounded bends and a U-turn
+//  when the successor starts before the predecessor's exit point;
+//  'straight' = one line from the exit to the entry, head along it.
 // ─────────────────────────────────────────────────────────────
 
 import { DependencyType } from '../types';
@@ -22,7 +24,11 @@ export interface ArrowVisual {
   /** `stroke-dasharray` of the line: `ARROW_DASH` when `dashed`, else `null` */
   dash: typeof ARROW_DASH | null;
   critical: boolean;
-  /** "+2d" / "-1d" next to the vertical segment; `fontPx` is the chart font size − 2 */
+  /**
+   * "+2d" / "-1d": next to the vertical segment (orthogonal), or next to the middle of the line
+   * (straight), on the side the line leaves free; `fontPx` is the chart font size − 2. The
+   * painters draw it with `dominant-baseline: central` and the default `text-anchor` (start).
+   */
   lagLabel: { text: string; x: number; y: number; fontPx: number } | null;
 }
 
@@ -60,6 +66,12 @@ export function roundedPolyline(points: Pt[], r: number): string {
 const leftEdge = (b: BarVisual) => b.x;
 const rightEdge = (b: BarVisual) => b.x + b.width;
 
+/**
+ * The link `from` → `to` of a dependency: exit and entry edges by type (FS: right → left, SS:
+ * left → left, FF: right → right, SF: left → right) at the bars' centre lines, routed by
+ * `cfg.arrows.routing` — `'orthogonal'` (default; a U-turn through `rowBoundary` when the
+ * successor starts before the exit) or `'straight'` (one line, the head rotated along it).
+ */
 export function computeArrowVisual(
   from: BarVisual,
   to: BarVisual,
@@ -82,6 +94,27 @@ export function computeArrowVisual(
   const ty = to.cy;
   // The line stops at the base of the head; the head ends on the bar edge
   const baseX = intoRight ? tipX + hs : tipX - hs;
+
+  const paint: Paint = isCritical ? themeVar('criticalColor') : (cfg.arrows.color ?? themeVar('arrowColor'));
+  const lagText = lag ? (lag > 0 ? `+${lag}d` : `${lag}d`) : null;
+  const common: Pick<ArrowVisual, 'paint' | 'width' | 'dashed' | 'dash' | 'critical'> = {
+    paint,
+    width: isCritical ? width + 0.5 : width,
+    dashed: lag !== 0,
+    dash: lag !== 0 ? ARROW_DASH : null,
+    critical: isCritical,
+  };
+
+  if (cfg.arrows.routing === 'straight') {
+    // Entry direction when the two ends meet: into the bar edge, like the orthogonal head
+    const line = straightLink([ex, ey], [tipX, ty], intoRight ? -1 : 1, hs, fontPx - 2);
+    return {
+      d: line.d,
+      head: line.head,
+      ...common,
+      lagLabel: lagText ? { text: lagText, x: line.labelAt.x, y: line.labelAt.y, fontPx: fontPx - 2 } : null,
+    };
+  }
 
   let points: Pt[];
   if (type === DependencyType.SS) {
@@ -135,14 +168,59 @@ export function computeArrowVisual(
   return {
     d: roundedPolyline(points, radius),
     head,
-    paint: isCritical ? themeVar('criticalColor') : (cfg.arrows.color ?? themeVar('arrowColor')),
-    width: isCritical ? width + 0.5 : width,
-    dashed: lag !== 0,
-    dash: lag !== 0 ? ARROW_DASH : null,
-    critical: isCritical,
-    lagLabel:
-      lag && vertical
-        ? { text: lag > 0 ? `+${lag}d` : `${lag}d`, x: vertical[0] + 4, y: (ey + ty) / 2, fontPx: fontPx - 2 }
-        : null,
+    ...common,
+    lagLabel: lagText && vertical ? { text: lagText, x: vertical[0] + 4, y: (ey + ty) / 2, fontPx: fontPx - 2 } : null,
+  };
+}
+
+/** Horizontal gap (px) between the middle of a straight link and its lag label (as orthogonal: 4). */
+const STRAIGHT_LABEL_GAP = 4;
+/** Vertical clearance (px) between a sloped straight link and its lag label. */
+const STRAIGHT_LABEL_CLEARANCE = 2;
+
+/** Rounded to 1/100 px (a rotated head has long fractions), never `-0`. */
+const r2 = (v: number): number => Math.round(v * 100) / 100 + 0;
+
+/**
+ * A straight link from `exit` to `tip` (`arrows.routing: 'straight'`): the line stops at the base
+ * of the head and the head — the orthogonal head's size, `hs` long and `1.6 × hs` wide — points
+ * along the line, its tip on the bar edge. `entryDir` (+1 rightwards, −1 leftwards) orients the
+ * head when both ends meet; a link shorter than its head is all head (the line has no length).
+ *
+ * `labelAt` anchors the lag label (`dominant-baseline: central`, text to the right): its left
+ * edge `STRAIGHT_LABEL_GAP` right of the midpoint, its centre on the midpoint's y for a vertical
+ * line, else moved half the text height plus `STRAIGHT_LABEL_CLEARANCE` above a line that goes
+ * down to the right (or is level) and below one that goes up — the side the line leaves free to
+ * the right of the midpoint, so the text never crosses it.
+ */
+function straightLink(
+  exit: Pt,
+  tip: Pt,
+  entryDir: 1 | -1,
+  hs: number,
+  labelFontPx: number,
+): { d: string; head: string; labelAt: { x: number; y: number } } {
+  const [ex, ey] = exit;
+  const [tx, ty] = tip;
+  const dx = tx - ex;
+  const dy = ty - ey;
+  const len = Math.hypot(dx, dy);
+  const [ux, uy] = len > 0 ? [dx / len, dy / len] : [entryDir, 0];
+  // Base of the head; the line ends there (or doesn't leave the exit when the link is too short)
+  const bx = tx - ux * hs;
+  const by = ty - uy * hs;
+  const [lx, ly] = len > hs ? [bx, by] : [ex, ey];
+  // Half-width of the head, perpendicular to the line (a level link into a left edge gives the
+  // orthogonal head, point for point)
+  const nx = -uy * hs * 0.8;
+  const ny = ux * hs * 0.8;
+  const head = `${r2(tx)},${r2(ty)} ${r2(bx - nx)},${r2(by - ny)} ${r2(bx + nx)},${r2(by + ny)}`;
+
+  const shift = labelFontPx / 2 + STRAIGHT_LABEL_CLEARANCE;
+  const side = dx === 0 ? 0 : dy / dx >= 0 ? -1 : 1;
+  return {
+    d: `M${r2(ex)},${r2(ey)}L${r2(lx)},${r2(ly)}`,
+    head,
+    labelAt: { x: r2((ex + tx) / 2 + STRAIGHT_LABEL_GAP), y: r2((ey + ty) / 2 + side * shift) },
   };
 }

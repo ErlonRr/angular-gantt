@@ -20,20 +20,24 @@
  *   opts out with forced-color-adjust none and sets every colour of its subtree itself.
  *
  * The mapping (shared with Angular, which mirrors these rules in its component styles):
- * bar body ButtonFace with a 1.5 px ButtonText stroke; progress ButtonText at 0.45 (the inside
+ * bar body ButtonFace with a 1.5 px ButtonText stroke; rolled-up child segments ButtonFace with a
+ * 1 px ButtonText stroke (each child outlined); progress ButtonText at 0.45 (the inside
  * label stays readable over it); summary caps ButtonText; selected bar Highlight 2.5 px;
  * critical bar dashed 4 2 at 2 px; labels ButtonText inside, CanvasText outside; arrows
  * CanvasText; today Highlight; annotations, grid lines and the baseline GrayText; non-working
  * bands GrayText at 0.15 (intensive hours Highlight at 0.15); current header cell and selected
  * row Highlight / HighlightText; every focus ring and the overlay ring Highlight (HighlightText
  * inside a selected row); checked radio Highlight / HighlightText; tooltip, readout chip and
- * state box Canvas / CanvasText with a CanvasText border; skeleton GrayText.
+ * state box Canvas / CanvasText with a CanvasText border; skeleton GrayText. The row hover tint
+ * is hidden (the timeline rect and the task-list row's background image): forced colours keep
+ * the row backgrounds plain.
  */
 
 export const FORCED_COLORS_CSS = `
     @media (forced-colors: active) {
       /* ── Canvas: rows, bands, grid, annotations, today ── */
       .gantt-rows > rect { fill: Canvas !important; }
+      .gantt-row-hover { display: none; }
       .gantt-band { fill: GrayText !important; fill-opacity: 0.15; }
       .gantt-band--intensive { fill: Highlight !important; }
       .gantry-canvas-container pattern line { stroke: GrayText !important; }
@@ -49,6 +53,7 @@ export const FORCED_COLORS_CSS = `
 
       /* ── Bars: body, caps, progress, baseline, labels; critical dashed, selected Highlight ── */
       .gantt-bar-body { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1.5px; }
+      .gantt-bar-segment { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1px; }
       .gantt-bar-caps { fill: ButtonText !important; }
       .gantt-bar-progress { fill: ButtonText !important; fill-opacity: 0.45; }
       .gantt-bar-baseline { stroke: GrayText !important; }
@@ -61,7 +66,6 @@ export const FORCED_COLORS_CSS = `
       .gantt-bar-focus-ring { stroke: Highlight !important; }
       .gantt-bar-grip { fill: Canvas !important; stroke: Highlight !important; }
       .gantt-drag-preview { fill: Highlight !important; stroke: Highlight !important; }
-      .gantt-drag-preview-label { fill: CanvasText !important; }
 
       /* ── Header: current period, bands, marker lane, today pointer ── */
       .g-cell--current { forced-color-adjust: none; background-color: Highlight !important; border-color: CanvasText !important; }
@@ -79,6 +83,7 @@ export const FORCED_COLORS_CSS = `
       }
 
       /* ── Task list: selected row, status dots, disabled load-more ── */
+      .gantt-tl-row--hover { background-image: none; }
       .gantt-tl-row--selected { forced-color-adjust: none; background-color: Highlight !important; box-shadow: none; }
       .gantt-tl-row--selected, .gantt-tl-row--selected * { color: HighlightText !important; border-color: CanvasText !important; }
       .gantt-tl-status-dot { background-color: CanvasText !important; }
@@ -86,11 +91,13 @@ export const FORCED_COLORS_CSS = `
       .gantt-col-resize:hover { background-color: Highlight !important; }
       .gantt-load-more-btn[aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
 
-      /* ── Toolbar: the checked radio ── */
-      .gantt-tb-pill[aria-checked="true"] {
+      /* ── Toolbar: the checked radio and menu item, the pressed panel toggle, the More menu ── */
+      .gantt-tb-pill[aria-checked="true"], .gantt-tb-menu-item[aria-checked="true"] {
         forced-color-adjust: none;
         background-color: Highlight !important; border-color: Highlight !important; color: HighlightText !important;
       }
+      .gantt-tb-btn[aria-pressed="true"] { color: Highlight !important; border-color: Highlight !important; }
+      .gantt-tb-menu { background-color: Canvas !important; color: CanvasText !important; border-color: CanvasText !important; }
 
       /* ── Splitter: its line and its focus / hover line (the gradients are dropped) ── */
       .gantry-splitter-handle::before {
@@ -103,7 +110,7 @@ export const FORCED_COLORS_CSS = `
 
       /* ── Focus rings ── */
       .gantry-canvas-viewport:focus-visible, .gantry-splitter-toggle:focus-visible,
-      .gantt-tb-btn:focus-visible, .gantt-tb-pill:focus-visible,
+      .gantt-tb-btn:focus-visible, .gantt-tb-pill:focus-visible, .gantt-tb-menu-item:focus-visible,
       .gantt-tl-row:focus-visible, .gantt-tl-cell:focus-visible, .gantt-tl-col-header:focus-visible,
       .gantt-tl-load-more:focus-visible, .gantt-collapse-btn:focus-visible,
       .gantt-load-more-btn:focus-visible, .gantt-state-retry:focus-visible { outline-color: Highlight !important; }

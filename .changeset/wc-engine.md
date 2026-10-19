@@ -48,7 +48,7 @@ so horizontal scrolling inside a chunk does no DOM work; `.g-header` keeps the f
 `.g-cell` or `.gantt-band` in the shadow root now sees only the mounted ones. Header cells are positioned through the
 `--x` / `--w` custom properties. A custom `renderBar` is called again only when its row's task, visual, selection,
 critical/baseline state, scale or theme changes. The drag ghost uses the shared core look (dashed outline at 35 %
-opacity with a "+2d" movement label) and the dragged bar is dimmed through a CSS style. The tooltip is one persistent
+opacity) and the dragged bar is dimmed through a CSS style. The tooltip is one persistent
 popover (`role="tooltip"`) with `<dl>` rows written as text. Column resizing uses pointer capture (no `window` listeners).
 `@gantryjs/angular`, in the same release, windows its header, bands and grid lines the same way.
 

@@ -3,6 +3,9 @@
 // prevented only while dragging, pointercancel / Escape cancel, the drag follows the pointer in
 // content coordinates; the hover writes `hoveredBarId`, the cursor and the tooltip calls; a tap
 // toggles the tooltip. Bars are hit by geometry (the canvas box is at 0,0 in happy-dom).
+// Phase 10 step 4.1: a mouse press on a bar focuses that bar (a touch or pen drag too), with the
+// pointer's modality (no focus ring); Escape belongs to the press while it lasts; a scroll of
+// either pane clears the hover (the row hover itself is in hover.test.ts).
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   DRAG_THRESHOLD_PX,
@@ -92,9 +95,10 @@ describe('mouse press', () => {
     const { x, y } = centre('a');
 
     const down = send('pointerdown', x, y, 'mouse', barEl('a'));
-    // No text selection or native focus: the timeline takes keyboard focus, the pointer is captured
+    // No text selection or native focus: the pressed bar takes keyboard focus, the pointer is captured
     expect(down.defaultPrevented).toBe(true);
-    expect(el.shadowRoot!.activeElement).toBe(viewport());
+    expect(el.shadowRoot!.activeElement).toBe(barEl('a'));
+    expect(engine().inputs.focusVisibleBarId.peek()).toBeNull();
     expect(capture).toHaveBeenCalledWith(1);
     expect(dragKind()).toBe('idle');
 
@@ -148,22 +152,49 @@ describe('mouse press', () => {
     expect(onResized.mock.calls[0][0].detail).toMatchObject({ taskId: 'a', handle: 'right', daysDelta: 1 });
   });
 
-  it('leaves a bar that cannot be dragged to the plain click (no capture, no prevented default)', () => {
+  it('leaves a bar that cannot be dragged to the plain click (no capture), focusing that bar', () => {
     mount();
     const capture = vi.spyOn(canvas(), 'setPointerCapture');
     const { x, y } = centre('locked');
     const down = send('pointerdown', x, y, 'mouse', barEl('locked'));
-    expect(down.defaultPrevented).toBe(false);
+    // The bar takes focus itself (no native focus elsewhere, no text selection)
+    expect(down.defaultPrevented).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(barEl('locked'));
     send('pointermove', x + 3 * px(), y);
     expect(dragKind()).toBe('idle');
     send('pointerup', x + 3 * px(), y);
     expect(capture).not.toHaveBeenCalled();
-    // Drag off: no press on any bar
+    // Drag off: no press on any bar, but a press still focuses the bar it hits
     el.enableDrag = false;
+    getEngine(el).flushSync();
     const { x: ax, y: ay } = centre('a');
-    expect(send('pointerdown', ax, ay).defaultPrevented).toBe(false);
+    // In a handle's reach outside the bar's shapes: still that bar (hit by geometry)
+    send('pointerdown', ax, ay);
+    expect(el.shadowRoot!.activeElement).toBe(barEl('a'));
     send('pointermove', ax + 3 * px(), ay);
     expect(dragKind()).toBe('idle');
+    send('pointerup', ax + 3 * px(), ay);
+    // Off the bars: nothing is prevented, focus stays where it was
+    const off = send('pointerdown', 5, 5);
+    expect(off.defaultPrevented).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(barEl('a'));
+  });
+
+  it('a pressed bar keeps the pointer modality: no focus ring and no focus tooltip, until a key is pressed', () => {
+    mount();
+    const focusTip = vi.spyOn(engine().layers.tooltip, 'focus');
+    const { x, y } = centre('b');
+    // A keyboard user's last input was a key: the press makes the pointer the modality
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true }));
+    send('pointerdown', x, y, 'mouse', barEl('b'));
+    send('pointerup', x, y, 'mouse', barEl('b'));
+    expect(el.shadowRoot!.activeElement).toBe(barEl('b'));
+    expect(engine().inputs.focusedRowId.peek()).toBe('b');
+    expect(engine().inputs.focusVisibleBarId.peek()).toBeNull();
+    expect(focusTip).not.toHaveBeenCalled();
+    // The pressed bar is the timeline's tab stop now
+    getEngine(el).flushSync();
+    expect(barEl('b').getAttribute('tabindex')).toBe('0');
   });
 
   it('ignores other buttons', () => {
@@ -227,6 +258,40 @@ describe('cancelling', () => {
     send('pointermove', x + 3 * px(), y);
     expect(dragKind()).toBe('idle');
   });
+
+  it("Escape is the press's while it lasts: consumed before the chart and the page hear it, then theirs again", () => {
+    mount();
+    const onKey = vi.fn();
+    document.addEventListener('keydown', onKey);
+    el.setSelectedTasks(['b']);
+    const { x, y } = centre('a');
+    send('pointerdown', x, y, 'mouse', barEl('a'));
+    send('pointermove', x + 2 * px(), y);
+    expect(dragKind()).toBe('dragging');
+    // On the pressed bar, which holds focus
+    const esc = () => {
+      const e = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true });
+      barEl('a').dispatchEvent(e);
+      return e;
+    };
+    expect(esc().defaultPrevented).toBe(true);
+    expect(dragKind()).toBe('idle');
+    expect(engine().inputs.dragPreview.peek()).toBeNull();
+    // Not a keyboard focus (no ring, no focus tooltip), the selection stays, the page saw nothing
+    expect(engine().inputs.focusVisibleBarId.peek()).toBeNull();
+    expect(engine().layers.tooltip.visibleId()).toBeNull();
+    expect(el.getSelectedTasks().map(t => t.id)).toEqual(['b']);
+    expect(onKey).not.toHaveBeenCalled();
+    send('pointerup', x + 2 * px(), y);
+    // The press is over: the next Escape is the chart's (a key shows the focused bar's ring; with
+    // no tooltip to close first it clears the selection) and the page's
+    el.tooltipEnabled = false;
+    esc();
+    expect(engine().inputs.focusVisibleBarId.peek()).toBe('a');
+    expect(el.getSelectedTasks()).toEqual([]);
+    expect(onKey).toHaveBeenCalledOnce();
+    document.removeEventListener('keydown', onKey);
+  });
 });
 
 describe('touch and pen press', () => {
@@ -246,7 +311,9 @@ describe('touch and pen press', () => {
 
     vi.advanceTimersByTime(1);
     expect(dragKind()).toBe('dragging');
-    expect(el.shadowRoot!.activeElement).toBe(viewport());
+    // The dragged bar takes focus once the drag starts, with no focus ring
+    expect(el.shadowRoot!.activeElement).toBe(barEl('a'));
+    expect(engine().inputs.focusVisibleBarId.peek()).toBeNull();
     expect(touchmove(x + px(), y).defaultPrevented).toBe(true);
 
     send('pointermove', x + 2 * px(), y, 'touch');
@@ -454,6 +521,32 @@ describe('hover', () => {
     // The bar moved with the pointer: it is under it again
     expect(engine().inputs.hoveredBarId.peek()).toBe('a');
     expect(canvas().getAttribute('data-cursor')).toBe('grab');
+  });
+
+  it('a scroll of either pane clears the hovered bar, its grips, the row and the cursor; a drag keeps its cursor', () => {
+    mount();
+    const { inputs: I, dom } = engine();
+    const { x, y } = centre('a');
+    for (const pane of [viewport(), dom.panel]) {
+      send('pointermove', x, y, 'mouse', barEl('a'));
+      expect(I.hoveredBarId.peek()).toBe('a');
+      expect(I.hoveredRowId.peek()).toBe('a');
+      expect(canvas().getAttribute('data-cursor')).toBe('grab');
+      pane.dispatchEvent(new Event('scroll'));
+      expect(I.hoveredBarId.peek()).toBeNull();
+      expect(I.hoveredRowId.peek()).toBeNull();
+      expect(canvas().hasAttribute('data-cursor')).toBe(false);
+    }
+    // The next move hovers again
+    send('pointermove', x, y);
+    expect(I.hoveredBarId.peek()).toBe('a');
+    // While a bar is dragged (the viewport auto-scrolls) the cursor stays
+    send('pointerdown', x, y);
+    send('pointermove', x + 2 * px(), y);
+    expect(canvas().getAttribute('data-cursor')).toBe('grabbing');
+    viewport().dispatchEvent(new Event('scroll'));
+    expect(canvas().getAttribute('data-cursor')).toBe('grabbing');
+    send('pointerup', x + 2 * px(), y);
   });
 
   it('measures the canvas box once per hover, again after a scroll, a resize of the panes or re-entering', () => {

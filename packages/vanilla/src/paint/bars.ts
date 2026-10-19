@@ -9,8 +9,13 @@
  * the same visual and options as the last one returns at once.
  *
  * The group's classes: `gantt-bar` first (the paint-snapshot key), then `gantt-bar--<kind>`,
- * `gantt-bar--critical` on the critical path (forced-colors mode dashes it), `task.className`
- * and `gantt-bar-draggable`.
+ * `gantt-bar--critical` on the critical path (forced-colors mode dashes it), the row style's
+ * classes (`visual.className`: `options.styles`, `task.style.className`, the deprecated
+ * `task.className`) and `gantt-bar-draggable`.
+ *
+ * A collapsed rolled-up parent (`rollup.segments`) shows its children as segments right after the
+ * body: one `rect.gantt-bar-segment` per `visual.segments` entry (x / width from the segment, the
+ * bar's y, height and rx, fill through the CSSOM), present only while the visual has segments.
  */
 
 import { PAINTS, type BarVisual } from '@gantryjs/core';
@@ -21,8 +26,6 @@ export interface BarPaintOptions {
   /** Label font size in px (`themeMetrics(theme).fontPx`) */
   readonly fontPx: number;
   readonly selected: boolean;
-  /** `task.className`, added to the bar group */
-  readonly className?: string | undefined;
   /** Adds `gantt-bar-draggable` (grab cursor; the pointer handler only drags such bars) */
   readonly draggable?: boolean | undefined;
   /** On the critical path: adds `gantt-bar--critical` */
@@ -35,6 +38,8 @@ type PartName = (typeof PARTS)[number];
 
 interface BarState {
   readonly body: SVGPathElement;
+  /** Child segments (`visual.segments`), in order right after the body */
+  readonly segments: SVGRectElement[];
   caps: SVGPathElement | null;
   progress: SVGPathElement | null;
   baseline: SVGLineElement | null;
@@ -49,7 +54,6 @@ const bars = new WeakMap<SVGGElement, BarState>();
 const sameOptions = (a: BarPaintOptions, b: BarPaintOptions) =>
   a.fontPx === b.fontPx &&
   a.selected === b.selected &&
-  a.className === b.className &&
   !!a.draggable === !!b.draggable &&
   !!a.critical === !!b.critical;
 
@@ -57,7 +61,7 @@ const sameOptions = (a: BarPaintOptions, b: BarPaintOptions) =>
 export function createBar(v: BarVisual, opts: BarPaintOptions): SVGGElement {
   const body = s('path', { class: 'gantt-bar-body' });
   const g = s('g', null, body);
-  bars.set(g, { body, caps: null, progress: null, baseline: null, label: null, v: null, opts: null });
+  bars.set(g, { body, segments: [], caps: null, progress: null, baseline: null, label: null, v: null, opts: null });
   patchBar(g, v, opts);
   return g;
 }
@@ -74,7 +78,7 @@ export function patchBar(g: SVGGElement, v: BarVisual, opts: BarPaintOptions): v
 
   let cls = `gantt-bar gantt-bar--${v.kind}`;
   if (opts.critical) cls += ' gantt-bar--critical';
-  if (opts.className) cls += ` ${opts.className}`;
+  if (v.className) cls += ` ${v.className}`;
   if (opts.draggable) cls += ' gantt-bar-draggable';
   setAttr(g, 'class', cls);
 
@@ -83,6 +87,8 @@ export function patchBar(g: SVGGElement, v: BarVisual, opts: BarPaintOptions): v
   setAttr(body, 'stroke-width', opts.selected ? 1.5 : null);
   setStyleProp(body, 'fill', v.paint.body);
   setStyleProp(body, 'stroke', opts.selected ? PAINTS.selectionStroke : null);
+
+  paintSegments(st, v);
 
   const caps = part(g, st, 'caps', v.caps !== null, () => s('path', { class: 'gantt-bar-caps' }));
   if (caps && v.caps) {
@@ -131,6 +137,30 @@ export function patchBar(g: SVGGElement, v: BarVisual, opts: BarPaintOptions): v
     setStyleProp(label, 'fill', v.paint.label);
     setText(label, l.text);
   }
+}
+
+/**
+ * The child segments of `v` right after the body (none without `v.segments`): the rects are kept
+ * in order, extra ones removed, missing ones added after the last one.
+ */
+function paintSegments(st: BarState, v: BarVisual): void {
+  const segments = v.segments ?? [];
+  const rects = st.segments;
+  while (rects.length > segments.length) rects.pop()!.remove();
+  segments.forEach((seg, i) => {
+    let rect = rects[i];
+    if (!rect) {
+      rect = s('rect', { class: 'gantt-bar-segment', 'pointer-events': 'none' });
+      (rects[i - 1] ?? st.body).after(rect);
+      rects.push(rect);
+    }
+    setAttr(rect, 'x', seg.x);
+    setAttr(rect, 'y', v.y);
+    setAttr(rect, 'width', seg.width);
+    setAttr(rect, 'height', v.height);
+    setAttr(rect, 'rx', v.rx);
+    setStyleProp(rect, 'fill', seg.paint);
+  });
 }
 
 /**

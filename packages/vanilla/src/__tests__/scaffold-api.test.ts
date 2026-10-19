@@ -106,7 +106,8 @@ describe('<gantry-element> Phase 9 scaffold', () => {
 
   describe('public surface', () => {
     it('appends loading and errorMessage to the property table, and retry to the events', () => {
-      expect(GANTRY_PROPERTIES.slice(-2)).toEqual(['loading', 'errorMessage']);
+      // Phase 10 appends syncGroup after them
+      expect(GANTRY_PROPERTIES.slice(12, 14)).toEqual(['loading', 'errorMessage']);
       expect(GANTRY_EVENTS.retry).toBe('onRetry');
       expect(typeof GantryElement.prototype.fitToScreen).toBe('function');
     });

@@ -17,6 +17,7 @@ import type {
   PagedLoaderConfig,
   ColumnContext,
   GanttBarContext,
+  GanttSyncGroup,
 } from '@gantryjs/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
 
@@ -82,6 +83,8 @@ export interface GantryProperties {
   renderBar?: GanttBarRenderer | undefined;
   loading?: boolean | undefined;
   errorMessage?: string | null | undefined;
+  /** Sync group shared with other charts (core `createGanttSyncGroup()`); `null` = not synchronised */
+  syncGroup?: GanttSyncGroup | null | undefined;
 }
 
 /** Settable properties of `<gantry-element>`, in order (from the property table, `engine/props.ts`). */

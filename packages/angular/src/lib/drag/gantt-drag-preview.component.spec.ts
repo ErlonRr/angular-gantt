@@ -1,6 +1,7 @@
 // Drag ghost (Gantry 2 phase 6, step 2.5): the preview paints `computeDragGhostVisual` from
-// @gantryjs/core and draws exactly what it drew before (rect, dash, opacity, delta label), with
-// its paints as CSS properties; the canvas feeds it the dragged row, the config and the timeline.
+// @gantryjs/core and draws exactly what it drew before (rect, dash, opacity), with its paints as
+// CSS properties; the canvas feeds it the dragged row, the config and the timeline. Since phase 10
+// the ghost has no "+3d" label: the drag readout chip shows the move.
 import { describe, it, expect } from 'vitest';
 import { Component, provideZonelessChangeDetection, signal, viewChild } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
@@ -87,7 +88,7 @@ interface GhostDom {
   text: Record<string, string | null> | null;
 }
 
-/** What the preview drew before step 2.5 (transcribed from the old template and canvas inputs). */
+/** What the preview drew before step 2.5 (old template and canvas inputs), without the phase 10 label. */
 function previousGhost(p: DragPreview, c: Chart): GhostDom {
   const geo = geoOf(c.geos, p.taskId);
   const h = computeBarVisual({ geo, cfg: c.cfg, toX: c.tl.toX, fontPx: FONT_PX, resizable: true }).height;
@@ -105,19 +106,7 @@ function previousGhost(p: DragPreview, c: Chart): GhostDom {
       'stroke-dasharray': '4 2',
       'stroke-width': '1.5',
     },
-    text:
-      p.delta === 0
-        ? null
-        : {
-            x: String(p.x + p.width / 2),
-            y: String(p.y),
-            fill: 'var(--gantt-text)',
-            'font-size': '11px',
-            'font-weight': '600',
-            'text-anchor': 'middle',
-            'dominant-baseline': 'auto',
-            text: `${p.delta > 0 ? '+' : ''}${p.delta}${p.unit === 'hour' ? 'h' : 'd'}`,
-          },
+    text: null,
   };
 }
 
@@ -217,7 +206,16 @@ describe('GanttDragPreviewComponent', () => {
     const g = computeDragGhostVisual(p, geoOf(c.geos, 'a'), c.cfg, c.tl.toX, i18n, FONT_PX);
     expect(dom?.rect).toMatchObject({ x: String(g.x), y: String(g.y), height: String(g.height), rx: String(g.rx) });
     expect(dom?.rect['fill']).toBe(g.paint);
-    expect(dom?.text).toMatchObject({ x: String(g.label?.x), y: String(g.label?.y), text: '+3d' });
+    expect(g.label).toBeNull();
+    expect(dom?.text).toBeNull();
+  });
+
+  it('draws no movement label, moved or not (the drag readout chip shows the move)', async () => {
+    const f = await mountPreview();
+    const { dom } = await show(f, { viewMode: 'Day' }, 'a', 'bar', 2);
+    expect(dom?.rect['class']).toBe('gantt-drag-preview');
+    expect(dom?.text).toBeNull();
+    expect((f.nativeElement as HTMLElement).querySelectorAll('text')).toHaveLength(0);
   });
 
   it('draws no label while the snapped movement is zero', async () => {
@@ -240,27 +238,18 @@ describe('GanttDragPreviewComponent', () => {
     expect(readGhost(f.nativeElement as HTMLElement)).toBeNull();
   });
 
-  it('ignores pointer events, binds paints as CSS properties and uses the chart font', async () => {
+  it('ignores pointer events and binds paints as CSS properties', async () => {
     const f = await mountPreview();
     await show(f, { viewMode: 'Day' }, 'a', 'bar', 2);
     const root = f.nativeElement as HTMLElement;
     const rect = root.querySelector('rect.gantt-drag-preview');
-    const text = root.querySelector('text');
     const host = rect?.parentElement;
-    if (!rect || !text || !host) throw new Error('no ghost');
+    if (!rect || !host) throw new Error('no ghost');
     expect(getComputedStyle(host).pointerEvents).toBe('none');
-    expect(getComputedStyle(text).userSelect).toBe('none');
-    // the test DOM resolves an undefined var() to its default font: read the matching component rule
-    const fonts = [...document.styleSheets]
-      .flatMap(sheet => [...sheet.cssRules])
-      .filter((r): r is CSSStyleRule => r instanceof CSSStyleRule && text.matches(r.selectorText))
-      .map(r => r.style.getPropertyValue('font-family'));
-    expect(fonts).toContain('var(--gantt-font)');
-    for (const el of [rect, text]) {
-      expect(el.hasAttribute('fill')).toBe(false);
-      expect(el.hasAttribute('stroke')).toBe(false);
-      expect(el.hasAttribute('pointer-events')).toBe(false);
-    }
+    expect(rect.hasAttribute('fill')).toBe(false);
+    expect(rect.hasAttribute('stroke')).toBe(false);
+    expect(rect.hasAttribute('pointer-events')).toBe(false);
+    expect(root.querySelector('text')).toBeNull();
   });
 });
 
@@ -303,7 +292,7 @@ describe('GanttCanvasComponent drag ghost', () => {
     const { c, p, dragSvc } = await dragInChart(f, 'a', 2);
     const dom = readGhost(f.nativeElement as HTMLElement);
     expect(dom).toEqual(previousGhost(p, c));
-    expect(dom?.text?.['text']).toBe('+2d');
+    expect(dom?.text).toBeNull();
 
     dragSvc.preview.set(null);
     dragSvc.state.set({ kind: 'idle' });

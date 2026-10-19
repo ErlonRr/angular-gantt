@@ -33,6 +33,11 @@
  *   it returns replaces the row's keyed slot; in between, the same node is kept and only the
  *   attributes above are patched on it. (A task mutated in place keeps its custom bar until its
  *   visual changes: replace the task object to re-render it.)
+ *
+ * The row style's classes (`visual.className`: `options.styles`, `task.style.className`, the
+ * deprecated `task.className`) are part of a built-in bar's class (`paint/bars.ts`); a custom
+ * node gets them added and removed one by one next to its own classes (as Angular's bar outlet
+ * does), and reads the whole style in `ctx.style`.
  */
 
 import {
@@ -97,6 +102,12 @@ interface OverlayShape {
 const same = (a: readonly unknown[] | undefined, b: readonly unknown[]) =>
   a?.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 
+const NO_CLASSES: readonly string[] = [];
+
+/** The classes of a `className` value (`null`: none) */
+const classList = (className: string | null): readonly string[] =>
+  className ? className.split(/\s+/).filter(Boolean) : NO_CLASSES;
+
 /** The primary pointer is coarse (touch): selected bars show their grips. Read once per element. */
 const coarsePointer = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
@@ -117,6 +128,7 @@ function sameContext(a: GanttBarContext, b: GanttBarContext): boolean {
     a.draggable === b.draggable &&
     a.enableResize === b.enableResize &&
     a.showBaseline === b.showBaseline &&
+    a.style === b.style &&
     a.layoutParams.origin.getTime() === b.layoutParams.origin.getTime() &&
     a.layoutParams.pxPerDay === b.layoutParams.pxPerDay &&
     a.layoutParams.rowHeight === b.layoutParams.rowHeight &&
@@ -135,6 +147,8 @@ export function createBarsLayer(ctx: LayerContext): Layer {
   const names = new WeakMap<GanttFlatRow, BarName>();
   /** Bars dimmed as the dragged one */
   const dimmed = new WeakSet<Element>();
+  /** The style classes this layer added to each custom bar node */
+  const styleClasses = new WeakMap<Element, readonly string[]>();
   /** The bar focused last: it keeps the tab stop while mounted, so Tab returns to it */
   let lastFocusedId: string | null = null;
   /** What the bars were last painted from (the overlay alone may change: hover, keyboard focus) */
@@ -210,6 +224,8 @@ export function createBarsLayer(ctx: LayerContext): Layer {
       // repaint on a colour change
       const theme = renderBar ? G.theme() : undefined;
       const tl = renderBar ? G.timeline() : undefined;
+      // Custom bars get their row's resolved style (`ctx.style`)
+      const styleOf = renderBar ? G.rowStyle() : undefined;
       const fontPx = G.metrics().fontPx;
       const critical = G.critical()?.criticalIds ?? NONE;
       const selected = I.selection().selected;
@@ -233,7 +249,7 @@ export function createBarsLayer(ctx: LayerContext): Layer {
       const keys = rowKeys(geos);
       paintOverlay(geos, keys, visualOf, selected);
       // Only the overlay changed (hover, keyboard focus): the bars stay as they are
-      const from: unknown[] = [geos, visualOf, renderBar, theme, tl, fontPx, critical, selected];
+      const from: unknown[] = [geos, visualOf, renderBar, theme, tl, styleOf, fontPx, critical, selected];
       from.push(enableDrag, dragged, stop, rowCount, i18n, cfg);
       if (same(paintedFrom, from)) return;
       paintedFrom = from;
@@ -245,12 +261,12 @@ export function createBarsLayer(ctx: LayerContext): Layer {
         const opts: BarPaintOptions = {
           fontPx,
           selected: selected.has(task.id),
-          className: task.className,
           draggable: enableDrag && task.draggable !== false,
           critical: isCritical,
         };
         const key = keys[i]!;
-        if (!renderBar || !theme || !tl) return { key, row: geo.row, v, opts, critical: isCritical, node: null };
+        if (!renderBar || !theme || !tl || !styleOf)
+          return { key, row: geo.row, v, opts, critical: isCritical, node: null };
 
         const barCtx: GanttBarContext = {
           row: geo.row,
@@ -263,6 +279,7 @@ export function createBarsLayer(ctx: LayerContext): Layer {
           enableResize: !!v.handles,
           showBaseline: cfg.baseline,
           visual: v,
+          style: styleOf(geo.row),
         };
         let bar = custom.get(key);
         if (!bar || bar.renderBar !== renderBar || !sameContext(bar.ctx, barCtx)) {
@@ -291,8 +308,15 @@ export function createBarsLayer(ctx: LayerContext): Layer {
         item => item.node ?? createBar(item.v, item.opts),
         (el, item, i) => {
           const task = item.row.task;
-          if (item.node) toggleClass(el, 'gantt-bar-draggable', !!item.opts.draggable);
-          else patchBar(el as SVGGElement, item.v, item.opts);
+          if (item.node) {
+            toggleClass(el, 'gantt-bar-draggable', !!item.opts.draggable);
+            // The row style's classes, next to the node's own (the ones added before and gone are removed)
+            const prev = styleClasses.get(el) ?? NO_CLASSES;
+            const next = classList(item.v.className);
+            for (const c of prev) if (!next.includes(c)) toggleClass(el, c, false);
+            for (const c of next) toggleClass(el, c, true);
+            styleClasses.set(el, next);
+          } else patchBar(el as SVGGElement, item.v, item.opts);
           setAttr(el, 'data-task-id', task.id);
           setAttr(el, 'data-bar-type', item.row.barType);
           setAttr(el, 'role', 'option');

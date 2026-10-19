@@ -12,10 +12,13 @@ import type {
   ScaleFormatContext,
   GanttLabels,
   GanttI18n,
+  WeekRule,
+  WeekStart,
 } from '../types';
 import { ViewMode, DEFAULT_LABELS } from '../types';
 import { calendarDays, toLocalDay } from '../gantt-math';
-import { formatDate, isoWeek } from '../format';
+import { formatDate } from '../format';
+import { resolveWeek, weekOfYear } from '../format/week';
 
 // ─── Unit arithmetic ──────────────────────────────────────────
 
@@ -33,7 +36,7 @@ export const UNIT_DAYS: Record<TimeUnit, number> = {
  * Start of the `unit`×`step` period containing `date`. Steps align to the
  * calendar (6 hours → 00/06/12/18, 6 months → Jan/Jul, 2 days/weeks → epoch-aligned).
  */
-export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1 = 1): Date {
+export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: WeekStart = 1): Date {
   return periodStart(toLocalDay(date), unit, step, weekStart);
 }
 
@@ -42,7 +45,7 @@ export function unitStart(date: Date, unit: TimeUnit, step = 1, weekStart: 0 | 1
  * normalisation, so an hour boundary that happens to fall on UTC midnight (16:00 in
  * Los Angeles) is not mistaken for a date-only value.
  */
-function periodStart(d: Date, unit: TimeUnit, step: number, weekStart: 0 | 1): Date {
+function periodStart(d: Date, unit: TimeUnit, step: number, weekStart: WeekStart): Date {
   const y = d.getFullYear(),
     m = d.getMonth(),
     day = d.getDate();
@@ -104,12 +107,14 @@ export function periodNext(start: Date, unit: TimeUnit, step: number): Date {
     : unitAdd(start, unit, step);
 }
 
-/** Week number: ISO-8601 when the week starts on Monday, US-style (week 1 holds Jan 1) on Sunday. */
-export function weekNumber(date: Date, weekStart: 0 | 1 = 1): number {
-  if (weekStart === 1) return isoWeek(date);
-  const jan1 = new Date(date.getFullYear(), 0, 1);
-  const dayOfYear = Math.round(calendarDays(date) - calendarDays(jan1));
-  return Math.floor((dayOfYear + jan1.getDay()) / 7) + 1;
+/**
+ * Week number (1–53) of `date`'s local calendar day under a rule (`weekOfYear`) or under the rule
+ * a chart with only `weekStart` set numbers by (`resolveWeek`): 1 → ISO-8601, 0 → US (week 1
+ * holds January 1, and so does the week's December part), 6 → weeks from Saturday with week 1
+ * holding 4 days of the year.
+ */
+export function weekNumber(date: Date, week: WeekStart | WeekRule = 1): number {
+  return weekOfYear(date, typeof week === 'number' ? resolveWeek(undefined, week).rule : week);
 }
 
 // ─── Formats ──────────────────────────────────────────────────
@@ -117,12 +122,19 @@ export function weekNumber(date: Date, weekStart: 0 | 1 = 1): number {
 /** Inclusive last day of a period whose exclusive end is `end`. */
 const lastDay = (end: Date) => new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
 
-/** Ready-made week label formats — pass as a scale's `format`. */
+/** The week number of a label: `ctx.week`'s rule (a context built by hand without it: `ctx.weekStart`'s). */
+const labelWeek = (start: Date, ctx: ScaleFormatContext): number =>
+  weekNumber(start, (ctx as Partial<ScaleFormatContext>).week ?? ctx.weekStart);
+
+/**
+ * Ready-made week label formats — pass as a scale's `format`. Week numbers follow the chart's
+ * rule (`ScaleFormatContext.week`: `weekNumbering` and `weekStart`) for the week's first day.
+ */
 export const WEEK_FORMATS = {
   /** "W52" (prefix from `labels.weekPrefix`) */
-  number: ((s, _e, ctx) => `${ctx.labels.weekPrefix}${weekNumber(s, ctx.weekStart)}`) as ScaleFormat,
+  number: ((s, _e, ctx) => `${ctx.labels.weekPrefix}${labelWeek(s, ctx)}`) as ScaleFormat,
   /** "Week 52" (word from `labels.week`) */
-  label: ((s, _e, ctx) => `${ctx.labels.week} ${weekNumber(s, ctx.weekStart)}`) as ScaleFormat,
+  label: ((s, _e, ctx) => `${ctx.labels.week} ${labelWeek(s, ctx)}`) as ScaleFormat,
   /** "4–11" — first and last day of the week */
   range: ((s, e) => `${s.getDate()}–${lastDay(e).getDate()}`) as ScaleFormat,
   /** "4–11 Mar", or "28 Feb – 6 Mar" across months */
@@ -134,7 +146,7 @@ export const WEEK_FORMATS = {
   }) as ScaleFormat,
   /** "W52 · 4–11" */
   numberRange: ((s, e, ctx) =>
-    `${ctx.labels.weekPrefix}${weekNumber(s, ctx.weekStart)} · ${s.getDate()}–${lastDay(e).getDate()}`) as ScaleFormat,
+    `${ctx.labels.weekPrefix}${labelWeek(s, ctx)} · ${s.getDate()}–${lastDay(e).getDate()}`) as ScaleFormat,
 };
 
 /** "Q2 2026" / "Q2" (prefix from `labels.quarterPrefix`) */
@@ -289,7 +301,10 @@ export interface BuildTiersInput {
   pxPerDay: number;
   /** Tier heights when a scale has none: [upper tiers, bottom tier] */
   heights?: [number, number] | undefined;
-  weekStart?: 0 | 1 | undefined;
+  /** First day of the week cells (default: `week`'s first day when it is 0 or 6, otherwise Monday) */
+  weekStart?: WeekStart | undefined;
+  /** Week-numbering rule of the labels (default: the rule `resolveWeek` gives for `weekStart`) */
+  week?: WeekRule | undefined;
   locale?: string | undefined;
   labels?: GanttLabels | undefined;
   now?: Date | undefined;
@@ -323,7 +338,7 @@ export function partialLabelHidden(label: string, width: number, fontPx = 12): b
  * Period boundaries (start dates) of a unit inside [start, end), the first one possibly before
  * `start`. `start` and `end` are local dates (already normalised), like every timeline bound.
  */
-export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: number, weekStart: 0 | 1): Date[] {
+export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: number, weekStart: WeekStart): Date[] {
   const out: Date[] = [];
   let cur = periodStart(start, unit, step, weekStart);
   // Hard cap protects against runaway configs (e.g. hour scale over decades)
@@ -334,13 +349,18 @@ export function unitBoundaries(start: Date, end: Date, unit: TimeUnit, step: num
   return out;
 }
 
+/** The week-cell start of a rule's first day: Sunday or Saturday as they are, any other day Monday (as `resolveWeek`). */
+const cellWeekStart = (day: number): WeekStart => (day === 0 || day === 6 ? day : 1);
+
 export function buildTiers(input: BuildTiersInput): ScaleTier[] {
-  const { scales, pxPerDay, weekStart = 1, locale, now = new Date(), labelFontPx = 12 } = input;
+  const { scales, pxPerDay, locale, now = new Date(), labelFontPx = 12 } = input;
+  const weekStart = input.weekStart ?? (input.week ? cellWeekStart(input.week.firstDay) : 1);
   const local = (d: Date) => (input.normalizeDateOnly === false ? d : toLocalDay(d));
   const start = local(input.start);
   const end = local(input.end);
   const labels = input.labels ?? DEFAULT_LABELS;
   const [upperH, bottomH] = input.heights ?? [32, 28];
+  const week = input.week ?? resolveWeek(undefined, weekStart).rule;
   // Bounds and cells are local dates: x without date-only normalisation (see `periodStart`)
   const origin = calendarDays(start, false);
   const xOf = (d: Date) => Math.round((calendarDays(d, false) - origin) * pxPerDay);
@@ -356,6 +376,7 @@ export function buildTiers(input: BuildTiersInput): ScaleTier[] {
       step,
       labels,
       weekStart,
+      week,
       ...(locale !== undefined && { locale }),
     };
     const cells: ScaleCell[] = [];

@@ -286,6 +286,8 @@ export interface GanttSetup {
   tooltipTemplate?: boolean;
   /** A paged data source serving `tasks` whose first `failures` fetches reject (no automatic retry) */
   dataSource?: { failures: number; pageSize?: number };
+  /** The chart's box in px. Default: 1150 × 700 */
+  box?: { width: number; height: number };
 }
 
 /** What `Gantt.set` changes after the chart is open. */
@@ -400,8 +402,8 @@ export class Gantt {
             ['top', '0'],
             ['left', '0'],
             ['z-index', '100'],
-            ['width', '1150px'],
-            ['height', '700px'],
+            ['width', `${f.box?.width ?? 1150}px`],
+            ['height', `${f.box?.height ?? 700}px`],
           ]) {
             el.style.setProperty(prop, value);
           }

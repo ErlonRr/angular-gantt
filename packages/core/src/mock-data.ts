@@ -15,7 +15,7 @@ export const DEMO_TASKS: GanttTask[] = [
     start: d('2026-01-05'),
     end: d('2026-05-30'),
     progress: 48,
-    barColor: '#6366F1',
+    style: { color: '#6366F1' },
   },
   {
     id: 'p1-a',
@@ -75,7 +75,7 @@ export const DEMO_TASKS: GanttTask[] = [
     end: d('2026-05-15'),
     progress: 0,
     dependency: 'p1-c',
-    barColor: '#F59E0B',
+    style: { color: '#F59E0B' },
   },
   {
     id: 'p2',
@@ -84,7 +84,7 @@ export const DEMO_TASKS: GanttTask[] = [
     start: d('2026-03-01'),
     end: d('2026-07-31'),
     progress: 22,
-    barColor: '#10B981',
+    style: { color: '#10B981' },
   },
   {
     id: 'p2-a',
@@ -122,7 +122,7 @@ export const DEMO_TASKS: GanttTask[] = [
     end: d('2026-07-15'),
     progress: 0,
     dependency: 'p2-c',
-    barColor: '#10B981',
+    style: { color: '#10B981' },
   },
 ];
 

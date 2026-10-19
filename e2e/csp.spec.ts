@@ -139,7 +139,7 @@ test.describe('strict CSP + Trusted Types', () => {
     await page.mouse.move(4, 4);
     await expect(chart.get('.gantt-tooltip')).toBeHidden();
 
-    // Drag a bar (ghost, movement label, dimmed bar). A mouse press drags once it has moved 3 px:
+    // Drag a bar (ghost, readout chip, dimmed bar). A mouse press drags once it has moved 3 px:
     // a press that moves less is a click and drags nothing
     const grab = { x: bar.x + Math.min(20, bar.width / 3), y: bar.y + bar.height / 2 };
     await page.mouse.move(grab.x, grab.y);

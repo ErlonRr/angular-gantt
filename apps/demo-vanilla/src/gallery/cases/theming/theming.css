@@ -1,0 +1,15 @@
+/*
+ * Page CSS for <gantry-element>: it renders in a shadow root, so page rules reach it through its
+ * CSS custom properties, its parts (::part) and its custom states (:state(dark | dragging | loading)).
+ * The --gantt-* variables are in scope inside each part.
+ */
+
+/* A part: an accent line on top of the toolbar, in the bar colour of the preset */
+gantry-element.themed-chart::part(toolbar) {
+  border-top: 3px solid var(--gantt-bar);
+}
+
+/* A custom state: while the chart is dark, its frame takes the bar colour too */
+gantry-element.themed-chart:state(dark) {
+  border-color: var(--gantt-bar);
+}

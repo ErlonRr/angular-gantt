@@ -1,0 +1,8 @@
+/* Gallery pages: page-local rules next to demo-kit's gs-gallery and gs-case classes */
+.gl-back {
+  display: inline-flex;
+  transform: scaleX(-1);
+}
+.gl-tags {
+  margin-top: 12px;
+}
