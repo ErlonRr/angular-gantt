@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type {
+  GanttEditingOptions,
   GanttOptions,
   GanttScale,
   GanttZoomLevel,
@@ -34,6 +35,7 @@ import { themeVar, type Paint } from './paint';
 import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
 import { resolveWeek } from '../format/week';
+import { DEFAULT_PROGRESS_STEP } from '../interaction/keyboard-edit';
 
 export interface ResolvedLine {
   /** Explicit `GanttLineStyle.color`, else the theme token (`var(--gantt-grid-line)`…) */
@@ -74,6 +76,34 @@ export interface ResolvedToolbar {
   panelToggle: boolean;
   /** Controls that don't fit: into the "More" menu, or wrapped */
   overflow: 'menu' | 'wrap';
+  /** Undo / Redo buttons (shown only while the chart keeps history: `editing.history`) */
+  undo: boolean;
+}
+
+/** Undo steps kept by default (`editing.history.limit`). */
+export const DEFAULT_HISTORY_LIMIT = 100;
+/** Window in ms in which changes with the same coalesce key make one undo step (`editing.history.coalesceMs`). */
+export const DEFAULT_COALESCE_MS = 800;
+
+/**
+ * `options.editing` with every feature resolved. With `enabled: false` every feature is off; drag
+ * and resize still follow `enableDrag` / `enableResize` and still go through the change pipeline.
+ */
+export interface ResolvedEditing {
+  /** `editing` is `true` or an object */
+  enabled: boolean;
+  /** Cell editing */
+  cells: boolean;
+  /** The progress grip and ↑ / ↓ in move mode, with the step in %; `false` when off */
+  progress: { step: number } | false;
+  /** Link creation and deletion, and whether a task may link to its own ancestors / descendants */
+  dependencies: { create: boolean; delete: boolean; parentChild: boolean };
+  /** `editing.validate`, or `null` */
+  validate: NonNullable<GanttEditingOptions['validate']> | null;
+  /** Undo / redo, or `false` (editing off, `history: false`, or `controlled`) */
+  history: { limit: number; coalesceMs: number } | false;
+  /** The app owns the tasks: nothing is applied, no history */
+  controlled: boolean;
 }
 
 /** Row height, header tier heights and toolbar control size of a `density`. */
@@ -210,6 +240,8 @@ export interface ResolvedGanttConfig {
   };
   legend: { position: 'bottom' | 'toolbar' };
   markers: { lane: 'auto' | boolean };
+  /** Interactive editing (`editing`, default off) */
+  editing: ResolvedEditing;
 }
 
 /** `LightTheme.barRadius` / `DarkTheme.barRadius` in px (when no metrics are passed). */
@@ -254,6 +286,60 @@ function resolveRollup(r: boolean | GanttRollupOptions | undefined): ResolvedRol
     dates: o.dates ?? true,
     color: o.color ?? false,
     segments: o.segments ?? false,
+  };
+}
+
+/** `value` when it is a finite number `ok` accepts, else `fallback` (untyped callers, typos). */
+const checked = (value: number | undefined, ok: (n: number) => boolean, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) && ok(value) ? value : fallback;
+
+/**
+ * `editing`: off unless `true` or an object. In the object form each feature is on unless it is
+ * `false` (`dependencies.parentChild` is off unless set); `controlled` turns history off. The
+ * progress step must be > 0, the history limit ≥ 1 (whole steps) and `coalesceMs` ≥ 0, else the
+ * default is used.
+ */
+export function resolveEditing(editing: boolean | GanttEditingOptions | undefined): ResolvedEditing {
+  if (!editing) {
+    return {
+      enabled: false,
+      cells: false,
+      progress: false,
+      dependencies: { create: false, delete: false, parentChild: false },
+      validate: null,
+      history: false,
+      controlled: false,
+    };
+  }
+  const o: GanttEditingOptions = editing === true ? {} : editing;
+  const controlled = o.controlled ?? false;
+  const progress = o.progress ?? true;
+  const deps = o.dependencies ?? true;
+  const history = o.history ?? true;
+  const historyOpts: { limit?: number | undefined; coalesceMs?: number | undefined } | false =
+    history === true ? {} : history;
+  return {
+    enabled: true,
+    cells: o.cells ?? true,
+    progress:
+      progress === false
+        ? false
+        : { step: checked(progress === true ? undefined : progress.step, n => n > 0, DEFAULT_PROGRESS_STEP) },
+    dependencies:
+      deps === false
+        ? { create: false, delete: false, parentChild: false }
+        : deps === true
+          ? { create: true, delete: true, parentChild: false }
+          : { create: deps.create ?? true, delete: deps.delete ?? true, parentChild: deps.parentChild ?? false },
+    validate: o.validate ?? null,
+    history:
+      controlled || historyOpts === false
+        ? false
+        : {
+            limit: Math.floor(checked(historyOpts.limit, n => n >= 1, DEFAULT_HISTORY_LIMIT)),
+            coalesceMs: checked(historyOpts.coalesceMs, n => n >= 0, DEFAULT_COALESCE_MS),
+          },
+    controlled,
   };
 }
 
@@ -409,6 +495,7 @@ export function resolveConfig(
             fit: toolbar?.fit ?? true,
             panelToggle: toolbar?.panelToggle ?? false,
             overflow: toolbar?.overflow ?? 'menu',
+            undo: toolbar?.undo ?? true,
           },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
@@ -423,6 +510,7 @@ export function resolveConfig(
     },
     legend: { position: options.legend?.position ?? 'bottom' },
     markers: { lane: options.markers?.lane ?? 'auto' },
+    editing: resolveEditing(options.editing),
   };
 }
 

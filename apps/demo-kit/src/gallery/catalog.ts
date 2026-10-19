@@ -20,6 +20,11 @@ export const CASE_IDS = [
   'milestones-baselines',
   'non-working',
   'week-numbering',
+  'editing',
+  'cell-editing',
+  'custom-editors',
+  'dependency-editing',
+  'controlled',
   'multi-pipeline',
   'custom-bars',
   'custom-columns',
@@ -35,7 +40,7 @@ export const CASE_IDS = [
 export type CaseId = (typeof CASE_IDS)[number];
 
 export type GalleryCategory =
-  'data' | 'structure' | 'scheduling' | 'multiple' | 'custom' | 'locale' | 'layout' | 'scale';
+  'data' | 'structure' | 'scheduling' | 'editing' | 'multiple' | 'custom' | 'locale' | 'layout' | 'scale';
 
 export interface GalleryCategoryInfo {
   id: GalleryCategory;
@@ -59,6 +64,12 @@ export const GALLERY_CATEGORIES: readonly GalleryCategoryInfo[] = [
     id: 'scheduling',
     label: 'Scheduling',
     summary: 'Dependencies, milestones, baselines, non-working time and week numbers.',
+  },
+  {
+    id: 'editing',
+    label: 'Editing',
+    summary:
+      'Change the plan in the chart: bars, progress, links and cells, with undo, validation and app-owned state.',
   },
   {
     id: 'multiple',
@@ -103,12 +114,14 @@ export const GALLERY_FRAMEWORK_LABELS: Readonly<Record<GalleryFramework, string>
 /** Ids of the known framework differences (`framework-notes.ts`). */
 export type NoteId =
   | 'tasks-input'
+  | 'series-model'
   | 'view-mode-event'
-  | 'row-click-payload'
+  | 'before-change'
   | 'empty-content'
   | 'custom-bars'
   | 'custom-cells'
   | 'custom-tooltip'
+  | 'cell-editor'
   | 'styling-hooks'
   | 'theme-tokens'
   | 'forced-colors'
@@ -117,6 +130,7 @@ export type NoteId =
   | 'ssr'
   | 'toolbar-slot'
   | 'methods'
+  | 'history-state'
   | 'array-updates'
   | 'responsive-first-frame';
 
@@ -248,6 +262,63 @@ export const GALLERY_CASES: readonly GalleryCase[] = [
     tags: ['weekNumbering', 'weekStart', 'WEEK_FORMATS'],
     ready: { charts: 1 },
     notes: [],
+    isNew: true,
+  },
+
+  // ── Editing ───────────────────────────────────────────────
+  {
+    id: 'editing',
+    title: 'Edit bars with undo',
+    summary:
+      'Move and resize bars with the pointer or in move mode, drag the progress grip, then undo and redo each change; a log lists what changed.',
+    category: 'editing',
+    tags: ['editing', 'history', 'undo()', 'tasks-change'],
+    ready: { charts: 1 },
+    notes: ['methods', 'history-state'],
+    isNew: true,
+  },
+  {
+    id: 'cell-editing',
+    title: 'Edit cells',
+    summary:
+      'Edit names, dates, durations, progress and predecessors in the task list, beside the chart or as a table; an invalid value keeps its editor open and says why.',
+    category: 'editing',
+    tags: ['editing.cells', 'predecessors', 'aria-invalid'],
+    ready: { charts: 1 },
+    notes: [],
+    isNew: true,
+  },
+  {
+    id: 'custom-editors',
+    title: 'Custom cell editors',
+    summary:
+      'An owner picked from a list, an estimate with your own check and a colour from your own editor; two buttons open an editor and focus a task from code.',
+    category: 'editing',
+    tags: ['ColumnDef.editor', 'validate', 'editCell()', 'focusTask()'],
+    ready: { charts: 1 },
+    notes: ['custom-cells', 'cell-editor', 'methods'],
+    isNew: true,
+  },
+  {
+    id: 'dependency-editing',
+    title: 'Draw and remove links',
+    summary:
+      'Link two bars by dragging from a connector, with two clicks, or with L and Enter; select a link and press Delete to remove it, and allow parent–child links with a switch.',
+    category: 'editing',
+    tags: ['editing.dependencies', 'dependencies.parentChild', 'tasks-change'],
+    ready: { charts: 1 },
+    notes: [],
+    isNew: true,
+  },
+  {
+    id: 'controlled',
+    title: 'App-owned tasks',
+    summary:
+      'The app owns the tasks: the chart proposes each change, the app vetoes the ones that touch a finished task and sets the tasks itself for the others.',
+    category: 'editing',
+    tags: ['editing.controlled', 'before-change', 'preventDefault()'],
+    ready: { charts: 1 },
+    notes: ['series-model', 'before-change'],
     isNew: true,
   },
 

@@ -27,6 +27,8 @@ export interface FocusTarget {
   readonly key: string;
   /** Scroll it into view (a keyboard move), not just keep it focused (a rebuild) */
   readonly scroll: boolean;
+  /** Show its focus ring whatever the last input was (`focus({ focusVisible: true })`: `focusTask()`) */
+  readonly visible: boolean;
 }
 
 export interface FocusTracker {
@@ -34,11 +36,18 @@ export interface FocusTracker {
   capture(): void;
   /**
    * Focus the control with `key` after the next flush, scrolling it into view (a keyboard move to
-   * a control that may not be mounted yet). Wins over the captures of that flush.
+   * a control that may not be mounted yet). Wins over the captures of that flush. `visible`: its
+   * focus ring shows even when a pointer led here (`focusTask()` from a button).
    */
-  request(key: string): void;
+  request(key: string, options?: { visible?: boolean | undefined }): void;
   /** The remembered target, cleared (tracked: a capture or a request re-runs the focus-restore region). */
   take(): FocusTarget | null;
+  /**
+   * The input modality the bars' focus ring follows (`keyboard.ts` `bindFocusTracking`, like
+   * `:focus-visible`): `true` after a key (and initially: focus moved by a script shows its ring),
+   * `false` after a pointer press. `focusTask()` sets it, so the bar it focuses shows its ring.
+   */
+  keyboard: boolean;
 }
 
 /** `data-focus-key` of an element (HTML or SVG). */
@@ -47,10 +56,14 @@ export const focusKeyOf = (el: Element | null | undefined): string | null => el?
 /**
  * Focuses `el` and scrolls it into view by the least amount (a keyboard move: `focus()` alone
  * may centre it), below the sticky headers (the panes' scroll padding: in the timeline a bar
- * lands with its whole focus ring, core `timelineScrollPadding`).
+ * lands with its whole focus ring, core `timelineScrollPadding`). `visible`: the browser shows its
+ * focus ring (`:focus-visible`) even after a pointer input, where `focusVisible` is supported.
  */
-export function focusIntoView(el: HTMLElement | SVGElement): void {
-  el.focus({ preventScroll: true });
+export function focusIntoView(el: HTMLElement | SVGElement, visible = false): void {
+  const options: FocusOptions & { focusVisible?: boolean } = visible
+    ? { preventScroll: true, focusVisible: true }
+    : { preventScroll: true };
+  el.focus(options);
   el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }
 
@@ -67,15 +80,16 @@ export function createFocusTracker(shadow: ShadowRoot): FocusTracker {
   let pending: FocusTarget | null = null;
   const bump = () => captured.set(captured.peek() + 1);
   return {
+    keyboard: true,
     capture() {
       if (pending !== null) return;
       const key = focusKeyOf(shadow.activeElement);
       if (!key) return;
-      pending = { key, scroll: false };
+      pending = { key, scroll: false, visible: false };
       bump();
     },
-    request(key) {
-      pending = { key, scroll: true };
+    request(key, options) {
+      pending = { key, scroll: true, visible: options?.visible === true };
       bump();
     },
     take() {
@@ -133,7 +147,7 @@ export function createFocusRestoreLayer(ctx: LayerContext): Layer {
       }
       const el = focusKeyOf(active) === target.key ? (active as HTMLElement) : findFocusKey(shadow, target.key);
       if (!el || isInert(el)) focusFallback(ctx);
-      else if (target.scroll) focusIntoView(el);
+      else if (target.scroll) focusIntoView(el, target.visible);
       else if (el !== active) el.focus({ preventScroll: true });
     },
   };

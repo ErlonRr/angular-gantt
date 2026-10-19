@@ -1,34 +1,39 @@
 /**
  * @file keyboard-edit.ts
- * Move mode: moving and resizing a bar with the keyboard (Enter / F2 on a movable bar), through
- * core `KeyboardEditSession` — the same snapping, minimum length and event shapes as a pointer
- * drag (`DragSession`).
+ * Move mode: moving, resizing and changing the progress of a bar with the keyboard (Enter / F2 on
+ * a bar the row's `editRules` let move, resize or change the progress), through core
+ * `KeyboardEditSession` — the same snapping, minimum length and change as a pointer drag.
  *
  *   ←/→           move one unit (a day, or an hour on hour scales) earlier / later
  *   Shift+←/→     resize the end        (task bars, with `enableResize`)
  *   Alt+←/→       resize the start
- *   Enter / F2    commit: `task-dragged` / `task-resized` as after a pointer drag, then the change is announced
+ *   ↑/↓           progress ± `editing.progress.step` (`editRules(row).progress`)
+ *   Enter / F2    commit: one change through the pipeline (`keyboardEditChange`, coalesce key
+ *                 `kbd:<id>`): `before-change`, the history, `task-dragged` / `task-resized` /
+ *                 `task-progress-changed`, `tasks-change`; announced by the pipeline
  *   Esc, Tab, blur, a pointer press   cancel (announced)
  *
- * The preview goes to the engine's `dragPreview` input, so the pointer drag's ghost, its pinned
- * row and the dimmed source bar show it (and the readout chip, step 4.4). Each step reads the
- * new dates out (core `formatDragReadout`, debounced). While move mode is on, other plain keys
- * do nothing; the progress keys (↑/↓) wait for the progress event of Phase 11. A change of the
- * timeline (zoom, new range) or of the task under edit cancels it at the next key.
+ * The date preview goes to the engine's `dragPreview` input, so the pointer drag's ghost, its
+ * pinned row and the dimmed source bar show it (and the readout chip); each date step reads the
+ * new dates out (core `formatDragReadout`, debounced). A progress step writes `progressPreview`
+ * (the bar draws the new progress) and reads it out (`announceProgress`). While move mode is on,
+ * other plain keys do nothing. A change of the timeline (zoom, new range) or of the task under
+ * edit cancels it at the next key.
  */
 
 import {
   KeyboardEditSession,
-  announceKeyboardEdit,
-  bottomScale,
+  editTiming,
   formatDragReadout,
-  taskSpan,
+  isEmptyChange,
+  keyboardEditChange,
+  keyboardEditOptionsFor,
+  keyboardEditStartText,
+  taskChange,
   type DragPreview,
-  type DragTiming,
+  type GanttChange,
   type GanttFlatRow,
   type GanttTask,
-  type KeyboardEditEvent,
-  type ResolvedGanttConfig,
   type TimelineModel,
 } from '@gantryjs/core';
 import type { LayerContext } from '../layers/context';
@@ -38,7 +43,10 @@ export interface KeyboardEdit {
   active(): boolean;
   /** Task id of the bar in move mode, `null` when it is off */
   taskId(): string | null;
-  /** Starts move mode on `row`'s bar; `false` when it can't move (drag off, `draggable: false`, a pointer drag). */
+  /**
+   * Starts move mode on `row`'s bar; `false` when its `editRules` allow no move, resize or
+   * progress change (drag off, `draggable: false`, `editable: false`, …) or a pointer drag is on.
+   */
   start(row: GanttFlatRow): boolean;
   /** A key while move mode is on (prevents the default action of what it uses). */
   key(event: KeyboardEvent): void;
@@ -46,22 +54,15 @@ export interface KeyboardEdit {
   cancel(quiet?: boolean): void;
 }
 
-/** Scale of the current timeline for an edit that starts now (the pointer drag's timing). */
-function editTiming(tl: TimelineModel, cfg: ResolvedGanttConfig): DragTiming {
-  return {
-    pxPerDay: tl.pxPerDay,
-    toX: tl.toX,
-    span: (start, end) => taskSpan({ start, end }, cfg),
-    snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
-  };
-}
-
 /** What the edit started from: a change of either cancels it. */
 interface Origin {
   readonly session: KeyboardEditSession;
+  /** The row's task (a rolled-up parent's copy, or the normalised task) */
   readonly task: GanttTask;
   readonly timeline: TimelineModel;
   readonly milestone: boolean;
+  /** The progress shown now (the session's) */
+  progress: number;
 }
 
 export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
@@ -72,6 +73,7 @@ export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
   const finish = (): void => {
     edit = null;
     I.dragPreview.set(null);
+    I.progressPreview.set(null);
   };
 
   const cancel = (quiet = false): void => {
@@ -82,21 +84,28 @@ export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
     if (!quiet) ctx.announce.say(labels().announceEditCancel(task.name));
   };
 
-  /** Applies the commit's events like a pointer drop: update the task, then emit (in order). */
-  const commit = (events: readonly KeyboardEditEvent[]): void => {
+  /**
+   * The session's change, built from the raw task (undo restores the app's values). The fields come
+   * from the row's task the session edited, so a rolled-up value is never written back.
+   */
+  const changeOf = (session: KeyboardEditSession, task: GanttTask): GanttChange | null => {
+    const proposed = keyboardEditChange(session, task);
+    const raw = ctx.edit.rawTask(task.id);
+    if (!proposed || !raw || raw === task) return proposed;
+    const change = taskChange(raw, proposed.updates[0]?.after ?? {}, 'keyboard', {
+      coalesceKey: proposed.coalesceKey,
+    });
+    return isEmptyChange(change) ? null : change;
+  };
+
+  /** Enter / F2: the change through the pipeline (it announces the result, a rejection or a veto). */
+  const commit = (): void => {
     if (!edit) return;
     const { session, task } = edit;
     finish();
-    let tasks = G.tasks.peek();
-    for (const ev of events) {
-      if (ev.kind === 'progress') continue; // no progress event before Phase 11 (sessions don't edit it)
-      const { taskId, newStart, newEnd } = ev.event;
-      tasks = tasks.map(t => (t.id === taskId ? { ...t, start: newStart, end: newEnd } : t));
-      I.tasksIn.set(tasks);
-      if (ev.kind === 'drag') ctx.emit('task-dragged', ev.event);
-      else ctx.emit('task-resized', ev.event);
-    }
-    ctx.announce.say(announceKeyboardEdit(events, task.name, labels(), session.unit));
+    const change = changeOf(session, task);
+    if (change) ctx.edit.commit(change);
+    else ctx.announce.say(labels().announceEditNoChange(task.name));
   };
 
   /** The new dates of a step, read out (the readout chip's text). */
@@ -116,21 +125,18 @@ export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
     taskId: () => edit?.session.taskId ?? null,
     start(row) {
       const task = row.task;
-      if (edit || !I.enableDrag.peek() || task.draggable === false || drag.state.peek().kind !== 'idle') return false;
+      if (edit || drag.state.peek().kind !== 'idle') return false;
       const geo = G.geoById.peek().get(task.id);
       if (!geo) return false;
       const cfg = G.config.peek();
+      const options = keyboardEditOptionsFor(G.editRules.peek()(geo.row), cfg.editing);
+      if (!options) return false;
       const timeline = G.timeline.peek();
       const visual = G.barVisual.peek()(geo);
-      const session = new KeyboardEditSession(task, geo, editTiming(timeline, cfg), {
-        movable: true,
-        resizable: I.enableResize.peek() && visual.kind === 'task',
-        // ↑/↓ change the progress once Phase 11 has its event
-        progressEditable: false,
-      });
-      edit = { session, task, timeline, milestone: visual.kind === 'milestone' };
+      const session = new KeyboardEditSession(task, geo, editTiming(timeline, cfg), options);
+      edit = { session, task, timeline, milestone: visual.kind === 'milestone', progress: session.state.progress };
       I.dragPreview.set(session.preview());
-      ctx.announce.say(labels().announceEditStart(task.name));
+      ctx.announce.say(keyboardEditStartText(task.name, options.progressEditable === true, labels()));
       return true;
     },
     key(event) {
@@ -153,13 +159,21 @@ export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
         return;
       }
       event.preventDefault();
-      if (result.type === 'commit') commit(result.events);
+      if (result.type === 'commit') commit();
       else if (result.type === 'cancel') {
         finish();
         ctx.announce.say(labels().announceEditCancel(task.name));
       } else if (result.changed) {
-        I.dragPreview.set(result.preview);
-        ctx.announce.say(readout(result.preview, milestone));
+        const { progress } = result.preview;
+        if (progress !== edit.progress) {
+          // ↑/↓: the bar draws the new progress (none while back at the task's own)
+          edit.progress = progress;
+          I.progressPreview.set(progress === (task.progress ?? 0) ? null : { taskId: task.id, progress });
+          ctx.announce.say(labels().announceProgress(task.name, progress));
+        } else {
+          I.dragPreview.set(result.preview);
+          ctx.announce.say(readout(result.preview, milestone));
+        }
       }
     },
     cancel,

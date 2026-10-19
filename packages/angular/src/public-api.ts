@@ -11,11 +11,12 @@
 export * from '@gantryjs/core';
 
 // Angular-specific
-export type { ColumnDef } from './lib/types';
+export type { ColumnDef, CellEditorTemplateContext } from './lib/types';
 export { provideGantt, withBars, type GanttGlobalConfig, type GanttFeature } from './lib/provide';
 export { provideGanttBar, type GanttBarDef } from './lib/bar-registry';
 export { GantryComponent } from './lib/gantt-component/gantry.component';
 export { GanttColumnDefDirective } from './lib/columns/gantt-column.directive';
+export { GanttCellEditorDirective } from './lib/columns/gantt-cell-editor.directive';
 export {
   GanttTooltipTemplateDirective,
   type GanttTooltipTemplateContext,

@@ -19,8 +19,13 @@ paths:
   `hitTestBar`), `arrows.ts`, `drag.ts`, `markers.ts` (marker lane, annotations), `zoom.ts`,
   `viewport.ts`, `readout.ts`, `columns.ts`, `paint.ts`, `theme.ts`, `styles.ts` (the task-style
   resolver; `task-style.ts` is its import-cycle-free leaf), `layout-vars.ts` (the read-only layout
-  CSS variables). Rollups (summary parents computed from their children) live in
-  `src/gantt-rollup.ts`. UI state machines and models go
+  CSS variables), `overlay.ts` (focus ring, grips, progress grip, link connectors), `links.ts`
+  (link preview). Rollups (summary parents computed from their children) live in
+  `src/gantt-rollup.ts`. `src/editing/` holds the change pipeline: `changes` (build, apply, invert,
+  merge, `deriveOps`), `pipeline` (`prepareChange`), `validate`, `permissions` (`editRules`,
+  `cellEditable`), `history`, `cells`, `parse`, `sessions`, `describe`. Every task change goes
+  through `prepareChange`, so a binding never validates, derives events or words announcements
+  itself; history takes the time as a parameter. UI state machines and models go
   in `src/state/` (`tooltip.ts`, `toolbar.ts`, `menu.ts`, `responsive.ts`, `sync.ts` (sync groups),
   `chart-state.ts`, `legend.ts`, `selection.ts`, …), input reducers in `src/interaction/`
   (`keymap.ts`, `grid-nav.ts`, `timeline-nav.ts`, `roving.ts`, `key-selection.ts`,

@@ -894,6 +894,20 @@ body {
 .gs-switch input:checked::after {
   transform: translateX(16px);
 }
+/* Disabled controls (exempt from the contrast minimum); their labels and hints keep full strength.
+   An `aria-disabled` button stays focusable (focus doesn't drop to <body> when it turns unavailable). */
+.gs-switch:has(input:disabled),
+.gs-field :disabled,
+.gs-btn[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.gs-switch input:disabled,
+.gs-range:disabled,
+.gs-select:disabled,
+.gs-seg-btn:disabled,
+.gs-btn[aria-disabled='true'] {
+  opacity: 0.5;
+}
 
 /* ── Layout and cards ─────────────────────────────────────── */
 
@@ -1630,6 +1644,36 @@ a.gs-card:hover {
   font-family: var(--gs-font-mono);
   font-size: 12.5px;
   text-align: center;
+}
+/*
+ * The editing cases' log: `ol.gs-case-log[aria-label]`, newest first, at most 5 lines (`pushLog`
+ * of demo-kit/gallery). Not a live region: the chart announces each change itself. Hidden while
+ * empty.
+ */
+.gs-case-log {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  background: var(--gs-surface-2);
+  color: var(--gs-muted);
+  font-family: var(--gs-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  list-style: none;
+}
+.gs-case-log:empty {
+  display: none;
+}
+.gs-case-log li {
+  overflow-wrap: anywhere;
+}
+/* The newest line */
+.gs-case-log li:first-child {
+  color: var(--gs-text);
 }
 /* Custom empty-state content inside a chart */
 .gs-case-empty {

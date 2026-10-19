@@ -49,6 +49,13 @@
  * `responsive.breakpoint` the chart switches its view (`layers/responsive.ts`; the forced view is
  * never persisted: `getState()` reports the wide view); rolled-up parent rows (`options.rollup`)
  * carry derived copies of their tasks, while `tasks`, the events and `getSelectedTasks()` stay raw.
+ *
+ * Phase 11: every change to the tasks (drag, resize, move mode, progress, cells, links, the API
+ * methods below, undo / redo) runs through one pipeline (`engine/edit.ts`): validation, the
+ * cancelable `before-change`, the apply to `tasks` (or `dataSource.patch()`), the history, then
+ * the op events, `task-updated`, `tasks-change` and `history-change`. `options.editing` turns on
+ * the editing surfaces (cells, progress, links, history); drag and resize follow `enableDrag` /
+ * `enableResize` as before. `updateTask()` / `appendTasks()` stay silent data writes.
  */
 
 import {
@@ -60,6 +67,8 @@ import {
   type GanttSyncGroup,
   type GanttView,
   type ViewMode,
+  type DependencyType,
+  linkChange,
   zoomStep,
   fitZoomLevel,
   fitScrollLeft,
@@ -144,8 +153,11 @@ export interface GantryElement {
 const BaseElement: typeof HTMLElement =
   typeof HTMLElement === 'undefined' ? (class {} as typeof HTMLElement) : HTMLElement;
 
-/** Public getters without a setter (`setViewMode()` / `setView()` change them; `criticalIds` is derived). */
-const READ_ONLY_PROPERTIES = ['viewMode', 'view', 'criticalIds'] as const;
+/**
+ * Public getters without a setter (`setViewMode()` / `setView()` change them; `criticalIds`,
+ * `canUndo` and `canRedo` are derived).
+ */
+const READ_ONLY_PROPERTIES = ['viewMode', 'view', 'criticalIds', 'canUndo', 'canRedo'] as const;
 
 /** The element's `ElementInternals`, or `null` where the engine has none (or they are taken). */
 function attachInternalsOf(el: HTMLElement): ElementInternals | null {
@@ -211,6 +223,13 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @fires {CustomEvent<GanttState>} state-change - The UI state changed (panel width or view, zoom, column widths, collapsed rows, sort); debounced, persisted under `options.stateKey`.
  * @fires {CustomEvent<{ error: unknown; page: number }>} load-error - A data-source page failed after its automatic retries (`dataSource.retry()` tries again).
  * @fires {CustomEvent<RetryEvent>} retry - Retry was pressed on the error state: `{ source: 'error' }` for `errorMessage` (load again, then clear it), `{ source: 'dataSource' }` after a failed first data-source page (the element calls `dataSource.retry()`).
+ * @fires {CustomEvent<GanttBeforeChangeEvent>} before-change - A change is about to be applied (any edit, the API, undo / redo): `{ change, tasks }` (the proposed tasks). Cancelable: `event.preventDefault()` or `detail.preventDefault()`, synchronously, vetoes it; assigning `tasks` meanwhile counts as handled (nothing applied).
+ * @fires {CustomEvent<GanttTasksChangeEvent>} tasks-change - After every accepted change: `{ tasks, change, applied }`; `applied: false` in controlled mode (`editing.controlled`: set `tasks` yourself).
+ * @fires {CustomEvent<TaskUpdatedEvent>} task-updated - One per changed task, after the op events: `{ taskId, task, previous, fields, source }`.
+ * @fires {CustomEvent<TaskProgressEvent>} task-progress-changed - A task's progress changed: `{ taskId, oldProgress, newProgress }`.
+ * @fires {CustomEvent<DependencyChangeEvent>} dependency-created - A dependency was added: `{ fromId, toId, type, lag }`.
+ * @fires {CustomEvent<DependencyChangeEvent>} dependency-deleted - A dependency was removed: `{ fromId, toId, type, lag }`.
+ * @fires {CustomEvent<GanttHistoryState>} history-change - The undo / redo state changed: `{ canUndo, canRedo, undoLabel, redoLabel, undoCount, redoCount }`.
  *
  * @slot empty - Shown in the empty state (no tasks and nothing loading); `labels.emptyState` when nothing is slotted.
  *
@@ -225,6 +244,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssstate dark - The dark theme is active (`darkMode` is `true`, or `'auto'` with a dark colour scheme).
  * @cssstate dragging - A bar is being dragged or resized.
  * @cssstate loading - `loading` is on, or a data-source page is loading.
+ * @cssstate linking - A dependency link is being drawn (`editing.dependencies`).
  *
  * @cssprop [--gantt-bg=#FFFFFF] - Chart background (theme `backgroundColor`). Defaults are the light theme's.
  * @cssprop [--gantt-header-bg=#F8FAFC] - Header background (`headerBackground`).
@@ -320,6 +340,7 @@ export class GantryElement extends BaseElement {
         setState('dragging', dragging);
       });
       effect(() => setState('dark', G.isDark()));
+      effect(() => setState('linking', I.link() !== null));
       effect(() => setState('loading', I.loading() || I.loadState()?.isLoading === true));
       // The chart's name: the host region and the timeline viewport, kept in sync with the labels
       effect(() => {
@@ -418,8 +439,13 @@ export class GantryElement extends BaseElement {
   // ── Properties (one per `PROPERTY_TABLE` entry; `undefined` restores the default) ──
 
   /** Tasks to display (a tree through `parentId`). Ignored while a `dataSource` is set. */
+  /**
+   * The tasks as you set them (with a data source, its items while connected), as Angular's
+   * `series`: the chart's repairs (a missing `end`, an unknown `parentId`) stay inside the chart, so
+   * `el.tasks = el.tasks.map(…)` never loses data.
+   */
   get tasks(): GanttTask[] {
-    return this.#engine.graph.tasks.peek();
+    return this.#engine.inputs.tasksIn.peek();
   }
   set tasks(v: GanttTask[] | undefined) {
     this.#set('tasks', v);
@@ -791,16 +817,106 @@ export class GantryElement extends BaseElement {
     );
   }
 
-  /** Merge `patch` into the task with this id. */
+  /**
+   * Merge `patch` into the task with this id: a silent data write (no `before-change`, no history),
+   * into the `dataSource` when there is one (so the next page keeps it), else into `tasks`.
+   */
   updateTask(id: string, patch: Partial<GanttTask>): void {
-    const { inputs: I, graph: G } = this.#engine;
-    I.tasksIn.set(G.tasks.peek().map(t => (t.id === id ? { ...t, ...patch } : t)));
+    const update = (items: readonly GanttTask[]) => items.map(t => (t.id === id ? { ...t, ...patch } : t));
+    this.#writeTasks(update);
   }
-  /** Add tasks after the current ones. */
+  /** Add tasks after the current ones (silently; into the `dataSource` when there is one). */
   appendTasks(tasks: GanttTask[]): void {
-    const { inputs: I, graph: G } = this.#engine;
-    // `graph.tasks` repairs the appended tasks like set ones
-    if (tasks.length) I.tasksIn.set([...G.tasks.peek(), ...tasks]);
+    // The graph repairs the appended tasks like set ones
+    if (tasks.length) this.#writeTasks(items => [...items, ...tasks]);
+  }
+  /** The raw input (`tasks` as set, or the data source's items) through `update`, as Angular writes it. */
+  #writeTasks(update: (items: readonly GanttTask[]) => GanttTask[]): void {
+    const { inputs: I } = this.#engine;
+    const ds = I.dataSource.peek();
+    if (ds) ds.patch(update);
+    else I.tasksIn.set(update(I.tasksIn.peek()));
+  }
+
+  // ── Editing (every change runs through the pipeline: `before-change`, history, events) ──
+
+  /** Undo the last change (`false` when there is nothing to undo, no history, or it was rejected or vetoed). */
+  undo(): boolean {
+    return this.#engine.edit.undo();
+  }
+  /** Redo the last undone change (`false` when there is nothing to redo, or it was rejected or vetoed). */
+  redo(): boolean {
+    return this.#engine.edit.redo();
+  }
+  /** There is a change to undo (refreshed on `history-change`; `false` while the chart keeps no history). */
+  get canUndo(): boolean {
+    return this.#engine.inputs.historyState.peek().canUndo;
+  }
+  /** There is an undone change to redo. */
+  get canRedo(): boolean {
+    return this.#engine.inputs.historyState.peek().canRedo;
+  }
+  /** Forget every undo and redo step (task changes made elsewhere never clear the history). */
+  clearHistory(): void {
+    this.#engine.edit.clear();
+  }
+
+  /**
+   * Make `toId` depend on `fromId` (source `'api'`): validated like a drawn link (no self link,
+   * duplicate, loop, or parent ↔ child link unless `editing.dependencies.parentChild`), vetoable,
+   * undoable. Returns whether it was added (or handed to the app in controlled mode).
+   */
+  addDependency(fromId: string, toId: string, type: DependencyType = 'FS', lag = 0): boolean {
+    const { edit } = this.#engine;
+    return edit.commit(linkChange(edit.rawTasks(), { fromId, toId, type, lag }, 'link', 'api'));
+  }
+  /** Remove the links from `fromId` to `toId` (only those of `type` when given; source `'api'`). Returns whether one was removed. */
+  removeDependency(fromId: string, toId: string, type?: DependencyType): boolean {
+    const { edit } = this.#engine;
+    return edit.commit(linkChange(edit.rawTasks(), { fromId, toId, type }, 'unlink', 'api'));
+  }
+
+  /** Open the editor of a task-list cell (`editing.cells`); `false` when that cell can't be edited. */
+  editCell(taskId: string, columnKey: string): boolean {
+    return this.#engine.ctx.cells.start(taskId, columnKey);
+  }
+
+  /**
+   * Focus a task's bar (`area: 'bar'`, the default) or its task-list row (`'row'`): its collapsed
+   * ancestors expand, its row is kept mounted and scrolled into view. The other area is used while
+   * the view hides the requested one. Its focus ring shows even when a pointer triggered the call
+   * (a button): `focus({ focusVisible: true })` where supported, and the bar's own ring. Returns
+   * `false` for an unknown id.
+   */
+  focusTask(id: string, options: { area?: 'bar' | 'row' | undefined } = {}): boolean {
+    const { inputs: I, graph: G, ctx } = this.#engine;
+    const byId = new Map<string, GanttTask>();
+    for (const t of G.tasks.peek()) if (!byId.has(t.id)) byId.set(t.id, t);
+    if (!byId.has(id)) return false;
+    // Expand the collapsed ancestors (a loop in the data ends at the first repeated id)
+    const collapsed = I.collapsedIds.peek();
+    const expand = new Set<string>();
+    const seen = new Set<string>([id]);
+    for (let p = byId.get(id)?.parentId; p !== undefined && !seen.has(p); p = byId.get(p)?.parentId) {
+      seen.add(p);
+      if (collapsed.has(p)) expand.add(p);
+    }
+    if (expand.size) {
+      I.collapsedIds.set(new Set([...collapsed].filter(c => !expand.has(c))));
+      this.#saveState();
+    }
+    const view = I.viewOverride.peek();
+    const area = view === 'table' ? 'row' : view === 'chart' ? 'bar' : (options.area ?? 'bar');
+    // Pinned: mounted wherever it is, then focused and scrolled into view after the flush, with its
+    // focus ring as from the keyboard (a bar already focused by a pointer shows it now)
+    I.focusedRowId.set(id);
+    const key = `${area}:${id}`;
+    ctx.focus.keyboard = true;
+    if (area === 'bar' && ctx.shadow.activeElement?.getAttribute('data-focus-key') === key) {
+      I.focusVisibleBarId.set(id);
+    }
+    ctx.focus.request(key, { visible: true });
+    return true;
   }
 
   /** Collapse every group (task with children). */
@@ -915,9 +1031,12 @@ export class GantryElement extends BaseElement {
 
   // ── Events ────────────────────────────────────────────────
 
-  #emit<K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]): void {
+  /** Dispatches an event; `false` when a listener prevented a cancelable one (`before-change`). */
+  #emit<K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]): boolean {
     /** @ignore The events are listed with `@fires` on the class (Custom Elements Manifest). */
-    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    return this.dispatchEvent(
+      new CustomEvent(type, { detail, bubbles: true, composed: true, cancelable: type === 'before-change' }),
+    );
   }
 }
 

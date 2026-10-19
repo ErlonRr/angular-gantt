@@ -71,7 +71,7 @@ describe('announce', () => {
     };
     const resize: KeyboardEditEvent = {
       kind: 'resize',
-      event: { ...base, handle: 'right', newStart: day(2, 12), newEnd: day(2, 19), daysDelta: 3 },
+      event: { ...base, edge: 'end', handle: 'right', newStart: day(2, 12), newEnd: day(2, 19), daysDelta: 3 },
     };
     const progress: KeyboardEditEvent = { kind: 'progress', event: { taskId: 'a', oldProgress: 40, newProgress: 45 } };
     expect(announceKeyboardEdit([], 'Backend')).toBe('Backend unchanged');
@@ -85,7 +85,7 @@ describe('announce', () => {
     const hDrag: KeyboardEditEvent = { kind: 'drag', event: { ...drag.event, daysMoved: 7 / 24 } };
     const hResize: KeyboardEditEvent = {
       kind: 'resize',
-      event: { ...base, handle: 'right', newStart: day(2, 12), newEnd: day(2, 19), daysDelta: 17 / 24 },
+      event: { ...base, edge: 'end', handle: 'right', newStart: day(2, 12), newEnd: day(2, 19), daysDelta: 17 / 24 },
     };
     expect(announceKeyboardEdit([hDrag, hResize], 'X', undefined, 'hour')).toBe(
       'X start moved 7 hours later. X end moved 24 hours later',

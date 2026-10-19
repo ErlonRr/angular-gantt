@@ -2,21 +2,36 @@
 //  gantry · drag/gantt-drag-readout.component.ts
 //
 //  The drag readout chip: the new dates and duration of the bar being
-//  dragged, resized or moved with the keyboard ("3 Mar – 6 Mar · 3 days").
+//  dragged, resized or moved with the keyboard ("3 Mar – 6 Mar · 3 days"),
+//  or the new progress while its grip is dragged ("45%").
 //  GantryComponent attaches it inside `.gantry-canvas-viewport`, after the
 //  canvas, only while it shows (D27, as the Web Component's readout layer
 //  packages/vanilla/src/layers/readout.ts): an `@if` on `injectDragReadout`,
-//  which is `null` without a drag preview, for a preview without the new
-//  dates and for one whose row is gone:
+//  which is `null` without a preview, for a preview without the new dates
+//  and for one whose row is gone:
 //
 //    div.gantt-drag-readout[aria-hidden][data-align]   placed with --x / --y
 //
-//  Text: core `formatDragReadout(preview, …)`, its dates in
-//  `formats.readoutFormat` when set, else core's default for the scale
-//  unit (a milestone shows its date only, hour scales the time). Place:
-//  core `placeDragReadout(ghost, { scrollLeft, viewportWidth, scrollTop,
-//  headerHeight, viewportHeight, width })` in the viewport's scroll
-//  content, written as the `--x` / `--y` custom properties and
+//  Dates: shown while the drag preview carries the new dates (a pointer
+//  drag or resize, a keyboard move). Text: core `formatDragReadout(preview,
+//  …)`, its dates in `formats.readoutFormat` when set, else core's default
+//  for the scale unit (a milestone shows its date only, hour scales the
+//  time); anchor: the ghost.
+//
+//  Progress (Phase 11, D11): shown first, while the progress grip is
+//  dragged (`GanttProgressService.active()`) and `layout.progressPreview`
+//  holds its value. Text: core `formatProgressReadout(progress, locale)`;
+//  anchor: the bar's box (`x`, `y`, `width`, `height` of its core
+//  `computeBarVisual`, which depend on the geometry, the options and the
+//  row's resolved style only). Move mode's ↑ / ↓ write `progressPreview`
+//  too, but there the chip keeps the dates (the drag preview is set all
+//  along) and the live region says the progress. `active()` is not a
+//  signal: a grip drag writes `progressPreview` on each move and clears it
+//  when it ends, which re-runs this chip.
+//
+//  Place: core `placeDragReadout(anchor, { scrollLeft, viewportWidth,
+//  scrollTop, headerHeight, viewportHeight, width })` in the viewport's
+//  scroll content, written as the `--x` / `--y` custom properties and
 //  `data-align` (the stylesheet translates the chip by 0 / -50% / -100%,
 //  so its real width is never measured).
 //  `aria-hidden`: the live region announces the result instead. The
@@ -26,14 +41,18 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, type Signal } from '@angular/core';
 import {
   barKind,
+  computeBarVisual,
   computeDragGhostVisual,
   dragReadoutWidth,
   formatDragReadout,
+  formatProgressReadout,
   placeDragReadout,
   type DragPreview,
+  type DragReadoutAnchor,
   type DragReadoutPlacement,
 } from '@gantryjs/core';
 
+import { GanttProgressService } from '../editing/progress';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -47,15 +66,40 @@ export interface DragReadout {
   readonly y: string;
 }
 
+/** What a chip says and the box it is placed by */
+interface Chip {
+  readonly anchor: DragReadoutAnchor;
+  readonly text: string;
+}
+
 /**
- * The readout chip of `preview` (call in an injection context below the chart: GantryComponent's
- * field), `null` while there is nothing to show — no preview, a preview without the new dates, or
- * one whose row is gone (the Web Component's readout region then detaches its chip).
+ * The readout chip of a progress-grip drag, else of `preview` (call in an injection context below
+ * the chart: GantryComponent's field), `null` while there is nothing to show — no preview, a
+ * preview without the new dates, or one whose row is gone (the Web Component's readout region then
+ * detaches its chip).
  */
 export function injectDragReadout(preview: Signal<DragPreview | null>): Signal<DragReadout | null> {
   const layout = inject(GanttLayoutService);
   const scroll = inject(GanttScrollService);
   const i18n = inject(GanttI18nService);
+  const progressDrag = inject(GanttProgressService);
+
+  /** The progress grip's chip: "45%" over the bar, `null` unless a grip drag shows a preview. */
+  const progressChip = computed<Chip | null>(() => {
+    const p = layout.progressPreview();
+    // Read only while a progress preview exists (editing off never reads the grip)
+    if (!p || !progressDrag.active()) return null;
+    const geo = layout.geometryById().get(p.taskId);
+    if (!geo) return null;
+    const { x, y, width, height } = computeBarVisual({
+      geo,
+      cfg: layout.cfg(),
+      toX: layout.timeline().toX,
+      fontPx: layout.fontPx(),
+      style: layout.rowStyle()(geo.row),
+    });
+    return { anchor: { x, y, width, height }, text: formatProgressReadout(p.progress, i18n.locale()) };
+  });
 
   /** The dragged bar's ghost (`computeDragGhostVisual`, as the canvas draws it); `null` when its row is gone */
   const ghost = computed(() => {
@@ -82,13 +126,20 @@ export function injectDragReadout(preview: Signal<DragPreview | null>): Signal<D
     });
   });
 
-  /** Text and place of the chip (`placeDragReadout` in the viewport's scroll content) */
-  return computed<DragReadout | null>(() => {
+  /** The dates chip of a drag, resize or move-mode preview, anchored on its ghost. */
+  const datesChip = computed<Chip | null>(() => {
     const g = ghost();
     const t = text();
-    if (!g || !t) return null;
+    return g && t ? { anchor: g, text: t } : null;
+  });
+
+  /** Text and place of the chip (`placeDragReadout` in the viewport's scroll content) */
+  return computed<DragReadout | null>(() => {
+    const chip = progressChip() ?? datesChip();
+    if (!chip) return null;
+    const { anchor, text: t } = chip;
     const viewportHeight = layout.viewportHeight();
-    const place = placeDragReadout(g, {
+    const place = placeDragReadout(anchor, {
       scrollLeft: scroll.scrollLeft(),
       viewportWidth: layout.viewportWidth(),
       scrollTop: scroll.scrollTop(),

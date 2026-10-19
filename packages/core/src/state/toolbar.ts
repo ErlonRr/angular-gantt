@@ -2,12 +2,15 @@
 //  gantry · state/toolbar.ts
 //  Toolbar model: groups, items, icons and the roving tab stop (Phase 9
 //  step 2.6), the panel toggle and the overflow layout with its "More"
-//  menu (Phase 10 step 2.5). Both painters render `layoutToolbar()` (of
-//  `buildToolbar()`) as is, so they show the same controls in the same
-//  order with the same classes, roles and names:
+//  menu (Phase 10 step 2.5), the undo / redo group (Phase 11 step 2.6).
+//  Both painters render `layoutToolbar()` (of `buildToolbar()`) as is,
+//  so they show the same controls in the same order with the same
+//  classes, roles and names:
 //
 //    div.gantt-toolbar[role=toolbar]
 //      div.gantt-tb-group.gantt-tb-panel-group      task list toggle            (aria-pressed, `panelToggle`)
+//      div.gantt-tb-group.gantt-tb-history          undo · redo                 (icon buttons, aria-disabled,
+//                                                                                while the chart keeps history)
 //      div.gantt-tb-group                           zoom out · zoom in · fit    (icon buttons)
 //      div.gantt-tb-group.gantt-tb-pills            zoom levels                 (text radios)
 //      div.gantt-tb-group                           today                       (icon + text)
@@ -23,7 +26,7 @@
 //  items are not (`reduceMenu` in state/menu.ts moves inside the menu).
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttLabels, GanttView, GanttZoomLevel } from '../types';
+import type { GanttHistoryState, GanttLabels, GanttView, GanttZoomLevel } from '../types';
 import type { ResolvedToolbar } from '../render/config';
 import type { MoveCommand } from '../interaction/keymap';
 
@@ -31,7 +34,7 @@ import type { MoveCommand } from '../interaction/keymap';
 
 /** The toolbar's built-in icons. */
 export type ToolbarIcon =
-  'zoomIn' | 'zoomOut' | 'fit' | 'today' | 'viewSplit' | 'viewTable' | 'viewChart' | 'panel' | 'more';
+  'zoomIn' | 'zoomOut' | 'fit' | 'today' | 'viewSplit' | 'viewTable' | 'viewChart' | 'panel' | 'more' | 'undo' | 'redo';
 
 /** `viewBox` of every toolbar icon (a 16 px grid). */
 export const TOOLBAR_ICON_VIEWBOX = '0 0 16 16';
@@ -94,6 +97,11 @@ export const TOOLBAR_ICONS: Readonly<Record<ToolbarIcon, readonly string[]>> = {
     'M7.25 8a0.75 0.75 0 1 0 1.5 0a0.75 0.75 0 1 0-1.5 0',
     'M11.75 8a0.75 0.75 0 1 0 1.5 0a0.75 0.75 0 1 0-1.5 0',
   ],
+  // An arrowhead pointing left on a line that turns back along a half circle: "go back a step".
+  // Centred on the 16 px grid (x 2.5–13.5, y 3–13); the bottom stroke ends under the arrowhead.
+  undo: ['M5.5 3L2.5 6l3 3', 'M2.5 6H10a3.5 3.5 0 0 1 0 7H5.5'],
+  // Undo mirrored about x = 8
+  redo: ['M10.5 3l3 3-3 3', 'M13.5 6H6a3.5 3.5 0 0 0 0 7h4.5'],
 };
 
 // ─── Model ────────────────────────────────────────────────────
@@ -115,6 +123,8 @@ export type ToolbarLabels = Pick<
   | 'showPanel'
   | 'hidePanel'
   | 'more'
+  | 'undo'
+  | 'redo'
 >;
 
 /** What a toolbar control does when pressed (or, for a radio, checked). */
@@ -128,19 +138,23 @@ export type ToolbarAction =
   /** The task list toggle (`toolbar.panelToggle`): the binding runs `togglePanel()` (`togglePanelView`) */
   | { type: 'togglePanel' }
   /** The More button: the binding opens / closes its menu (`reduceMenu`) */
-  | { type: 'menu' };
+  | { type: 'menu' }
+  /** Undo / Redo (`toolbar.undo`): the binding runs `undo()` / `redo()` */
+  | { type: 'undo' }
+  | { type: 'redo' };
 
 /** One built-in control: a `button` element. */
 export interface ToolbarItem {
   /**
    * `data-focus-key` of the button, unique in the toolbar and stable across paints (also the
-   * key for keyed lists): `panel`, `zoom-out`, `zoom-in`, `fit`, `zoom:<level name>`, `today`,
-   * `view:<view>`, `more`.
+   * key for keyed lists): `panel`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`,
+   * `zoom:<level name>`, `today`, `view:<view>`, `more`.
    */
   focusKey: string;
   /**
    * `class` of the button: `gantt-tb-btn`, `gantt-tb-btn gantt-tb-today`, `gantt-tb-pill`,
-   * `gantt-tb-btn gantt-tb-panel` or `gantt-tb-btn gantt-tb-more`
+   * `gantt-tb-btn gantt-tb-panel`, `gantt-tb-btn gantt-tb-undo`, `gantt-tb-btn gantt-tb-redo` or
+   * `gantt-tb-btn gantt-tb-more`
    */
   className: string;
   /** `role` attribute: `'radio'` for zoom levels and views, `null` for plain buttons (no attribute) */
@@ -164,14 +178,20 @@ export interface ToolbarItem {
   haspopup: 'menu' | null;
   /** `aria-expanded` of the More button (its menu is open), `null` for no attribute */
   expanded: boolean | null;
+  /**
+   * `aria-disabled`: `true` on Undo / Redo while there is nothing to undo / redo (the button stays
+   * focusable and in the roving set; pressing it does nothing), otherwise `null` for no attribute.
+   * The model never sets `false`.
+   */
+  disabled: boolean | null;
   action: ToolbarAction;
 }
 
 /**
- * Which built-in group: `panel` (the task list toggle), `zoom` (out · in · fit), `levels`, `today`,
- * `views`, `more` (the More menu button, added by `layoutToolbar`).
+ * Which built-in group: `panel` (the task list toggle), `history` (undo · redo), `zoom` (out · in ·
+ * fit), `levels`, `today`, `views`, `more` (the More menu button, added by `layoutToolbar`).
  */
-export type ToolbarGroupKey = 'panel' | 'zoom' | 'levels' | 'today' | 'views' | 'more';
+export type ToolbarGroupKey = 'panel' | 'history' | 'zoom' | 'levels' | 'today' | 'views' | 'more';
 
 /** One `div` of the toolbar, holding its controls in order. */
 export interface ToolbarGroup {
@@ -196,6 +216,11 @@ export interface ToolbarInput {
   viewMode: string;
   /** Current view (checks its radio; the panel toggle is pressed unless it is `'chart'`) */
   view: GanttView;
+  /**
+   * The chart's undo / redo state while it keeps history (`ResolvedEditing.history`), else `null`
+   * or omitted: no Undo / Redo buttons. Read by the `history` group (Phase 11 step 2.6).
+   */
+  history?: GanttHistoryState | null | undefined;
 }
 
 const VIEWS: readonly { view: GanttView; icon: ToolbarIcon; label: 'viewSplit' | 'viewTable' | 'viewChart' }[] = [
@@ -205,7 +230,7 @@ const VIEWS: readonly { view: GanttView; icon: ToolbarIcon; label: 'viewSplit' |
 ];
 
 /** The ARIA states a control does not use: no attribute. */
-const NO_STATE = { pressed: null, haspopup: null, expanded: null } as const;
+const NO_STATE = { pressed: null, haspopup: null, expanded: null, disabled: null } as const;
 
 const iconButton = (focusKey: string, icon: ToolbarIcon, label: string, action: ToolbarAction): ToolbarItem => ({
   focusKey,
@@ -218,6 +243,13 @@ const iconButton = (focusKey: string, icon: ToolbarIcon, label: string, action: 
   title: label,
   ...NO_STATE,
   action,
+});
+
+/** Undo or Redo: an icon button, `aria-disabled` while there is nothing to undo / redo. */
+const historyButton = (kind: 'undo' | 'redo', label: string, available: boolean): ToolbarItem => ({
+  ...iconButton(kind, kind, label, { type: kind }),
+  className: `gantt-tb-btn gantt-tb-${kind}`,
+  disabled: available ? null : true,
 });
 
 /**
@@ -274,6 +306,12 @@ export function zoomLevelLabel(
  * `'chart'`) and titled `labels.hidePanel` then, `labels.showPanel` otherwise; pressing it switches
  * to `togglePanelView(view)` (shown → `'chart'`, hidden → `'split'`). Pass the groups to
  * `layoutToolbar` to fit them to the toolbar's width.
+ *
+ * With `toolbar.undo` and a `history` state (the chart keeps history: `editing.history`, not
+ * controlled) the `history` group follows: Undo and Redo icon buttons (`gantt-tb-undo` /
+ * `gantt-tb-redo`, focus keys `undo` / `redo`, named by `labels.undo` / `labels.redo`), each
+ * `aria-disabled` (`disabled: true`) while `canUndo` / `canRedo` is false. They stay in the roving
+ * set and never move into the More menu.
  */
 export function buildToolbar(input: ToolbarInput): ToolbarGroup[] {
   const { toolbar, labels, viewMode, view } = input;
@@ -298,8 +336,17 @@ export function buildToolbar(input: ToolbarInput): ToolbarGroup[] {
         pressed: shown,
         haspopup: null,
         expanded: null,
+        disabled: null,
         action: { type: 'togglePanel' },
       },
+    ]);
+  }
+
+  const history = input.history;
+  if (toolbar.undo && history) {
+    push({ key: 'history', className: 'gantt-tb-group gantt-tb-history', role: null, ariaLabel: null }, [
+      historyButton('undo', labels.undo, history.canUndo),
+      historyButton('redo', labels.redo, history.canRedo),
     ]);
   }
 
@@ -380,12 +427,13 @@ export function toolbarItems(groups: readonly ToolbarGroup[]): ToolbarItem[] {
 
 /**
  * The `focusKey` of the toolbar's single tab stop (`tabindex=0`; every other control gets `-1`):
- * the control focused last while it is still shown, otherwise the first control. `null` when
- * the toolbar has no control.
+ * the control focused last while it is still shown, otherwise the first control that is not
+ * `aria-disabled` (so Tab doesn't land on an unavailable Undo), else the first control. `null`
+ * when the toolbar has no control.
  */
 export function toolbarTabStop(items: readonly ToolbarItem[], lastFocusKey: string | null | undefined): string | null {
   if (lastFocusKey != null && items.some(i => i.focusKey === lastFocusKey)) return lastFocusKey;
-  return items[0]?.focusKey ?? null;
+  return (items.find(i => i.disabled !== true) ?? items[0])?.focusKey ?? null;
 }
 
 /**
@@ -447,7 +495,10 @@ const METRICS = {
   charEm: 0.6,
 } as const;
 
-/** Groups moved into the More menu while the toolbar is too narrow, in this order. */
+/**
+ * Groups moved into the More menu while the toolbar is too narrow, in this order. The panel toggle,
+ * the history group (undo · redo) and the zoom buttons never move.
+ */
 export const TOOLBAR_OVERFLOW_ORDER: readonly ToolbarGroupKey[] = ['levels', 'views', 'today'];
 
 /** Sizes `estimateToolbarWidth` reads. */
@@ -584,6 +635,7 @@ function moreGroup(labels: Pick<GanttLabels, 'more'>, open: boolean): ToolbarGro
         pressed: null,
         haspopup: 'menu',
         expanded: open,
+        disabled: null,
         action: { type: 'menu' },
       },
     ],
@@ -608,7 +660,8 @@ function menuItem(item: ToolbarItem): ToolbarMenuItem {
  * Fit the toolbar to `width`: with `overflow: 'menu'`, while the groups don't fit
  * (`estimateToolbarWidth`), move the zoom levels, then the views, then today into a More menu
  * (`TOOLBAR_OVERFLOW_ORDER`), stopping as soon as the rest and the More button fit. The panel
- * toggle and the zoom buttons always stay; whatever still doesn't fit wraps (CSS). A toolbar that
+ * toggle, Undo / Redo and the zoom buttons always stay (`estimateToolbarWidth` counts them);
+ * whatever still doesn't fit wraps (CSS). A toolbar that
  * fits, an unmeasured width and `overflow: 'wrap'` give the groups as they are and no menu, so the
  * output only changes while the toolbar is too narrow.
  */

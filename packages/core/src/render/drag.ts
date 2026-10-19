@@ -7,7 +7,11 @@
 
 import type { TaskDragEvent, TaskResizeEvent } from '../types';
 import { addDays } from '../gantt-math';
+import type { ResolvedGanttConfig } from './config';
+import { bottomScale } from './scales';
+import { taskSpan, type TimelineModel } from './timeline';
 
+/** What a `DragSession` drags: the whole bar (move) or one of its resize handles. */
 export type DragHandle = 'bar' | 'left' | 'right';
 
 export interface DragTiming {
@@ -41,6 +45,29 @@ export interface DragPreview {
 }
 
 export type DragResult = { kind: 'drag'; event: TaskDragEvent } | { kind: 'resize'; event: TaskResizeEvent } | null;
+
+/**
+ * The timing of a drag or keyboard edit that starts now (`DragSession`, `KeyboardEditSession`):
+ * the scale of `timeline` (`pxPerDay`, `toX`), the span of task dates as drawn (`taskSpan`:
+ * date-only normalisation, inclusive ends) and the snap unit — whole hours on hour scales (the
+ * bottom tier's unit), whole days otherwise. Both bindings build their sessions with it.
+ */
+export function editTiming(
+  timeline: Pick<TimelineModel, 'pxPerDay' | 'toX'>,
+  cfg: Pick<ResolvedGanttConfig, 'scales' | 'endDateMode' | 'normalizeDateOnly'>,
+): DragTiming {
+  return {
+    pxPerDay: timeline.pxPerDay,
+    toX: timeline.toX,
+    span: (start, end) => taskSpan({ start, end }, cfg),
+    snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
+  };
+}
+
+/** The task edge a resize handle moves: `'left'` → `'start'`, `'right'` → `'end'` (`TaskResizeEvent.edge`). */
+export function resizeEdge(handle: 'left' | 'right'): 'start' | 'end' {
+  return handle === 'left' ? 'start' : 'end';
+}
 
 const addHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000);
 
@@ -130,6 +157,6 @@ export class DragSession {
     const base = { taskId: this.taskId, oldStart: this.origStart, oldEnd: this.origEnd, newStart, newEnd };
     return this.handle === 'bar'
       ? { kind: 'drag', event: { ...base, daysMoved: days } }
-      : { kind: 'resize', event: { ...base, handle: this.handle, daysDelta: days } };
+      : { kind: 'resize', event: { ...base, edge: resizeEdge(this.handle), handle: this.handle, daysDelta: days } };
   }
 }

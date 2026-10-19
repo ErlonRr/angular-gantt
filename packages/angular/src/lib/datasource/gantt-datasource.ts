@@ -186,6 +186,30 @@ export class GanttDataSource<T extends GanttTask = GanttTask> {
   }
 
   /**
+   * Replace the loaded items with `update(items)` without fetching, keeping the paging state (the
+   * page, `hasMore`, a failure): how the chart applies an edit to a data source's tasks, so the
+   * edit survives the next page. A page in flight is appended to the patched items; `setStatic()`
+   * (and, with a fetcher, `reset()`) drops the patch with the other items. Returning the same array
+   * changes nothing.
+   *
+   * @throws TypeError when `update` does not return an array (the items stay as they were).
+   * @example
+   * ds.patch(items => items.map(t => (t.id === 'a' ? { ...t, progress: 100 } : t)));
+   */
+  patch(update: (items: readonly T[]) => T[]): void {
+    if (this._loader) {
+      this._loader.patch(update);
+      return;
+    }
+    const items = untracked(this._static);
+    const next: unknown = update(items);
+    if (!Array.isArray(next)) throw new TypeError('[gantry] patch(update): update must return an array');
+    if (next === items) return;
+    this._static.set(next as T[]);
+    this._notify();
+  }
+
+  /**
    * ɵ — private API, not covered by semver: the chart's load-state announcement. `listener` runs
    * synchronously on every change of the items, the loading flag, `hasMore` or the error, with the
    * load state before and after that change. Returns the function that unsubscribes it.

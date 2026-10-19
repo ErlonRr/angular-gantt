@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import { durationLabel, formatDate } from '../gantt-math';
+import { resolveFormatLocale } from '../format';
 import type { GanttLabels } from '../types';
 import { estimateTextWidth } from './bars';
 import type { ResolvedGanttConfig } from './config';
@@ -82,6 +83,25 @@ export function formatDragReadout(
   const text = to === from ? from : `${from}${DRAG_READOUT_RANGE_SEPARATOR}${to}`;
   const span = taskSpan({ start, end }, options.dates);
   return labels.dragReadout(text, durationLabel(span.start, span.end, labels));
+}
+
+const percentFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * The readout's text while the progress grip is dragged (`editing.progress`): the progress as a
+ * whole percentage in `locale` (default `'en'`, never the runtime's), clamped to 0–100 — "45%"
+ * (`'de'`: "45 %"). The chip is placed like the drag readout (`placeDragReadout`, anchored on the
+ * bar); the live region announces the result (`announceProgress`) instead.
+ */
+export function formatProgressReadout(progress: number, locale?: string): string {
+  const tag = resolveFormatLocale(locale);
+  let format = percentFormats.get(tag);
+  if (!format) {
+    format = new Intl.NumberFormat(tag, { style: 'percent', maximumFractionDigits: 0 });
+    percentFormats.set(tag, format);
+  }
+  const p = Number.isFinite(progress) ? Math.min(Math.max(Math.round(progress), 0), 100) : 0;
+  return format.format(p / 100);
 }
 
 /** Estimated border-box width of the chip for `text` (no layout read): pass it to `placeDragReadout`. */

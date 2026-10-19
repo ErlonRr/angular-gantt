@@ -26,7 +26,10 @@ export interface BarPaintOptions {
   /** Label font size in px (`themeMetrics(theme).fontPx`) */
   readonly fontPx: number;
   readonly selected: boolean;
-  /** Adds `gantt-bar-draggable` (grab cursor; the pointer handler only drags such bars) */
+  /**
+   * Adds `gantt-bar-draggable` (grab cursor; the pointer handler only drags such bars): the row's
+   * `editRules(row).move` (core; Phase 11 D9)
+   */
   readonly draggable?: boolean | undefined;
   /** On the critical path: adds `gantt-bar--critical` */
   readonly critical?: boolean | undefined;

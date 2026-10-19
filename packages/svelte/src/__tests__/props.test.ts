@@ -30,6 +30,20 @@ describe('Gantry.svelte props', () => {
     expect(Object.values(GANTRY_EVENTS).filter(name => !names.includes(name))).toEqual([]);
   });
 
+  it('destructures the Phase 11 editing callbacks', () => {
+    expect(destructured()).toEqual(
+      expect.arrayContaining([
+        'onBeforeChange',
+        'onTasksChange',
+        'onTaskUpdated',
+        'onTaskProgressChanged',
+        'onDependencyCreated',
+        'onDependencyDeleted',
+        'onHistoryChange',
+      ]),
+    );
+  });
+
   it('destructures nothing else but element, the empty and children snippets, and the rest', () => {
     const known = new Set<string>([
       ...GANTRY_PROPERTIES,
@@ -44,6 +58,12 @@ describe('Gantry.svelte props', () => {
 
   it('maps every GANTRY_PROPERTIES name to its own prop in the `properties` record', () => {
     for (const name of GANTRY_PROPERTIES) {
+      expect(source, name).toMatch(new RegExp(`\\n\\s*${name}: \\(\\) => ${name},`));
+    }
+  });
+
+  it('maps every GANTRY_EVENTS callback to its own prop in the `callbacks` record', () => {
+    for (const name of Object.values(GANTRY_EVENTS)) {
       expect(source, name).toMatch(new RegExp(`\\n\\s*${name}: \\(\\) => ${name},`));
     }
   });

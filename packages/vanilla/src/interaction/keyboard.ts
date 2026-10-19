@@ -12,11 +12,27 @@
  *   toolbar's listener sits below the shadow root and runs first: the keys of its More menu (core
  *   `toolbarMenuKey`) and its roving keys are prevented there, so they never reach this one (an
  *   Esc that closes the menu does not clear the selection); Tab out of the menu is not prevented.
- * What the area leaves goes to the global shortcuts: Esc (D24: cancels move mode or a pointer
- * drag, else clears the selection — the open tooltip closes first, in the capture phase,
- * `tooltip-triggers.ts`), Ctrl/⌘+A, and + − T F (`characterShortcuts` from the resolved
- * `keyboard` option). Keys nothing uses (and Alt combinations, L, Delete, Ctrl+Z/Y until Phase
- * 11) keep their default action; so do text inputs in custom cells and the splitter's separator.
+ * What the area leaves goes to the global shortcuts: Esc (D24: cancels move mode, a pointer drag
+ * or a link session, else deselects the selected link, else clears the selection — the open
+ * tooltip closes first, in the capture phase, `tooltip-triggers.ts`), Ctrl/⌘+A, and + − T F
+ * (`characterShortcuts` from the resolved `keyboard` option).
+ *
+ * Editing (Phase 11, plan §3e):
+ * - Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z and Ctrl+Y redo (`ctx.edit`), only while the chart keeps a
+ *   history (`editing.history`; not in controlled mode); otherwise, in move mode (modal: its own
+ *   keys) and in text entry, the browser's own undo keeps the keys.
+ * - With a link selected (`inputs.selectedLinkKey`), Delete / Backspace removes it wherever focus
+ *   is in the chart (outside text entry), and Esc deselects it only (`resolveKey`'s `active`).
+ * - L on a bar starts link mode (`timeline-keys.ts`); the keyboard session's target follows focus
+ *   (`bindFocusTracking`), and Tab out of the bars or a pointer press cancels it (announced). A
+ *   pointer press in the chart outside the timeline canvas deselects the selected link; on the
+ *   canvas, `canvas-pointer.ts` does (but not for a press on that link, which its click selects
+ *   again: no flicker).
+ *
+ * Keys nothing uses (and Alt combinations) keep their default action; so does text entry — an
+ * input, a select or a text area (a custom cell's control, a cell editor), editable content, and
+ * anything inside a cell editor (`.gantt-tl-editor`, whose own keys `cell-edit.ts` handles) — and
+ * the splitter's separator.
  *
  * `bindFocusTracking`: the row that holds focus — a task-list row (or one of its cells) or a bar —
  * is recorded in the `focusedRowId` input, so the virtual window keeps it mounted (pinned) while
@@ -40,21 +56,40 @@ export function barOf(dom: Pick<Skeleton, 'bars'>, el: EventTarget | null | unde
   return null;
 }
 
-/** Typing in a consumer's cell control: the chart leaves its keys alone. */
+/** Typing in a consumer's cell control or a cell editor: the chart leaves its keys alone. */
 const isTextEntry = (el: Element): boolean =>
-  /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || (el as HTMLElement).isContentEditable;
+  /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ||
+  (el as HTMLElement).isContentEditable ||
+  el.closest('.gantt-tl-editor') !== null;
 
 /** Binds the keys until `signal` aborts (the element disconnects; move mode is cancelled then). */
 export function bindKeyboard(ctx: LayerContext, signal: AbortSignal): void {
-  const { host, shadow, dom, drag, selection, graph: G } = ctx;
+  const { host, shadow, dom, drag, selection, link, inputs: I, graph: G } = ctx;
   const edit = createKeyboardEdit(ctx);
   signal.addEventListener('abort', () => edit.cancel(true), { once: true });
+
+  /** Escape cancels something instead of clearing the selection (core `resolveKey`'s `active`). */
+  const busy = (): boolean =>
+    drag.state.peek().kind !== 'idle' ||
+    link.active() ||
+    I.selectedLinkKey.peek() !== null ||
+    ctx.cells.active() !== null;
+  /** The chart keeps an undo history (`editing.history`; never in controlled mode). */
+  const keepsHistory = (): boolean => {
+    try {
+      return G.config.peek().editing.history !== false;
+    } catch {
+      return false;
+    }
+  };
 
   const onKey = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) return;
     const origin = event.composedPath()[0];
     const el = origin instanceof Element ? origin : null;
-    if (el && (isTextEntry(el) || el === dom.splitterHandle)) return;
+    // Text entry, the splitter, and anything inside an open cell editor (a custom editor made of
+    // buttons keeps its keys: no + − T F, Ctrl+A or Ctrl+Z from the chart)
+    if (el && (isTextEntry(el) || el === dom.splitterHandle || el.closest('.gantt-tl-cell--editing'))) return;
 
     // Move mode is modal: its keys, Esc and Tab end it
     if (edit.active()) {
@@ -64,8 +99,25 @@ export function bindKeyboard(ctx: LayerContext, signal: AbortSignal): void {
 
     const bar = barOf(dom, el);
     const area: KeyArea = bar ? 'timeline' : el && dom.tasklistContainer.contains(el) ? 'grid' : 'any';
-    const cmd = resolveKey(event, area, { ...G.config.peek().keyboard, active: drag.state.peek().kind !== 'idle' });
+    const options = { ...G.config.peek().keyboard, active: busy() };
+
+    // A selected link: Delete / Backspace removes it, whichever area holds focus
+    if (I.selectedLinkKey.peek() !== null && resolveKey(event, 'timeline', options) === 'delete') {
+      link.deleteSelected();
+      event.preventDefault();
+      return;
+    }
+
+    const cmd = resolveKey(event, area, options);
     if (cmd === null) return;
+    // Undo / redo while the chart keeps a history; otherwise the browser's own keeps the keys
+    if (cmd === 'undo' || cmd === 'redo') {
+      if (!keepsHistory()) return;
+      if (cmd === 'undo') ctx.edit.undo();
+      else ctx.edit.redo();
+      event.preventDefault();
+      return;
+    }
     if (bar && handleTimelineKey(ctx, event, bar, cmd, edit)) {
       event.preventDefault();
       return;
@@ -78,7 +130,9 @@ export function bindKeyboard(ctx: LayerContext, signal: AbortSignal): void {
     // Global shortcuts; anything else keeps its default action
     switch (cmd) {
       case 'cancel':
-        drag.cancel();
+        if (link.active()) link.cancel();
+        else if (I.selectedLinkKey.peek() !== null) link.deselect();
+        else drag.cancel();
         break;
       case 'clearSelection':
         selection.clear();
@@ -107,15 +161,28 @@ export function bindKeyboard(ctx: LayerContext, signal: AbortSignal): void {
   // Sent to the host itself (it delegates focus, so only a script does that)
   host.addEventListener('keydown', e => e.composedPath()[0] === host && onKey(e), { signal });
 
-  // Leaving the bar in move mode (blur) cancels it; a pointer press too, before any drag starts
+  // Leaving the bar in move mode (blur) cancels it; a pointer press too, before any drag starts.
+  // Keyboard link mode ends when focus leaves the bars for another control (not when it is lost:
+  // another window), or on a pointer press; a press outside the canvas deselects the selected link
+  // (on the canvas, `canvas-pointer.ts` keeps it for a press on that link).
   shadow.addEventListener(
     'focusout',
     e => {
       if (edit.active() && barOf(dom, e.target)?.getAttribute('data-task-id') === edit.taskId()) edit.cancel();
+      const next = (e as FocusEvent).relatedTarget;
+      if (I.link.peek()?.mode === 'keyboard' && next && !barOf(dom, next)) link.cancel();
     },
     { signal },
   );
-  shadow.addEventListener('pointerdown', () => edit.cancel(), { capture: true, signal });
+  shadow.addEventListener(
+    'pointerdown',
+    e => {
+      edit.cancel();
+      if (I.link.peek()?.mode === 'keyboard') link.cancel();
+      if (!dom.canvasContainer.contains(e.target as Node | null)) link.deselect();
+    },
+    { capture: true, signal },
+  );
 }
 
 /** Keys that alone don't make focus "visible" (pressing them with a pointer is common). */
@@ -127,9 +194,10 @@ const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'C
  * (`focusVisibleBarId`).
  */
 export function bindFocusTracking(ctx: LayerContext, signal: AbortSignal): void {
-  const { shadow, host, dom, inputs: I } = ctx;
-  /** The last input was a key (initially: focus moved by a script shows its ring, like `:focus-visible`) */
-  let keyboard = true;
+  const { shadow, host, dom, inputs: I, focus } = ctx;
+  // The last input was a key (`focus.keyboard`; initially: focus moved by a script shows its ring,
+  // like `:focus-visible`; `focusTask()` sets it too)
+  focus.keyboard = true;
   const doc = shadow.ownerDocument;
   const idOf = (bar: Element | null) => bar?.getAttribute('data-task-id') ?? null;
 
@@ -137,7 +205,7 @@ export function bindFocusTracking(ctx: LayerContext, signal: AbortSignal): void 
     'keydown',
     e => {
       if (MODIFIER_KEYS.has(e.key)) return;
-      keyboard = true;
+      focus.keyboard = true;
       // A key pressed on a bar focused by the pointer shows its ring from now on
       const id = idOf(barOf(dom, shadow.activeElement));
       if (id !== null) I.focusVisibleBarId.set(id);
@@ -147,7 +215,7 @@ export function bindFocusTracking(ctx: LayerContext, signal: AbortSignal): void 
   doc.addEventListener(
     'pointerdown',
     () => {
-      keyboard = false;
+      focus.keyboard = false;
       I.focusVisibleBarId.set(null);
     },
     { capture: true, signal },
@@ -161,7 +229,9 @@ export function bindFocusTracking(ctx: LayerContext, signal: AbortSignal): void 
         ? idOf(bar)
         : ((e.target as Element | null)?.closest?.<HTMLElement>('.gantt-tl-row')?.dataset['taskId'] ?? null);
       I.focusedRowId.set(id);
-      I.focusVisibleBarId.set(bar && keyboard ? id : null);
+      I.focusVisibleBarId.set(bar && focus.keyboard ? id : null);
+      // Keyboard link mode: the focused bar is the target
+      if (bar && I.link.peek()?.mode === 'keyboard') ctx.link.over(id);
     },
     { signal },
   );

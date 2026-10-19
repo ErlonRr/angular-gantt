@@ -7,6 +7,16 @@
 //  font size (`lagLabel.fontPx`, the chart font size − 2): the painter
 //  adds no geometry of its own. Its colour is a `Paint`, bound as a CSS
 //  property.
+//
+//  The group's class is `gantt-arrow`, plus `gantt-arrow--critical`
+//  (critical path) and `gantt-arrow--selected` (the link selected for
+//  deletion, Phase 11: the canvas hands it core `selectedArrowVisual`
+//  through `layout.arrowSelection`, which gives its paint, width and
+//  halo), as the Web Component's `paint/arrows.ts`. The selected link's
+//  halo is `path.gantt-arrow-halo`, the group's first child (behind the
+//  line), attached only while the visual has one. Arrows take no pointer
+//  events and no focus: they are hit by geometry (`editing/link.ts`, core
+//  `arrowAt`), and their keyboard path is the predecessors cell.
 // ─────────────────────────────────────────────────────────────
 
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
@@ -18,10 +28,23 @@ import type { ArrowVisual } from '@gantryjs/core';
   host: {
     class: 'gantt-arrow',
     '[class.gantt-arrow--critical]': 'arrow().critical',
+    '[class.gantt-arrow--selected]': 'arrow().selected',
     'aria-hidden': 'true',
     'pointer-events': 'none',
   },
   template: `
+    @if (arrow().halo; as halo) {
+      <svg:path
+        class="gantt-arrow-halo"
+        [attr.d]="arrow().d"
+        fill="none"
+        [style.stroke]="halo.paint"
+        [attr.stroke-width]="halo.width"
+        [attr.stroke-opacity]="halo.opacity"
+        stroke-linejoin="round"
+        stroke-linecap="round"
+      />
+    }
     <svg:path
       [attr.d]="arrow().d"
       fill="none"
@@ -46,7 +69,8 @@ import type { ArrowVisual } from '@gantryjs/core';
   `,
   styles: [
     `
-      /* Forced colours (D25): the link, its head and lag label CanvasText (inline SVG paints: !important) */
+      /* Forced colours (D25): the link, its head and lag label CanvasText (inline SVG paints: !important);
+         the link selected for deletion Highlight, its halo too at its own opacity (phase 11) */
       @media (forced-colors: active) {
         path {
           stroke: CanvasText !important;
@@ -54,6 +78,12 @@ import type { ArrowVisual } from '@gantryjs/core';
         polygon,
         text {
           fill: CanvasText !important;
+        }
+        :host(.gantt-arrow--selected) path {
+          stroke: Highlight !important;
+        }
+        :host(.gantt-arrow--selected) polygon {
+          fill: Highlight !important;
         }
       }
     `,

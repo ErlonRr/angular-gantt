@@ -83,7 +83,7 @@ describe('GantryComponent', () => {
     expect(f.componentInstance.events.at(-1)?.selectedIds).toEqual([]);
   });
 
-  it('leaves unhandled shortcuts (Alt+key, undo until Phase 11) to the browser; + and F are the chart’s', async () => {
+  it('leaves unhandled shortcuts (Alt+key, Ctrl+Z without a history, L on the host) to the browser; + and F are the chart’s', async () => {
     const f = await mount();
     const host = f.nativeElement.querySelector('gantry') as HTMLElement;
     for (const init of [{ key: 't', altKey: true }, { key: 'z', ctrlKey: true }, { key: 'l' }]) {

@@ -2,8 +2,10 @@
 // sheet is one `@media (forced-colors: active)` block, last in the base sheet, made of system
 // colours with `!important` (the paints are inline CSSOM styles); it implements the wave-5
 // mapping; its selectors match the element's real DOM; the normal sheet is left alone, and every
-// focus ring of the element uses `--gantt-focus-ring` (Highlight in forced colours). What the
-// browser draws under forced colours is checked in e2e/forced-colors.spec.ts.
+// focus ring of the element uses `--gantt-focus-ring` (Highlight in forced colours). Phase 11
+// (step 4.4, plan 3d) adds the editing nodes: progress grip, link connectors, link preview,
+// selected arrow, cell editor and its error, disabled Undo / Redo. What the browser draws under
+// forced colours is checked in e2e/forced-colors.spec.ts.
 import { describe, it, expect, afterEach } from 'vitest';
 import { ViewMode, type GanttAnnotation, type GanttTask } from '@gantryjs/core';
 import { type GantryElement } from '../gantry.element';
@@ -14,7 +16,18 @@ import { SPLITTER_CSS } from '../styles/splitter.css';
 import '../index';
 
 const FORCED = '(forced-colors: active)';
-const SYSTEM = new Set(['Canvas', 'CanvasText', 'Highlight', 'HighlightText', 'GrayText', 'ButtonFace', 'ButtonText']);
+const SYSTEM = new Set([
+  'Canvas',
+  'CanvasText',
+  'Highlight',
+  'HighlightText',
+  'GrayText',
+  'ButtonFace',
+  'ButtonText',
+  // The cell editor (Phase 11)
+  'Field',
+  'FieldText',
+]);
 /** Properties that take a colour (the `outline` / `border` shorthands too) */
 const COLOR_PROP = /^(fill|stroke|color|background-color|outline|outline-color|border|border(-[a-z]+)?-color)$/;
 
@@ -153,6 +166,23 @@ describe('forced-colors sheet', () => {
     ['.gantt-legend-swatch--line > line', { stroke: 'Highlight' }],
     ['.gantt-legend-swatch--dashed > line', { stroke: 'GrayText' }],
     ['.gantt-legend-swatch--bar > rect', { fill: 'ButtonFace', stroke: 'ButtonText', 'stroke-dasharray': '4 2' }],
+    // Editing (Phase 11): grips, connectors, link preview, selected arrow Highlight; invalid 2 px dashed CanvasText
+    ['.gantt-progress-grip', { fill: 'Canvas', stroke: 'Highlight' }],
+    ['.gantt-link-connector', { fill: 'Canvas', stroke: 'Highlight' }],
+    ['.gantt-link-connector--target', { fill: 'Highlight' }],
+    ['.gantt-link-connector--invalid', { stroke: 'CanvasText', 'stroke-width': '2px', 'stroke-dasharray': '4 2' }],
+    ['.gantt-link-preview', { fill: 'Highlight', stroke: 'Highlight' }],
+    [
+      '.gantt-link-preview--invalid',
+      { fill: 'CanvasText', stroke: 'CanvasText', 'stroke-width': '2px', 'stroke-dasharray': '4 2' },
+    ],
+    ['.gantt-arrow--selected path', { stroke: 'Highlight' }],
+    ['.gantt-arrow--selected polygon', { fill: 'Highlight' }],
+    ['.gantt-tl-editor', { 'background-color': 'Field', color: 'FieldText', 'border-color': 'FieldText' }],
+    ['.gantt-tl-editor[aria-invalid="true"]', { outline: '2px dashed CanvasText' }],
+    ['.gantt-tl-editor:focus-visible', { 'outline-color': 'Highlight' }],
+    ['.gantt-tl-editor-error', { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' }],
+    ['.gantt-tb-btn[aria-disabled="true"]', { color: 'GrayText', 'border-color': 'GrayText' }],
   ] as const)('maps %s', (selector, expected) => {
     const decls = forced(selector);
     for (const [prop, v] of Object.entries(expected)) expect(value(decls.get(prop)), prop).toBe(v);
@@ -183,6 +213,34 @@ describe('forced-colors sheet', () => {
         '.gantt-tl-row--selected',
       ].sort(),
     );
+  });
+});
+
+describe('forced-colors sheet: Phase 11 cascade order', () => {
+  /** Index of the first forced rule listing `selector`. */
+  const at = (selector: string) => FORCED_RULES.findIndex(r => r.selectors.includes(selector));
+
+  it('modifiers come after their base rule (same specificity: the later rule wins)', () => {
+    for (const [base, modifier] of [
+      ['.gantt-arrow path', '.gantt-arrow--selected path'],
+      ['.gantt-arrow polygon', '.gantt-arrow--selected polygon'],
+      ['.gantt-link-connector', '.gantt-link-connector--target'],
+      ['.gantt-link-connector', '.gantt-link-connector--invalid'],
+      ['.gantt-link-preview', '.gantt-link-preview--invalid'],
+    ]) {
+      expect(at(base), base).toBeGreaterThanOrEqual(0);
+      expect(at(modifier), modifier).toBeGreaterThan(at(base));
+    }
+  });
+
+  it('the cell editor wins over the selected row and its focus ring; an invalid one stays dashed', () => {
+    // The selected row (forced-color-adjust none, HighlightText on every descendant) comes first
+    expect(at('.gantt-tl-editor')).toBeGreaterThan(at('.gantt-tl-row--selected *'));
+    expect(at('.gantt-tl-editor-error')).toBeGreaterThan(at('.gantt-tl-row--selected *'));
+    // [aria-invalid] and :focus-visible weigh the same: the dashed outline is the later rule
+    expect(at('.gantt-tl-editor[aria-invalid="true"]')).toBeGreaterThan(at('.gantt-tl-editor:focus-visible'));
+    // A disabled Undo / Redo opts out of nothing (GrayText is a forced colour)
+    expect(forced('.gantt-tb-btn[aria-disabled="true"]').has('forced-color-adjust')).toBe(false);
   });
 });
 
@@ -328,5 +386,14 @@ describe('forced-colors selectors match the element', () => {
     // The selected bar is not on the critical path; the critical bars are built-in bars
     expect(root.querySelector('.gantt-bar[aria-selected="true"]')?.getAttribute('data-task-id')).toBe('c');
     expect(root.querySelectorAll('.gantt-bar--critical > .gantt-bar-body').length).toBeGreaterThan(1);
+  });
+
+  it('the disabled Undo / Redo rule reaches the history group (editing on, empty history)', () => {
+    el = document.createElement('gantry-element');
+    Object.assign(el, { tasks: TASKS(), options: { viewMode: ViewMode.Day, initialScroll: false, editing: true } });
+    document.body.appendChild(el);
+    getEngine(el).flushSync();
+    const hits = [...el.shadowRoot!.querySelectorAll('.gantt-tb-btn[aria-disabled="true"]')].map(b => b.className);
+    expect(hits).toEqual(['gantt-tb-btn gantt-tb-undo', 'gantt-tb-btn gantt-tb-redo']);
   });
 });

@@ -58,7 +58,7 @@ import {
   longPressGesture,
   moveGesture,
   startGesture,
-  type BarHit,
+  type DragHandle,
   type DragPreview,
   type DragResult,
   type DragTiming,
@@ -108,7 +108,7 @@ export class GanttDragService {
    * content x `x` (where the press started), on the scale `timing` of the current timeline. No-op
    * while a drag or an external preview is in progress.
    */
-  start(geo: RowGeometry, handle: BarHit, x: number, timing: DragTiming): void {
+  start(geo: RowGeometry, handle: DragHandle, x: number, timing: DragTiming): void {
     if (this.session || this.state().kind !== 'idle') return;
     const task = geo.row.task;
     const session = new DragSession(task.id, handle, task.start, task.end ?? task.start, x, geo, timing);

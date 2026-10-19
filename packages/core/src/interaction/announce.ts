@@ -27,6 +27,7 @@ export type AnnounceLabels = Pick<
   | 'announceProgress'
   | 'announceZoom'
   | 'announceEditStart'
+  | 'announceEditProgressHelp'
   | 'announceEditCancel'
   | 'announceEditNoChange'
   | 'announceExpanded'
@@ -34,6 +35,11 @@ export type AnnounceLabels = Pick<
   | 'announceLinkStart'
   | 'announceLinkCreated'
   | 'announceLinkCancel'
+  | 'announceLinkSelected'
+  | 'announceLinkDeleted'
+  | 'announceUndo'
+  | 'announceRedo'
+  | 'announceChangeRejected'
 >;
 
 export const DEFAULT_ANNOUNCE_LABELS: AnnounceLabels = {
@@ -43,6 +49,7 @@ export const DEFAULT_ANNOUNCE_LABELS: AnnounceLabels = {
   announceProgress: DEFAULT_LABELS.announceProgress,
   announceZoom: DEFAULT_LABELS.announceZoom,
   announceEditStart: DEFAULT_LABELS.announceEditStart,
+  announceEditProgressHelp: DEFAULT_LABELS.announceEditProgressHelp,
   announceEditCancel: DEFAULT_LABELS.announceEditCancel,
   announceEditNoChange: DEFAULT_LABELS.announceEditNoChange,
   announceExpanded: DEFAULT_LABELS.announceExpanded,
@@ -50,6 +57,11 @@ export const DEFAULT_ANNOUNCE_LABELS: AnnounceLabels = {
   announceLinkStart: DEFAULT_LABELS.announceLinkStart,
   announceLinkCreated: DEFAULT_LABELS.announceLinkCreated,
   announceLinkCancel: DEFAULT_LABELS.announceLinkCancel,
+  announceLinkSelected: DEFAULT_LABELS.announceLinkSelected,
+  announceLinkDeleted: DEFAULT_LABELS.announceLinkDeleted,
+  announceUndo: DEFAULT_LABELS.announceUndo,
+  announceRedo: DEFAULT_LABELS.announceRedo,
+  announceChangeRejected: DEFAULT_LABELS.announceChangeRejected,
 };
 
 /** Defaults with any overrides applied. */

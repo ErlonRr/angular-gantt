@@ -19,16 +19,46 @@
 //  A cell template goes inside an `<ng-container ganttColumn>`: the content
 //  query that finds it can't see inside an `<ng-template>` host.
 //
+//  Editing (Phase 11, D14 / D16; with `options.editing`): `[editable]`
+//  (`true`, `false` or per row; a bare `editable` attribute is `true`),
+//  `[editor]` (a built-in kind — 'text', 'number', 'date',
+//  'datetime-local', 'select' — or a function returning the editor's DOM
+//  node), `[editorOptions]`, `[exportValue]`, `[parse]` and `[validate]`.
+//  A custom editor can also be an `<ng-template ganttCellEditor let-edit>`
+//  inside the `<ng-container ganttColumn>` (an `[editor]` input wins over
+//  it); the cell template is then the first other `<ng-template>`:
+//
+//  <ng-container ganttColumn="estimate" label="Estimate" editable>
+//    <ng-template let-row>{{ row.task.data?.estimate }} h</ng-template>
+//    <ng-template ganttCellEditor let-edit>
+//      <input [value]="edit.value" (input)="edit.setValue($any($event.target).value)" />
+//    </ng-template>
+//  </ng-container>
+//
 //  GantryComponent reads every `ganttColumn` of its content through a
 //  content query (inside `@if` / `<ng-container>` too) and binds their
 //  `def`s into its column service: adding, removing or changing one
 //  updates the columns, with no registration step.
 // ─────────────────────────────────────────────────────────────
 
-import { Directive, computed, input, TemplateRef, contentChild } from '@angular/core';
+import {
+  Directive,
+  computed,
+  input,
+  TemplateRef,
+  contentChild,
+  contentChildren,
+  booleanAttribute,
+} from '@angular/core';
 
-import type { ColumnContext, ColumnSortValue, GanttFlatRow } from '@gantryjs/core';
+import type { CellEditorOptions, ColumnContext, ColumnSortValue, GanttFlatRow, GanttTask } from '@gantryjs/core';
 import { type ColumnDef, type ColumnRenderer, type ColumnCellContext } from '../types';
+import { GanttCellEditorDirective } from './gantt-cell-editor.directive';
+
+/** `[editable]`: a boolean, a per-row rule, or the attribute (`editable` / `editable="false"`). */
+function editableAttribute(value: ColumnDef['editable'] | string): ColumnDef['editable'] {
+  return typeof value === 'string' ? booleanAttribute(value) : value;
+}
 
 @Directive({
   selector: '[ganttColumn]',
@@ -50,8 +80,38 @@ export class GanttColumnDefDirective {
   /** Function-based renderer — overrides template cell if provided */
   readonly render = input<ColumnRenderer | undefined>(undefined);
 
-  /** The cell content: an `<ng-template let-row>` inside an `<ng-container ganttColumn>` */
-  readonly cellTemplate = contentChild<TemplateRef<ColumnCellContext>>(TemplateRef);
+  // ── Editing (Phase 11) ────────────────────────────────────
+  /** The cell can be edited (with `options.editing`): `true`, `false` or per row; a built-in key keeps its rule when unset */
+  readonly editable = input<ColumnDef['editable'], ColumnDef['editable'] | string>(undefined, {
+    transform: editableAttribute,
+  });
+  /** A built-in editor kind, or a function returning the editor's DOM node (wins over a `ganttCellEditor` template) */
+  readonly editor = input<ColumnDef['editor']>(undefined);
+  /** Settings of a built-in editor (`min` / `max` / `step`, the `select` options) */
+  readonly editorOptions = input<CellEditorOptions | undefined>(undefined);
+  /** The cell's value as text: the editor's first value */
+  readonly exportValue = input<((row: GanttFlatRow, ctx: ColumnContext) => string) | undefined>(undefined);
+  /** The editor's text → the task fields to change (throw `new Error(message)` to reject it) */
+  readonly parse = input<((value: string, row: GanttFlatRow, ctx: ColumnContext) => Partial<GanttTask>) | undefined>(
+    undefined,
+  );
+  /** Checks the parsed fields: a message rejects them */
+  readonly validate = input<ColumnDef['validate']>(undefined);
+
+  /** The custom editor: an `<ng-template ganttCellEditor let-edit>` inside an `<ng-container ganttColumn>` */
+  readonly editorTemplate = contentChild(GanttCellEditorDirective);
+  /** Every `<ng-template>` of the content (the editor's included) */
+  private readonly templates = contentChildren<TemplateRef<ColumnCellContext>>(TemplateRef, { descendants: true });
+
+  /**
+   * The cell content: the first `<ng-template>` inside an `<ng-container ganttColumn>` that is not
+   * the editor's (`ganttCellEditor`)
+   */
+  readonly cellTemplate = computed<TemplateRef<ColumnCellContext> | undefined>(() => {
+    // Each query makes its own TemplateRef: the same template has the same anchor node
+    const editorAnchor: unknown = this.editorTemplate()?.template.elementRef.nativeElement;
+    return this.templates().find(t => t.elementRef.nativeElement !== editorAnchor);
+  });
 
   /** The column definition: only what was given, so a built-in column with this key fills in the rest */
   readonly def = computed<ColumnDef>(() => {
@@ -74,6 +134,18 @@ export class GanttColumnDefDirective {
     if (sortValue) def.sortValue = sortValue;
     if (render) def.render = render;
     if (cellTemplate) def.cellTemplate = cellTemplate;
+    const editable = this.editable();
+    const editor = this.editor() ?? this.editorTemplate()?.template;
+    const editorOptions = this.editorOptions();
+    const exportValue = this.exportValue();
+    const parse = this.parse();
+    const validate = this.validate();
+    if (editable !== undefined) def.editable = editable;
+    if (editor !== undefined) def.editor = editor;
+    if (editorOptions) def.editorOptions = editorOptions;
+    if (exportValue) def.exportValue = exportValue;
+    if (parse) def.parse = parse;
+    if (validate) def.validate = validate;
     return def as ColumnDef;
   });
 }

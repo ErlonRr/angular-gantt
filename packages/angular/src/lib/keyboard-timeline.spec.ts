@@ -67,7 +67,7 @@ class EpicBar extends GanttBarBase {}
     [options]="options()"
     [enableDrag]="drag()"
     [enableResize]="resize()"
-    (rowClick)="clicks.push($event.row.task.id)"
+    (rowClick)="clicks.push($event.task.id)"
     (taskDragged)="dragged.push($event)"
     (taskResized)="resized.push($event)"
   />`,
@@ -462,6 +462,7 @@ describe('<gantry> keyboard move mode', () => {
     expect(c.h.resized).toEqual([
       {
         taskId: 'b',
+        edge: 'end',
         handle: 'right',
         oldStart: day(4),
         oldEnd: day(10),
@@ -547,7 +548,7 @@ describe('<gantry> keyboard move mode', () => {
     expect(press(active(), 'f')).toBe(true);
     expect(press(active(), '+')).toBe(true);
     expect(press(active(), ' ')).toBe(true);
-    // ↑/↓ (progress) wait for Phase 11's event: used, nothing changes
+    // ↑/↓ change the progress only with `editing.progress` (scaffold-p11.spec.ts): used, nothing changes
     expect(press(active(), 'ArrowDown')).toBe(true);
     expect(fit).not.toHaveBeenCalled();
     expect(c.layout.level()).toBe(ViewMode.Day);

@@ -15,7 +15,9 @@
 //  `window.__GANTRY_EVENTS__` (the Web Component's event names) and
 //  exposes `window.__GANTRY_API__` to change inputs and reach the
 //  component. `box` replaces the 1150 × 700 host size (the narrow
-//  scenarios of phase 10).
+//  scenarios of phase 10). Phase 11 records the seven editing outputs
+//  (`before-change` … `history-change`) and `veto` prevents every
+//  `before-change` (`detail.preventDefault()`).
 // ─────────────────────────────────────────────────────────────
 
 import { afterNextRender, ChangeDetectionStrategy, Component, signal, viewChild } from '@angular/core';
@@ -24,6 +26,7 @@ import {
   GanttDataSource,
   GanttTooltipTemplateDirective,
   type GanttAnnotation,
+  type GanttBeforeChangeEvent,
   type GanttOptions,
   type GanttTask,
   type GanttTimeHighlight,
@@ -56,6 +59,8 @@ interface GantryFixture {
   dataSource?: { failures: number; pageSize?: number };
   /** The host's size in px, instead of 1150 × 700 */
   box?: { width: number; height: number };
+  /** Every `before-change` is vetoed with `detail.preventDefault()` (after it is recorded) */
+  veto?: boolean;
 }
 
 /** What `window.__GANTRY_API__.set()` changes (dates as local ISO strings, like the fixture). */
@@ -65,6 +70,7 @@ interface FixturePatch {
   darkMode?: boolean | 'auto';
   loading?: boolean;
   errorMessage?: string | null;
+  veto?: boolean;
 }
 
 declare global {
@@ -134,6 +140,13 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (selectionChange)="record('selection-change', $event)"
         (viewModeChange)="record('view-mode-change', { viewMode: $event })"
         (retry)="record('retry', $event)"
+        (beforeChange)="beforeChange($event)"
+        (tasksChange)="record('tasks-change', $event)"
+        (taskUpdated)="record('task-updated', $event)"
+        (taskProgressChanged)="record('task-progress-changed', $event)"
+        (dependencyCreated)="record('dependency-created', $event)"
+        (dependencyDeleted)="record('dependency-deleted', $event)"
+        (historyChange)="record('history-change', $event)"
       >
         <div ganttEmpty class="fixture-empty">{{ emptyContent }}</div>
         @if (tooltipTemplate) {
@@ -163,6 +176,13 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (selectionChange)="record('selection-change', $event)"
         (viewModeChange)="record('view-mode-change', { viewMode: $event })"
         (retry)="record('retry', $event)"
+        (beforeChange)="beforeChange($event)"
+        (tasksChange)="record('tasks-change', $event)"
+        (taskUpdated)="record('task-updated', $event)"
+        (taskProgressChanged)="record('task-progress-changed', $event)"
+        (dependencyCreated)="record('dependency-created', $event)"
+        (dependencyDeleted)="record('dependency-deleted', $event)"
+        (historyChange)="record('history-change', $event)"
       >
         @if (tooltipTemplate) {
           <ng-template ganttTooltip let-task="task">
@@ -206,6 +226,7 @@ export class FixtureComponent {
   protected readonly darkMode = signal(this.fixture.darkMode ?? false);
   protected readonly loading = signal(this.fixture.loading ?? false);
   protected readonly errorMessage = signal(this.fixture.errorMessage ?? null);
+  private veto = this.fixture.veto === true;
 
   constructor() {
     const selected = this.fixture.selected ?? [];
@@ -220,6 +241,7 @@ export class FixtureComponent {
         if (patch.darkMode !== undefined) this.darkMode.set(patch.darkMode);
         if (patch.loading !== undefined) this.loading.set(patch.loading);
         if (patch.errorMessage !== undefined) this.errorMessage.set(patch.errorMessage);
+        if (patch.veto !== undefined) this.veto = patch.veto;
       },
       get chart() {
         return gantt();
@@ -230,6 +252,12 @@ export class FixtureComponent {
   /** Records an output under the Web Component's event name (dates become ISO strings). */
   protected record(type: string, detail: unknown): void {
     window.__GANTRY_EVENTS__?.push({ type, detail: JSON.parse(JSON.stringify(detail)) as unknown });
+  }
+
+  /** Records `before-change`, then vetoes it when the fixture says so (the Web Component driver does the same). */
+  protected beforeChange(detail: GanttBeforeChangeEvent): void {
+    this.record('before-change', detail);
+    if (this.veto) detail.preventDefault();
   }
 
   /** The fixture's options: revived dates, `highlightTime` from `highlight`, the tooltip renderer. */

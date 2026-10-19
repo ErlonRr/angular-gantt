@@ -7,6 +7,8 @@
  *
  *   div.gantt-toolbar[role=toolbar][aria-label]
  *     div.gantt-tb-group.gantt-tb-panel-group   button.gantt-tb-btn.gantt-tb-panel[aria-pressed]   (`panelToggle`)
+ *     div.gantt-tb-group.gantt-tb-history     button.gantt-tb-btn.gantt-tb-undo|redo[aria-label][title][aria-disabled?]
+ *                                              > svg.gantt-tb-icon   (`toolbar.undo` while the chart keeps history)
  *     div.gantt-tb-group                     button.gantt-tb-btn ×3 (zoom out, zoom in, fit)
  *                                              > svg.gantt-tb-icon[aria-hidden] > path…
  *     div.gantt-tb-group.gantt-tb-pills[role=radiogroup][aria-label]
@@ -26,11 +28,21 @@
  *     div.gantt-legend.gantt-legend--toolbar (`legend.position: 'toolbar'`: attached by the legend region)
  *
  * Patched in place: groups are keyed by `ToolbarGroup.key` and buttons by `ToolbarItem.focusKey`
- * (`data-focus-key`: `panel`, `zoom-out`, `zoom-in`, `fit`, `zoom:<level>`, `today`,
+ * (`data-focus-key`: `panel`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`, `zoom:<level>`, `today`,
  * `view:<view>`, `more`), menu sections by their group key and menu items by `menu:<key>`, so a
  * control keeps its node, and keyboard focus, across zooms, view switches and option changes.
  * The panel toggle, the More button and the menu are attached only while shown (D26): at a width
  * where everything fits, without `panelToggle`, the toolbar is the Phase 9 toolbar.
+ *
+ * History (Phase 11, D17): with `toolbar.undo` (default on) and while the chart keeps history
+ * (`editing.history`: editing on, not controlled) core adds the `history` group, Undo and Redo,
+ * after the panel group. It is built from `inputs.historyState`, so `aria-disabled="true"` follows
+ * `canUndo` / `canRedo` (absent while available). A disabled control stays focusable and in the
+ * roving set (the tab stop skips it when nothing was focused yet: core `toolbarTabStop`), and its
+ * click, Enter or Space does nothing. Otherwise they run `ctx.edit.undo()` / `redo()` (what the
+ * element's methods run; the pipeline announces the result) and focus stays on the button. The
+ * group never moves into the More menu. With editing off it is never built: the toolbar is
+ * unchanged.
  *
  * Overflow (D3): the width the groups get is the chart's (`mainW`, measured by the
  * ResizeObserver), less the legend's when it sits in the toolbar (measured by this layer's own
@@ -106,6 +118,8 @@ interface ButtonParts {
   /** The text of a text-only control (a zoom level) */
   text: Text | null;
   action: ToolbarAction;
+  /** `aria-disabled` (Undo / Redo with nothing to undo / redo): a press does nothing */
+  disabled: boolean;
 }
 
 /** What the toolbar paints: `null` while it is hidden. */
@@ -210,6 +224,8 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         labels,
         viewMode: G.viewMode(),
         view: I.viewOverride(),
+        // Undo / Redo while the chart keeps history (the state is read only then)
+        history: cfg.editing.history ? I.historyState() : null,
       });
       const legend = cfg.legend.position === 'toolbar';
       const layout = fitToolbar(groups, cfg, toolbar, labels, I.mainW(), legend ? legendW() : 0, I.menuOpen());
@@ -236,6 +252,14 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         return host.togglePanel();
       case 'menu':
         // The More button: its menu (see `dispatch`)
+        return;
+      case 'undo':
+        // The element's undo() / redo(): through the pipeline, which announces the result (a
+        // disabled button never gets here)
+        ctx.edit.undo();
+        return;
+      case 'redo':
+        ctx.edit.redo();
         return;
     }
   };
@@ -311,7 +335,9 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
           }
           const b = controlOf(e.target);
           if (!b) return;
-          const { action } = parts.get(b)!;
+          const { action, disabled } = parts.get(b)!;
+          // aria-disabled (Undo / Redo with nothing to do): focusable, but inert
+          if (disabled) return;
           if (action.type === 'menu') dispatch({ type: 'open', via: 'click', checked: toolbarMenuChecked(menuItems) });
           else run(action);
         },
@@ -396,7 +422,7 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
     let b = buttonNodes.get(item.focusKey);
     if (!b) {
       b = h('button', { attrs: { type: 'button' }, dataset: { focusKey: item.focusKey } });
-      parts.set(b, { icon: null, svg: null, label: null, text: null, action: item.action });
+      parts.set(b, { icon: null, svg: null, label: null, text: null, action: item.action, disabled: false });
       buttonNodes.set(item.focusKey, b);
     }
     return b;
@@ -431,6 +457,7 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
   const updateButton = (b: HTMLButtonElement, item: ToolbarItem, tabStop: string | null): void => {
     const p = parts.get(b)!;
     p.action = item.action;
+    p.disabled = item.disabled === true;
     setAttr(b, 'class', item.className);
     setAttr(b, 'role', item.role);
     setAttr(b, 'aria-checked', item.checked === null ? null : String(item.checked));
@@ -441,6 +468,8 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
     setAttr(b, 'aria-controls', item.expanded === true ? MENU_ID : null);
     setAttr(b, 'aria-label', item.ariaLabel);
     setAttr(b, 'title', item.title);
+    // Undo / Redo with nothing to undo / redo (core: `true` or `null`, never `false`)
+    setAttr(b, 'aria-disabled', item.disabled === null ? null : String(item.disabled));
     setAttr(b, 'tabindex', item.focusKey === tabStop ? 0 : -1);
     updateContent(b, p, item);
   };
@@ -466,7 +495,7 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
     if (!b) {
       const label = h('span', { class: 'gantt-tb-label' });
       b = h('button', { attrs: { type: 'button', tabindex: -1 }, dataset: { focusKey: item.focusKey } }, label);
-      menuParts.set(b, { icon: null, svg: null, label, text: null, action: item.action });
+      menuParts.set(b, { icon: null, svg: null, label, text: null, action: item.action, disabled: false });
       menuNodes.set(item.focusKey, b);
     }
     return b;

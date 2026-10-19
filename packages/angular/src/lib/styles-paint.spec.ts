@@ -212,6 +212,8 @@ describe('task styles in the Angular painters', () => {
         baseline: null,
         caps: 'M0,0',
         handles: null,
+        progressGrip: null,
+        connectors: null,
         focusRect: { x: 7, y: 2, width: 106, height: 26, rx: 5 },
         hitBox: { x: 10, y: 5, width: 100, height: 20 },
         className: null,

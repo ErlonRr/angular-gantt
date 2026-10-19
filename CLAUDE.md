@@ -20,6 +20,10 @@ All geometry and every default live in `packages/core/src/render/`:
 `resolveConfig()` (the only place options get defaults) → `buildTimeline()` (range, header
 tiers, period delimiters, non-working bands, today) → `computeRowGeometries()` →
 `computeBarVisual()` / `computeArrowVisual()`; drag/resize math in `DragSession`.
+Every edit — drag, resize, move mode, progress grip, cell, link, API, undo — is one `GanttChange` built and
+checked in `packages/core/src/editing/` (`changes`, `pipeline` → `prepareChange`, `validate`, `permissions`
+→ `editRules`, `history`, `cells`, `parse`, `sessions`); the bindings only run the pipeline
+(`before-change` → apply → events) and paint it.
 Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/src`) only
 **paint** that model. If two bindings disagree, the bug is in the one that computes instead of painting.
 

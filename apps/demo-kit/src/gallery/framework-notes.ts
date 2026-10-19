@@ -32,6 +32,15 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     cases: [],
   },
   {
+    id: 'series-model',
+    frameworks: ALL,
+    area: 'Data',
+    text: 'After an edit, Angular writes the new tasks back to `[(series)]` (without a data source) and also emits `(tasksChange)`; the other bindings keep the edited tasks in the chart and report them in `tasks-change` (`onTasksChange` in React and Svelte, `@tasks-change` in Vue). With `editing.controlled` nothing is applied: set the tasks yourself from the event in every binding.',
+    workaround:
+      'Pass `detail.tasks` on as the new array. Svelte copies the `tasks` prop one level, so keep app-owned tasks in `$state.raw`.',
+    cases: ['controlled'],
+  },
+  {
     id: 'view-mode-event',
     frameworks: ['angular'],
     area: 'Events',
@@ -39,13 +48,13 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     cases: ['tree'],
   },
   {
-    id: 'row-click-payload',
-    frameworks: ['angular'],
+    id: 'before-change',
+    frameworks: ALL,
     area: 'Events',
-    text: 'Angular’s `(rowClick)` emits the row’s geometry (`RowGeometry`, the row is its `row` field); its `(rowDblClick)` and the other bindings’ row events emit the `GanttFlatRow` itself.',
-    workaround: 'Read `event.row.task` in Angular’s `(rowClick)` and `detail.task` elsewhere.',
-    until: 'the editing release (Phase 11), which aligns the payloads',
-    cases: [],
+    text: 'Veto a change by calling `preventDefault()` on the `before-change` detail: `(beforeChange)` in Angular, `onBeforeChange` in React and Svelte, `@before-change` in Vue. The Web Component’s event is also cancelable, so `event.preventDefault()` works there too. Either way the veto must be synchronous. Setting the tasks inside the handler counts as handling the change (nothing is applied twice); in Angular only `chart.series.set()` or a data-source write does, because a new `[series]` binding reaches the chart at the next change detection.',
+    workaround:
+      'To approve a change asynchronously (a server, a dialog), turn on `editing.controlled` and set the tasks once the answer arrives.',
+    cases: ['controlled'],
   },
   {
     id: 'empty-content',
@@ -70,7 +79,7 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     text: 'Custom cells are an `<ng-template let-row>` inside an `<ng-container ganttColumn>` (or a `TemplateRef` in `cellTemplate`) in Angular, styled by page CSS; elsewhere `cellTemplate` is a function that returns a DOM node or a string, rendered inside the chart’s shadow root.',
     workaround:
       'Outside Angular, style the node inline (the CSSOM) with the `--gantt-*` variables, which reach into the shadow root, and give it `part` names to reach it from page CSS (forced colours, say).',
-    cases: ['custom-columns'],
+    cases: ['custom-columns', 'custom-editors'],
   },
   {
     id: 'custom-tooltip',
@@ -80,6 +89,15 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     workaround:
       'Keep `tooltip.render` free of side effects: the chart decides when to call it again. Outside Angular, style the node inline with the `--gantt-*` variables.',
     cases: ['tooltip'],
+  },
+  {
+    id: 'cell-editor',
+    frameworks: ALL,
+    area: 'Custom content',
+    text: 'A custom cell editor is an `<ng-template ganttCellEditor let-edit>` inside an `<ng-container ganttColumn>` in Angular (a function also works); elsewhere the column’s `editor` is a function that takes the edit context and returns a DOM node, mounted in the chart’s shadow root, so no framework component renders inside it. In every binding the chart focuses the editor and handles Enter, Tab and Escape. Angular consumers import `GanttCellEditorDirective` next to `GanttColumnDefDirective`; without it the editor template is taken for the cell template.',
+    workaround:
+      'Outside Angular, style the node inline (the `--gantt-*` variables reach into the shadow root); for a framework component, mount one into the node yourself.',
+    cases: ['custom-editors'],
   },
   {
     id: 'styling-hooks',
@@ -142,8 +160,15 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     id: 'methods',
     frameworks: ALL,
     area: 'Methods',
-    text: 'Methods such as `expandAll()`, `collapseAll()` and `scrollToTask(id)`: in Angular on the component (`viewChild(GantryComponent)`), on the element itself for the Web Component, on the `ref` in React, on the component ref’s `element` in Vue (`chart.value?.element?.expandAll()`: the ref exposes nothing else), and through `bind:element` in Svelte.',
-    cases: ['tree', 'only-parents'],
+    text: 'Methods such as `expandAll()`, `scrollToTask(id)`, `undo()`, `editCell(id, key)` and `focusTask(id)`: in Angular on the component (`viewChild(GantryComponent)`), on the element itself for the Web Component, on the `ref` in React, on the component ref’s `element` in Vue (`chart.value?.element?.expandAll()`: the ref exposes nothing else), and through `bind:element` in Svelte.',
+    cases: ['tree', 'only-parents', 'editing', 'custom-editors'],
+  },
+  {
+    id: 'history-state',
+    frameworks: ALL,
+    area: 'Methods',
+    text: 'Undo and redo state: Angular’s `canUndo()` and `canRedo()` are signals on the component; the Web Component has `canUndo` and `canRedo` getters, read through the element ref in React, Vue and Svelte and refreshed on `history-change`, whose detail carries the same flags.',
+    cases: ['editing'],
   },
   {
     id: 'array-updates',

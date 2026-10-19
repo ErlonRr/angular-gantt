@@ -166,7 +166,7 @@ describe('<gantry-element>', () => {
     const other = new KeyboardEvent('keydown', { key: 'q', cancelable: true });
     el.dispatchEvent(other);
     expect(other.defaultPrevented).toBe(false);
-    // L (link) waits for Phase 11
+    // L (link) acts only on a bar or a row (grid / timeline areas), not on the host
     const link = new KeyboardEvent('keydown', { key: 'l', cancelable: true });
     el.dispatchEvent(link);
     expect(link.defaultPrevented).toBe(false);
@@ -317,13 +317,19 @@ describe('<gantry-element>', () => {
     expect(errors).toHaveLength(1);
   });
 
-  it('repairs appended tasks like set ones', async () => {
+  it('repairs appended tasks like set ones, inside the chart (`tasks` returns them as given)', async () => {
     el = await mount({ tasks: [task('a', '2026-01-01', '2026-01-05')] });
-    el.appendTasks([{ id: 'b', name: 'B', start: new Date(2026, 0, 2), parentId: null } as unknown as GanttTask]);
+    const appended = { id: 'b', name: 'B', start: new Date(2026, 0, 2), parentId: null } as unknown as GanttTask;
+    el.appendTasks([appended]);
     await frame();
-    const b = el.tasks.find(t => t.id === 'b')!;
-    expect(b.end).toEqual(new Date(2026, 0, 2));
-    expect('parentId' in b).toBe(false);
+    // The chart draws the repaired task…
+    const drawn = getEngine(el)
+      .graph.tasks.peek()
+      .find(t => t.id === 'b')!;
+    expect(drawn.end).toEqual(new Date(2026, 0, 2));
+    expect('parentId' in drawn).toBe(false);
+    // …and gives back what it was given
+    expect(el.tasks.find(t => t.id === 'b')).toBe(appended);
   });
 
   it('initialPage: 0 waits for an explicit loadNext()', async () => {

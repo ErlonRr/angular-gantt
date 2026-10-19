@@ -278,7 +278,8 @@ function isEditable(target: EventTarget | undefined): boolean {
         margin-bottom: 2px;
       }
       .gantt-tooltip-label {
-        opacity: 0.6;
+        /* 0.75 of the tooltip text keeps AA contrast (6.4:1 light, 9:1 dark; 0.6 was 4.0:1) */
+        opacity: 0.75;
       }
       .gantt-tooltip-row--progress {
         flex-wrap: wrap;
@@ -561,7 +562,8 @@ export class GanttTooltipComponent {
     const box = svg.getBoundingClientRect();
     const y = e.clientY - box.top;
     const geo = this.layout.rowGeometries()[Math.floor(y / this.layout.cfg().rowHeight)];
-    return !!geo && hitTestBar(visualOf(geo), e.clientX - box.left, y) !== null;
+    // The bar's own hit area: the edit targets (progress grip, link connectors) are no bar press here
+    return !!geo && hitTestBar(visualOf(geo), e.clientX - box.left, y, false) !== null;
   }
 
   /** Binds the listeners on the chart, the page and the window; released with the component. */

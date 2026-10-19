@@ -4,6 +4,8 @@
  * keyed by `link.key` in drawing order. Each link's visual is memoised in the graph
  * (`graph.arrowVisual`, which carries the dash and the lag label's font size), so a scroll
  * computes and builds only the links that entered the window and leaves the others untouched.
+ * The link selected for deletion (`inputs.selectedLinkKey`, `interaction/link.ts`) comes with its
+ * selected visual (core `selectedArrowVisual`): only that group is patched (`gantt-arrow--selected`).
  */
 
 import type { ArrowVisual } from '@gantryjs/core';

@@ -52,7 +52,8 @@ function onDragged(e: TaskDragEvent) {
   `syncGroup`. An omitted prop keeps the element's default (booleans are not cast to `false`),
   and a prop that becomes `undefined` (or is dropped) restores it.
 - **Events** carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`,
-  `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry`.
+  `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry`, and the editing events `@before-change`, `@tasks-change`, `@task-updated`,
+  `@task-progress-changed`, `@dependency-created`, `@dependency-deleted`, `@history-change` (see [Editing](#editing)).
 - **Slots** — rendered in the element's light DOM, where its own slots pick them up: the `empty`
   slot (`<template #empty>…</template>`) in a `<div slot="empty">`, which replaces the empty-state
   text (`labels.emptyState`), then the default slot as it is (a `<div slot="empty">…</div>`
@@ -103,6 +104,36 @@ the zoom level, the horizontal scroll and the task-list width. `createGanttSyncG
 scroll, range, panel })` turns parts off (each is `true` by default). The group reaches the
 element as it is, never copied: a group kept in a `ref` or `reactive` is unwrapped with `toRaw`,
 and only replacing it is watched. `null`, or dropping the prop, takes the chart out of the group.
+
+## Editing
+
+With `:options="{ editing: true }"` the chart edits its own tasks (cells, a progress grip, links, undo / redo; every
+option is in [Editing](https://github.com/ErlonRr/gantryjs#editing)). Each change emits `before-change` first, then the op events and `tasks-change`.
+`@before-change` runs synchronously: `detail.preventDefault()` vetoes the change. Keep the tasks in state from
+`@tasks-change`, which gives the tasks after the change (use a `shallowRef`: the chart gets the very array it proposed):
+
+```vue
+<script setup lang="ts">
+const tasks = shallowRef<GanttTask[]>(initial);
+</script>
+
+<Gantry
+  :tasks="tasks"
+  :options="{ editing: true }"
+  @before-change="
+    d => {
+      if (isLocked(d.change)) d.preventDefault();
+    }
+  "
+  @tasks-change="d => (tasks = d.tasks)"
+/>
+```
+
+With `editing: { controlled: true }` the chart applies nothing: `@tasks-change` carries the proposed tasks
+(`applied: false`) and `tasks.value = d.tasks` is how you accept them. Undo and redo are methods on the element
+(`gantt.value?.element?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the
+[Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)). A custom cell editor is a function that returns a DOM node
+(`editor: ctx => node` in a column), not a VNode.
 
 ## Options and behaviour
 

@@ -143,6 +143,7 @@ describe('KeyboardEditSession — combined edits, progress, commit / cancel', ()
       kind: 'resize',
       event: {
         taskId: 'a',
+        edge: 'end',
         handle: 'right',
         oldStart: day(2, 12),
         oldEnd: day(2, 16),

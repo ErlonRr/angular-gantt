@@ -70,6 +70,35 @@
 //  chart's keyboard directive (`a11y/grid-keys.ts`); this list only
 //  records where its tab stop goes (`focusin`).
 //
+//  Cell editor (Phase 11, D14–D16, contract §3d, the Web Component's
+//  markup): while a cell is edited (`layout.cellEdit`,
+//  `editing/cell-edit.ts`) its row is pinned and raised and the cell shows
+//  the editor instead of its content (built again when the editor closes):
+//
+//    div.gantt-tl-row.gantt-tl-row--editing > div.gantt-tl-cell.gantt-tl-cell--editing
+//      input.gantt-tl-editor[type][aria-label][aria-invalid?][aria-describedby?]
+//        | select.gantt-tl-editor (kind 'select')
+//        | the custom editor's node (`ganttCellEditor` template or function; + class gantt-tl-editor)
+//      div.gantt-tl-editor-error#gantry-<n>-editor-error   last element, attached only while invalid
+//
+//  The editor (`[ganttCellEditorMount]`) is built once per edit, after the
+//  render that shows its cell: its text then belongs to it (typing changes
+//  no binding here), and the row re-rendering keeps the node and its
+//  focus. The key or double-click that opens an editor renders it at once
+//  (`ApplicationRef.tick()` from the event handler, as the Web Component's
+//  synchronous flush): its field has focus before the next key, so fast
+//  typing loses nothing. It is named `labels.ariaCellEditor(column, task)` and focused
+//  through its `editor:<id>:<column>` key (a custom node: the node, else
+//  its first focusable child). While `editing.cells` is on every cell
+//  carries `aria-readonly` (core `cellEditable`); with it off, no
+//  attribute. One `keydown` and one `focusout` listener on the list (bound
+//  after the first render) are the editor's: F2 / Enter / typing on an
+//  editable cell and the editor's Enter / Tab / Escape before the chart's
+//  keymap (`a11y/grid-keys.ts` `handleCellKey`), and focus leaving the
+//  editor (commit, else cancel). A double-click on an editable cell opens
+//  it too (`rowDblClick` still emits); clicks inside the editor are its
+//  own.
+//
 //  Column resize is the Web Component's gesture (`interaction/column-resize.ts`):
 //  the handle captures the pointer and listens for one gesture, never on
 //  `window`; destroying the list mid-drag drops the listeners and keeps the
@@ -77,23 +106,33 @@
 // ─────────────────────────────────────────────────────────────
 
 import {
+  ApplicationRef,
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  type ElementRef,
+  Directive,
+  ElementRef,
+  Renderer2,
+  TemplateRef,
+  ViewContainerRef,
+  afterEveryRender,
   afterNextRender,
+  afterRenderEffect,
   computed,
   inject,
   input,
   output,
   signal,
+  untracked,
   viewChild,
+  type EmbeddedViewRef,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 
-import { type GanttFlatRow, type ColumnDef } from '../types';
+import { type GanttFlatRow, type ColumnDef, type CellEditorTemplateContext } from '../types';
 import {
   buildColumnContext,
+  cellEditable,
   clampColumnWidth,
   columnsGridTemplate,
   computeCellVisual,
@@ -110,11 +149,201 @@ import {
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttDragService } from '../drag/gantt-drag.service';
+import { GanttCellEditService, editorFocusKey, type CellEditSession } from '../editing/cell-edit';
+import { findFocusKey, focusIntoView, handleCellKey, isInert, type GanttCellKeyContext } from '../a11y/grid-keys';
+
+/** Task lists built so far: the editor error's id is unique per list (`gantry-<n>-editor-error`, as the Web Component's) */
+let nextTaskListId = 0;
+
+/** What a custom editor's focus goes to: the node itself, else its first focusable child. */
+const FOCUSABLE = 'input, select, textarea, button, a[href], [tabindex], [contenteditable]';
+
+/** The open editor as the task list paints it (its text is the editor's own: typing changes nothing here). */
+interface TaskListEdit {
+  /** The edit (a new object per `start`) */
+  readonly open: CellEditSession;
+  /** The message under the cell, `null` while the text is valid */
+  readonly error: string | null;
+}
+
+const sameEdit = (a: TaskListEdit | null, b: TaskListEdit | null): boolean =>
+  a === b || (!!a && !!b && a.open === b.open && a.error === b.error);
+
+/** An event inside the open editor (its clicks and keys are the editor's). */
+const inEditor = (target: EventTarget | null): boolean =>
+  !!(target as Partial<Element> | null)?.closest?.('.gantt-tl-cell--editing');
+
+/** A mounted cell editor (`GanttCellEditorMountDirective`). */
+interface EditorMount {
+  /** The edit it belongs to */
+  readonly edit: CellEditSession;
+  /** The cell's child: `input` / `select.gantt-tl-editor`, or the custom editor's node (class added) */
+  readonly node: HTMLElement;
+  /** What takes focus and carries the name, `aria-invalid` and `aria-describedby` (the node or its first focusable child) */
+  readonly field: HTMLElement;
+  /** Removes what the mount added (its node, its listeners, a template's view) */
+  readonly release: () => void;
+}
+
+/**
+ * The editor of the cell being edited (`<ng-container [ganttCellEditorMount]>` inside it, contract
+ * §3d): after the render that shows the cell, a built-in `input` / `select.gantt-tl-editor` (its
+ * text set once, the `input` events → `GanttCellEditService.input`), the column's function editor's
+ * node, or its `<ng-template ganttCellEditor>` (the view's first element), inserted before the
+ * container, named and keyed `editor:<id>:<column>`. `aria-invalid` / `aria-describedby` follow
+ * the error. A new edit builds a new editor; the cell going back to its content removes it.
+ */
+@Directive({ selector: '[ganttCellEditorMount]' })
+export class GanttCellEditorMountDirective {
+  /** The edit (one object per `start`) */
+  readonly edit = input.required<CellEditSession>({ alias: 'ganttCellEditorMount' });
+  /** The message under the cell, `null` while valid */
+  readonly error = input<string | null>(null);
+  /** Id of the error node (`aria-describedby`) */
+  readonly errorId = input.required<string>();
+
+  private readonly cells = inject(GanttCellEditService);
+  private readonly i18n = inject(GanttI18nService);
+  private readonly vcr = inject(ViewContainerRef);
+  private readonly renderer = inject(Renderer2);
+  private mount: EditorMount | null = null;
+
+  constructor() {
+    afterRenderEffect({
+      write: () => {
+        const edit = this.edit();
+        const error = this.error();
+        const errorId = this.errorId();
+        untracked(() => this.paint(edit, error, errorId));
+      },
+    });
+    inject(DestroyRef).onDestroy(() => this.unmount());
+  }
+
+  private paint(edit: CellEditSession, error: string | null, errorId: string): void {
+    if (this.mount?.edit !== edit) {
+      this.unmount();
+      this.mount = this.build(edit);
+    }
+    const m = this.mount;
+    if (!m) return;
+    this.attr(m.field, 'aria-invalid', error ? 'true' : null);
+    this.attr(m.field, 'aria-describedby', error ? errorId : null);
+    if (m.node !== m.field) this.attr(m.node, 'aria-invalid', error ? 'true' : null);
+  }
+
+  private attr(el: HTMLElement, name: string, value: string | null): void {
+    if (value === null) this.renderer.removeAttribute(el, name);
+    else this.renderer.setAttribute(el, name, value);
+  }
+
+  /** Builds the editor of `edit` (the session as resolved now) and inserts it before the container. */
+  private build(edit: CellEditSession): EditorMount | null {
+    const s = this.cells.session();
+    const anchor = this.vcr.element.nativeElement as Node;
+    const cell = anchor.parentNode;
+    if (s?.context !== edit.context || !cell) return null;
+    const r = this.renderer;
+    const own = s.column.editor;
+    const custom = s.editor.kind === 'custom';
+    const listeners = new AbortController();
+    let view: EmbeddedViewRef<CellEditorTemplateContext> | null = null;
+    /** A node this mount inserts (and removes): a built-in editor or a function editor's node */
+    let inserted: HTMLElement | null = null;
+    let node: HTMLElement;
+    if (custom && own instanceof TemplateRef) {
+      // `<ng-template ganttCellEditor let-edit>`: its first element is the editor's node
+      view = this.vcr.createEmbeddedView(own, {
+        $implicit: s.context,
+        edit: s.context,
+      });
+      view.detectChanges();
+      const first = view.rootNodes.find((n: Node): n is HTMLElement => n.nodeType === 1);
+      if (!first) {
+        view.destroy();
+        return null;
+      }
+      node = first;
+    } else if (custom && typeof own === 'function') {
+      node = own(s.context);
+      inserted = node;
+    } else {
+      node = this.builtin(s, listeners.signal);
+      inserted = node;
+    }
+    if (inserted) r.insertBefore(cell, inserted, anchor);
+    let field = node;
+    if (view || (custom && typeof own === 'function')) {
+      // A custom editor: the class added; focus goes to the node, else its first focusable child
+      r.addClass(node, 'gantt-tl-editor');
+      field = node.matches(FOCUSABLE) ? node : (node.querySelector<HTMLElement>(FOCUSABLE) ?? node);
+      // Nothing focusable inside: the node itself takes focus (the keys reach the chart through it)
+      if (field === node && !node.matches(FOCUSABLE)) r.setAttribute(node, 'tabindex', '-1');
+    }
+    if (!field.hasAttribute('aria-label') && !field.hasAttribute('aria-labelledby')) {
+      r.setAttribute(field, 'aria-label', untracked(this.i18n.labels).ariaCellEditor(s.column.label, s.row.task.name));
+    }
+    r.setAttribute(field, 'data-focus-key', editorFocusKey(s.taskId, s.columnKey));
+    return {
+      edit,
+      node,
+      field,
+      release: () => {
+        listeners.abort();
+        if (inserted) inserted.remove();
+        if (view && !view.destroyed) view.destroy();
+      },
+    };
+  }
+
+  /** A built-in editor (§3d): `input.gantt-tl-editor[type][min][max][step]` or a `select` over its options. */
+  private builtin(s: CellEditSession, signal: AbortSignal): HTMLElement {
+    const r = this.renderer;
+    const { input: spec } = s.editor;
+    const value = this.cells.text() ?? s.editor.value;
+    let el: HTMLInputElement | HTMLSelectElement;
+    if (spec.type === 'select') {
+      const select = r.createElement('select') as HTMLSelectElement;
+      r.setAttribute(select, 'class', 'gantt-tl-editor');
+      for (const o of spec.options ?? []) {
+        const option = r.createElement('option') as HTMLOptionElement;
+        r.setAttribute(option, 'value', o.value);
+        r.appendChild(option, r.createText(o.label));
+        r.appendChild(select, option);
+      }
+      select.value = value;
+      el = select;
+    } else {
+      const input = r.createElement('input') as HTMLInputElement;
+      r.setAttribute(input, 'class', 'gantt-tl-editor');
+      r.setAttribute(input, 'type', spec.type);
+      for (const name of ['min', 'max', 'step'] as const) {
+        const v = spec[name];
+        if (v !== undefined) r.setAttribute(input, name, String(v));
+      }
+      r.setAttribute(input, 'autocomplete', 'off');
+      input.value = value;
+      // F2 / Enter / double-click select the text; a typed character stays with the caret after it
+      if (!s.seeded && (spec.type === 'text' || spec.type === 'number')) {
+        input.addEventListener('focus', () => input.select(), { once: true, signal });
+      }
+      el = input;
+    }
+    // The editor's text (a custom editor calls `setValue`)
+    el.addEventListener('input', () => this.cells.input(el.value), { signal });
+    return el;
+  }
+
+  private unmount(): void {
+    this.mount?.release();
+    this.mount = null;
+  }
+}
 
 @Component({
   selector: 'gantt-tasklist',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, GanttCellEditorMountDirective],
   host: {
     class: 'gantt-tasklist',
     role: 'treegrid',
@@ -178,9 +407,12 @@ import { GanttDragService } from '../drag/gantt-drag.service';
            the chart's keyboard directive (one listener on the chart) -->
       @let hoveredId = layout.hoveredRowId();
       @let styleOf = layout.rowStyle();
+      @let edit = editView();
+      @let editable = editableOf();
       @for (m of rows(); track m.row.task.id) {
         @let row = m.row;
         @let rowId = row.task.id;
+        @let rowEditing = edit !== null && edit.open.taskId === rowId;
         <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -->
         <div
           class="gantt-tl-row"
@@ -189,6 +421,7 @@ import { GanttDragService } from '../drag/gantt-drag.service';
           [class.gantt-tl-row--group]="row.hasChildren"
           [class.gantt-tl-row--pinned]="m.pinnedTop !== null"
           [class.gantt-tl-row--hover]="rowId === hoveredId"
+          [class.gantt-tl-row--editing]="rowEditing"
           [attr.data-task-id]="row.task.id"
           [attr.data-focus-key]="'row:' + row.task.id"
           [attr.tabindex]="rowId === rowStop() ? 0 : -1"
@@ -203,21 +436,30 @@ import { GanttDragService } from '../drag/gantt-drag.service';
           [style.height.px]="rowHeight()"
           [style.background-color]="rowBg(row, styleOf)"
           (click)="onRowClick($event, row)"
-          (dblclick)="rowDblClick.emit(row)"
+          (dblclick)="onRowDblClick($event, row)"
         >
           @for (col of visibleColumns(); track col.key; let c = $index) {
-            @let cell = cellVisual(col, row);
+            @let editing = rowEditing && col.key === edit?.open.columnKey;
+            @let cell = editing ? null : cellVisual(col, row);
             <div
               class="gantt-tl-cell"
               role="gridcell"
+              [class.gantt-tl-cell--editing]="editing"
               [attr.aria-colindex]="c + 1"
               [attr.tabindex]="rowId === tabStopId() && col.key === cellStop() ? 0 : -1"
               [attr.data-focus-key]="'cell:' + rowId + ':' + col.key"
               [attr.data-status]="cell?.status ?? null"
               [attr.title]="cell?.title ?? null"
+              [attr.aria-readonly]="editable ? !editable(col, row) : null"
               [style.justify-content]="justify(col.align)"
             >
-              @if (col.cellTemplate) {
+              @if (editing && edit) {
+                <!-- The cell editor (built after this render), then its message while the text is invalid -->
+                <ng-container [ganttCellEditorMount]="edit.open" [error]="edit.error" [errorId]="errorId" />
+                @if (edit.error) {
+                  <div class="gantt-tl-editor-error" [attr.id]="errorId">{{ edit.error }}</div>
+                }
+              } @else if (col.cellTemplate) {
                 <!-- Custom cell via <ng-template ganttColumn> -->
                 <ng-container *ngTemplateOutlet="col.cellTemplate; context: { $implicit: row, row: row, ctx: ctx() }" />
               } @else if (col.key === 'name') {
@@ -417,6 +659,70 @@ import { GanttDragService } from '../drag/gantt-drag.service';
       .gantt-collapse-btn:hover {
         opacity: 0.75;
       }
+      /* Cell editor (the Web Component's rules): the raised row, the editing cell, the field and its
+         error. The invalid outline uses longhands: every outline shorthand here is a focus ring */
+      .gantt-tl-row--editing {
+        z-index: 3;
+        overflow: visible;
+      }
+      .gantt-tl-row--editing:not(.gantt-tl-row--pinned) {
+        position: relative;
+      }
+      .gantt-tl-cell--editing {
+        position: relative;
+        overflow: visible;
+        padding: 0 4px;
+        cursor: auto;
+      }
+      /* ::ng-deep: a custom editor is the consumer's node (template or function), outside this
+         component's style scope; the rules reach it through the class the chart adds */
+      :host ::ng-deep .gantt-tl-editor {
+        box-sizing: border-box;
+        flex: 1 1 auto;
+        align-self: stretch;
+        width: 100%;
+        min-width: 0;
+        margin: 3px 0;
+        padding: 0 6px;
+        border: 1px solid var(--gantt-border);
+        border-radius: 4px;
+        background-color: var(--gantt-bg);
+        color: var(--gantt-text);
+        font-family: var(--gantt-font);
+        font-size: var(--gantt-font-size);
+        cursor: text;
+      }
+      :host ::ng-deep .gantt-tl-editor:focus-visible {
+        outline: 2px solid var(--gantt-focus-ring);
+        outline-offset: -1px;
+      }
+      :host ::ng-deep .gantt-tl-editor[aria-invalid='true'] {
+        border-color: var(--gantt-status-overdue);
+        outline-width: 2px;
+        outline-style: solid;
+        outline-color: var(--gantt-status-overdue);
+        outline-offset: -1px;
+      }
+      .gantt-tl-editor-error {
+        position: absolute;
+        inset-block-start: 100%;
+        inset-inline-start: 0;
+        z-index: 1;
+        box-sizing: border-box;
+        min-width: 100%;
+        max-width: 320px;
+        width: max-content;
+        padding: 4px 8px;
+        border: 1px solid var(--gantt-status-overdue);
+        border-radius: 0 0 4px 4px;
+        background-color: var(--gantt-bg);
+        color: var(--gantt-status-overdue);
+        font-family: var(--gantt-font);
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: normal;
+        cursor: default;
+      }
       /* Keyboard focus only (--gantt-focus-ring): inset rings (cells and the panel clip anything outside them) */
       .gantt-tl-row:focus-visible,
       .gantt-tl-cell:focus-visible,
@@ -429,7 +735,9 @@ import { GanttDragService } from '../drag/gantt-drag.service';
       /* Forced colours (D25): the hover tint hidden (row backgrounds stay plain); the selected row
          Highlight / HighlightText over its inline background, opting out of forcing (the Canvas text
          backplate would hide HighlightText), so its subtree's colours are set here (its focus rings
-         HighlightText); status dots CanvasText */
+         HighlightText); status dots CanvasText. The cell editor (after those, so it wins in the selected
+         row too): Field / FieldText, its ring Highlight, an invalid value a 2 px dashed CanvasText
+         outline, the message CanvasText on Canvas */
       @media (forced-colors: active) {
         .gantt-tl-row--hover {
           background-image: none;
@@ -458,6 +766,22 @@ import { GanttDragService } from '../drag/gantt-drag.service';
         .gantt-col-resize:hover {
           background-color: Highlight;
         }
+        :host ::ng-deep .gantt-tl-editor:focus-visible {
+          outline-color: Highlight !important;
+        }
+        :host ::ng-deep .gantt-tl-editor {
+          background-color: Field !important;
+          color: FieldText !important;
+          border-color: FieldText !important;
+        }
+        :host ::ng-deep .gantt-tl-editor[aria-invalid='true'] {
+          outline: 2px dashed CanvasText !important;
+        }
+        .gantt-tl-editor-error {
+          background-color: Canvas !important;
+          color: CanvasText !important;
+          border-color: CanvasText !important;
+        }
       }
     `,
   ],
@@ -467,15 +791,52 @@ export class GanttTaskListComponent {
     const destroyRef = inject(DestroyRef);
     // A resize still running when the list goes: drop its listeners, keep the width reached
     destroyRef.onDestroy(() => this.colResize.abort());
-    // Browser only (never on the server): the hovered row's listeners, released with the list
-    afterNextRender(() => destroyRef.onDestroy(this.connectHover()));
+    // Browser only (never on the server): the hovered row's and the cell editor's listeners,
+    // released with the list
+    afterNextRender(() => {
+      destroyRef.onDestroy(this.connectHover());
+      destroyRef.onDestroy(this.connectEditing());
+    });
+    // The control a cell edit asked to focus once this render mounted it (the editor, or its cell)
+    afterEveryRender(() => this.focusRequested());
   }
 
   /** The chart's layout graph: the hovered row and the rows' resolved styles */
   protected readonly layout = inject(GanttLayoutService);
   /** A bar is dragged: no row hovers meanwhile */
   private readonly drag = inject(GanttDragService);
+  /** Cell editing: what F2 / Enter / typing / double-click open, the editor's state */
+  private readonly cells = inject(GanttCellEditService);
+  /** Renders the editor a key just opened at once (`renderNow`) */
+  private readonly appRef = inject(ApplicationRef);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly rowsEl = viewChild.required<ElementRef<HTMLElement>>('rowsEl');
+
+  /** Id of the cell editor's message (`aria-describedby`), unique per list */
+  protected readonly errorId = `gantry-${++nextTaskListId}-editor-error`;
+
+  /** The open editor without its text (typing re-renders nothing), `null` when none is */
+  protected readonly editView = computed<TaskListEdit | null>(
+    () => {
+      const state = this.layout.cellEdit();
+      const open = this.cells.opened();
+      return state && open && state.taskId === open.taskId && state.columnKey === open.columnKey
+        ? { open, error: state.error }
+        : null;
+    },
+    { equal: sameEdit },
+  );
+
+  /**
+   * Which cells can be edited (`aria-readonly`: core `cellEditable` with the row's edit rules),
+   * `null` while `editing.cells` is off (no attribute). Kept while the edit rules are the same.
+   */
+  protected readonly editableOf = computed<((col: ColumnDef, row: GanttFlatRow) => boolean) | null>(() => {
+    const cfg = this.layout.cfg();
+    if (!cfg.editing.cells) return null;
+    const rules = this.layout.editRules();
+    return (col, row) => cellEditable(col, row, rules(row), cfg);
+  });
 
   // ── Inputs ────────────────────────────────────────────────
   /** Rows to mount, in DOM order: the virtual window plus the pinned rows (`mountedRows`) */
@@ -624,7 +985,22 @@ export class GanttTaskListComponent {
 
   // ── Row click (selection) ─────────────────────────────────
   protected onRowClick(event: MouseEvent, row: GanttFlatRow): void {
+    // A click inside the open editor is the editor's
+    if (inEditor(event.target)) return;
     this.rowClick.emit({ row, event });
+  }
+
+  /** A double-click on an editable cell (not on a control inside it) also opens its editor; `rowDblClick` still emits. */
+  protected onRowDblClick(event: MouseEvent, row: GanttFlatRow): void {
+    const target = event.target as Element;
+    if (inEditor(target)) return;
+    const cell = target.closest('.gantt-tl-cell');
+    const key = cell ? this.visibleColumns()[Number(cell.getAttribute('aria-colindex')) - 1]?.key : undefined;
+    // Mounted and focused at once: a key typed right away reaches the field
+    if (key !== undefined && !target.closest('button, a[href]') && this.cells.start(row.task.id, key)) {
+      this.renderNow();
+    }
+    this.rowDblClick.emit(row);
   }
 
   /** Focus moved inside the list: a header cell, a row or one of its cells keeps the tab stop. */
@@ -653,6 +1029,67 @@ export class GanttTaskListComponent {
   // ── Column resize ─────────────────────────────────────────
   protected onColResizeStart(event: PointerEvent, col: ColumnDef): void {
     this.colResize.start(event.currentTarget as HTMLElement, event, col);
+  }
+
+  // ── Cell editor ───────────────────────────────────────────
+  /**
+   * The cell editor's listeners on the list (after the first render): F2 / Enter / typing on an
+   * editable cell and the editor's Enter / Tab / Escape, before the chart's keymap (one listener on
+   * the chart, which this list is inside); focus leaving the editor's cell commits it (else cancels)
+   * once focus has settled — a press elsewhere, Tab out of a custom editor, or the editor removed
+   * with its row. Returns the release.
+   */
+  private connectEditing(): () => void {
+    const list = this.host.nativeElement;
+    const listeners = new AbortController();
+    const { signal } = listeners;
+    const release = this.cells.connect(list);
+    const keys: GanttCellKeyContext = {
+      layout: this.layout,
+      cells: this.cells,
+      columns: () => untracked(this.visibleColumns),
+      renderNow: () => this.renderNow(),
+    };
+    list.addEventListener('keydown', e => handleCellKey(keys, e), { signal });
+    list.addEventListener(
+      'focusout',
+      e => {
+        const open = this.cells.active();
+        const cell = (e.target as Partial<Element> | null)?.closest?.('.gantt-tl-cell--editing');
+        if (!open || !cell) return;
+        const next = e.relatedTarget as Node | null;
+        if (next && cell.contains(next)) return;
+        queueMicrotask(() => {
+          const now = this.cells.active();
+          if (now?.taskId !== open.taskId || now.columnKey !== open.columnKey) return;
+          const root = list.getRootNode() as Partial<DocumentOrShadowRoot>;
+          const active = root.activeElement;
+          if (active && list.querySelector('.gantt-tl-cell--editing')?.contains(active)) return;
+          this.cells.blur();
+        });
+      },
+      { signal },
+    );
+    return () => {
+      listeners.abort();
+      release();
+    };
+  }
+
+  /**
+   * Renders now, from an event handler (never during a render): the editor a key or double-click
+   * just opened is mounted and focused before the next event (the Web Component's `renderNow`).
+   */
+  private renderNow(): void {
+    this.appRef.tick();
+  }
+
+  /** Focuses (and scrolls to) the control a cell edit asked for, now that it is mounted. */
+  private focusRequested(): void {
+    const key = this.cells.takeFocusRequest();
+    if (key === null) return;
+    const el = findFocusKey(this.host.nativeElement, key);
+    if (el && !isInert(el)) focusIntoView(el);
   }
 
   // ── Row hover ─────────────────────────────────────────────

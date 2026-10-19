@@ -24,6 +24,14 @@
  * connection's owner; the narrow-width switch (`layers/responsive.ts`) hears every measured width.
  * Both write inputs only. Rolled-up parent rows (`graph/rows.ts`) leave through the events with
  * their raw task (`rowEvent`).
+ *
+ * Every change to the tasks — a pointer drop included — goes through the change pipeline
+ * (`edit.ts`, `ctx.edit.commit`): validation, the cancelable `before-change`, the apply to the raw
+ * input (or `dataSource.patch()`), the history and the events. `updateTask()` / `appendTasks()`
+ * stay silent data writes. The link, progress-grip and cell-edit interactions
+ * (`interaction/{link,progress,cell-edit}.ts`) live as long as the element; a disconnect cancels them.
+ * While connected, an effect deselects the selected link once it is no longer drawn (the app
+ * changed the tasks, a collapsed row hides an end), so a link made again later is not selected.
  */
 
 import {
@@ -40,16 +48,15 @@ import {
 } from '../reactive';
 import {
   announceLoadState,
-  bottomScale,
+  dragChange,
+  editTiming,
   rollupSource,
-  taskSpan,
   seedCollapsed,
   CLOCK_INTERVAL,
-  type DragTiming,
   type GanttFlatRow,
   type GanttTask,
-  type ResolvedGanttConfig,
-  type TimelineModel,
+  type TaskDragEvent,
+  type TaskResizeEvent,
 } from '@gantryjs/core';
 import { createThemeSheet, type ThemeSheet } from '../styles/theme-sheet';
 import { BASE_CSS, getBaseSheet } from '../styles/base';
@@ -63,6 +70,9 @@ import { bindTooltipTriggers } from '../interaction/tooltip-triggers';
 import { createColumns, type Columns } from '../interaction/columns';
 import { createDrag, type Drag } from '../interaction/drag';
 import { createSelection, type Selection } from '../interaction/selection';
+import { createLink, type LinkApi } from '../interaction/link';
+import { createProgressDrag, type ProgressDrag } from '../interaction/progress';
+import { createCellEdit, type CellEditApi } from '../interaction/cell-edit';
 import { buildSkeleton, type Skeleton } from '../layers/skeleton';
 import { createFocusTracker } from '../layers/focus-restore';
 import type { Emit, HostApi, LayerContext } from '../layers/context';
@@ -83,6 +93,7 @@ import { horizontalGraph, type HorizontalGraph } from './graph/horizontal';
 import { tasklistGraph, type TasklistGraph } from './graph/tasklist';
 import { createLayers, disconnectLayers, registerRegions, REGIONS, type Layers, type Region } from './render';
 import { announceEffects, createLiveAnnouncer } from './announce';
+import { createEditor, type Editor } from './edit';
 
 /**
  * The nodes every layer-specific graph module (`visuals`, `arrows`, `horizontal`, `tasklist`)
@@ -115,6 +126,8 @@ export interface Engine {
   readonly dom: Skeleton;
   readonly drag: Drag;
   readonly selection: Selection;
+  /** The change pipeline and the history (`ctx.edit`) */
+  readonly edit: Editor;
   /** What the layers (and the interaction handlers) are built with */
   readonly ctx: LayerContext;
   readonly layers: Layers;
@@ -183,22 +196,6 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   };
 
   const dom = buildSkeleton(shadow);
-  const updateTask = (id: string, patch: Partial<GanttTask>): void => {
-    inputs.tasksIn.set(graph.tasks.peek().map(t => (t.id === id ? { ...t, ...patch } : t)));
-  };
-  const drag = createDrag({
-    preview: inputs.dragPreview,
-    timing: () => dragTiming(graph.timeline.peek(), graph.config.peek()),
-    onDragged: e => {
-      updateTask(e.taskId, { start: e.newStart, end: e.newEnd });
-      hooks.emit('task-dragged', e);
-    },
-    onResized: e => {
-      updateTask(e.taskId, { start: e.newStart, end: e.newEnd });
-      hooks.emit('task-resized', e);
-    },
-  });
-  const selection = createSelection(inputs.selection, e => hooks.emit('selection-change', e));
   const announce = createLiveAnnouncer(dom.srLive);
   /**
    * Every event the layers and interactions fire: a row leaves with its raw task, never a
@@ -209,6 +206,30 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       type,
       (type === 'row-click' || type === 'row-dblclick' ? rowEvent(detail as GanttFlatRow) : detail) as typeof detail,
     );
+  const edit = createEditor({
+    inputs,
+    graph,
+    columns,
+    emit,
+    // Nothing is announced before the first render (the baseline)
+    announce: text => {
+      if (text && layers['scroll-commands'].hasRendered()) announce.say(text);
+    },
+  });
+  /** A pointer drop: the change of the raw task (undo restores the app's values) through the pipeline */
+  const dropped = (e: TaskDragEvent | TaskResizeEvent, source: 'drag' | 'resize'): void => {
+    const task = edit.rawTask(e.taskId) ?? graph.tasks.peek().find(t => t.id === e.taskId);
+    if (task) edit.commit(dragChange(e, task, source));
+  };
+  const drag = createDrag({
+    preview: inputs.dragPreview,
+    timing: () => editTiming(graph.timeline.peek(), graph.config.peek()),
+    onDragged: e => dropped(e, 'drag'),
+    onResized: e => dropped(e, 'resize'),
+  });
+  const selection = createSelection(inputs.selection, e => hooks.emit('selection-change', e));
+  // The interactions below are built from the context (filled in right after it)
+  const late: { link?: LinkApi; progress?: ProgressDrag; cells?: CellEditApi } = {};
   const ctx: LayerContext = {
     host,
     shadow,
@@ -218,11 +239,24 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     dom,
     drag,
     selection,
+    edit,
+    get link() {
+      return late.link!;
+    },
+    get progress() {
+      return late.progress!;
+    },
+    get cells() {
+      return late.cells!;
+    },
     focus: createFocusTracker(shadow),
     emit,
     saveState: hooks.saveState,
     announce,
     setBusy: hooks.setBusy,
+    renderNow() {
+      frame?.flushSync();
+    },
     rowClick(row, event) {
       const ids = graph.visibleRows.peek().map(r => r.task.id);
       selection.handleClick(row.task.id, event, ids, graph.config.peek().selection);
@@ -231,6 +265,9 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     // The layer exists once `layers` is built (only called from event handlers)
     sync: { reportPanel: px => layers.sync.reportPanel(px) },
   };
+  late.link = createLink(ctx);
+  late.progress = createProgressDrag(ctx);
+  late.cells = createCellEdit(ctx);
   const layers = createLayers(ctx);
 
   /** `groupBar.collapsed` of the options (`false` while they are invalid: the render reports them) */
@@ -368,6 +405,20 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     announceEffects(inputs, graph, announce, level => layers.sync.takeGroupLevel(level), hasRendered);
     onCleanup(() => announce.cancel());
 
+    // The selected link (Delete removes it) is deselected once it is no longer drawn: the app
+    // changed the tasks, its row was collapsed. The arrows are read only while one is selected.
+    effect(() => {
+      const key = inputs.selectedLinkKey();
+      if (key === null) return;
+      let links: readonly { readonly key: string }[];
+      try {
+        links = graph.arrowIndex().links;
+      } catch {
+        return; // invalid options: the render reports them
+      }
+      if (!links.some(l => l.key === key)) untracked(() => ctx.link.deselect());
+    });
+
     // Mirror the data source while connected (a new one replaces the old subscription)
     effect(() => {
       const ds = inputs.dataSource();
@@ -409,6 +460,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     dom,
     drag,
     selection,
+    edit,
     ctx,
     layers,
     runs,
@@ -433,6 +485,9 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       stop();
       disconnectLayers(layers);
       drag.cancel();
+      ctx.link.cancel(true);
+      ctx.progress.cancel();
+      ctx.cells.cancel();
     },
     adopt,
     flushSync() {
@@ -460,14 +515,4 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
 function rowEvent(row: GanttFlatRow): GanttFlatRow {
   const task = rollupSource(row.task);
   return task === row.task ? row : { ...row, task };
-}
-
-/** Scale of the current timeline for a drag that starts now. */
-function dragTiming(tl: TimelineModel, cfg: ResolvedGanttConfig): DragTiming {
-  return {
-    pxPerDay: tl.pxPerDay,
-    toX: tl.toX,
-    span: (start, end) => taskSpan({ start, end }, cfg),
-    snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
-  };
 }

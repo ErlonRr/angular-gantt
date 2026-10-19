@@ -41,5 +41,9 @@ paths:
 - All three: a prop never set is not written (attributes and imperative values survive); listeners are attached before
   the first property assignment so events fired by it reach the callbacks; tests live in `src/__tests__/` (Vitest
   projects `react` / `vue` / `svelte`, SSR specs with `// @vitest-environment node`).
+- Editing events (Phase 11): the wrappers forward `onBeforeChange`, `onTasksChange`, `onTaskUpdated`,
+  `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange` (Vue `@before-change`…)
+  synchronously with `event.detail`, so `detail.preventDefault()` in `onBeforeChange` vetoes. Svelte destructures
+  them explicitly (React and Vue derive them from `GANTRY_EVENTS`).
 - Named exports only (no default export); each package re-exports `@gantryjs/core`.
 - Verify: `pnpm typecheck` and the demo apps (`pnpm --filter demo-react typecheck`, etc.).

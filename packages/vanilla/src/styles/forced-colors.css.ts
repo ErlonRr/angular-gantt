@@ -31,6 +31,16 @@
  * state box Canvas / CanvasText with a CanvasText border; skeleton GrayText. The row hover tint
  * is hidden (the timeline rect and the task-list row's background image): forced colours keep
  * the row backgrounds plain.
+ *
+ * Editing (Phase 11, plan 3d): the progress grip as the resize grip (Canvas, Highlight stroke);
+ * link connectors Canvas with a Highlight stroke, the target connector filled Highlight; the link
+ * preview Highlight (stroke and its solid head); the selected arrow Highlight (its halo too, at
+ * its own opacity); the invalid states
+ * (connector, preview, cell editor) a 2 px dashed CanvasText; the cell editor Field / FieldText
+ * with a FieldText border (set even inside the selected row, which opts out of forcing), its
+ * error message Canvas / CanvasText with a CanvasText border; an aria-disabled toolbar button
+ * (Undo / Redo with nothing to do) GrayText. The cell editor's rules come after the focus rings,
+ * so an invalid editor keeps its dashed outline while it has focus.
  */
 
 export const FORCED_COLORS_CSS = `
@@ -50,6 +60,8 @@ export const FORCED_COLORS_CSS = `
       /* ── Dependency arrows ── */
       .gantt-arrow path { stroke: CanvasText !important; }
       .gantt-arrow polygon, .gantt-arrow text { fill: CanvasText !important; }
+      .gantt-arrow--selected path { stroke: Highlight !important; }
+      .gantt-arrow--selected polygon { fill: Highlight !important; }
 
       /* ── Bars: body, caps, progress, baseline, labels; critical dashed, selected Highlight ── */
       .gantt-bar-body { fill: ButtonFace !important; stroke: ButtonText !important; stroke-width: 1.5px; }
@@ -62,10 +74,17 @@ export const FORCED_COLORS_CSS = `
       .gantt-bar--critical > .gantt-bar-body { stroke-width: 2px; stroke-dasharray: 4 2; }
       .gantt-bar[aria-selected="true"] > .gantt-bar-body { stroke: Highlight !important; stroke-width: 2.5px; }
 
-      /* ── Bar overlay (focus ring, grips) and drag ghost ── */
+      /* ── Bar overlay (focus ring, grips, link connectors), drag ghost, link preview ── */
       .gantt-bar-focus-ring { stroke: Highlight !important; }
-      .gantt-bar-grip { fill: Canvas !important; stroke: Highlight !important; }
+      .gantt-bar-grip, .gantt-progress-grip { fill: Canvas !important; stroke: Highlight !important; }
+      .gantt-link-connector { fill: Canvas !important; stroke: Highlight !important; }
+      .gantt-link-connector--target { fill: Highlight !important; }
+      .gantt-link-connector--invalid { stroke: CanvasText !important; stroke-width: 2px; stroke-dasharray: 4 2; }
       .gantt-drag-preview { fill: Highlight !important; stroke: Highlight !important; }
+      .gantt-link-preview { fill: Highlight !important; stroke: Highlight !important; }
+      .gantt-link-preview--invalid {
+        fill: CanvasText !important; stroke: CanvasText !important; stroke-width: 2px; stroke-dasharray: 4 2;
+      }
 
       /* ── Header: current period, bands, marker lane, today pointer ── */
       .g-cell--current { forced-color-adjust: none; background-color: Highlight !important; border-color: CanvasText !important; }
@@ -91,12 +110,13 @@ export const FORCED_COLORS_CSS = `
       .gantt-col-resize:hover { background-color: Highlight !important; }
       .gantt-load-more-btn[aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
 
-      /* ── Toolbar: the checked radio and menu item, the pressed panel toggle, the More menu ── */
+      /* ── Toolbar: the checked radio and menu item, the pressed panel toggle, a disabled Undo / Redo, the More menu ── */
       .gantt-tb-pill[aria-checked="true"], .gantt-tb-menu-item[aria-checked="true"] {
         forced-color-adjust: none;
         background-color: Highlight !important; border-color: Highlight !important; color: HighlightText !important;
       }
       .gantt-tb-btn[aria-pressed="true"] { color: Highlight !important; border-color: Highlight !important; }
+      .gantt-tb-btn[aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
       .gantt-tb-menu { background-color: Canvas !important; color: CanvasText !important; border-color: CanvasText !important; }
 
       /* ── Splitter: its line and its focus / hover line (the gradients are dropped) ── */
@@ -113,9 +133,17 @@ export const FORCED_COLORS_CSS = `
       .gantt-tb-btn:focus-visible, .gantt-tb-pill:focus-visible, .gantt-tb-menu-item:focus-visible,
       .gantt-tl-row:focus-visible, .gantt-tl-cell:focus-visible, .gantt-tl-col-header:focus-visible,
       .gantt-tl-load-more:focus-visible, .gantt-collapse-btn:focus-visible,
-      .gantt-load-more-btn:focus-visible, .gantt-state-retry:focus-visible { outline-color: Highlight !important; }
+      .gantt-load-more-btn:focus-visible, .gantt-state-retry:focus-visible,
+      .gantt-tl-editor:focus-visible { outline-color: Highlight !important; }
       .gantt-tl-row--selected:focus-visible, .gantt-tl-row--selected .gantt-tl-cell:focus-visible,
       .gantt-tl-row--selected .gantt-collapse-btn:focus-visible { outline-color: HighlightText !important; }
+
+      /* ── Cell editor: the field (also in the selected row), its invalid outline, its error ── */
+      .gantt-tl-editor { background-color: Field !important; color: FieldText !important; border-color: FieldText !important; }
+      .gantt-tl-editor[aria-invalid="true"] { outline: 2px dashed CanvasText !important; }
+      .gantt-tl-editor-error {
+        background-color: Canvas !important; color: CanvasText !important; border-color: CanvasText !important;
+      }
 
       /* ── Legend swatches: as the canvas draws them ── */
       .gantt-legend-swatch--line > line { stroke: Highlight !important; }

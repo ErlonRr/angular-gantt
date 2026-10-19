@@ -16,6 +16,7 @@ import { test, expect } from './fixtures';
 import { TARGETS } from '../playwright.config';
 import {
   GALLERY_CASES,
+  GALLERY_CATEGORIES,
   GALLERY_FRAMEWORKS,
   GALLERY_FRAMEWORK_LABELS,
   galleryCase,
@@ -244,7 +245,7 @@ for (const fw of VITE_APPS) {
       const indexUrl = page.url();
       await page.getByRole('navigation', { name: 'Gallery categories' }).getByRole('link').nth(3).click();
       expect(page.url()).toBe(indexUrl);
-      expect(await focusedId(page)).toBe('gallery-multiple-title');
+      expect(await focusedId(page)).toBe(`gallery-${GALLERY_CATEGORIES[3].id}-title`);
       await expect(page.locator('h1')).toHaveText('Examples');
     });
   });

@@ -8,6 +8,7 @@ import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { TARGETS } from '../playwright.config';
+import { GALLERY_CASES } from '../apps/demo-kit/src/gallery/catalog';
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const CHARTS = 'gantry, gantry-element';
@@ -39,7 +40,7 @@ const COMPOSED: readonly { name: string; home: string; h1: string; gallery: stri
   { name: 'Svelte', home: '/svelte/', h1: 'Gantry in Svelte', gallery: '/svelte/#/examples' },
 ];
 /** The gallery's case count (apps/demo-kit/src/gallery/catalog.ts) */
-const CASE_COUNT = 20;
+const CASE_COUNT = GALLERY_CASES.length;
 
 /** The other demo apps: one page each, same shell without the site nav. */
 const APPS: readonly { name: string; url: string }[] = [

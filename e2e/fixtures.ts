@@ -226,7 +226,21 @@ export type Binding = 'vanilla' | 'angular';
 export const BINDINGS: readonly Binding[] = ['vanilla', 'angular'];
 
 /** The events the harness records (Angular outputs are recorded under these names). */
-const RECORDED_EVENTS = ['task-dragged', 'task-resized', 'selection-change', 'view-mode-change', 'retry'] as const;
+const RECORDED_EVENTS = [
+  'task-dragged',
+  'task-resized',
+  'selection-change',
+  'view-mode-change',
+  'retry',
+  // Phase 11: the editing pipeline (D5 order: before-change → op events → task-updated → tasks-change → history-change)
+  'before-change',
+  'tasks-change',
+  'task-updated',
+  'task-progress-changed',
+  'dependency-created',
+  'dependency-deleted',
+  'history-change',
+] as const;
 export type RecordedEvent = (typeof RECORDED_EVENTS)[number];
 
 /** px per day of the built-in zoom levels (core `DEFAULT_ZOOM_LEVELS`). */
@@ -288,6 +302,8 @@ export interface GanttSetup {
   dataSource?: { failures: number; pageSize?: number };
   /** The chart's box in px. Default: 1150 × 700 */
   box?: { width: number; height: number };
+  /** Every `before-change` is vetoed with `detail.preventDefault()`, after it is recorded (phase 11) */
+  veto?: boolean;
 }
 
 /** What `Gantt.set` changes after the chart is open. */
@@ -297,6 +313,7 @@ export interface GanttPatch {
   darkMode?: boolean;
   loading?: boolean;
   errorMessage?: string | null;
+  veto?: boolean;
 }
 
 export const DEFAULT_OPTIONS: Record<string, unknown> = { viewMode: 'Day', initialScroll: false };
@@ -352,6 +369,57 @@ export function focused(chart: Chart): Promise<FocusInfo | null> {
 /** Two animation frames: the Web Component paints once per frame, Angular renders within one. */
 export const frames = (page: Page): Promise<unknown> =>
   page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+/**
+ * A client point on the arrow `fromId` → `toId` (finish to start), as far from every bar as the path
+ * allows: the arrow whose path starts nearest the predecessor's end and ends nearest the
+ * successor's start, sampled along its length. `clear` is its distance in px to the nearest bar's
+ * pointer targets (phase 11: a click there selects the link; bars and their handles win the hit test).
+ */
+export function arrowPoint(
+  chart: Chart,
+  fromId: string,
+  toId: string,
+): Promise<{ x: number; y: number; clear: number }> {
+  return chart.evalRoot(
+    (root, [from, to]) => {
+      const rect = (id: string) =>
+        root.querySelector(`.gantt-bars-layer > [data-task-id="${id}"] .gantt-bar-body`)!.getBoundingClientRect();
+      const a = rect(from);
+      const b = rect(to);
+      let best: { score: number; at: (l: number) => DOMPoint; len: number } | null = null;
+      for (const p of root.querySelectorAll<SVGPathElement>('g.gantt-arrow > path')) {
+        const len = p.getTotalLength();
+        const m = p.getScreenCTM()!;
+        const at = (l: number) => {
+          const q = p.getPointAtLength(l);
+          return new DOMPoint(q.x, q.y).matrixTransform(m);
+        };
+        const s = at(0);
+        const e = at(len);
+        const score =
+          Math.hypot(s.x - a.right, s.y - (a.top + a.bottom) / 2) +
+          Math.hypot(e.x - b.left, e.y - (b.top + b.bottom) / 2);
+        if (!best || score < best.score) best = { score, at, len };
+      }
+      // Each bar's pointer targets: the bar, its resize handles (half of a 24 px target outside each
+      // end) and at least 24 px tall (core `barHandles`)
+      const bars = [...root.querySelectorAll('.gantt-bars-layer > [data-task-id]')].map(el => {
+        const r = el.getBoundingClientRect();
+        const grow = Math.max(0, (24 - r.height) / 2);
+        return { left: r.left - 12, right: r.right + 12, top: r.top - grow, bottom: r.bottom + grow };
+      });
+      let pick = { x: 0, y: 0, clear: -Infinity };
+      for (let i = 1; i < 120; i++) {
+        const q = best!.at((best!.len * i) / 120);
+        const clear = Math.min(...bars.map(r => Math.max(r.left - q.x, q.x - r.right, r.top - q.y, q.y - r.bottom)));
+        if (clear > pick.clear) pick = { x: q.x, y: q.y, clear };
+      }
+      return pick;
+    },
+    [fromId, toId] as const,
+  );
+}
 
 /** The page script both drivers share: local ISO date-time strings → `Date`s. */
 function reviveSource(): string {
@@ -453,6 +521,11 @@ export class Gantt {
               log.push({ type, detail: JSON.parse(JSON.stringify((e as CustomEvent).detail ?? null)) as unknown }),
             );
           }
+          // The veto, after the recording listener (the Angular fixture records, then vetoes)
+          w['__GANTRY_VETO__'] = f.veto === true;
+          el.addEventListener('before-change', e => {
+            if (w['__GANTRY_VETO__']) (e as CustomEvent<{ preventDefault(): void }>).detail.preventDefault();
+          });
           old.replaceWith(el);
         },
         [fx, RECORDED_EVENTS, reviveSource()] as const,
@@ -492,6 +565,7 @@ export class Gantt {
           if (p.darkMode !== undefined) g['darkMode'] = p.darkMode;
           if (p.loading !== undefined) g['loading'] = p.loading;
           if (p.errorMessage !== undefined) g['errorMessage'] = p.errorMessage;
+          if (p.veto !== undefined) (window as unknown as Record<string, unknown>)['__GANTRY_VETO__'] = p.veto;
         },
         [patch, this.setup.tooltipRender ?? false, reviveSource()] as const,
       );

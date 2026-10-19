@@ -309,6 +309,8 @@ describe('canvas layers', () => {
       baseline: null,
       caps: null,
       handles: null,
+      progressGrip: null,
+      connectors: null,
       focusRect: { x: 7, y: 2, width: 106, height: 26, rx: 7 },
       hitBox: { x: 10, y: 5, width: 100, height: 20 },
       className: null,
@@ -378,6 +380,9 @@ describe('canvas layers', () => {
         dash: null,
         critical: false,
         lagLabel: null,
+        points: [],
+        selected: false,
+        halo: null,
       };
       // The dash and the lag label's font size are the visual's (core `ArrowVisual.dash`, `lagLabel.fontPx`)
       const g = createArrow(a);

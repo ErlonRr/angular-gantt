@@ -1,22 +1,27 @@
 /**
  * @file overlay.ts
  * Overlay region: the annotations (regions and lines under the bars, labels above them while the
- * marker lane is off), the today line and the drag ghost.
+ * marker lane is off), the today line, the drag ghost and the link preview.
  *
  * - Annotations are core's `computeAnnotationVisuals` over the mounted window, keyed by index and
  *   patched; they are revisited only when they, the timeline, the window, the font size or the
  *   marker lane change, so a drag move costs nothing here. While the marker lane shows
  *   (`graph.laneHeight` > 0, D12) their labels are in the header's lane, not over the bars.
- * - The today line (`line.gantt-today`, before `g.gantt-arrows`) and the ghost
- *   (`rect.gantt-drag-preview`, last in the SVG) are single persistent nodes, attached only while
- *   shown. The ghost is patched in O(1) from `computeDragGhostVisual` (`graph.ghostVisual`); the
- *   drag readout chip (`layers/readout.ts`) shows the move.
+ * - The today line (`line.gantt-today`, before `g.gantt-arrows`), the ghost
+ *   (`rect.gantt-drag-preview`) and the link preview (`path.gantt-link-preview`, Phase 11) are
+ *   single persistent nodes, attached only while shown; the ghost and the link preview are the
+ *   SVG's last children (the preview after the ghost). The ghost is patched in O(1) from
+ *   `computeDragGhostVisual` (`graph.ghostVisual`); the drag readout chip (`layers/readout.ts`)
+ *   shows the move. The link preview is the link session's (`inputs.link.preview`): its `d` drawn
+ *   from the bars as they are now (`graph.linkPreviewPath`, core `linkPreviewPathOf`: a zoom during
+ *   a session moves it with them), and `gantt-link-preview--invalid` while the target can't be
+ *   linked; its stroke, dash and the head's fill are the stylesheet's.
  */
 
 import { computeAnnotationVisuals, type AnnotationVisual } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
-import { setAttr, setStyleProp, setText } from '../dom/patch';
+import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
 import { showNode } from './skeleton';
 
@@ -117,9 +122,17 @@ export function createOverlayLayer(ctx: LayerContext): Layer {
         setAttr(dom.today, 'y2', bottom);
       }
 
-      // Drag ghost (last in the SVG)
+      // Link preview (the SVG's last child while a link session draws one), from the bars as they are now
+      const preview = I.link()?.preview ?? null;
+      showNode(dom.svg, dom.linkPreview, preview !== null);
+      if (preview) {
+        setAttr(dom.linkPreview, 'd', G.linkPreviewPath() ?? preview.d);
+        toggleClass(dom.linkPreview, 'gantt-link-preview--invalid', preview.targetId !== null && !preview.valid);
+      }
+
+      // Drag ghost (last in the SVG, before the link preview)
       const ghost = G.ghostVisual();
-      showNode(dom.svg, dom.ghost, ghost !== null);
+      showNode(dom.svg, dom.ghost, ghost !== null, preview ? dom.linkPreview : null);
       if (!ghost) return;
       const el = dom.ghost;
       setAttr(el, 'x', ghost.x);

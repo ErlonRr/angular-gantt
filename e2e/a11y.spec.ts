@@ -8,10 +8,13 @@
 // - the host: a region named by `labels.ariaChart` (ElementInternals for the Web Component, host
 //   attributes for Angular), the dark theme as `:state(dark)` / `.gantry-dark`, and no `tabindex` /
 //   `data-theme`.
+// - editing (phase 11): axe with an open cell editor holding an invalid value (aria-invalid, the
+//   message under it, the alert region) and in keyboard link mode (the preview, the target connector).
 // The Web Component runs in the playground; Angular in the showcase's `/fixture` route, fed through
-// `window.__GANTRY_FIXTURE__` (view, dark mode, extra rows).
+// `window.__GANTRY_FIXTURE__` (view, dark mode, extra rows; the editing tests use the `Gantt` harness).
 import AxeBuilder from '@axe-core/playwright';
-import { test, expect, SEL, type Chart } from './fixtures';
+import type { Page } from '@playwright/test';
+import { test, expect, SEL, Gantt, focused, type Chart } from './fixtures';
 import { day, type FixtureTask, type PaintFixture } from './paint-fixture';
 import { TARGETS } from '../playwright.config';
 
@@ -39,6 +42,16 @@ interface OpenOptions {
 const KNOWN_VIOLATIONS: readonly { id: string; node: (n: NodeResult) => boolean; why: string }[] = [];
 
 const isKnown = (v: Result, n: NodeResult) => KNOWN_VIOLATIONS.some(k => k.id === v.id && k.node(n));
+
+/** axe on `target`'s chart: the violations not in `KNOWN_VIOLATIONS`, one line per node. */
+async function unexpectedViolations(page: Page, target: Target): Promise<string[]> {
+  const { violations } = await new AxeBuilder({ page }).include(HOST[target]).withTags(WCAG).analyze();
+  return violations.flatMap(v =>
+    v.nodes
+      .filter(n => !isKnown(v, n))
+      .map(n => `${v.id} (${v.impact ?? '?'}): ${n.target.join(' » ')}\n  ${n.failureSummary ?? ''}`),
+  );
+}
 
 /** Two animation frames: the Web Component paints once per frame, Angular renders within one. */
 const frames = (chart: Chart) =>
@@ -209,6 +222,48 @@ for (const target of TARGET_LIST) {
         expect(unexpected).toEqual([]);
       });
     }
+
+    test('axe: no violations with an invalid cell editor open, then in keyboard link mode', async ({ chart, page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const g = new Gantt(chart, target);
+      await g.open({
+        options: {
+          viewMode: 'Day',
+          initialScroll: false,
+          editing: true,
+          panel: { width: 640, columns: ['name', 'start', 'end', 'progress', 'predecessors'] },
+        },
+        box: { width: 1400, height: 700 },
+      });
+
+      // 150 in %: the editor stays open, invalid, with its message
+      await chart.get('.gantt-tl-cell[data-focus-key="cell:scope:progress"]').focus();
+      await page.keyboard.press('F2');
+      await expect.poll(() => chart.focusedKey()).toBe('editor:scope:progress');
+      await page.keyboard.type('150');
+      await page.keyboard.press('Enter');
+      await expect(chart.get('.gantt-tl-editor[aria-invalid="true"]')).toHaveCount(1);
+      await expect(chart.get('.gantt-tl-editor-error')).toBeVisible();
+      expect(await unexpectedViolations(page, target)).toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(chart.get('.gantt-tl-editor')).toHaveCount(0);
+
+      // L on Scope, ↓ to Research (already linked: the invalid preview), ↓ ↓ to Documentation (valid)
+      // The timeline's tab stop is the bar of the row focused last: Scope
+      await g.focusBefore();
+      await g.tabTo('bar');
+      expect((await focused(chart))?.taskId).toBe('scope');
+      await page.keyboard.press('l');
+      await page.keyboard.press('ArrowDown');
+      await expect(chart.get('path.gantt-link-preview--invalid')).toHaveCount(1);
+      expect(await unexpectedViolations(page, target)).toEqual([]);
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.press('ArrowDown');
+      expect((await focused(chart))?.taskId).toBe('docs');
+      await expect(chart.get('path.gantt-link-preview')).toHaveCount(1);
+      await expect(chart.get('.gantt-link-connector--target')).toHaveCount(1);
+      expect(await unexpectedViolations(page, target)).toEqual([]);
+    });
 
     test('keyboard: Tab goes toolbar → one task-list row → splitter → toggle → one bar', async ({ chart, page }) => {
       await open(chart, target, { dark: false, view: 'split' });

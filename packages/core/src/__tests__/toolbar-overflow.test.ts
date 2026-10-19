@@ -51,6 +51,7 @@ const ALL: ResolvedToolbar = {
   fit: true,
   panelToggle: false,
   overflow: 'menu',
+  undo: true,
 };
 const LEVELS: GanttZoomLevel[] = ['Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
 const small = (toolbar: ResolvedToolbar, view: GanttView = 'split'): ToolbarGroup[] =>
@@ -258,6 +259,7 @@ describe('layoutToolbar — the More button', () => {
           pressed: null,
           haspopup: 'menu',
           expanded: false,
+          disabled: null,
           action: { type: 'menu' },
         },
       ],

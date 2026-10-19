@@ -255,13 +255,13 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
   });
 
   // ── A press elsewhere dismisses it ──────────────────────────────────────
-  /** A bar under the pointer, by geometry (the canvas pointer handler's hit test). */
+  /** A bar under the pointer, by geometry (the canvas pointer handler's hit test, without the edit targets). */
   const onBar = (e: PointerEvent): boolean => {
     try {
       const box = dom.canvasContainer.getBoundingClientRect();
       const y = e.clientY - box.top;
       const geo = G.geometries.peek()[Math.floor(y / G.config.peek().rowHeight)];
-      return !!geo && hitTestBar(G.barVisual.peek()(geo), e.clientX - box.left, y) !== null;
+      return !!geo && hitTestBar(G.barVisual.peek()(geo), e.clientX - box.left, y, false) !== null;
     } catch {
       return false;
     }

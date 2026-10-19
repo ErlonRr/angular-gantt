@@ -13,7 +13,7 @@
 
 import {
   DragSession,
-  type BarHit,
+  type DragHandle,
   type DragPreview,
   type DragTiming,
   type RowGeometry,
@@ -43,7 +43,7 @@ export interface Drag {
    * Starts dragging `geo`'s bar by `handle` (`'bar'` moves it, `'left'` / `'right'` resize it)
    * from content x `x` (where the press started). No-op while a drag is active.
    */
-  start(geo: RowGeometry, handle: BarHit, x: number): void;
+  start(geo: RowGeometry, handle: DragHandle, x: number): void;
   /** The pointer is at content x `x`: the preview follows. */
   move(x: number): void;
   /** Released at content x `x`: emits `task-dragged` / `task-resized` when the task changed. */

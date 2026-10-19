@@ -49,10 +49,11 @@
  *   g.gantt-bar-overlay       attached while it shows a focus ring or grips (D4)
  *   g.gantt-annotation-labels
  *   rect.gantt-drag-preview   attached while a bar is dragged
+ *   path.gantt-link-preview   attached last while a link session shows a preview (Phase 11)
  *
- * The today line, the row hover, the bar overlay and the drag ghost are single persistent nodes
- * and stay detached while hidden: the paint snapshots and `.gantt-drag-preview` (count 0 after a
- * drop) rely on it.
+ * The today line, the row hover, the bar overlay, the drag ghost and the link preview are single
+ * persistent nodes and stay detached while hidden: the paint snapshots and `.gantt-drag-preview`
+ * (count 0 after a drop) rely on it.
  *
  * The svg is the bars' listbox (D3): `aria-orientation=vertical` here, its name
  * (`labels.ariaBars`) and `aria-multiselectable` from the bars region.
@@ -124,6 +125,11 @@ export interface Skeleton {
   readonly annotationLabels: SVGGElement;
   /** The drag ghost (appended last while a bar is dragged) */
   readonly ghost: SVGRectElement;
+  /**
+   * The link being drawn (`path.gantt-link-preview[pointer-events=none]`, Phase 11): detached; the
+   * svg's last child while a link session shows a preview (`inputs.link.preview`)
+   */
+  readonly linkPreview: SVGPathElement;
 }
 
 let uid = 0;
@@ -180,6 +186,8 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
   const annotationLabels = s('g', { class: 'gantt-annotation-labels', ...decorative });
   // Geometry, opacity, dash and paint come from the drag ghost's visual (overlay layer)
   const ghost = s('rect', { class: 'gantt-drag-preview', 'pointer-events': 'none' });
+  // Its `d` and the `--invalid` modifier come from the link session's preview (core `linkPreviewPath`)
+  const linkPreview = s('path', { class: 'gantt-link-preview', 'pointer-events': 'none' });
   const svg = s(
     'svg',
     { role: 'listbox', 'aria-orientation': 'vertical' },
@@ -262,6 +270,7 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
     barOverlay,
     annotationLabels,
     ghost,
+    linkPreview,
   };
 }
 

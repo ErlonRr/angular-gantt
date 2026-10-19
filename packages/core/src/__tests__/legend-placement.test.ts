@@ -84,7 +84,8 @@ describe('step 2.6 public API', () => {
       expect(typeof fn).toBe('function');
     }
     expect(core.TOOLBAR_ICON_VIEWBOX).toBe('0 0 16 16');
-    expect(Object.keys(core.TOOLBAR_ICONS)).toHaveLength(9);
+    // + undo / redo (Phase 11)
+    expect(Object.keys(core.TOOLBAR_ICONS)).toHaveLength(11);
     expect(core.SKELETON_MAX_ROWS).toBeGreaterThan(0);
   });
 });

@@ -56,6 +56,19 @@
 //  (`layout/responsive.ts`) hears the measured width and the user's view
 //  picks; the sync member (`sync/gantt-sync.ts`) follows `[syncGroup]`
 //  and hears the level, panel width and scroll changes.
+//
+//  Editing (phase 11): every task change — a drag, a resize, move mode,
+//  the progress grip, a cell, a link, the API (`addDependency()`…),
+//  undo / redo — goes through the chart's editor
+//  (`editing/gantt-editor.service.ts`, the change pipeline), which applies
+//  it to the raw input: the data source (`patch`), else the `series`
+//  model (`[(series)]`). Its events are the outputs `beforeChange` (veto
+//  with `preventDefault()`), the op events (`taskDragged`, `taskResized`,
+//  `taskProgressChanged`, `dependencyCreated`, `dependencyDeleted`),
+//  `taskUpdated`, `tasksChange` and `historyChange`; `canUndo` /
+//  `canRedo` are signals. The link, progress and cell services
+//  (`editing/link.ts`, `progress.ts`, `cell-edit.ts`) are the gestures'
+//  (wave 4); the host has the class `gantry-linking` while a link is drawn.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -65,6 +78,7 @@ import {
   output,
   model,
   type ModelSignal,
+  type OutputEmitterRef,
   signal,
   computed,
   effect,
@@ -83,6 +97,7 @@ import {
   booleanAttribute,
   contentChild,
   DOCUMENT,
+  ChangeDetectorRef,
 } from '@angular/core';
 
 import {
@@ -99,6 +114,7 @@ import {
   type SelectionChangeEvent,
   type RowGeometry,
   type GanttFlatRow,
+  DependencyType,
 } from '../types';
 import {
   resolveConfig,
@@ -125,8 +141,22 @@ import {
   timelineScrollPadding,
   layoutCssVars,
   rollupSource,
+  dragChange,
+  linkChange,
+  fieldLabel,
+  findColumn,
+  type BarSegment,
   type BarVisual,
   type CPMResult,
+  type DependencyChangeEvent,
+  type EditRules,
+  type GanttBeforeChangeEvent,
+  type GanttChangeSource,
+  type GanttHistoryState,
+  type GanttTasksChangeEvent,
+  type ResolvedTaskStyle,
+  type TaskProgressEvent,
+  type TaskUpdatedEvent,
   type GanttSyncGroup,
   type LoadStateSnapshot,
   type ResolvedGanttConfig,
@@ -165,6 +195,15 @@ import { GanttTooltipTemplateDirective } from '../tooltip/gantt-tooltip-template
 import { bindZoomGestures } from '../scroll/zoom-gestures';
 import { GanttResponsive } from '../layout/responsive';
 import { GanttSync } from '../sync/gantt-sync';
+import {
+  GanttEditorService,
+  sameHistorySettings,
+  type GanttEditorEvents,
+  type GanttHistorySettings,
+} from '../editing/gantt-editor.service';
+import { GanttLinkService } from '../editing/link';
+import { GanttProgressService } from '../editing/progress';
+import { GanttCellEditService } from '../editing/cell-edit';
 
 /** The control inside the chart that received focus last (focus restore when it is removed) */
 interface FocusRecord {
@@ -185,10 +224,39 @@ function rawRow(row: GanttFlatRow): GanttFlatRow {
   return task === row.task ? row : { ...row, task };
 }
 
-/** A row geometry as events carry it: its row with the raw task */
-function rawGeometry(geo: RowGeometry): RowGeometry {
-  const row = rawRow(geo.row);
-  return row === geo.row ? geo : { ...geo, row };
+/** Everything `computeBarVisual` reads besides the row: a new memo of visuals starts when one changes */
+interface BarInputs {
+  readonly cfg: ResolvedGanttConfig;
+  readonly toX: (d: Date) => number;
+  readonly fontPx: number;
+  readonly barTextColor: string;
+  readonly critical: ReadonlySet<string>;
+  readonly styleOf: (row: GanttFlatRow) => ResolvedTaskStyle;
+  readonly segmentsOf: (geo: RowGeometry) => BarSegment[] | null;
+  readonly rulesOf: (row: GanttFlatRow) => EditRules;
+}
+
+/**
+ * A row's bar visual (core `computeBarVisual`): its resolved style and segments, resize handles,
+ * progress grip and link connectors as its edit rules allow (D9, D11), and `progress` instead of the
+ * task's (a progress drag's preview).
+ */
+function barVisualOf(inputs: BarInputs, geo: RowGeometry, progress?: number): BarVisual {
+  const rules = inputs.rulesOf(geo.row);
+  return computeBarVisual({
+    geo,
+    cfg: inputs.cfg,
+    toX: inputs.toX,
+    fontPx: inputs.fontPx,
+    barTextColor: inputs.barTextColor,
+    isCritical: inputs.critical.has(geo.row.task.id),
+    resizable: rules.resize,
+    progressEditable: rules.progress,
+    linkable: rules.linkFrom,
+    style: inputs.styleOf(geo.row),
+    segments: inputs.segmentsOf(geo),
+    progress,
+  });
 }
 
 @Component({
@@ -206,6 +274,10 @@ function rawGeometry(geo: RowGeometry): RowGeometry {
     GanttBarFocusService,
     GanttResponsive,
     GanttSync,
+    GanttEditorService,
+    GanttLinkService,
+    GanttProgressService,
+    GanttCellEditService,
   ],
   hostDirectives: [GanttKeyboardDirective],
   imports: [
@@ -236,6 +308,8 @@ function rawGeometry(geo: RowGeometry): RowGeometry {
     '[class.gantry-dragging]': 'dragSvc.isActive()',
     // The consumer's `loading` or a data-source page loading (the Web Component's :state(loading))
     '[class.gantry-loading]': 'loading() || dataSource()?.isLoading() === true',
+    // A link is being drawn (the Web Component's :state(linking))
+    '[class.gantry-linking]': 'layout.link() !== null',
     '(focusin)': 'onFocusIn($event)',
     '(focusout)': 'onFocusOut($event)',
   },
@@ -371,6 +445,7 @@ function rawGeometry(geo: RowGeometry): RowGeometry {
         <gantt-canvas
           [style.margin-bottom.px]="canvasBottomPad()"
           [barVisual]="barVisual()"
+          [baseBarVisual]="taskBarVisual()"
           [criticalIds]="criticalIds()"
           [floatDays]="cpm()?.floatMap"
           [tasksById]="layout.columnContext().taskById"
@@ -384,7 +459,7 @@ function rawGeometry(geo: RowGeometry): RowGeometry {
           (rowClick)="onCanvasRowClick($event)"
           (rowDblClick)="onRowDblClick($event)"
         />
-        <!-- Drag readout chip (pointer drag and keyboard move mode), attached while it shows the new dates -->
+        <!-- Drag readout chip (pointer drag, keyboard move mode and the progress grip), attached while it shows -->
         @if (dragReadout(); as readout) {
           <div ganttDragReadout [readout]="readout"></div>
         }
@@ -634,6 +709,11 @@ export class GantryComponent {
   private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly cdr = inject(ChangeDetectorRef);
+  /** The change pipeline: every task change, the history */
+  private readonly editor = inject(GanttEditorService);
+  /** Cell editing (`editCell()`) */
+  private readonly cellEdit = inject(GanttCellEditService);
 
   // ── DOM references ────────────────────────────────────────
   private readonly mainEl = viewChild<ElementRef<HTMLElement>>('mainEl');
@@ -646,7 +726,14 @@ export class GantryComponent {
   protected readonly tooltipTemplate = contentChild(GanttTooltipTemplateDirective, { descendants: true });
 
   // ── Inputs ────────────────────────────────────────────────
-  readonly series = input<GanttTask[]>([]);
+  /**
+   * The tasks, two-way: `[(series)]`. The chart writes it when it applies an edit (a drag, a cell, a
+   * link, undo…) without a data source, and in `updateTask()` / `appendTasks()`: the untouched tasks
+   * keep their objects. With `editing.controlled` it never writes it (set the tasks from
+   * `tasksChange`). Ignored while `dataSource` is set (the edits go to `dataSource.patch()`).
+   */
+  // Explicit type: the API report prints it as written
+  readonly series: ModelSignal<GanttTask[]> = model<GanttTask[]>([]);
   readonly dataSource = input<GanttDataSource | null>(null);
   readonly options = input<GanttOptions>({});
   readonly annotations = input<GanttAnnotation[]>([]);
@@ -692,7 +779,8 @@ export class GantryComponent {
   readonly selectionChange = output<SelectionChangeEvent>();
   /** A data-source page failed after its automatic retries (`dataSource.retry()` tries again) */
   readonly loadError = output<{ error: unknown; page: number }>();
-  readonly rowClick = output<RowGeometry>();
+  /** A row was clicked or activated (Enter) in either pane: its row (a rolled-up parent's with its raw task) */
+  readonly rowClick = output<GanttFlatRow>();
   readonly rowDblClick = output<GanttFlatRow>();
   /** Panel width / collapsed, view, zoom, column widths, collapsed rows or sort changed */
   readonly stateChange = output<GanttState>();
@@ -703,6 +791,38 @@ export class GantryComponent {
    * source without this output.
    */
   readonly retry = output<RetryEvent>();
+  /**
+   * A change is about to be applied (every edit: drag, resize, keyboard, progress, cell, link, API,
+   * undo / redo). Call `preventDefault()` on it, synchronously, to veto it; writing `series` (or the
+   * data source) meanwhile counts as handled: nothing is applied (`tasksChange` with `applied: false`).
+   */
+  readonly beforeChange = output<GanttBeforeChangeEvent>();
+  /** After every accepted change: the tasks now, or (`editing.controlled`, `applied: false`) the tasks to set yourself */
+  readonly tasksChange = output<GanttTasksChangeEvent>();
+  /** One per changed task, after the op events */
+  readonly taskUpdated = output<TaskUpdatedEvent>();
+  /** A task's progress changed (progress grip, ↑ / ↓ in move mode, the progress cell, undo / redo) */
+  readonly taskProgressChanged = output<TaskProgressEvent>();
+  /** A dependency was added (link drawn, predecessors cell, `addDependency()`, undo / redo) */
+  readonly dependencyCreated = output<DependencyChangeEvent>();
+  /** A dependency was removed (selected link + Delete, predecessors cell, `removeDependency()`, undo / redo) */
+  readonly dependencyDeleted = output<DependencyChangeEvent>();
+  /** The undo / redo state changed (`canUndo`, `canRedo`, labels, counts) */
+  readonly historyChange = output<GanttHistoryState>();
+
+  /** The outputs of the editor's events, by the Web Component's names */
+  private readonly editorOutputs: { readonly [K in keyof GanttEditorEvents]: OutputEmitterRef<GanttEditorEvents[K]> } =
+    {
+      'before-change': this.beforeChange,
+      'tasks-change': this.tasksChange,
+      'task-updated': this.taskUpdated,
+      'task-dragged': this.taskDragged,
+      'task-resized': this.taskResized,
+      'task-progress-changed': this.taskProgressChanged,
+      'dependency-created': this.dependencyCreated,
+      'dependency-deleted': this.dependencyDeleted,
+      'history-change': this.historyChange,
+    };
 
   // ── Resolved configuration (shared render model) ─────────
   /** Resolved theme: only its metrics enter the config (colours reach the chart through the host's `--gantt-*` tokens) */
@@ -823,6 +943,9 @@ export class GantryComponent {
    * shown rows (with no rows the error state box, `role=alert`, says it: read once, not twice)
    */
   protected readonly srAlert = computed(() => {
+    // A cell editor's message (an invalid value) wins while it shows
+    const cell = this.cellEdit.alert();
+    if (cell) return cell;
     const error = this.dataSource()?.error();
     if (error === null || error === undefined || this.layout.chartState().kind === 'error') return '';
     return this.i18n.labels().loadError;
@@ -831,6 +954,8 @@ export class GantryComponent {
   // ── Focus ─────────────────────────────────────────────────
   /** The control that received focus last while focus is inside the chart (`null` once it left) */
   private focusRecord: FocusRecord | null = null;
+  /** `data-focus-key` `focusTask()` asked for: focused after the next render, its focus ring shown */
+  private focusRequest: string | null = null;
 
   // ── Horizontal scroll ─────────────────────────────────────
   private readonly envInjector = inject(EnvironmentInjector);
@@ -855,35 +980,50 @@ export class GantryComponent {
   /**
    * Bar visual of a row geometry, memoised per geometry. A new memo starts whenever an input of
    * `computeBarVisual` changes (config, timeline, critical path, theme metrics, drag / resize
-   * flags, row styles, segments); a scroll, a selection or a colour-only theme change reuses every
-   * visual. Serves any visible row, mounted or not (the canvas, its arrows and `getBarVisual`).
-   * Each bar gets its row's resolved style (`layout.rowStyle`) and, with `rollup.segments`, a
-   * collapsed parent its children's segments (`layout.barSegments`).
+   * flags and edit rules, row styles, segments); a scroll, a selection or a colour-only theme change
+   * reuses every visual. Serves any visible row, mounted or not (the canvas, its arrows and
+   * `getBarVisual`). Each bar gets its row's resolved style (`layout.rowStyle`), with
+   * `rollup.segments` a collapsed parent its children's segments (`layout.barSegments`), and the
+   * handles, progress grip and connectors its edit rules allow (`layout.editRules`). While a progress
+   * drag previews a bar (`layout.progressPreview`), that bar draws the previewed progress.
    */
   protected readonly barVisual = computed<BarVisualOf>(() => {
-    const cfg = this.cfg();
-    const { toX } = this.layout.timeline();
+    const visualOf = this.taskBarVisual();
+    // A progress drag draws its bar at the previewed progress; every other bar keeps its visual
+    const preview = this.layout.progressPreview();
+    if (!preview) return visualOf;
+    const inputs = this.barInputs();
+    let previewed: { readonly geo: RowGeometry; readonly visual: BarVisual } | null = null;
+    return geo => {
+      if (geo.row.task.id !== preview.taskId) return visualOf(geo);
+      if (previewed?.geo !== geo) previewed = { geo, visual: barVisualOf(inputs, geo, preview.progress) };
+      return previewed.visual;
+    };
+  });
+
+  /** What the bar visuals read besides the row (each bar's edit rules: `layout.editRules`) */
+  private readonly barInputs = computed<BarInputs>(() => {
     const { fontPx, barTextColor } = this.themeMetrics();
-    const crit = this.criticalIds();
-    const resizable = this.dragEnabled() && this.resizeEnabled();
-    const styleOf = this.layout.rowStyle();
-    const segmentsOf = this.layout.barSegments();
+    return {
+      cfg: this.cfg(),
+      toX: this.layout.timeline().toX,
+      fontPx,
+      barTextColor,
+      critical: this.criticalIds(),
+      styleOf: this.layout.rowStyle(),
+      segmentsOf: this.layout.barSegments(),
+      rulesOf: this.layout.editRules(),
+    };
+  });
+
+  /** The bar visuals as the tasks stand (no preview), memoised per geometry */
+  protected readonly taskBarVisual = computed<BarVisualOf>(() => {
+    const inputs = this.barInputs();
     const memo = new WeakMap<RowGeometry, BarVisual>();
     return geo => {
       let v = memo.get(geo);
       if (!v) {
-        const task = geo.row.task;
-        v = computeBarVisual({
-          geo,
-          cfg,
-          toX,
-          fontPx,
-          barTextColor,
-          isCritical: crit.has(task.id),
-          resizable: resizable && task.draggable !== false,
-          style: styleOf(geo.row),
-          segments: segmentsOf(geo),
-        });
+        v = barVisualOf(inputs, geo);
         memo.set(geo, v);
       }
       return v;
@@ -932,6 +1072,30 @@ export class GantryComponent {
       loadState: () => loadStateOf(this.dataSource()),
       showLegend: () => this.showLegend(),
       toolbarShown: () => this.showToolbar() && !!this.cfg().toolbar,
+      enableDrag: () => this.dragEnabled(),
+      enableResize: () => this.resizeEnabled(),
+    });
+    // The change pipeline: applied to the data source, else the `series` model; its events are the outputs
+    this.editor.bind({
+      source: () => untracked(() => this.dataSource()?.items() ?? this.series()),
+      write: update => this.writeTasks(update),
+      emit: (type, detail) => this.editorOutputs[type].emit(detail),
+      columnLabel: key =>
+        untracked(
+          () =>
+            findColumn(this.colSvc.columns(), this.colSvc.builtins(), key)?.label ??
+            fieldLabel(key, this.i18n.labels()),
+        ),
+    });
+    this.layout.bindHistory(() => this.editor.state());
+    // The history follows `editing.history` for the chart's lifetime: created, re-configured (trimmed)
+    // or dropped (`historyChange` when that empties it), as the Web Component's element effect
+    const historySettings = computed<GanttHistorySettings>(() => this.cfg().editing.history, {
+      equal: sameHistorySettings,
+    });
+    effect(() => {
+      const settings = historySettings();
+      untracked(() => this.editor.syncHistory(settings));
     });
     // Every selection change — canvas, task list, keyboard or API — reaches the output
     this.selSvc.onChange = e => this.selectionChange.emit(e);
@@ -1148,7 +1312,10 @@ export class GantryComponent {
    */
   private restoreFocus(): void {
     const host = this.hostEl.nativeElement;
-    const request = this.keyboard.takeFocusRequest();
+    const own = this.focusRequest;
+    this.focusRequest = null;
+    const keys = this.keyboard.takeFocusRequest();
+    const request = keys ?? own;
     if (request !== null) {
       this.focusRecord = null;
       const active = this.doc.activeElement;
@@ -1156,7 +1323,8 @@ export class GantryComponent {
         active && host.contains(active) && focusKeyOf(active) === request
           ? (active as HTMLElement)
           : findFocusKey(host, request);
-      if (el && !isInert(el)) focusIntoView(el);
+      // `focusTask()`'s target shows its focus ring even when a pointer led here
+      if (el && !isInert(el)) focusIntoView(el, keys === null);
       else this.focusFallback();
       return;
     }
@@ -1207,15 +1375,15 @@ export class GantryComponent {
 
   // ── Event handlers ────────────────────────────────────────
 
+  /** A row clicked or activated in the task list (a rolled-up parent's row carries its raw task: events stay raw) */
   protected onTaskListRowClick(e: { row: GanttFlatRow; event: MouseEvent | KeyboardEvent }): void {
     this.selSvc.handleClick(e.row.task.id, e.event, this.layout.visibleRows(), this.cfg().selection);
-    const geo = this.layout.geometryById().get(e.row.task.id);
-    if (geo) this.rowClick.emit(rawGeometry(geo));
+    this.rowClick.emit(rawRow(e.row));
   }
 
   /** A row clicked in the timeline (a rolled-up parent's row carries its raw task: events stay raw) */
-  protected onCanvasRowClick(geo: RowGeometry): void {
-    this.rowClick.emit(rawGeometry(geo));
+  protected onCanvasRowClick(row: GanttFlatRow): void {
+    this.rowClick.emit(rawRow(row));
   }
 
   /** A row double-clicked in either pane (a rolled-up parent's row carries its raw task) */
@@ -1233,14 +1401,30 @@ export class GantryComponent {
     this.saveState();
   }
 
+  /** A pointer drag dropped a bar (or a keyboard move): the new dates through the change pipeline */
   protected onTaskDragged(event: TaskDragEvent): void {
-    this.layout.updateTask(event.taskId, { start: event.newStart, end: event.newEnd });
-    this.taskDragged.emit(event);
+    this.commitDates(event, 'drag');
   }
 
+  /** A pointer resize ended (or a keyboard resize): the new dates through the change pipeline */
   protected onTaskResized(event: TaskResizeEvent): void {
-    this.layout.updateTask(event.taskId, { start: event.newStart, end: event.newEnd });
-    this.taskResized.emit(event);
+    this.commitDates(event, 'resize');
+  }
+
+  /** New dates of a task as one change of its raw task (`taskDragged` / `taskResized` come from the pipeline). */
+  private commitDates(event: TaskDragEvent | TaskResizeEvent, source: GanttChangeSource): void {
+    const task = this.editor.rawTask(event.taskId);
+    if (task) this.editor.commit(dragChange(event, task, source));
+  }
+
+  /**
+   * Writes the raw tasks: the data source's (`patch`: the edit survives the next page), else the
+   * `series` model (`[(series)]`). Untouched tasks keep their objects.
+   */
+  private writeTasks(update: (items: readonly GanttTask[]) => GanttTask[]): void {
+    const ds = untracked(this.dataSource);
+    if (ds) ds.patch(update);
+    else this.series.update(items => update(items));
   }
 
   /** Retry of the error state: the `retry` output, then (data-source failure) the data source's own retry. */
@@ -1498,12 +1682,105 @@ export class GantryComponent {
     this.selSvc.selectAll(this.layout.visibleRows(), this.cfg().selection);
   }
 
+  /**
+   * Change a task's fields as data, silently: no change pipeline, no event (besides `seriesChange`),
+   * no history. Written to the data source (`patch`), else to `series`.
+   */
   updateTask(id: string, patch: Partial<GanttTask>): void {
-    this.layout.updateTask(id, patch);
+    this.writeTasks(items => items.map(t => (t.id === id ? { ...t, ...patch } : t)));
   }
 
+  /** Add tasks at the end, silently (as `updateTask()`). */
   appendTasks(tasks: GanttTask[]): void {
-    this.layout.appendTasks(tasks);
+    if (tasks.length) this.writeTasks(items => [...items, ...tasks]);
+  }
+
+  // ── Editing ───────────────────────────────────────────────
+
+  /** Undo is possible: the chart keeps history (`editing`, not controlled) and has a step to undo */
+  readonly canUndo: Signal<boolean> = computed(() => this.editor.state().canUndo);
+  /** Redo is possible: a step was undone and nothing was recorded since */
+  readonly canRedo: Signal<boolean> = computed(() => this.editor.state().canRedo);
+
+  /**
+   * Undo the last change (as Ctrl/⌘+Z): through the change pipeline (source `'undo'`), so
+   * `beforeChange` can veto it and the events fire with the inverse ops. `false` when there is
+   * nothing to undo, or it was rejected or vetoed.
+   */
+  undo(): boolean {
+    return this.editor.undo();
+  }
+
+  /** Redo the last undone change (as Ctrl/⌘+Shift+Z, Ctrl+Y); `false` when there is nothing to redo, or it was refused. */
+  redo(): boolean {
+    return this.editor.redo();
+  }
+
+  /** Forget every undo and redo step (`historyChange` when there were some). Task changes never clear it. */
+  clearHistory(): void {
+    this.editor.clear();
+  }
+
+  /**
+   * Add the dependency `fromId` → `toId` (`toId` gets the link), through the change pipeline
+   * (source `'api'`): validated (self link, duplicate, cycle, parent ↔ child, read-only), vetoable,
+   * undoable. Works whatever `editing` is. `false` when it was refused.
+   */
+  addDependency(fromId: string, toId: string, type: DependencyType = DependencyType.FS, lag = 0): boolean {
+    return this.editor.commit(linkChange(this.editor.rawTasks(), { fromId, toId, type, lag }, 'link', 'api'));
+  }
+
+  /**
+   * Remove the dependency `fromId` → `toId` (of any type, or only `type`), through the change
+   * pipeline (source `'api'`). `false` when there is no such link or the change was refused.
+   */
+  removeDependency(fromId: string, toId: string, type?: DependencyType): boolean {
+    return this.editor.commit(linkChange(this.editor.rawTasks(), { fromId, toId, type }, 'unlink', 'api'));
+  }
+
+  /**
+   * Open the editor of `columnKey`'s cell on `taskId`'s row (as F2 on that cell): needs
+   * `editing.cells` and an editable cell. `false` when it can't be edited.
+   */
+  editCell(taskId: string, columnKey: string): boolean {
+    return this.cellEdit.start(taskId, columnKey);
+  }
+
+  /**
+   * Move keyboard focus to a task: its bar (`area: 'bar'`, the default) or its task-list row
+   * (`'row'`). Its collapsed ancestors expand, its row is kept mounted and, after the next render,
+   * focused and scrolled into view. The other area is used while the view hides the requested one.
+   * Its focus ring shows even when a pointer triggered the call (a button): `focus({ focusVisible:
+   * true })` where supported, and the bar's own ring. `false` for an unknown id.
+   */
+  focusTask(id: string, options: { area?: 'bar' | 'row' | undefined } = {}): boolean {
+    const byId = new Map<string, GanttTask>();
+    for (const t of this.layout.tasks()) if (!byId.has(t.id)) byId.set(t.id, t);
+    if (!byId.has(id)) return false;
+    // Expand the collapsed ancestors (a loop in the data ends at the first repeated id)
+    const collapsed = this.layout.collapsedIds();
+    const expand = new Set<string>();
+    const seen = new Set<string>([id]);
+    for (let p = byId.get(id)?.parentId; p !== undefined && !seen.has(p); p = byId.get(p)?.parentId) {
+      seen.add(p);
+      if (collapsed.has(p)) expand.add(p);
+    }
+    if (expand.size) {
+      this.layout.collapsedIds.set(new Set([...collapsed].filter(c => !expand.has(c))));
+      this.saveState();
+    }
+    const view = this.layout.view();
+    const area = view === 'table' ? 'row' : view === 'chart' ? 'bar' : (options.area ?? 'bar');
+    // Pinned in the virtual window until focus moves on; focused once mounted (`restoreFocus`), with
+    // its focus ring as from the keyboard (a bar already focused by a pointer shows it now)
+    this.layout.focusedRowId.set(id);
+    const key = `${area}:${id}`;
+    const active = this.doc.activeElement;
+    const focused = !!active && this.hostEl.nativeElement.contains(active) && focusKeyOf(active) === key;
+    this.barFocus.showFocus(area === 'bar' && focused ? id : null);
+    this.focusRequest = key;
+    this.cdr.markForCheck();
+    return true;
   }
 
   collapseAll(): void {

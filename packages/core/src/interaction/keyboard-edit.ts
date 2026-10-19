@@ -12,12 +12,24 @@
 //    Enter / F2                      commit · Escape cancel
 //
 //  In RTL time runs right to left, so ArrowLeft is "later".
+//
+//  Since Phase 11 a commit is one change through the binding's editor:
+//  `keyboardEditChange(session, task)` (source 'keyboard', coalesce key
+//  `kbd:<id>`, so quick consecutive commits make one undo step); the
+//  pipeline derives the same events `commit()` lists. What the keys may
+//  change comes from `editRules` (`keyboardEditOptionsFor`).
 // ─────────────────────────────────────────────────────────────
 
+import { isEmptyChange, taskChange } from '../editing/changes';
+import type { EditRules } from '../editing/permissions';
 import { addDays } from '../gantt-math';
-import type { DragPreview, DragResult, DragTiming } from '../render/drag';
-import type { TaskDragEvent, TaskResizeEvent } from '../types';
+import type { ResolvedEditing } from '../render/config';
+import { resizeEdge, type DragPreview, type DragResult, type DragTiming } from '../render/drag';
+import type { GanttChange, GanttLabels, GanttTask, TaskDragEvent, TaskProgressEvent, TaskResizeEvent } from '../types';
 import { logicalArrow, type KeyLike } from './keymap';
+
+// `TaskProgressEvent` lives in the shared types since Phase 11 (the progress grip, cells and ↑ / ↓ emit it)
+export type { TaskProgressEvent } from '../types';
 
 export type KeyboardEditMode = 'move' | 'resizeStart' | 'resizeEnd' | 'progress';
 
@@ -28,13 +40,6 @@ export interface KeyboardEditStep {
 }
 
 export type KeyboardEditAction = KeyboardEditStep | 'commit' | 'cancel';
-
-/** Progress changed with the keyboard (no such event exists for pointer drags yet). */
-export interface TaskProgressEvent {
-  taskId: string;
-  oldProgress: number;
-  newProgress: number;
-}
 
 /** What a commit emits: the drag / resize result shapes of `DragSession`, plus progress. */
 export type KeyboardEditEvent = Exclude<DragResult, null> | { kind: 'progress'; event: TaskProgressEvent };
@@ -47,13 +52,9 @@ export interface KeyboardEditTask {
 }
 
 /**
- * What the keyboard may change. Bindings pass the same rules as the pointer handles
- * (core `computeBarVisual`), using the bar kind rather than `visual.handles` (the width
- * threshold for handles is a pointer concern):
- *
- *   movable:          cfg.enableDrag && task.draggable !== false
- *   resizable:        movable && cfg.enableResize && visual.kind === 'task'
- *   progressEditable: visual.kind !== 'milestone'
+ * What the keyboard may change. Bindings build it from the row's `editRules` with
+ * `keyboardEditOptionsFor` (the same rules as the pointer handles, the progress grip and the
+ * cells), never from the task's fields themselves.
  */
 export interface KeyboardEditOptions {
   /** Progress change per ArrowUp / ArrowDown. Default 5. */
@@ -318,6 +319,7 @@ export class KeyboardEditSession {
       units: number,
     ): TaskResizeEvent => ({
       taskId: this.taskId,
+      edge: resizeEdge(handle),
       handle,
       oldStart,
       oldEnd,
@@ -356,4 +358,54 @@ export class KeyboardEditSession {
     this.progress = this.origProgress;
     this.lastMode = 'move';
   }
+}
+
+/**
+ * The keyboard-edit options of a row from its `editRules` (D9): move, resize and progress as the
+ * rules say, the progress step from `editing.progress` (`DEFAULT_PROGRESS_STEP` while it is off).
+ * `null` when none of them is allowed: Enter / F2 on that bar does not start move mode.
+ */
+export function keyboardEditOptionsFor(
+  rules: Pick<EditRules, 'move' | 'resize' | 'progress'>,
+  editing: Pick<ResolvedEditing, 'progress'>,
+): KeyboardEditOptions | null {
+  if (!rules.move && !rules.resize && !rules.progress) return null;
+  return {
+    movable: rules.move,
+    resizable: rules.resize,
+    progressEditable: rules.progress,
+    progressStep: editing.progress ? editing.progress.step : DEFAULT_PROGRESS_STEP,
+  };
+}
+
+/**
+ * What move mode announces when it starts: `announceEditStart(name)`, followed by
+ * `announceEditProgressHelp` when ↑ / ↓ change the progress (`progressEditable`).
+ */
+export function keyboardEditStartText(
+  name: string,
+  progressEditable: boolean,
+  labels: Pick<GanttLabels, 'announceEditStart' | 'announceEditProgressHelp'>,
+): string {
+  const start = labels.announceEditStart(name);
+  return progressEditable ? `${start} ${labels.announceEditProgressHelp}` : start;
+}
+
+/**
+ * The change a move-mode session makes to `task` (call it after `commit()`, or instead of it):
+ * the new `start` / `end` when they moved and the new `progress` when it changed, as one
+ * `GanttChange` with source `'keyboard'` and coalesce key `kbd:<task id>`; its ops are the events
+ * `commit()` returns (a move, a resize with `edge`, both, a progress change). `null` when nothing
+ * changed, after `cancel()`, or for another task.
+ */
+export function keyboardEditChange(session: KeyboardEditSession, task: GanttTask): GanttChange | null {
+  if (session.taskId !== task.id) return null;
+  const state = session.state;
+  if (!state.changed) return null;
+  const after: Partial<GanttTask> = {};
+  if (state.startUnits !== 0) after.start = state.start;
+  if (state.endUnits !== 0) after.end = state.end;
+  if (state.progress !== (task.progress ?? 0)) after.progress = state.progress;
+  const change = taskChange(task, after, 'keyboard', { coalesceKey: `kbd:${task.id}` });
+  return isEmptyChange(change) ? null : change;
 }

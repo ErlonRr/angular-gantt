@@ -25,6 +25,14 @@
  * Focus (`--gantt-focus-ring`): rows, cells, header cells, collapse toggles and the footer show an
  * inset ring (cells and the panel clip anything outside them), the load-more button an outer one;
  * keyboard focus only (`:focus-visible`).
+ *
+ * Cell editor (Phase 11, the same rules as Angular's task list): the editing row is raised above
+ * its neighbours (z-index 3) and its editing cell lets its error overflow below it. The editor
+ * (an input, a select, or a custom node with the class added) fills the cell height minus a 3 px
+ * margin, in the chart font, with the background colour; its focus ring is the focus-ring colour
+ * and an invalid value (aria-invalid) is outlined in the overdue status colour. The message sits
+ * under the cell (inset-block-start 100%), in the overdue colour on the background. No new theme
+ * key; the forced-colors sheet restyles all three.
  */
 
 export const TASKLIST_CSS = `
@@ -81,6 +89,28 @@ export const TASKLIST_CSS = `
     .gantt-tl-row--hover { background-image: linear-gradient(var(--gantt-row-hover-bg), var(--gantt-row-hover-bg)); }
     .gantt-tl-row--selected { box-shadow: inset 3px 0 0 var(--gantt-sel-border); }
     .gantt-tl-row--pinned { position: absolute; left: 0; right: 0; z-index: 1; }
+    /* Cell editor: the raised row, the editing cell, the field and its error */
+    .gantt-tl-row--editing { z-index: 3; overflow: visible; }
+    .gantt-tl-row--editing:not(.gantt-tl-row--pinned) { position: relative; }
+    .gantt-tl-cell--editing { position: relative; overflow: visible; padding: 0 4px; cursor: auto; }
+    .gantt-tl-editor {
+      box-sizing: border-box; flex: 1 1 auto; align-self: stretch; width: 100%; min-width: 0; margin: 3px 0;
+      padding: 0 6px; border: 1px solid var(--gantt-border); border-radius: 4px;
+      background-color: var(--gantt-bg); color: var(--gantt-text);
+      font-family: var(--gantt-font); font-size: var(--gantt-font-size); cursor: text;
+    }
+    .gantt-tl-editor:focus-visible { outline: 2px solid var(--gantt-focus-ring); outline-offset: -1px; }
+    .gantt-tl-editor[aria-invalid="true"] {
+      border-color: var(--gantt-status-overdue);
+      outline-width: 2px; outline-style: solid; outline-color: var(--gantt-status-overdue); outline-offset: -1px;
+    }
+    .gantt-tl-editor-error {
+      position: absolute; inset-block-start: 100%; inset-inline-start: 0; z-index: 1;
+      box-sizing: border-box; min-width: 100%; max-width: 320px; width: max-content; padding: 4px 8px;
+      border: 1px solid var(--gantt-status-overdue); border-radius: 0 0 4px 4px;
+      background-color: var(--gantt-bg); color: var(--gantt-status-overdue);
+      font-family: var(--gantt-font); font-size: 12px; line-height: 1.4; white-space: normal; cursor: default;
+    }
     .gantt-tl-row:focus-visible, .gantt-tl-cell:focus-visible, .gantt-tl-col-header:focus-visible,
     .gantt-tl-load-more:focus-visible, .gantt-collapse-btn:focus-visible {
       outline: 2px solid var(--gantt-focus-ring); outline-offset: -2px;

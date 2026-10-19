@@ -5,7 +5,7 @@
 //
 //  Data flow (signals only, no effect, no imperative push):
 //
-//   dataSource.items() ?? series ──► tasks (linkedSignal: local edits until the source changes)
+//   dataSource.items() ?? series ──► tasks (linkedSignal; edits are written to the source, not here)
 //                                └─► collapsedIds (linkedSignal: `task.collapsed` / `groupBar.collapsed`
 //                                    seed never-seen ids)
 //   [(viewMode)] + options.viewMode ──► level (linkedSignal: whichever changed last, or the user's zoom)
@@ -42,6 +42,20 @@
 //  painted), `hoveredBarId` and `focusVisibleBarId` (the bar overlay),
 //  `hoveredRowId` (the row hover), `mainWidth` (the measured main area:
 //  the toolbar layout) and `shared` (a sync group's range and extent).
+//
+//  Editing (Gantry 2 phase 11, plan §3f; the Web Component's inputs of
+//  the same names): `cellEdit` (the cell being edited), `link` (a link
+//  being drawn), `selectedLinkKey` (the arrow selected for Delete; it
+//  follows `arrowIndex`, the links drawn: a link that is gone — the app
+//  changed the tasks, a collapsed row hides an end — is deselected),
+//  `progressPreview` (a progress drag's preview: the bar visual draws it)
+//  and `historyState` (the undo / redo state, bound to the chart's
+//  editor). `editRules` is core `editRules` per row (D9): what the user
+//  may move, resize, edit or link there, with `enableDrag` /
+//  `enableResize` (`bindChart`). The tasks themselves are never written
+//  here: every change goes through the chart's editor
+//  (`editing/gantt-editor.service.ts`), which applies it to the raw input
+//  (`[(series)]` or the data source), and `tasks` follows.
 //  Nothing in this service touches the DOM.
 // ─────────────────────────────────────────────────────────────
 
@@ -106,7 +120,18 @@ import {
   rollupSegments,
   createStyleResolver,
   taskOwnStyle,
+  editRules,
+  selectedArrowVisual,
+  buildArrowIndex,
+  type ArrowIndex,
+  type ArrowVisual,
   type BarSegment,
+  type CellEditState,
+  type EditRules,
+  type GanttHistoryState,
+  type LinkMode,
+  type LinkPreview,
+  type LinkSide,
   type CPMResult,
   type GanttRollupInfo,
   type NaturalTimelineRange,
@@ -165,7 +190,41 @@ export interface ChartSources {
   readonly showLegend: () => boolean;
   /** The toolbar is on screen (`showToolbar` and `options.toolbar !== false`) */
   readonly toolbarShown: () => boolean;
+  /** `options.enableDrag ?? enableDrag` (the edit rules) */
+  readonly enableDrag: () => boolean;
+  /** `options.enableResize ?? enableResize` (the edit rules) */
+  readonly enableResize: () => boolean;
 }
+
+/** A link being drawn (`editing/link.ts`): its source bar and side, how it started, its preview */
+export interface GanttLinkState {
+  readonly sourceId: string;
+  readonly side: LinkSide;
+  readonly mode: LinkMode;
+  /** Core `LinkSession.hover`'s preview, `null` before the pointer or the keys reach a target */
+  readonly preview: LinkPreview | null;
+  /**
+   * The last pointer position (canvas px; `null` / unset from the keys): where a preview without a
+   * target ends when the bars move under it (the canvas draws it from the bars as they are now)
+   */
+  readonly pointer?: { readonly x: number; readonly y: number } | null | undefined;
+}
+
+/** A progress drag's preview (`editing/progress.ts`): the progress its bar draws instead of the task's */
+export interface GanttProgressPreview {
+  readonly taskId: string;
+  readonly progress: number;
+}
+
+/** The undo / redo state while the chart keeps no history (editing off, `history: false`, controlled) */
+export const EMPTY_HISTORY_STATE: GanttHistoryState = {
+  canUndo: false,
+  canRedo: false,
+  undoLabel: null,
+  redoLabel: null,
+  undoCount: 0,
+  redoCount: 0,
+};
 
 /** A horizontal scroll the chart applies once the timeline it targets has painted */
 export type GanttScrollRequest = 'fit';
@@ -281,9 +340,17 @@ export class GanttLayoutService {
 
   private readonly chartSources = signal<ChartSources | null>(null);
 
-  /** Annotations, font size, loading / error / load state, legend switch and toolbar presence */
+  /** Annotations, font size, loading / error / load state, legend switch, toolbar presence, drag flags */
   bindChart(sources: ChartSources): void {
     this.chartSources.set(sources);
+  }
+
+  /** The chart editor's undo / redo state (`GanttEditorService.state`) */
+  private readonly historySource = signal<(() => GanttHistoryState) | null>(null);
+
+  /** The undo / redo state `historyState` reads (GantryComponent binds its editor's, once). */
+  bindHistory(state: () => GanttHistoryState): void {
+    this.historySource.set(state);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -293,7 +360,10 @@ export class GanttLayoutService {
   /** The consumer's tasks, repaired (`normalizeTasks`) */
   private readonly sourceTasks = computed(() => normalizeTasks(this.tasksSource()?.() ?? []));
 
-  /** Tasks shown: the consumer's, with local edits (drag, `updateTask`, `appendTasks`) until a new source */
+  /**
+   * Tasks shown: the consumer's, repaired. The chart writes its edits (and `updateTask()` /
+   * `appendTasks()`) to the raw input (`[(series)]` or the data source), never here.
+   */
   readonly tasks = linkedSignal<GanttTask[]>(() => this.sourceTasks());
 
   /**
@@ -421,6 +491,37 @@ export class GanttLayoutService {
 
   /** A scroll to apply once the timeline it targets has painted (`fitToScreen`), cleared by the chart */
   readonly scrollRequest = signal<GanttScrollRequest | null>(null);
+
+  // ── Editing (plan §3f): written by the editing services, painted by the canvas, task list, toolbar
+
+  /** The cell being edited (core `reduceCellEdit`), `null` = none (`editing/cell-edit.ts`) */
+  readonly cellEdit = signal<CellEditState>(null);
+
+  /** The link being drawn, `null` = none (`editing/link.ts`; the host's `.gantry-linking` class) */
+  readonly link = signal<GanttLinkState | null>(null);
+
+  /**
+   * Key of the selected dependency arrow (`ArrowLink.key`: Delete removes it), `null` = none. The
+   * links drawn changing (`arrowIndex`) deselect it when it is no longer among them: the app changed
+   * the tasks, its row was collapsed (as the Web Component's), so a link made again later is not
+   * selected.
+   */
+  readonly selectedLinkKey = linkedSignal<ArrowIndex | null, string | null>({
+    source: () => (this.boundConfig() ? this.arrowIndex() : null),
+    computation: (index, prev) => {
+      const key = prev?.value ?? null;
+      return key !== null && index?.links.some(l => l.key === key) ? key : null;
+    },
+  });
+
+  /** A progress drag's preview, `null` = none (`editing/progress.ts`): the bar visual draws that progress */
+  readonly progressPreview = signal<GanttProgressPreview | null>(null);
+
+  /**
+   * The undo / redo state (`history-change`'s detail): the toolbar's Undo / Redo and the chart's
+   * `canUndo` / `canRedo`. `EMPTY_HISTORY_STATE` while the chart keeps no history.
+   */
+  readonly historyState = computed<GanttHistoryState>(() => this.historySource()?.() ?? EMPTY_HISTORY_STATE);
 
   /** Resolved options (set directly, or derived from `bindConfig`) */
   readonly config = signal<ResolvedGanttConfig | null>(null);
@@ -642,6 +743,47 @@ export class GanttLayoutService {
     };
   });
 
+  /**
+   * What the user may change on a row (core `editRules`, D9): move and resize (`enableDrag` /
+   * `enableResize`, `draggable`, the bar kind, `rollup.dates`), the progress, links and cells
+   * (`editing`), never on an `editable: false` task. Memoised per row object; a new memo starts with
+   * the config or the drag flags. The bar visuals, move mode and the edit gestures read it.
+   */
+  readonly editRules = computed<(row: GanttFlatRow) => EditRules>(() => {
+    const config = this.cfg();
+    const src = this.chartSources();
+    const enableDrag = src?.enableDrag() ?? true;
+    const enableResize = src?.enableResize() ?? true;
+    const memo = new WeakMap<GanttFlatRow, EditRules>();
+    return row => {
+      let rules = memo.get(row);
+      if (!rules) {
+        rules = editRules(row, { config, enableDrag, enableResize });
+        memo.set(row, rules);
+      }
+      return rules;
+    };
+  });
+
+  /**
+   * An arrow as painted: the selected link's (`selectedLinkKey`) with the focus-ring paint and one
+   * more px of width (core `selectedArrowVisual`, memoised per visual), any other link's unchanged.
+   */
+  readonly arrowSelection = computed<(linkKey: string, visual: ArrowVisual) => ArrowVisual>(() => {
+    const selected = this.selectedLinkKey();
+    if (selected === null) return (_key, visual) => visual;
+    const memo = new WeakMap<ArrowVisual, ArrowVisual>();
+    return (key, visual) => {
+      if (key !== selected) return visual;
+      let shown = memo.get(visual);
+      if (!shown) {
+        shown = selectedArrowVisual(visual);
+        memo.set(visual, shown);
+      }
+      return shown;
+    };
+  });
+
   /** x of the today line for the exact clock tick, `null` when hidden (`showToday: false`) or out of range */
   readonly todayX = computed<number | null>(() =>
     this.cfg().showToday ? todayX(this.timeline(), new Date(this.now())) : null,
@@ -654,6 +796,13 @@ export class GanttLayoutService {
   readonly geometryById = computed<Map<string, RowGeometry>>(
     () => new Map(this.rowGeometries().map(g => [g.row.task.id, g])),
   );
+
+  /**
+   * The dependency links between the rows, indexed by their vertical span (core `buildArrowIndex`):
+   * built once per (tasks, geometries); the canvas queries the window's links, the link service
+   * hit-tests them, `selectedLinkKey` follows them.
+   */
+  readonly arrowIndex = computed<ArrowIndex>(() => buildArrowIndex(this.tasks(), this.geometryById()));
 
   // ── Convenience accessors (stable public API) ─────────────
 
@@ -922,15 +1071,5 @@ export class GanttLayoutService {
     this.level.set(level);
     this.scrollRequest.set('fit');
     return level;
-  }
-
-  /** Update a single task in-place (no full re-render of unrelated rows) */
-  updateTask(taskId: string, patch: Partial<GanttTask>): void {
-    this.tasks.update(tasks => tasks.map(t => (t.id === taskId ? { ...t, ...patch } : t)));
-  }
-
-  /** Append tasks (lazy load) */
-  appendTasks(newTasks: GanttTask[]): void {
-    this.tasks.update(existing => normalizeTasks([...existing, ...newTasks]));
   }
 }

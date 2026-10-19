@@ -77,6 +77,8 @@ bootstrapApplication(AppComponent, {
 - Keyboard: one tab stop each for the toolbar, the task list (row-first treegrid) and the bars;
   keyboard move / resize mode (`Enter` / `F2`); `+` `-` `T` `F` shortcuts
   (`keyboard.characterShortcuts`)
+- Editing (`options.editing`): cell editors (`<ng-template ganttCellEditor>` for your own), a progress grip, links drawn
+  from a bar's connector, undo / redo, a cancelable `(beforeChange)` and `[(series)]`
 - Zoom with the toolbar, the keys, Ctrl/⌘ + wheel or a pinch (anchored at the pointer), and
   `fitToScreen()` / the Fit button
 - Chart states: `[loading]` skeleton, `[errorMessage]` with Retry (`(retry)`), `[ganttEmpty]`
@@ -112,6 +114,7 @@ The Angular API:
 - [Custom bars](https://github.com/ErlonRr/gantryjs#custom-bar-component) and
   [custom columns](https://github.com/ErlonRr/gantryjs#custom-columns-left-panel)
 - [Lazy loading](https://github.com/ErlonRr/gantryjs#lazy-load-with-ganttdatasource)
+- [Editing](https://github.com/ErlonRr/gantryjs#editing): events, controlled mode, cells, links and undo
 - [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs), the
   [public API](https://github.com/ErlonRr/gantryjs#public-api) and the
   [content slots](https://github.com/ErlonRr/gantryjs#ng-content-slots)

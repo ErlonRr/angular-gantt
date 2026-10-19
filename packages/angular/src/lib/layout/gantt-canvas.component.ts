@@ -11,7 +11,7 @@
 //  Windowed like the Web Component, from the chart's layout graph:
 //  rows, row separators and bars of the mounted rows (virtual window +
 //  pinned rows), bands and vertical grid lines inside the horizontal
-//  window, the arrows whose span meets the window (`buildArrowIndex`),
+//  window, the arrows whose span meets the window (`layout.arrowIndex`),
 //  annotations and the today line over the window's height.
 //
 //  Row backgrounds are core `rowPaint` with the row's resolved style
@@ -41,26 +41,57 @@
 //  mounted row, the dragged bar dimmed by its outlet). The task tooltip is
 //  one popover per chart (`div[ganttTooltip]`, created on the first hover).
 //
+//  Dependency arrows are painted as the layout selects them
+//  (`layout.arrowSelection`: the selected link with the focus-ring paint,
+//  `gantt-arrow--selected`). While a link is drawn with a preview
+//  (`layout.link().preview`, Gantry 2 phase 11, D12), the svg's last child
+//  is `path.gantt-link-preview[pointer-events=none]` (its `d` from the
+//  bars as they are now, core `linkPreviewPathOf`: a zoom during a session
+//  moves it with them; `gantt-link-preview--invalid` on an invalid target).
+//
 //  Pointer interaction on the <svg>, the Web Component's
 //  `interaction/canvas-pointer.ts` (listeners bound after the first render,
 //  passive where they can be, released with the chart):
 //
 //  - Hit-testing by geometry: the row under the pointer's `y`, then core
-//    `hitTestBar` on that row's visual (handles first, then the hit box),
-//    so custom bars hit the same way and the hover, the cursor and a press
-//    agree. The canvas box is measured once and kept until something can
-//    move it (a scroll of the viewport or the page, a resize, the pointer
-//    entering, a press, a change of the measured sizes or the view): no
-//    layout read per `pointermove`.
+//    `hitTestBar` on that row's visual (D11 order: the resize handles, the
+//    progress grip, the link connectors, then the hit box), so custom bars
+//    hit the same way and the hover, the cursor and a press agree. The
+//    progress grip and the connectors (`editing`) are hit only on a bar
+//    whose overlay shows them (`GanttBarFocusService.hitTargets`), so a
+//    press inside a narrow bar that shows nothing still moves it. The
+//    canvas box is measured once and kept until something can move it (a
+//    scroll of the viewport or the page, a resize, the pointer entering, a
+//    press, a change of the measured sizes or the view): no layout read
+//    per `pointermove`. During a press, canvas coordinates are the press
+//    point plus the pointer's and the scroll's moves.
 //  - Press (D13, `trackPress` in `drag/gantt-drag.service.ts`): a mouse
 //    drags once it has moved 3 px, a touch or pen once held still for
-//    350 ms; moving a touch earlier lets the browser pan. A drag dismisses
-//    the tooltip, follows the pointer in content coordinates (client x plus
-//    the scroll since the press) and auto-scrolls near the viewport's edges
-//    (`GanttScrollService.autoScroll`). A tap (touch / pen, no drag)
-//    toggles the bar's tooltip; a click selects through the `click` event.
-//    `pointercancel`, Escape (the press's own, in the window's capture
-//    phase) and the chart's destruction cancel.
+//    350 ms; moving a touch earlier lets the browser pan. What drags is the
+//    part hit: the body or a resize handle (`GanttDragService`, when
+//    `editRules(row).move`), the progress grip (`GanttProgressService`:
+//    core `ProgressSession`, the live fill and the readout chip follow
+//    `layout.progressPreview`) or a link connector
+//    (`link.start(id, side, 'drag', at)`, then `link.move()` with the
+//    pointer and `link.move()` + `link.finish()` on release). A drag
+//    dismisses the tooltip, follows the pointer in content coordinates
+//    (client x plus the scroll since the press) and auto-scrolls near the
+//    viewport's edges (`GanttScrollService.autoScroll`). A tap (touch /
+//    pen, no drag) toggles the bar's tooltip; a click selects through the
+//    `click` event. `pointercancel`, Escape (the press's own, in the
+//    window's capture phase) and the chart's destruction cancel.
+//  - Click-mode links (WCAG 2.5.7): a click or tap on a connector arms a
+//    link (`link.start(…, 'click', …)`). While it is armed the pointer
+//    moves its preview (`link.move`) and the next press belongs to it: on
+//    a bar it finishes the link there, elsewhere it cancels it
+//    (announced); a mouse acts on the press, a touch or pen on its release
+//    (a touch that pans keeps it armed). The click that ends a progress or
+//    link gesture selects nothing.
+//  - Click: with `editing.dependencies.delete` a click first goes to the
+//    arrows (`link.selectAt`: the arrow under it, bars win; the press has
+//    deselected the last one unless it was on that very link, so
+//    re-clicking it never flickers); a click that selects a link selects
+//    no row. Otherwise it selects the row.
 //  - Focus: a mouse press on a bar (one that can be dragged or not)
 //    prevents the native focus and text selection and focuses that bar
 //    itself, without scrolling (Escape then cancels its drag, the arrow
@@ -68,16 +99,19 @@
 //    drags. The modality stays the pointer's (`GanttBarFocusService`): no
 //    focus ring, no focus tooltip until a key is pressed.
 //  - Hover (mouse and pen): the bar under the pointer is the layout's
-//    `hoveredBarId` (its grips show), its tooltip opens (`tooltip.hover`
-//    from the painted bar under the pointer); off the bars,
-//    `tooltip.unhover()`. The row under the pointer (core `rowIndexAtY`)
-//    is `layout.hoveredRowId` (the row tint of both panes). The cursor is
-//    the host's `data-cursor` attribute styled by the stylesheet:
-//    `ew-resize` on the handles, `grab` on the body of a bar that can be
-//    dragged, `grabbing` / `ew-resize` while dragging. Leaving the canvas,
-//    a drag starting and a scroll of either pane (the content moves under
-//    the pointer) clear the hovered bar, its grips, the hovered row and
-//    the cursor, until the pointer moves again; so does the chart's
+//    `hoveredBarId` (its overlay shapes show), its tooltip opens
+//    (`tooltip.hover` from the painted bar under the pointer); off the
+//    bars, `tooltip.unhover()`. The row under the pointer (core
+//    `rowIndexAtY`) is `layout.hoveredRowId` (the row tint of both panes).
+//    The cursor is the host's `data-cursor` attribute styled by the
+//    stylesheet: `ew-resize` on the handles and the progress grip, `grab`
+//    on the body of a bar that can be dragged, `crosshair` on the
+//    connectors and while a link is being made, `pointer` on a deletable
+//    arrow (core `arrowAt`, `ARROW_HIT_TOLERANCE`); `grabbing` /
+//    `ew-resize` / `crosshair` while dragging. Leaving the canvas, a drag
+//    starting and a scroll of either pane (the content moves under the
+//    pointer) clear the hovered bar, its shapes, the hovered row and the
+//    cursor, until the pointer moves again; so does the chart's
 //    destruction.
 // ─────────────────────────────────────────────────────────────
 
@@ -111,15 +145,16 @@ import {
   type TaskResizeEvent,
 } from '../types';
 import {
-  buildArrowIndex,
+  ARROW_HIT_TOLERANCE,
+  arrowAt,
   computeArrowVisual,
-  taskSpan,
+  linkPreviewPathOf,
+  editTiming,
   rowPaint,
   themeMetrics,
   sameThemeMetrics,
   PAINTS,
   HATCH_PATTERN,
-  bottomScale,
   gestureKind,
   hitTestBar,
   rowIndexAtY,
@@ -127,8 +162,9 @@ import {
   type ArrowVisual,
   type BarHit,
   type BarVisual,
-  type DragTiming,
+  type DragHandle,
   type GestureState,
+  type LinkSide,
 } from '@gantryjs/core';
 
 import { GanttBarRegistry } from '../bar-registry';
@@ -138,6 +174,8 @@ import { GanttBarFocusService } from '../bars/bar-focus.service';
 import { GanttArrowComponent } from '../arrows/gantt-arrow.component';
 import { GanttDragService, bindTouchGuard, trackPress, type Press } from '../drag/gantt-drag.service';
 import { GanttDragPreviewComponent } from '../drag/gantt-drag-preview.component';
+import { GanttLinkService } from '../editing/link';
+import { GanttProgressService } from '../editing/progress';
 import { GanttScrollService, type AutoScroll } from '../scroll/gantt-scroll.service';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
@@ -163,16 +201,45 @@ interface MountedArrow {
 interface BarPointerHit {
   readonly geo: RowGeometry;
   readonly part: BarHit;
-  /** Drag is on and the task may be dragged */
+  /**
+   * The press may become a drag: on the body and the resize handles when the row may move
+   * (`editRules(row).move`); on the progress grip and the connectors always (they exist only where
+   * their rule allows them)
+   */
   readonly draggable: boolean;
 }
 
 /** The host's `data-cursor` (styled by the stylesheet) */
-type Cursor = 'grab' | 'grabbing' | 'ew-resize' | null;
+type Cursor = 'grab' | 'grabbing' | 'ew-resize' | 'crosshair' | 'pointer' | null;
 
-/** The hover cursor of a hit: resize on the handles, grab on the body of a bar that can be dragged. */
-const hoverCursor = (hit: BarPointerHit | null): Cursor =>
-  !hit?.draggable ? null : hit.part === 'bar' ? 'grab' : 'ew-resize';
+/** What a press drags once it moves: the bar (move / resize), its progress, or a new link. */
+type Gesture = 'drag' | 'progress' | 'link';
+
+/** The `DragSession` handle of a hit part: the body moves the bar, the resize handles resize it. */
+const dragHandle = (part: BarHit): DragHandle | null =>
+  part === 'bar' || part === 'left' || part === 'right' ? part : null;
+
+/** The connector side of a hit part (`null`: not a connector). */
+const linkSide = (part: BarHit): LinkSide | null =>
+  part === 'link-start' ? 'start' : part === 'link-end' ? 'end' : null;
+
+/** The hover cursor of a hit (the Web Component's `hoverCursor`). */
+const hoverCursor = (hit: BarPointerHit): Cursor => {
+  switch (hit.part) {
+    case 'progress':
+      return 'ew-resize';
+    case 'link-start':
+    case 'link-end':
+      return 'crosshair';
+    case 'bar':
+      return hit.draggable ? 'grab' : null;
+    default:
+      return hit.draggable ? 'ew-resize' : null;
+  }
+};
+
+/** The cursor while a press drags `part`. */
+const dragCursor = (part: BarHit): Cursor => (part === 'bar' ? 'grabbing' : linkSide(part) ? 'crosshair' : 'ew-resize');
 
 const noop = (): void => undefined;
 
@@ -379,7 +446,7 @@ const noop = (): void => undefined;
           }
         </g>
 
-        <!-- Focus ring and grips of the focused / hovered bar (attached while shown) -->
+        <!-- Focus ring, grips, progress grip and link connectors (core computeBarOverlay; attached while shown) -->
         @if (barFocus.shown()) {
           <g ganttBarOverlay></g>
         }
@@ -397,6 +464,16 @@ const noop = (): void => undefined;
           [fontPx]="fontPx()"
           [rowStyle]="dragRowStyle()"
         ></g>
+
+        <!-- The link being drawn: the svg's last child while the session shows a preview -->
+        @if (layout.link()?.preview; as preview) {
+          <svg:path
+            class="gantt-link-preview"
+            [class.gantt-link-preview--invalid]="preview.targetId !== null && !preview.valid"
+            pointer-events="none"
+            [attr.d]="linkPreviewD() ?? preview.d"
+          />
+        }
       </svg>
       <!-- Task tooltip: one popover per chart, from the first hover on -->
       @if (tooltip.requested()) {
@@ -449,10 +526,33 @@ const noop = (): void => undefined;
       :host([data-cursor='ew-resize']) .gantt-bar-draggable {
         cursor: ew-resize;
       }
+      /* Editing (Gantry 2 phase 11): crosshair on the link connectors and while a link is being made,
+         pointer on a dependency arrow a click can select */
+      :host([data-cursor='crosshair']),
+      :host([data-cursor='crosshair']) .gantt-bar-draggable {
+        cursor: crosshair;
+      }
+      :host([data-cursor='pointer']),
+      :host([data-cursor='pointer']) .gantt-bar-draggable {
+        cursor: pointer;
+      }
+      /* The link being drawn: a dashed focus-ring line whose closed head is filled in the same colour;
+         an invalid target, the overdue status colour (D22: no new theme variable) */
+      .gantt-link-preview {
+        fill: var(--gantt-focus-ring);
+        stroke: var(--gantt-focus-ring);
+        stroke-width: 2px;
+        stroke-dasharray: 4 3;
+      }
+      .gantt-link-preview--invalid {
+        fill: var(--gantt-status-overdue);
+        stroke: var(--gantt-status-overdue);
+      }
 
       /* Forced colours (D25): SVG paints are not forced (preserve-parent-color) and are inline, so
          every one is set here with !important: rows Canvas (the hover tint hidden), non-working time
-         GrayText at 0.15 (intensive hours Highlight), grid lines GrayText, today Highlight */
+         GrayText at 0.15 (intensive hours Highlight), grid lines GrayText, today Highlight; the link
+         preview Highlight, invalid a 2 px dashed CanvasText */
       @media (forced-colors: active) {
         .gantt-rows > rect {
           fill: Canvas !important;
@@ -474,14 +574,33 @@ const noop = (): void => undefined;
         .gantt-today {
           stroke: Highlight !important;
         }
+        .gantt-link-preview {
+          fill: Highlight !important;
+          stroke: Highlight !important;
+        }
+        .gantt-link-preview--invalid {
+          fill: CanvasText !important;
+          stroke: CanvasText !important;
+          stroke-width: 2px;
+          stroke-dasharray: 4 2;
+        }
       }
     `,
   ],
 })
 export class GanttCanvasComponent {
-  /** Bar visuals of the chart (memoised per geometry; restarts with the config, timeline, critical path and metrics) */
+  /**
+   * Bar visuals of the chart as painted (memoised per geometry; restarts with the config, timeline,
+   * critical path and metrics; a progress drag's bar at its previewed progress)
+   */
   readonly barVisual = input.required<BarVisualOf>();
+  /**
+   * The bar visuals without a progress preview (what the arrows and a progress drag's start read: a
+   * progress moves no bar end). Unbound: `barVisual`.
+   */
+  readonly baseBarVisual = input<BarVisualOf | null>(null);
   readonly criticalIds = input<ReadonlySet<string>>(new Set());
+  /** `enableDrag` of the chart (the bars' draggable state is `layout.editRules`, which reads the same flag) */
   readonly enableDrag = input<boolean>(true);
   readonly enableSelection = input<boolean>(true);
   readonly multiSelect = input<boolean>(true);
@@ -495,7 +614,8 @@ export class GanttCanvasComponent {
 
   readonly taskDragged = output<TaskDragEvent>();
   readonly taskResized = output<TaskResizeEvent>();
-  readonly rowClick = output<RowGeometry>();
+  /** A row was clicked (its bar or the row around it): the row, as the task list's `rowClick` */
+  readonly rowClick = output<GanttFlatRow>();
   readonly rowDblClick = output<GanttFlatRow>();
 
   /** Unique per instance: SVG ids live in the light DOM */
@@ -509,6 +629,10 @@ export class GanttCanvasComponent {
   protected readonly layout = inject(GanttLayoutService);
   /** Bar tab stops, focus and the overlay (one per chart, provided by GantryComponent) */
   protected readonly barFocus = inject(GanttBarFocusService);
+  /** Links drawn from the connectors, arrows selected by a click (provided by GantryComponent) */
+  private readonly link = inject(GanttLinkService);
+  /** The progress-grip drag (provided by GantryComponent) */
+  private readonly progress = inject(GanttProgressService);
   private readonly themeSvc = inject(GanttThemeService);
   /** The timeline viewport's scrolling (auto-scroll while dragging) */
   private readonly scrollSvc = inject(GanttScrollService);
@@ -546,15 +670,18 @@ export class GanttCanvasComponent {
   // ── Render model ──────────────────────────────────────────
 
   /** Dependency links indexed by their vertical span: built once per (tasks, geometries), queried per window */
-  private readonly arrowIndex = computed(() => buildArrowIndex(this.layout.tasks(), this.layout.geometryById()));
+  private readonly arrowIndex = this.layout.arrowIndex;
+
+  /** The bar visuals without a progress preview (a progress being dragged moves no bar end) */
+  private readonly baseVisual = computed<BarVisualOf>(() => this.baseBarVisual() ?? this.barVisual());
 
   /**
    * Arrow visual of a link, memoised per link; the memo restarts with the bar visuals (config,
-   * timeline, critical path, metrics), the rows and the critical path, so a scroll computes only
-   * the links that entered the window.
+   * timeline, critical path, metrics; not a progress preview), the rows and the critical path, so a
+   * scroll computes only the links that entered the window.
    */
   private readonly arrowVisual = computed(() => {
-    const visualOf = this.barVisual();
+    const visualOf = this.baseVisual();
     const geoById = this.layout.geometryById();
     const cfg = this.config();
     const crit = this.criticalIds();
@@ -583,16 +710,43 @@ export class GanttCanvasComponent {
     };
   });
 
-  /** The links whose span meets the window (`windowSpan`), in drawing order, keyed by `link.key` */
+  /**
+   * The links whose span meets the window (`windowSpan`), in drawing order, keyed by `link.key`, as
+   * painted: the selected one (`layout.arrowSelection`) with the focus-ring paint
+   */
   protected readonly arrows = computed<MountedArrow[]>(() => {
     const { top, bottom } = this.layout.windowSpan();
     const arrowOf = this.arrowVisual();
+    const shown = this.layout.arrowSelection();
     const out: MountedArrow[] = [];
     for (const link of this.arrowIndex().query(top, bottom)) {
       const visual = arrowOf(link);
-      if (visual) out.push({ key: link.key, visual });
+      if (visual) out.push({ key: link.key, visual: shown(link.key, visual) });
     }
     return out;
+  });
+
+  /**
+   * The `d` of `path.gantt-link-preview` with the bars as they are now: from the source's connector
+   * to the target's, else to the last pointer (core `linkPreviewPathOf`), so a zoom during a session
+   * moves the preview with the bars; `null` while none shows (the session's own `preview.d` when an
+   * end has no row). The Web Component's `graph.linkPreviewPath`.
+   */
+  protected readonly linkPreviewD = computed<string | null>(() => {
+    const link = this.layout.link();
+    const preview = link?.preview;
+    if (!link || !preview) return null;
+    const geoById = this.layout.geometryById();
+    const source = geoById.get(link.sourceId);
+    const target = preview.targetId === null ? undefined : geoById.get(preview.targetId);
+    const visualOf = this.barVisual();
+    if (source && target && preview.targetSide) {
+      return linkPreviewPathOf(visualOf(source), link.side, { visual: visualOf(target), side: preview.targetSide });
+    }
+    if (source && preview.targetId === null && link.pointer) {
+      return linkPreviewPathOf(visualOf(source), link.side, link.pointer);
+    }
+    return preview.d;
   });
 
   /** Row geometry of the task being dragged or resized (the drag ghost's row) */
@@ -639,7 +793,8 @@ export class GanttCanvasComponent {
       const theme = this.theme();
       const crit = this.criticalIds();
       const selected = this.selSvc.selectedIds();
-      const dragEnabled = this.enableDrag();
+      // Which bars can be dragged (`gantt-bar-draggable`, `ctx.draggable`): the rows' edit rules (D9)
+      const rulesOf = this.layout.editRules();
       const styleOf = this.layout.rowStyle();
       const out = new Map<string, GanttBarContext>();
       for (const geo of geos) {
@@ -657,7 +812,7 @@ export class GanttCanvasComponent {
           layoutParams,
           isCritical: crit.has(id),
           isSelected: selected.has(id),
-          draggable: dragEnabled && geo.row.task.draggable !== false,
+          draggable: rulesOf(geo.row).move,
           enableResize: !!visual.handles,
           showBaseline: cfg.baseline,
           visual,
@@ -677,6 +832,8 @@ export class GanttCanvasComponent {
     this.tooltip.bindTemplate(this.tooltipTemplate);
     // A press on a bar's hit area (handles included) is this canvas', not a press elsewhere
     this.tooltip.bindBarVisual(this.barVisual);
+    // A progress drag starts from the visual without a preview
+    this.progress.bindVisual(() => this.baseVisual());
     // Browser only (never on the server): the pointer listeners, released with the chart
     afterNextRender(() => this.connectPointer());
   }
@@ -699,7 +856,7 @@ export class GanttCanvasComponent {
     this.barFocus.focusOut();
   }
 
-  // ── Pointer: press (drag, resize, tap), hover, click ──────
+  // ── Pointer: press (drag, resize, progress, link, tap), hover, click ──────
 
   /** The timeline viewport (`.gantry-canvas-viewport`, the scroll container), from the first render */
   private viewport: HTMLElement | null = null;
@@ -709,13 +866,37 @@ export class GanttCanvasComponent {
   private boxKey = '';
   /** The press in progress: its gesture, and its auto-scroll once it drags */
   private current: { press: Press; auto: AutoScroll | null } | null = null;
-  /** `scrollLeft` of the viewport when the press started: content x = client x + the scroll since */
+  /** What the press drags (set once it drags) */
+  private gesture: Gesture | null = null;
+  /** The viewport's scroll offsets when the press started: content x = client x + the scroll since */
   private scroll0 = 0;
+  private scrollTop0 = 0;
+  /** Where the press started, in canvas and in client coordinates */
+  private pressCanvas = { x: 0, y: 0 };
+  private pressClient = { x: 0, y: 0 };
+  /** The trailing click of the last press belongs to a progress or link gesture: it selects nothing */
+  private swallowClick = false;
   /** Follows the pointer while dragging (set when the press starts dragging) */
   private dragMove: (g: GestureState) => void = noop;
 
   /** A pointer drag or resize is in progress */
   private readonly dragging = (): boolean => this.dragSvc.isPointerDrag();
+  /** A press drags something (a bar, a progress, a link) */
+  private readonly busy = (): boolean => this.dragging() || this.gesture !== null;
+
+  /** The press's gesture still runs (the keyboard may have ended it) */
+  private live(): boolean {
+    switch (this.gesture) {
+      case 'drag':
+        return this.dragging();
+      case 'progress':
+        return this.progress.active();
+      case 'link':
+        return this.link.active();
+      default:
+        return false;
+    }
+  }
 
   /** After the first render, in the browser: press, hover and touch listeners, released with the chart. */
   private connectPointer(): void {
@@ -751,19 +932,19 @@ export class GanttCanvasComponent {
     viewport.addEventListener(
       'touchstart',
       e => {
-        if (this.current && e.touches.length > 1 && !this.dragging()) this.current.press.cancel();
+        if (this.current && e.touches.length > 1 && !this.busy()) this.current.press.cancel();
       },
       { passive: true, signal },
     );
-    // While a touch drags a bar the browser must not pan
-    bindTouchGuard(svg, this.dragging, signal);
+    // While a touch drags a bar, its progress or a link the browser must not pan
+    bindTouchGuard(svg, this.busy, signal);
     // The page scrolling or resizing moves the canvas too (removed by hand: some DOMs don't tie a
     // window listener to an abort signal)
     win?.addEventListener('scroll', invalidate, { passive: true, capture: true });
     win?.addEventListener('resize', invalidate, { passive: true });
 
     this.destroyRef.onDestroy(() => {
-      // A press in progress ends with the chart: no long press, drag or auto-scroll left behind
+      // A press in progress ends with the chart: no long press, drag, progress, link or auto-scroll left behind
       this.current?.press.cancel();
       listeners.abort();
       win?.removeEventListener('scroll', invalidate, { capture: true });
@@ -777,26 +958,42 @@ export class GanttCanvasComponent {
   private onPointerDown(e: PointerEvent, svg: SVGSVGElement, keyTarget: EventTarget): void {
     // The previous press's trailing click has been dispatched by now (or never comes: a touch drag)
     this.dragSvc.lastDragMoved = false;
+    this.swallowClick = false;
+    // A press deselects the selected link, except a press on that link: its click selects it again,
+    // so it never flickers off for a frame (presses outside the canvas: the keyboard directive)
+    const selectedLink = this.layout.selectedLinkKey();
+    if (selectedLink !== null) {
+      this.box = null;
+      const p = this.point(e.clientX, e.clientY);
+      if (this.link.keyAt(p.x, p.y) !== selectedLink) this.link.deselect();
+    }
     const current = this.current;
     if (current) {
       // A second pointer (a pinch, another finger): an undecided press gives way; a drag goes on
-      if (current.press.pointerId !== e.pointerId && !this.dragging()) current.press.cancel();
+      if (current.press.pointerId !== e.pointerId && !this.busy()) current.press.cancel();
       return;
     }
     if (e.button !== 0) return;
     this.box = null;
-    const hit = this.hitAt(e.clientX, e.clientY);
+    const at = this.point(e.clientX, e.clientY);
+    // A link armed by a click takes the press (a keyboard link already ended: the keyboard directive)
+    if (this.layout.link()?.mode === 'click') {
+      this.pressArmed(e, at, svg, keyTarget);
+      return;
+    }
+    const hit = this.hitOf(this.geoAt(at.y), at.x, at.y);
     if (!hit) return;
+    const id = hit.geo.row.task.id;
     const mouse = gestureKind(e.pointerType) === 'mouse';
     if (mouse) {
       // No text selection or native focus: the pressed bar takes keyboard focus itself, without
       // scrolling (Escape cancels its drag); the modality stays the pointer's (no focus ring)
       e.preventDefault();
-      this.focusBar(hit.geo.row.task.id);
+      this.focusBar(id);
       // A bar that can't be dragged: the press is a plain click (touch and pen may still tap)
       if (!hit.draggable) return;
     }
-    this.scroll0 = this.viewport?.scrollLeft ?? 0;
+    this.beginPress(e, at);
     const target = e.target;
     const press = trackPress(e, {
       target: svg,
@@ -804,16 +1001,22 @@ export class GanttCanvasComponent {
       draggable: hit.draggable,
       onDragStart: g => this.dragStart(hit, g),
       onDragMove: g => {
-        // The keyboard shortcuts cancelled the drag (Escape): the press is over too
-        if (!this.dragging()) this.current?.press.cancel();
+        // The keyboard shortcuts ended the gesture (Escape): the press is over too
+        if (!this.live()) this.current?.press.cancel();
         else this.dragMove(g);
       },
       onEnd: (result, g) => {
-        this.endPress();
-        if (result === 'drop') this.drop(g.x);
-        else if (result === 'tap' && this.tooltipEnabled()) {
+        const was = this.endPress();
+        const side = linkSide(hit.part);
+        if (result === 'drop') this.dropGesture(was, g);
+        else if ((result === 'click' || result === 'tap') && side) {
+          // A click or tap on a connector arms a click-mode link (WCAG 2.5.7): the next press ends it
+          this.swallowClick = true;
+          this.tooltip.dismiss();
+          this.link.start(id, side, 'click', at);
+        } else if (result === 'tap' && this.tooltipEnabled()) {
           // The tapped bar (or the bar of a handle's reach, outside its own shapes)
-          const bar = barHostOf(target) ?? this.barById(hit.geo.row.task.id);
+          const bar = barHostOf(target) ?? this.barById(id);
           if (bar) this.tooltip.tap(hit.geo.row, bar);
         }
         // A mouse or pen hovers again where it was released (the bar may have moved under it)
@@ -821,53 +1024,148 @@ export class GanttCanvasComponent {
         else this.cursor.set(null);
       },
       onCancel: () => {
-        this.endPress();
-        this.dragSvc.cancel();
+        this.cancelGesture(this.endPress());
         this.cursor.set(null);
       },
     });
     this.current = { press, auto: null };
   }
 
-  /** A press became a drag: the tooltip and the grips step aside, the bar follows the pointer. */
+  /**
+   * A press while a click-mode link is armed belongs to it: a mouse settles it at once; a touch or
+   * pen on release (a tap), and a touch that pans keeps it armed.
+   */
+  private pressArmed(e: PointerEvent, at: { x: number; y: number }, svg: SVGSVGElement, keyTarget: EventTarget): void {
+    this.tooltip.dismiss();
+    if (gestureKind(e.pointerType) === 'mouse') {
+      e.preventDefault();
+      this.swallowClick = true;
+      this.settleLink(at);
+      return;
+    }
+    this.beginPress(e, at);
+    const press = trackPress(e, {
+      target: svg,
+      keyTarget,
+      draggable: false,
+      onDragStart: noop,
+      onDragMove: noop,
+      onEnd: (result, g) => {
+        this.endPress();
+        if (result === 'none') return;
+        this.swallowClick = true;
+        this.settleLink(this.canvasAt(g.x, g.y));
+        this.cursor.set(null);
+      },
+      onCancel: () => {
+        this.endPress();
+        this.link.cancel();
+        this.cursor.set(null);
+      },
+    });
+    this.current = { press, auto: null };
+  }
+
+  /** A click-mode link ends at canvas `p`: on a bar it links to that bar, elsewhere it is cancelled. */
+  private settleLink(p: { x: number; y: number }): void {
+    if (this.hitOf(this.geoAt(p.y), p.x, p.y)) {
+      this.link.move(p.x, p.y);
+      this.link.finish();
+    } else this.link.cancel();
+  }
+
+  /** A press became a drag: the tooltip and the hover step aside, the gesture follows the pointer. */
   private dragStart(hit: BarPointerHit, g: GestureState): void {
     const current = this.current;
     if (!current) return;
+    const id = hit.geo.row.task.id;
     this.tooltip.dismiss();
     this.layout.hoveredBarId.set(null);
     this.layout.hoveredRowId.set(null);
-    this.cursor.set(hit.part === 'bar' ? 'grabbing' : 'ew-resize');
+    this.cursor.set(dragCursor(hit.part));
     // A touch or pen drag focuses its bar too (a mouse press already did): Escape cancels it there
-    if (g.kind === 'touch') this.focusBar(hit.geo.row.task.id);
-    this.dragSvc.start(hit.geo, hit.part, g.startX, this.dragTiming());
-    let lastX = g.x;
+    if (g.kind === 'touch') this.focusBar(id);
+    const handle = dragHandle(hit.part);
+    const side = linkSide(hit.part);
+    let follow: (clientX: number, clientY: number) => void;
+    if (handle) {
+      this.gesture = 'drag';
+      this.dragSvc.start(hit.geo, handle, g.startX, editTiming(this.timeline(), this.config()));
+      follow = x => this.dragSvc.move(this.contentX(x));
+    } else if (side) {
+      this.gesture = 'link';
+      this.link.start(id, side, 'drag', this.pressCanvas);
+      follow = (x, y) => {
+        const p = this.canvasAt(x, y);
+        this.link.move(p.x, p.y);
+      };
+    } else {
+      this.gesture = 'progress';
+      this.progress.start(hit.geo, g.startX);
+      follow = x => this.progress.move(this.contentX(x));
+    }
+    let last = { x: g.x, y: g.y };
     const auto = this.scrollSvc.autoScroll({
       maxLeft: () => this.timeline().totalWidth - this.layout.viewportWidth(),
-      // The viewport scrolled under a still pointer: the bar moves by as much
-      onScroll: () => this.dragSvc.move(this.contentX(lastX)),
+      // The viewport scrolled under a still pointer: the gesture moves by as much
+      onScroll: () => follow(last.x, last.y),
     });
     current.auto = auto;
-    const follow = (next: GestureState): void => {
-      lastX = next.x;
-      this.dragSvc.move(this.contentX(next.x));
+    const move = (next: GestureState): void => {
+      last = { x: next.x, y: next.y };
+      follow(next.x, next.y);
       auto.update(next.x);
     };
-    follow(g);
-    this.dragMove = follow;
+    move(g);
+    this.dragMove = move;
   }
 
-  /** Released while dragging at client x `clientX`: the task moved or resized (when it changed). */
+  /** Released while dragging: the gesture ends at the release point. */
+  private dropGesture(was: Gesture | null, g: GestureState): void {
+    if (was === 'drag') this.drop(g.x);
+    else if (was === 'progress') {
+      this.swallowClick = true;
+      this.progress.drop(this.contentX(g.x));
+    } else if (was === 'link') {
+      this.swallowClick = true;
+      const p = this.canvasAt(g.x, g.y);
+      this.link.move(p.x, p.y);
+      this.link.finish();
+    }
+  }
+
+  /** The press was cancelled (Escape, `pointercancel`, a second finger, the chart destroyed): so is its gesture. */
+  private cancelGesture(was: Gesture | null): void {
+    this.dragSvc.cancel();
+    if (was === 'progress') this.progress.cancel();
+    else if (was === 'link') this.link.cancel(true);
+    // The release that follows (a mouse button still down) is not a click
+    if (was === 'progress' || was === 'link') this.swallowClick = true;
+  }
+
+  /** Released while dragging a bar at client x `clientX`: the task moved or resized (when it changed). */
   private drop(clientX: number): void {
     const result = this.dragSvc.drop(this.contentX(clientX));
     if (result?.kind === 'drag') this.taskDragged.emit(result.event);
     else if (result?.kind === 'resize') this.taskResized.emit(result.event);
   }
 
-  /** The press is over: its auto-scroll stops */
-  private endPress(): void {
+  /** Marks where a press starts (its coordinates for `contentX` / `canvasAt`). */
+  private beginPress(e: PointerEvent, at: { x: number; y: number }): void {
+    this.scroll0 = this.viewport?.scrollLeft ?? 0;
+    this.scrollTop0 = this.viewport?.scrollTop ?? 0;
+    this.pressCanvas = at;
+    this.pressClient = { x: e.clientX, y: e.clientY };
+  }
+
+  /** The press is over: its auto-scroll stops; returns what it was dragging. */
+  private endPress(): Gesture | null {
+    const was = this.gesture;
     this.current?.auto?.stop();
     this.current = null;
+    this.gesture = null;
     this.dragMove = noop;
+    return was;
   }
 
   /** Content x of a client x: plus how far the timeline scrolled since the press */
@@ -875,15 +1173,11 @@ export class GanttCanvasComponent {
     return clientX + (this.viewport?.scrollLeft ?? 0) - this.scroll0;
   }
 
-  /** The scale a drag starts on: the current timeline (core `DragSession` timing) */
-  private dragTiming(): DragTiming {
-    const tl = this.timeline();
-    const cfg = this.config();
+  /** Canvas coordinates of a client position during the press: the press point plus the pointer's and the scroll's moves */
+  private canvasAt(clientX: number, clientY: number): { x: number; y: number } {
     return {
-      pxPerDay: tl.pxPerDay,
-      toX: tl.toX,
-      span: (start, end) => taskSpan({ start, end }, cfg),
-      snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
+      x: this.pressCanvas.x + this.contentX(clientX) - this.pressClient.x,
+      y: this.pressCanvas.y + clientY - this.pressClient.y + (this.viewport?.scrollTop ?? 0) - this.scrollTop0,
     };
   }
 
@@ -891,6 +1185,14 @@ export class GanttCanvasComponent {
 
   private onPointerMove(e: PointerEvent): void {
     if (this.current || e.pointerType === 'touch' || this.dragging()) return;
+    // A link armed by a click follows the pointer (and finds its target), with no tooltip
+    if (this.layout.link()?.mode === 'click') {
+      const { x, y } = this.point(e.clientX, e.clientY);
+      this.link.move(x, y);
+      this.hoverAt(e.clientX, e.clientY);
+      this.tooltip.unhover();
+      return;
+    }
     this.hoverAt(e.clientX, e.clientY);
     if (!this.tooltipEnabled()) return;
     // The tooltip follows the painted bar under the pointer (its host in the bars layer)
@@ -910,19 +1212,27 @@ export class GanttCanvasComponent {
   }
 
   /**
-   * Cursor, grips and row tint for a fine pointer at a client position (geometry: the handles
-   * reach past the bar).
+   * Cursor, overlay shapes and row tint for a fine pointer at a client position (geometry: the
+   * handles and the edit targets reach past the bar).
    */
   private hoverAt(clientX: number, clientY: number): void {
     const { x, y } = this.point(clientX, clientY);
     const geo = this.geoAt(y);
     const hit = this.hitOf(geo, x, y);
-    this.cursor.set(hoverCursor(hit));
+    this.cursor.set(
+      this.layout.link()
+        ? 'crosshair'
+        : hit
+          ? hoverCursor(hit)
+          : this.linksDeletable() && this.onArrow(x, y)
+            ? 'pointer'
+            : null,
+    );
     this.layout.hoveredBarId.set(hit?.geo.row.task.id ?? null);
     this.layout.hoveredRowId.set(geo?.row.task.id ?? null);
   }
 
-  /** Nothing is hovered any more: cursor, grips and row tint go (the tooltip has its own rules). */
+  /** Nothing is hovered any more: cursor, overlay shapes and row tint go (the tooltip has its own rules). */
   private unhover(): void {
     this.cursor.set(null);
     this.layout.hoveredBarId.set(null);
@@ -937,17 +1247,21 @@ export class GanttCanvasComponent {
   // Click, double-click
 
   protected onClick(event: MouseEvent): void {
-    if (this.dragSvc.lastDragMoved) {
+    if (this.dragSvc.lastDragMoved || this.swallowClick) {
       this.dragSvc.lastDragMoved = false;
+      this.swallowClick = false;
       return;
     }
-    const geo = this.geoAt(this.point(event.clientX, event.clientY).y);
+    const { x, y } = this.point(event.clientX, event.clientY);
+    // A dependency arrow (D13): a click on it selects it, not the row (bars win)
+    if (this.linksDeletable() && this.link.selectAt(x, y)) return;
+    const geo = this.geoAt(y);
     if (!geo) return;
     this.selSvc.handleClick(geo.row.task.id, event, this.layout.visibleRows(), {
       enabled: this.enableSelection(),
       multi: this.multiSelect(),
     });
-    this.rowClick.emit(geo);
+    this.rowClick.emit(geo.row);
   }
 
   protected onDblClick(event: MouseEvent): void {
@@ -976,21 +1290,27 @@ export class GanttCanvasComponent {
     return i === null ? undefined : geos[i];
   }
 
-  /** The bar of `geo` at canvas `x` / `y` and the part hit (core `hitTestBar`), `null` off it. */
+  /**
+   * The bar of `geo` at canvas `x` / `y` and the part hit (core `hitTestBar`), `null` off it. The
+   * progress grip and the link connectors count only where the bar overlay shows them
+   * (`GanttBarFocusService.hitTargets`, D11).
+   */
   private hitOf(geo: RowGeometry | undefined, x: number, y: number): BarPointerHit | null {
     if (!geo) return null;
-    const part = hitTestBar(this.barVisual()(geo), x, y);
+    const part = hitTestBar(this.barFocus.hitTargets(geo.row.task.id, this.barVisual()(geo)), x, y);
     if (!part) return null;
-    return { geo, part, draggable: this.enableDrag() && geo.row.task.draggable !== false };
+    return { geo, part, draggable: !dragHandle(part) || this.layout.editRules()(geo.row).move };
   }
 
-  /**
-   * The bar under a client position and the part hit, `null` off the bars: the row from `y`, then
-   * core `hitTestBar` on its visual (handles first, then the hit box).
-   */
-  private hitAt(clientX: number, clientY: number): BarPointerHit | null {
-    const { x, y } = this.point(clientX, clientY);
-    return this.hitOf(this.geoAt(y), x, y);
+  /** `editing.dependencies.delete`: a click selects a link, a link under the pointer shows `pointer` */
+  private linksDeletable(): boolean {
+    return this.config().editing.dependencies.delete;
+  }
+
+  /** Whether a dependency arrow passes within `ARROW_HIT_TOLERANCE` of canvas `x` / `y` (core `arrowAt`) */
+  private onArrow(x: number, y: number): boolean {
+    const links = this.arrowIndex().query(y - ARROW_HIT_TOLERANCE, y + ARROW_HIT_TOLERANCE);
+    return arrowAt(links, this.arrowVisual(), x, y) !== null;
   }
 
   /** The painted bar of `id` (a tap in a handle's reach, outside the bar's own shapes; a press focuses it) */

@@ -14,6 +14,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import {
   GantryComponent,
   type GanttState,
+  type GanttTask,
   type SelectionChangeEvent,
   type TaskDragEvent,
   type TaskResizeEvent,
@@ -23,7 +24,9 @@ import {
   PLAYGROUND_DEFAULTS,
   PLAYGROUND_SECTIONS,
   changedKeys,
+  controlEnabled,
   decodeState,
+  editEventText,
   encodeState,
   playgroundCode,
   playgroundCommand,
@@ -31,6 +34,8 @@ import {
   valueText,
   withValue,
   type PlaygroundControl,
+  type PlaygroundEditEvent,
+  type PlaygroundEditEvents,
   type PlaygroundKey,
   type PlaygroundState,
 } from 'demo-kit/playground';
@@ -66,6 +71,11 @@ function storedFramework(): FrameworkId {
   } catch {
     return 'html';
   }
+}
+
+/** An event's output name: `before-change` → `beforeChange`. */
+function outputName(event: string): string {
+  return event.replace(/-(\w)/g, (_, c: string) => c.toUpperCase());
 }
 
 /** `+3 days`, `-1 day`, `+0.25 days` (Hour zoom moves by parts of a day). */
@@ -112,9 +122,10 @@ function days(n: number): string {
               </button>
             </div>
           </div>
+          <!-- [(series)]: the chart writes its edits back, so the names in the log follow them -->
           <gantry
             class="gs-chart pg-chart"
-            [series]="demo.tasks"
+            [(series)]="tasks"
             [annotations]="demo.annotations"
             [options]="options()"
             [viewMode]="state().viewMode"
@@ -125,6 +136,13 @@ function days(n: number): string {
             (taskResized)="onResized($event)"
             (selectionChange)="onSelection($event)"
             (stateChange)="onState($event)"
+            (beforeChange)="onEdit('before-change', $event)"
+            (taskProgressChanged)="onEdit('task-progress-changed', $event)"
+            (dependencyCreated)="onEdit('dependency-created', $event)"
+            (dependencyDeleted)="onEdit('dependency-deleted', $event)"
+            (taskUpdated)="onEdit('task-updated', $event)"
+            (tasksChange)="onEdit('tasks-change', $event)"
+            (historyChange)="onEdit('history-change', $event)"
           />
         </section>
 
@@ -204,6 +222,7 @@ function days(n: number): string {
                         [id]="'pg-' + c.key"
                         [attr.aria-describedby]="'pg-' + c.key + '-hint'"
                         [checked]="state()[c.key] === true"
+                        [disabled]="disabled().has(c.key)"
                         (change)="set(c.key, check.checked)"
                         #check
                       />
@@ -222,17 +241,41 @@ function days(n: number): string {
                       [max]="c.max"
                       [step]="c.step ?? 1"
                       [value]="state()[c.key]"
+                      [disabled]="disabled().has(c.key)"
                       [attr.aria-valuetext]="rangeText(c)"
                       [attr.aria-describedby]="'pg-' + c.key + '-hint'"
                       (input)="set(c.key, +range.value)"
                       #range
                     />
+                  } @else if (c.kind === 'segmented') {
+                    <!-- A labelled group of toggle buttons, the one pressed being the value -->
+                    <span class="gs-label" [id]="'pg-' + c.key + '-label'">{{ c.label }}</span>
+                    <div
+                      class="gs-seg"
+                      role="group"
+                      [id]="'pg-' + c.key"
+                      [attr.aria-labelledby]="'pg-' + c.key + '-label'"
+                      [attr.aria-describedby]="'pg-' + c.key + '-hint'"
+                    >
+                      @for (choice of c.choices; track choice[0]) {
+                        <button
+                          type="button"
+                          class="gs-seg-btn"
+                          [attr.aria-pressed]="state()[c.key] === choice[0]"
+                          [disabled]="disabled().has(c.key)"
+                          (click)="set(c.key, choice[0])"
+                        >
+                          {{ choice[1] }}
+                        </button>
+                      }
+                    </div>
                   } @else {
                     <label class="gs-label" [for]="'pg-' + c.key">{{ c.label }}</label>
                     <select
                       class="gs-select"
                       [id]="'pg-' + c.key"
                       [attr.aria-describedby]="'pg-' + c.key + '-hint'"
+                      [disabled]="disabled().has(c.key)"
                       (change)="choose(c, select.value)"
                       #select
                     >
@@ -286,12 +329,20 @@ export class PlaygroundPageComponent {
   protected readonly frameworks = FRAMEWORKS;
   /** The sample plan, moved so today sits inside it. */
   protected readonly demo = createDemoData();
+  /** The tasks the chart shows; it writes its edits back (`[(series)]`). */
+  protected readonly tasks = signal<GanttTask[]>(this.demo.tasks);
   private readonly today = new Date();
-  private readonly names = new Map(this.demo.tasks.map(t => [t.id, t.name]));
+  private readonly names = computed(() => new Map(this.tasks().map(t => [t.id, t.name])));
 
   protected readonly state = signal(decodeState(this.route.snapshot.queryParamMap.get('setup')));
   protected readonly options = computed(() => playgroundOptions(this.state(), this.today));
   protected readonly changed = computed(() => changedKeys(this.state()));
+  /** The controls that don't apply in this state (the Editing ones while editing is off). */
+  protected readonly disabled = computed(() => {
+    const state = this.state();
+    const keys = this.sections.flatMap(s => s.controls).filter(c => !controlEnabled(c, state));
+    return new Set<PlaygroundKey>(keys.map(c => c.key));
+  });
 
   protected readonly framework = signal<FrameworkId>(storedFramework());
   protected readonly code = computed(() => playgroundCode(this.state(), this.framework(), this.today));
@@ -376,7 +427,15 @@ export class PlaygroundPageComponent {
   }
 
   protected onResized(e: TaskResizeEvent): void {
-    this.log('taskResized', `${this.name(e.taskId)} ${e.handle === 'left' ? 'start' : 'end'} ${days(e.daysDelta)}`);
+    this.log('taskResized', `${this.name(e.taskId)} ${e.edge} ${days(e.daysDelta)}`);
+  }
+
+  /** An editing output, logged under its own name with the same text as the Web Component playground. */
+  protected onEdit<K extends PlaygroundEditEvent>(event: K, detail: PlaygroundEditEvents[K]): void {
+    this.log(
+      outputName(event),
+      editEventText(event, detail, id => this.name(id)),
+    );
   }
 
   protected onSelection(e: SelectionChangeEvent): void {
@@ -396,7 +455,7 @@ export class PlaygroundPageComponent {
   }
 
   private name(id: string): string {
-    return this.names.get(id) ?? id;
+    return this.names().get(id) ?? id;
   }
 
   private log(name: string, detail: string): void {

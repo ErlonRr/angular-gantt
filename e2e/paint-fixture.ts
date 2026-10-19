@@ -282,9 +282,22 @@ export const STYLED_OPTIONS: Record<string, unknown> = {
  * critical chain, rendered with forced colours emulated (`emulateMedia({ forcedColors: 'active' })`).
  * `styled` renders `STYLED_TASKS` / `STYLED_OPTIONS`; `narrow` the light week in a 600 × 600 box,
  * below the responsive breakpoint (640 px): the timeline alone and the toolbar's More button.
+ * `editing` (phase 11) is the light week with `editing: true` (the toolbar's history group, the
+ * cells' `aria-readonly`); paint.spec.ts then selects a link, opens an invalid cell editor and
+ * hovers a bar (its grips, progress grip and link connectors). Hover opens no tooltip there.
  */
 export type Scenario =
-  'light-week' | 'dark-week' | 'auto-dark' | 'hour' | 'table' | 'tooltip' | 'selected' | 'forced' | 'styled' | 'narrow';
+  | 'light-week'
+  | 'dark-week'
+  | 'auto-dark'
+  | 'hour'
+  | 'table'
+  | 'tooltip'
+  | 'selected'
+  | 'forced'
+  | 'styled'
+  | 'narrow'
+  | 'editing';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -297,6 +310,7 @@ export const SCENARIOS: readonly Scenario[] = [
   'forced',
   'styled',
   'narrow',
+  'editing',
 ];
 
 /** The `narrow` scenario's box */
@@ -328,6 +342,8 @@ export function paintFixture(scenario: Scenario): PaintFixture {
       return { ...base, tasks: STYLED_TASKS, options: STYLED_OPTIONS, annotations: [], highlight: [] };
     case 'narrow':
       return { ...base, box: NARROW_BOX };
+    case 'editing':
+      return { ...base, options: { ...PAINT_OPTIONS, editing: true, tooltip: { trigger: 'focus' } } };
     default:
       return base;
   }

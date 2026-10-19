@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 //  gantry · state/paged-loader.ts
 //  Framework-free paged loader behind every binding's `GanttDataSource`:
-//  pages, resets (generations), errors and retries with exponential backoff.
+//  pages, resets (generations), errors and retries with exponential backoff,
+//  and `patch()` for the charts' edits to loaded items (no refetch).
 // ─────────────────────────────────────────────────────────────
 
 export interface PagedLoaderConfig<T> {
@@ -113,6 +114,25 @@ export class PagedLoader<T> {
   replace(items: T[]): void {
     this.restart(false);
     this._items = items;
+    this.notify();
+  }
+
+  /**
+   * Edit the loaded items in place of the server: `update` gets the current items and returns the
+   * new list (the charts pass `items => applyChange(items, change)` for each edit). Nothing is
+   * fetched and the paging state is kept (`page`, `nextPage`, `hasMore`, `isLoading`, `error`): a
+   * page still in flight is appended to the patched list when it arrives, the next `loadNext()`
+   * continues where paging was, and `reset()` / `replace()` drop the patch with the other items.
+   * Listeners are notified when `update` returns a different array; returning the same array (or
+   * mutating it) changes nothing.
+   *
+   * @throws TypeError when `update` does not return an array (the items stay as they were).
+   */
+  patch(update: (items: readonly T[]) => T[]): void {
+    const next: unknown = update(this._items);
+    if (!Array.isArray(next)) throw new TypeError('[gantry] patch(update): update must return an array');
+    if (next === this._items) return;
+    this._items = next as T[];
     this.notify();
   }
 

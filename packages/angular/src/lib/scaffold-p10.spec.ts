@@ -30,7 +30,6 @@ import {
   type GanttOptions,
   type GanttSyncGroup,
   type GanttTask,
-  type RowGeometry,
 } from '@gantryjs/core';
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttBarBase } from './bars/bar-base';
@@ -91,7 +90,7 @@ class Host {
   readonly tasks = signal<GanttTask[]>(TASKS);
   readonly options = signal<GanttOptions>({ initialScroll: false });
   readonly group = signal<GanttSyncGroup | null>(null);
-  readonly clicks: RowGeometry[] = [];
+  readonly clicks: GanttFlatRow[] = [];
   readonly dblClicks: GanttFlatRow[] = [];
   readonly gantt = viewChild.required(GantryComponent);
 }
@@ -276,7 +275,7 @@ describe('rollups in the layout graph', () => {
     row.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     row.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
     await c.f.whenStable();
-    expect(c.h.clicks.at(-1)?.row.task).toBe(rawTask(c, 'p'));
+    expect(c.h.clicks.at(-1)?.task).toBe(rawTask(c, 'p'));
     expect(c.h.dblClicks.at(-1)?.task).toBe(rawTask(c, 'p'));
 
     // The timeline's double-click (the first row) too

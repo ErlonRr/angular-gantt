@@ -134,7 +134,10 @@ function unwrap(value: unknown): unknown {
  * A thin binding over the `<gantry-element>` Web Component: props are set as element properties
  * (`undefined` restores the element's default), events are emitted with their `detail`. Array props
  * (`tasks`, `columns`, `annotations`) and `options` are watched one level deep, so `tasks.push(…)`
- * on a reactive array or `options.viewMode = …` on a reactive object re-renders the chart. The
+ * on a reactive array or `options.viewMode = …` on a reactive object re-renders the chart. Each
+ * edit emits `beforeChange` first, synchronously: `detail.preventDefault()` in the handler vetoes
+ * it. Then `tasksChange` carries the tasks after the change (`detail.tasks`; the proposed ones,
+ * with `applied: false`, in controlled mode), ready for `@tasks-change="e => (tasks = e.tasks)"`. The
  * template ref exposes `element`: the `GantryElement` with its
  * imperative API (`zoomIn()`, `scrollToToday()`, `getSelectedTasks()`, …). The `empty` slot
  * (`<template #empty>…</template>`) replaces the empty-state text; the default slot is rendered

@@ -48,7 +48,8 @@ export function Roadmap() {
   `syncGroup`, plus `className` / `style` / any HTML attribute.
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,
   `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`,
-  `onLoadError`, `onRetry`.
+  `onLoadError`, `onRetry`, and the editing callbacks `onBeforeChange`, `onTasksChange`, `onTaskUpdated`,
+  `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange` (see [Editing](#editing)).
 - **Children** go into the element's light DOM, where its slots pick them up:
   `<div slot="empty">…</div>` replaces the empty-state text (`labels.emptyState`).
 - **Ref** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is attached once the
@@ -99,6 +100,29 @@ scroll, range, panel })` turns parts off (each is `true` by default). The group 
 element as it is, never copied: keep it stable (`useState(() => …)`, `useMemo` or a module
 constant). `syncGroup={null}`, or leaving the prop out once it was set, takes the chart out of
 the group.
+
+### Editing
+
+With `options={{ editing: true }}` the chart edits its own tasks (cells, a progress grip, links, undo / redo; every
+option is in [Editing](https://github.com/ErlonRr/gantryjs#editing)). Each change calls `onBeforeChange` first, then the op callbacks and
+`onTasksChange`. `onBeforeChange` runs synchronously: `detail.preventDefault()` vetoes the change. Keep the tasks in
+state from `onTasksChange`, which gives the tasks after the change:
+
+```tsx
+<Gantry
+  tasks={tasks}
+  options={{ editing: true }}
+  onBeforeChange={d => {
+    if (isLocked(d.change)) d.preventDefault();
+  }}
+  onTasksChange={d => setTasks(d.tasks)}
+/>
+```
+
+With `editing: { controlled: true }` the chart applies nothing: `onTasksChange` carries the proposed tasks
+(`applied: false`) and `setTasks(d.tasks)` is how you accept them. Undo and redo are methods on the ref
+(`gantt.current?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the [Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)).
+A custom cell editor is a function that returns a DOM node (`columns={[{ key, label, width, editor: ctx => node }]}`), not a React element.
 
 ### Options and behaviour
 

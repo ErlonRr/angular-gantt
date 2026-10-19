@@ -27,6 +27,16 @@
 //  template) keeps Enter and Space. The task list paints the roving
 //  `tabindex` (one tab stop for the whole grid).
 //
+//  Cell editing (Phase 11, D15; `handleCellKey`, from the task list's own
+//  `keydown` listener, so it runs before the chart's keymap): on an
+//  editable cell F2 / Enter open its editor and a printable key opens a
+//  text (or, for digits, number) editor seeded with that character (core
+//  `cellEditKey`, which wins over the single-key shortcuts there); in the
+//  editor Enter commits, Tab / Shift+Tab commit and edit the next /
+//  previous editable cell, Escape cancels — unless a custom editor
+//  prevented the key. Keys typed during an IME composition are left
+//  alone, and the grid's navigation ignores the editor.
+//
 //  Also here: the context every key handler reads (`GanttKeyContext`,
 //  built by the chart's keyboard directive) and the focus helpers the
 //  chart's focus restore shares (`findFocusKey`, `focusIntoView`, `isInert`).
@@ -36,6 +46,7 @@ import {
   HEADER_ROW,
   ROW_FOCUS,
   bodyHeight,
+  cellEditKey,
   isGridEdgeJump,
   isKeySelectionCommand,
   keySelectionModifiers,
@@ -60,6 +71,8 @@ import { type GanttScrollService } from '../scroll/gantt-scroll.service';
 import { type GanttDragService } from '../drag/gantt-drag.service';
 import { type GanttI18nService } from '../services/gantt-i18n.service';
 import { type GanttAnnouncer } from './announcer';
+import { type GanttEditorService } from '../editing/gantt-editor.service';
+import { type GanttCellEditService } from '../editing/cell-edit';
 
 /** What the chart (`GantryComponent`) does for the keys: its element, outputs and public actions. */
 export interface GanttKeyboardHost {
@@ -102,6 +115,11 @@ export interface GanttKeyContext {
   readonly announcer: GanttAnnouncer;
   readonly chart: GanttKeyboardHost;
   /**
+   * The chart's change pipeline (undo / redo, links, move mode). Set by `GanttKeyboardDirective`;
+   * optional only so the context compiles while a directive does not provide it.
+   */
+  readonly editor?: GanttEditorService;
+  /**
    * Focus the control with `key` after the next render, scrolled into view (a keyboard move to a
    * control that may not be mounted yet).
    */
@@ -130,10 +148,14 @@ export function isInert(el: Element): boolean {
 /**
  * Focuses `el` and scrolls it into view by the least amount (a keyboard move: `focus()` alone may
  * centre it), below the sticky headers (the panes' scroll padding: in the timeline a bar lands
- * with its whole focus ring, core `timelineScrollPadding`).
+ * with its whole focus ring, core `timelineScrollPadding`). `visible`: the browser shows its focus
+ * ring (`:focus-visible`) even after a pointer input, where `focusVisible` is supported.
  */
-export function focusIntoView(el: HTMLElement | SVGElement): void {
-  el.focus({ preventScroll: true });
+export function focusIntoView(el: HTMLElement | SVGElement, visible = false): void {
+  const options: FocusOptions & { focusVisible?: boolean } = visible
+    ? { preventScroll: true, focusVisible: true }
+    : { preventScroll: true };
+  el.focus(options);
   el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
 }
 
@@ -185,7 +207,7 @@ export function setCollapsed(ctx: GanttKeyContext, row: GanttFlatRow, collapsed:
 const columnOf = (el: Element): number => Number(el.getAttribute('aria-colindex')) - 1;
 
 /** The visible row a task-list row element shows (`aria-rowindex` 1 is the header row). */
-function rowOf(ctx: GanttKeyContext, el: Element): GanttFlatRow | undefined {
+function rowOf(ctx: Pick<GanttKeyContext, 'layout'>, el: Element): GanttFlatRow | undefined {
   const rows = ctx.layout.visibleRows();
   const id = el.getAttribute('data-task-id');
   const row = rows[Number(el.getAttribute('aria-rowindex')) - 2];
@@ -207,11 +229,71 @@ function focusPosition(ctx: GanttKeyContext, row: number, col: number): void {
   moveFocus(ctx, list, key, id);
 }
 
+/** What the cell-editing keys read: the cell editor, the rows and the task list's columns. */
+export interface GanttCellKeyContext {
+  readonly layout: GanttLayoutService;
+  readonly cells: GanttCellEditService;
+  /** The task list's columns in the current view */
+  columns(): readonly ColumnDef[];
+  /**
+   * Renders now (the task list: `ApplicationRef.tick()`): the editor a key opened is mounted and
+   * focused before the next key, so fast typing loses nothing (the Web Component's `renderNow`)
+   */
+  renderNow?: (() => void) | undefined;
+}
+
+/**
+ * The cell-editing keys (D15), from the task list's own `keydown` listener (before the chart's
+ * keymap): prevents what it used, so the keymap leaves it alone.
+ * - In the open editor: Enter → commit, Tab / Shift+Tab → commit and edit the next / previous
+ *   editable cell of the row, Escape → cancel (focus back to the cell). A key the custom editor
+ *   prevented, and any other key, stays the editor's.
+ * - On an editable cell with focus (not a control inside it): F2 / Enter → edit, a printable key
+ *   → edit seeded with it (text editors; digits for number editors).
+ * The key that opens an editor (F2, Enter, a typed character; Tab / Shift+Tab to the next one)
+ * renders it at once (`ctx.renderNow`): its field has focus before the next key.
+ */
+export function handleCellKey(ctx: GanttCellKeyContext, event: KeyboardEvent): void {
+  if (event.isComposing) return;
+  const origin = event.composedPath()[0];
+  if (!(origin instanceof Element)) return;
+  const { cells } = ctx;
+  if (cells.active() && origin.closest('.gantt-tl-cell--editing')) {
+    if (event.defaultPrevented) return;
+    const kind = cells.session()?.editor.kind ?? 'text';
+    const action = cellEditKey(event, { editing: true, kind });
+    if (action === null) return;
+    event.preventDefault();
+    if (action === 'cancel') cells.cancel();
+    else cells.commit(action === 'commit-next' ? 'next' : action === 'commit-prev' ? 'prev' : undefined);
+    // Tab / Shift+Tab opened the next editor: its field has focus before the next key
+    if (action !== 'commit' && action !== 'cancel' && cells.active()) ctx.renderNow?.();
+    return;
+  }
+  if (event.defaultPrevented || !origin.classList.contains('gantt-tl-cell')) return;
+  // Text editors take every key another kind takes: anything else (arrows, Space…) is not resolved
+  if (cellEditKey(event, { editing: false, kind: 'text' }) === null) return;
+  const rowEl = origin.closest('.gantt-tl-row');
+  const row = rowEl ? rowOf(ctx, rowEl) : undefined;
+  const col = ctx.columns()[columnOf(origin)];
+  if (!row || !col) return;
+  const kind = cells.kindOf(row.task.id, col.key);
+  if (kind === null) return;
+  const action = cellEditKey(event, { editing: false, kind });
+  if (action !== 'start' && action !== 'seed') return;
+  if (!cells.start(row.task.id, col.key, action === 'seed' ? event.key : undefined)) return;
+  event.preventDefault();
+  // The field is mounted and focused now: the keys typed right after this one reach it
+  ctx.renderNow?.();
+}
+
 /**
  * A grid key on `origin` (inside the task list). Returns `true` when the grid used it (the caller
  * prevents its default action), `false` to let the global shortcuts or the browser have it.
  */
 export function handleGridKey(ctx: GanttKeyContext, event: KeyboardEvent, origin: Element, cmd: Command): boolean {
+  // An open cell editor keeps its keys (a custom editor's buttons, arrows…)
+  if (origin.closest('.gantt-tl-cell--editing')) return false;
   const head = origin.closest('.gantt-tl-col-header');
   const rowEl = head ? null : origin.closest('.gantt-tl-row');
   if (!head && !rowEl) return false;

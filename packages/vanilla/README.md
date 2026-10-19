@@ -59,12 +59,14 @@ gantry-element:not(:defined) {
 
 `options` accepts every `GanttOptions` field — header tiers & week formats, zoom presets,
 period delimiters, weekends / holidays / working hours, bar & arrow sizes, panel splitter,
-table view and saved state, the toolbar, legend and marker lane, the tooltip and the keyboard
-shortcuts. See the full guide, [Configuration](https://github.com/ErlonRr/gantryjs#configuration), and in particular:
+table view and saved state, the toolbar, legend and marker lane, the tooltip, the keyboard
+shortcuts and `editing`. See the full guide, [Configuration](https://github.com/ErlonRr/gantryjs#configuration), and in particular:
 
 - [Toolbar, legend and markers](https://github.com/ErlonRr/gantryjs#toolbar-legend-and-markers),
   [Tooltip](https://github.com/ErlonRr/gantryjs#tooltip) and
   [Loading, error and empty states](https://github.com/ErlonRr/gantryjs#loading-error-and-empty-states);
+- [Editing](https://github.com/ErlonRr/gantryjs#editing): cells, the progress grip, links, undo / redo, the change
+  pipeline and controlled mode;
 - [Keyboard and focus](https://github.com/ErlonRr/gantryjs#keyboard-and-focus),
   [Touch and pointer](https://github.com/ErlonRr/gantryjs#touch-and-pointer), [Zoom](https://github.com/ErlonRr/gantryjs#zoom),
   [Screen readers](https://github.com/ErlonRr/gantryjs#screen-readers) and [Forced colors](https://github.com/ErlonRr/gantryjs#forced-colors).
@@ -75,11 +77,11 @@ shortcuts. See the full guide, [Configuration](https://github.com/ErlonRr/gantry
 | ----------------------------- | ----------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `tasks`                       | `GanttTask[]`                                                                 | `[]`     | Tasks (tree via `parentId`). Replace the array to update. Ignored while a `dataSource` is set.                                                                                                        |
 | `options`                     | `GanttOptions`                                                                | `{}`     | `viewMode`, `rowHeight`, `baseline`, `criticalPath`, `showToday`, `panelWidth`, `locale`, `labels`, `formats`, `theme`, …                                                                             |
-| `columns`                     | `VanillaColumnDef[]`                                                          | built-in | Left-panel columns (`options.columns` wins). `render(row)` returns text; `cellTemplate(row, ctx)` a DOM `Node` or text.                                                                               |
+| `columns`                     | `VanillaColumnDef[]`                                                          | built-in | Left-panel columns (`options.columns` wins). `render(row)` returns text; `cellTemplate(row, ctx)` a DOM `Node` or text; `editor(ctx)` a cell editor's DOM node (`editing.cells`).                     |
 | `annotations`                 | `GanttAnnotation[]`                                                           | `[]`     | Highlighted date ranges / markers                                                                                                                                                                     |
 | `darkMode`                    | `boolean \| 'auto'`                                                           | `false`  | `'auto'` follows `prefers-color-scheme`                                                                                                                                                               |
 | `showToolbar`                 | `boolean`                                                                     | `true`   | Zoom, _Fit_, zoom levels, _Today_ and the view switch (`options.toolbar`)                                                                                                                             |
-| `enableDrag` / `enableResize` | `boolean`                                                                     | `true`   | Per task: `task.draggable = false`                                                                                                                                                                    |
+| `enableDrag` / `enableResize` | `boolean`                                                                     | `true`   | Per task: `task.draggable = false` (`task.editable = false` locks the whole row)                                                                                                                      |
 | `tooltipEnabled`              | `boolean`                                                                     | `true`   | Task tooltip on hover, keyboard focus and tap (`options.tooltip`)                                                                                                                                     |
 | `showLegend`                  | `boolean`                                                                     | `false`  | Legend strip: today marker, annotations, critical path and baseline (`options.legend`)                                                                                                                |
 | `dataSource`                  | `{ fetcher(page, pageSize), pageSize?, initialPage?, retries?, retryDelay? }` | `null`   | Lazy paging (or a `GanttDataSource`); replaces `tasks` while set. A failed page shows Retry and pauses until `retry()`                                                                                |
@@ -118,20 +120,42 @@ The element never writes attributes back.
 
 All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload is in `event.detail`.
 
-| Event                        | `detail`                                                                                |
-| ---------------------------- | --------------------------------------------------------------------------------------- |
-| `task-dragged`               | `TaskDragEvent` — `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`           |
-| `task-resized`               | `TaskResizeEvent` — `{ taskId, handle, oldStart, oldEnd, newStart, newEnd, daysDelta }` |
-| `selection-change`           | `{ selectedIds: string[] }`                                                             |
-| `row-click` / `row-dblclick` | `GanttFlatRow`                                                                          |
-| `view-mode-change`           | `{ viewMode }` — fired when the active zoom level changes                               |
-| `state-change`               | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort |
-| `load-error`                 | `{ error, page }` — a data-source page failed after its automatic retries               |
-| `retry`                      | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }`  |
+| Event                                       | `detail`                                                                                 |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `task-dragged`                              | `TaskDragEvent` — `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`            |
+| `task-resized`                              | `TaskResizeEvent` — `{ taskId, edge, oldStart, oldEnd, newStart, newEnd, daysDelta }`    |
+| `task-progress-changed`                     | `TaskProgressEvent` — `{ taskId, oldProgress, newProgress }`                             |
+| `dependency-created` / `dependency-deleted` | `DependencyChangeEvent` — `{ fromId, toId, type, lag }`                                  |
+| `task-updated`                              | `TaskUpdatedEvent` — `{ taskId, task, previous, fields, source }`, one per changed task  |
+| `before-change`                             | `GanttBeforeChangeEvent` — `{ change, tasks, preventDefault() }`; cancelable             |
+| `tasks-change`                              | `GanttTasksChangeEvent` — `{ tasks, change, applied }`                                   |
+| `history-change`                            | `GanttHistoryState` — `{ canUndo, canRedo, undoLabel, redoLabel, undoCount, redoCount }` |
+| `selection-change`                          | `{ selectedIds: string[] }`                                                              |
+| `row-click` / `row-dblclick`                | `GanttFlatRow`                                                                           |
+| `view-mode-change`                          | `{ viewMode }` — fired when the active zoom level changes                                |
+| `state-change`                              | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort  |
+| `load-error`                                | `{ error, page }` — a data-source page failed after its automatic retries                |
+| `retry`                                     | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }`   |
 
 `retry` carries `{ source: 'error' }` for the `errorMessage` state (load again, then clear
 `errorMessage`) and `{ source: 'dataSource' }` after a failed first data-source page (the element
 also calls `dataSource.retry()`; a later page's Retry in the task-list footer only retries).
+
+The seven editing events (`task-progress-changed` to `history-change`) fire in the order of the
+[change pipeline](https://github.com/ErlonRr/gantryjs#the-pipeline-and-its-events): `before-change`, then the op events
+(`task-dragged`, `task-resized`, `task-progress-changed`, `dependency-created`, `dependency-deleted`), `task-updated` per
+task, `tasks-change`, `history-change`. Veto a change with `event.preventDefault()` or `event.detail.preventDefault()` in
+`before-change`, synchronously. `task-resized` has `edge: 'start' | 'end'`; its `handle` is deprecated.
+
+```js
+chart.addEventListener('before-change', e => {
+  if (e.detail.change.source === 'cell') e.preventDefault(); // no cell edits
+});
+chart.addEventListener('tasks-change', e => save(e.detail.tasks)); // after every change
+```
+
+With `options.editing.controlled` the chart applies nothing: set the tasks yourself from `tasks-change`
+(`chart.tasks = e.detail.tasks`). See [Controlled mode](https://github.com/ErlonRr/gantryjs#controlled-mode).
 
 `addEventListener` is typed: `gantt.addEventListener('task-dragged', e => e.detail.daysMoved)`.
 `GantryEventDetailMap` / `GantryEventMap` type the payloads, and `GANTRY_EVENTS` maps each event
@@ -139,20 +163,25 @@ to its binding callback name (`'task-dragged'` → `onTaskDragged`).
 
 ## Methods
 
-| Method                                                                              |                                                                                      |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `zoomIn()` / `zoomOut()` / `setViewMode(mode)`                                      | Change the zoom level (a `ViewMode` or a `zoomLevels` name)                          |
-| `fitToScreen()`                                                                     | Zoom to the finest level that shows every task, then scroll to the first one         |
-| `setView('split' \| 'table' \| 'chart')` / `togglePanel()`                          | Switch view; `togglePanel()` collapses / expands the task list (restoring its width) |
-| `scrollToToday(behavior?)` / `scrollToDate(date, behavior?)`                        | Centre a date in the timeline                                                        |
-| `scrollToTask(id, behavior?)`                                                       | Scroll a task into view (both axes)                                                  |
-| `getSelectedTasks()` / `setSelectedTasks(ids)` / `clearSelection()` / `selectAll()` | Selection                                                                            |
-| `updateTask(id, patch)` / `appendTasks(tasks)`                                      | Edit or extend the task list                                                         |
-| `collapseAll()` / `expandAll()`                                                     | Groups                                                                               |
-| `setColumnVisible(key, visible, view?)` / `toggleColumnVisible(key, view?)`         | Column visibility in both views, or only `'split'` / `'table'`                       |
-| `getState()` / `setState(state)`                                                    | UI state snapshot (see `state-change`)                                               |
-| `getBarVisual(id)`                                                                  | A bar's computed geometry (e.g. to anchor a popover), also for rows out of view      |
-| `setTheme(theme)` / `patchTheme(patch)` / `resetTheme()`                            | Replace / merge / drop the custom theme overrides (see [Theming](#theming))          |
+| Method                                                                               |                                                                                                     |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `zoomIn()` / `zoomOut()` / `setViewMode(mode)`                                       | Change the zoom level (a `ViewMode` or a `zoomLevels` name)                                         |
+| `fitToScreen()`                                                                      | Zoom to the finest level that shows every task, then scroll to the first one                        |
+| `setView('split' \| 'table' \| 'chart')` / `togglePanel()`                           | Switch view; `togglePanel()` collapses / expands the task list (restoring its width)                |
+| `scrollToToday(behavior?)` / `scrollToDate(date, behavior?)`                         | Centre a date in the timeline                                                                       |
+| `scrollToTask(id, behavior?)`                                                        | Scroll a task into view (both axes)                                                                 |
+| `getSelectedTasks()` / `setSelectedTasks(ids)` / `clearSelection()` / `selectAll()`  | Selection                                                                                           |
+| `updateTask(id, patch)` / `appendTasks(tasks)`                                       | Edit or extend the task list: silent writes into `tasks` (or `dataSource.patch()`), no events       |
+| `undo()` / `redo()`                                                                  | Step through the editing history; `false` when there is nothing to do, or it was rejected or vetoed |
+| `canUndo` / `canRedo` (getters) · `clearHistory()`                                   | The history's state (refreshed on `history-change`) · forget every step                             |
+| `addDependency(fromId, toId, type?, lag?)` / `removeDependency(fromId, toId, type?)` | Link or unlink two tasks through the pipeline (validated, vetoable, undoable); `boolean`            |
+| `editCell(taskId, columnKey)`                                                        | Open a task-list cell's editor (`editing.cells`); `false` when it can't be edited                   |
+| `focusTask(id, { area? })`                                                           | Focus a bar (`'bar'`, default) or row (`'row'`); expands collapsed ancestors, scrolls to it         |
+| `collapseAll()` / `expandAll()`                                                      | Groups                                                                                              |
+| `setColumnVisible(key, visible, view?)` / `toggleColumnVisible(key, view?)`          | Column visibility in both views, or only `'split'` / `'table'`                                      |
+| `getState()` / `setState(state)`                                                     | UI state snapshot (see `state-change`)                                                              |
+| `getBarVisual(id)`                                                                   | A bar's computed geometry (e.g. to anchor a popover), also for rows out of view                     |
+| `setTheme(theme)` / `patchTheme(patch)` / `resetTheme()`                             | Replace / merge / drop the custom theme overrides (see [Theming](#theming))                         |
 
 ## Slots
 
@@ -182,10 +211,14 @@ first control inside). The tab stops, in order:
 4. the bars (`role="option"` in the timeline's `listbox`): one stop — `↑` / `↓`, `PgUp` /
    `PgDn`, `Home` / `End` move between bars, `←` / `→` pan the timeline, `Space` selects, and
    `Enter` / `F2` start **move mode** (`←` / `→` move the bar, `Shift` / `Alt` + `←` / `→`
-   resize its end / start, `Enter` commits with `task-dragged` / `task-resized`, `Escape`
-   cancels). The timeline viewport is a tab stop only while no bar is mounted.
+   resize its end / start, `↑` / `↓` change the progress with `editing.progress`, `Enter`
+   commits with `task-dragged` / `task-resized` / `task-progress-changed`, `Escape` cancels). The timeline viewport is a tab stop only while no bar is mounted.
 
-Anywhere inside: `Escape` cancels move mode or a drag, else closes the tooltip, else clears the
+With `options.editing`: `F2` / `Enter` / a character on a task-list cell opens its editor, `L` on a bar starts a link,
+`Delete` removes the selected link and `Ctrl/⌘ + Z` / `Ctrl/⌘ + Shift + Z` / `Ctrl + Y` undo and redo (see
+[Editing](https://github.com/ErlonRr/gantryjs#editing)).
+
+Anywhere inside: `Escape` cancels move mode, a drag, a link or a cell edit, else closes the tooltip, else clears the
 selection; `Ctrl/⌘ + A` selects all; `+` / `-` zoom, `T` scrolls to today and `F` fits the tasks
 to the screen (off with `options.keyboard.characterShortcuts: false`). Shortcuts don't fire while
 typing in an input or with `Alt` / `AltGr` held. Every stop shows a ring in `--gantt-focus-ring`
@@ -298,6 +331,7 @@ gantry-element::part(toolbar) {
 | `:state(dark)`     | the dark theme is active (`darkMode` or `'auto'`) |
 | `:state(dragging)` | a bar is dragged or resized                       |
 | `:state(loading)`  | `loading` is on, or a data-source page is loading |
+| `:state(linking)`  | a dependency link is being drawn                  |
 
 ```css
 gantry-element:state(dark) {
@@ -327,8 +361,8 @@ host's inline style, which needs `style-src 'unsafe-inline'`. There is no nonce 
 
 `@gantryjs/vanilla` exports `GantryElement`, `GanttDataSource`, the tables `GANTRY_PROPERTIES` and
 `GANTRY_EVENTS`, the types `GantryProperties`, `GantryEventDetailMap`, `GantryEventMap`,
-`GantryEventCallbacks`, `GanttBarRenderer`, `GanttDataSourceConfig`, `VanillaColumnDef` and
-`VanillaCellTemplate`, and everything in `@gantryjs/core` (model types, `LightTheme` / `DarkTheme`,
+`GantryEventCallbacks`, `GanttBarRenderer`, `GanttDataSourceConfig`, `VanillaColumnDef`,
+`VanillaCellTemplate` and `VanillaCellEditor`, and everything in `@gantryjs/core` (model types, `LightTheme` / `DarkTheme`,
 labels, date and theme helpers). Importing it registers `<gantry-element>`.
 
 The package ships a [Custom Elements Manifest](https://github.com/webcomponents/custom-elements-manifest)

@@ -10,6 +10,10 @@
  *
  * The More menu hangs under the toolbar at its end (the toolbar is its containing block), above
  * the panes' sticky headers, splitter and state box (z-index 14).
+ *
+ * Undo and Redo (the history group, Phase 11) are plain icon buttons; while there is nothing to
+ * undo / redo they are aria-disabled: muted, with no hover change and the default cursor (still
+ * focusable, so they keep their focus ring).
  */
 
 export const TOOLBAR_CSS = `
@@ -34,6 +38,9 @@ export const TOOLBAR_CSS = `
     }
     .gantt-tb-pill { border-color: transparent; background: transparent; }
     .gantt-tb-btn:hover, .gantt-tb-pill:hover { color: var(--gantt-text); border-color: var(--gantt-border); }
+    .gantt-tb-btn[aria-disabled="true"], .gantt-tb-btn[aria-disabled="true"]:hover {
+      color: var(--gantt-text-muted); border-color: var(--gantt-border); cursor: default;
+    }
     .gantt-tb-btn:focus-visible, .gantt-tb-pill:focus-visible { outline: 2px solid var(--gantt-focus-ring); outline-offset: 1px; }
     .gantt-tb-pill[aria-checked="true"] { background: var(--gantt-bar); border-color: var(--gantt-bar); color: var(--gantt-bar-text-on-bar); }
     .gantt-tb-btn[aria-pressed="true"] { background: color-mix(in srgb, var(--gantt-bar) 12%, var(--gantt-panel-bg)); border-color: var(--gantt-bar); color: var(--gantt-bar); }

@@ -5,10 +5,15 @@
 
 import type { CaseId } from './catalog';
 import type { GalleryCaseData } from './types';
+import { cellEditingCase } from './cases/cell-editing';
+import { controlledCase } from './cases/controlled';
 import { customBarsCase } from './cases/custom-bars';
 import { customColumnsCase } from './cases/custom-columns';
+import { customEditorsCase } from './cases/custom-editors';
 import { densityCase } from './cases/density';
 import { dependenciesCase } from './cases/dependencies';
+import { dependencyEditingCase } from './cases/dependency-editing';
+import { editingCase } from './cases/editing';
 import { i18nCase } from './cases/i18n';
 import { keyboardCase } from './cases/keyboard';
 import { largeCase } from './cases/large';
@@ -37,6 +42,11 @@ export const CASE_DATA: Readonly<Record<CaseId, GalleryCaseData>> = {
   'milestones-baselines': milestonesBaselinesCase,
   'non-working': nonWorkingCase,
   'week-numbering': weekNumberingCase,
+  editing: editingCase,
+  'cell-editing': cellEditingCase,
+  'custom-editors': customEditorsCase,
+  'dependency-editing': dependencyEditingCase,
+  controlled: controlledCase,
   'multi-pipeline': multiPipelineCase,
   'custom-bars': customBarsCase,
   'custom-columns': customColumnsCase,

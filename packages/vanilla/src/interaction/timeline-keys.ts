@@ -9,6 +9,13 @@
  *   Space / Shift+Space / Ctrl+Space      select (toggles with multiple selection) / range / toggle
  *   Enter / F2                            move mode on a movable bar (`keyboard-edit.ts`), otherwise
  *                                         activate: select only this row + `row-click`
+ *   L                                     link mode from this bar's end (`editing.dependencies`,
+ *                                         `editRules(row).linkFrom`; `link.ts`, mode `'keyboard'`)
+ *
+ * In keyboard link mode the focused bar is the target (`keyboard.ts` follows focus). In keyboard or
+ * click mode, Enter, F2 or L on a bar creates the link to it (FS from the keyboard) through the
+ * pipeline, and on the source bar itself cancels (announced). Esc cancels; so do Tab out of the
+ * bars and a pointer press in keyboard mode (`keyboard.ts`).
  *
  * A bar beyond the virtual window (PageDown, End) is mounted first: its row is pinned
  * (`focusedRowId`) and the focus-restore region focuses it after the flush.
@@ -56,6 +63,18 @@ export function handleTimelineKey(
       if (id !== undefined) moveFocus(ctx, dom.bars, `bar:${id}`, id);
     }
     return true;
+  }
+  // Link mode: Enter, F2 or L on a bar finishes it there (a pointer drag's session is the pointer's)
+  const linking = ctx.inputs.link.peek();
+  if (linking && linking.mode !== 'drag' && (cmd === 'activate' || cmd === 'edit' || cmd === 'link')) {
+    ctx.link.over(row.task.id);
+    ctx.link.finish();
+    return true;
+  }
+  if (cmd === 'link') {
+    if (linking) return false;
+    ctx.link.start(row.task.id, 'end', 'keyboard', null);
+    return ctx.link.active();
   }
   if (cmd === 'activate' || cmd === 'edit') {
     if (!edit.start(row)) ctx.rowClick(row, event);

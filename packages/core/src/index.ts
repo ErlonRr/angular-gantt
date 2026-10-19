@@ -67,6 +67,18 @@ export * from './interaction/gesture';
 export * from './interaction/autoscroll';
 export * from './interaction/scroll-sync';
 export * from './a11y/describe';
+// Editing (Phase 11): changes and their pipeline, history, validation, permissions, cells, sessions
+export * from './editing/changes';
+export * from './editing/pipeline';
+export * from './editing/describe';
+export * from './editing/history';
+export * from './editing/validate';
+export * from './editing/permissions';
+export * from './editing/parse';
+export * from './editing/cells';
+export * from './editing/sessions';
+export * from './render/overlay';
+export * from './render/links';
 // Engine helpers: arrow window index, drag ghost, quantised clock
 export { buildArrowIndex, type ArrowIndex, type ArrowLink } from './render/arrow-index';
 export { computeDragGhostVisual, DRAG_SOURCE_OPACITY, type GhostVisual, type GhostLabel } from './render/ghost';

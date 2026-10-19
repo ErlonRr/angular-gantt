@@ -4,8 +4,8 @@
 //
 // e2e drives this page: its chart is the first <gantry-element>, and options, darkMode or tasks a
 // test assigns stay put — the page re-assigns options only when a control changes (or the zoom
-// changes while the chart still runs the playground's options) and darkMode only when the site
-// theme changes.
+// changes while the chart still runs the playground's options), darkMode only when the site theme
+// changes, and never tasks (the chart applies its own edits; `tasks-change` is only logged).
 import 'demo-kit/site.css';
 import './playground.css';
 import '@gantryjs/vanilla';
@@ -16,10 +16,13 @@ import {
   PLAYGROUND_DEFAULTS,
   changedKeys,
   decodeState,
+  editEventText,
   encodeState,
   playgroundCommand,
   playgroundOptions,
   withValue,
+  type PlaygroundEditEvent,
+  type PlaygroundEditEvents,
   type PlaygroundState,
 } from 'demo-kit/playground';
 import { PACKAGES, SITE } from 'demo-kit/site';
@@ -123,7 +126,7 @@ gantt.addEventListener('task-dragged', e => {
   log.add('task-dragged', `${taskName(e.detail.taskId)} · ${days(e.detail.daysMoved)}`);
 });
 gantt.addEventListener('task-resized', e => {
-  log.add('task-resized', `${taskName(e.detail.taskId)} · ${e.detail.handle} edge ${days(e.detail.daysDelta)}`);
+  log.add('task-resized', `${taskName(e.detail.taskId)} · ${e.detail.edge} ${days(e.detail.daysDelta)}`);
 });
 gantt.addEventListener('selection-change', e => {
   const ids = e.detail.selectedIds;
@@ -145,6 +148,18 @@ gantt.addEventListener('view-mode-change', e => {
   // Re-derive the options (the week tiers belong to the Week zoom) unless a script replaced them
   if (runsOurOptions) applyOptions();
 });
+
+// Editing: every change (drag, keyboard, cell, link, undo…) goes through the chart's pipeline. The
+// chart applies it itself, so `tasks-change` is only logged: the names above read the edited tasks
+const logEdit = <K extends PlaygroundEditEvent>(event: K, detail: PlaygroundEditEvents[K]) =>
+  log.add(event, editEventText(event, detail, taskName));
+gantt.addEventListener('before-change', e => logEdit('before-change', e.detail));
+gantt.addEventListener('task-progress-changed', e => logEdit('task-progress-changed', e.detail));
+gantt.addEventListener('dependency-created', e => logEdit('dependency-created', e.detail));
+gantt.addEventListener('dependency-deleted', e => logEdit('dependency-deleted', e.detail));
+gantt.addEventListener('task-updated', e => logEdit('task-updated', e.detail));
+gantt.addEventListener('tasks-change', e => logEdit('tasks-change', e.detail));
+gantt.addEventListener('history-change', e => logEdit('history-change', e.detail));
 
 showState();
 applyOptions();

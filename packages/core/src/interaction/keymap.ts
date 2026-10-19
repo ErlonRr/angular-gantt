@@ -25,9 +25,23 @@
 //  shortcut except Escape, so OS menus and typed characters win.
 //
 //  Bindings dispatch zoomIn / zoomOut / today / fit (`fitToScreen()`),
-//  selectAll and clearSelection / cancel from any area. undo / redo,
-//  link and delete resolve but have no action until Phase 11: leave
-//  the key's default action alone for them.
+//  selectAll and clearSelection / cancel from any area. The editing
+//  commands (Phase 11) act only when their feature is on; otherwise, as
+//  for any `null`, leave the key's default action alone:
+//    undo / redo  the chart keeps history (`editing.history`), the focus
+//                 is in the chart, outside text entry (a cell editor,
+//                 an input in a custom cell or slot) and not in move
+//                 mode — the browser's own undo wins there
+//    link         on a bar (timeline) with `editRules(row).linkFrom`:
+//                 link mode from the bar's end (`LinkSession`, mode
+//                 'keyboard'); Enter or L on another bar creates an FS
+//                 link, Escape (`cancel`, pass `active`) ends it
+//    delete       removes the selected link (`dependencies.delete`)
+//    edit, activate (Enter / F2) on a bar: move mode when the row can
+//                 move, resize or change progress
+//                 (`keyboardEditOptionsFor`); in move mode
+//                 `keyboardEditAction` reads the keys instead (↑ / ↓ =
+//                 progress), not `resolveKey`
 //
 //  Left/right are logical: `move.left` is towards the inline start
 //  ("previous"), so in RTL ArrowLeft resolves to `move.right`.
@@ -85,8 +99,8 @@ export interface ResolveKeyOptions {
    */
   characterShortcuts?: boolean | undefined;
   /**
-   * A drag, keyboard edit or link is in progress: Escape resolves to `cancel` instead of
-   * `clearSelection`. Default `false`.
+   * A drag, keyboard edit, link session or cell edit is in progress, or a link is selected: Escape
+   * resolves to `cancel` instead of `clearSelection`. Default `false`.
    */
   active?: boolean | undefined;
 }

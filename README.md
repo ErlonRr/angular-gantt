@@ -1,7 +1,7 @@
 # Gantry
 
 > A free, full-featured, open-source Gantt chart for **every framework** — Angular, React, Vue, Svelte, or plain JavaScript.
-> Interactive drag & resize (mouse, touch and keyboard), dependencies, critical path, baselines, virtual scrolling, theming and i18n — accessible (WCAG 2.2 AA, forced colors), MIT licensed, zero runtime dependencies.
+> Interactive editing (drag & resize with mouse, touch and keyboard, cells, links, progress, undo / redo), dependencies, critical path, baselines, virtual scrolling, theming and i18n — accessible (WCAG 2.2 AA, forced colors), MIT licensed, zero runtime dependencies.
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-banner.png)
 
@@ -84,7 +84,7 @@ On this page: [Timeline](#timeline-header-tiers-and-zoom) · [Week numbering](#w
 [Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
 [Panel and table](#task-list-panel-table-view-and-saved-state) · [Responsive and density](#responsive-layout-and-density) ·
 [Toolbar](#toolbar-legend-and-markers) · [Tooltip](#tooltip) · [States](#loading-error-and-empty-states) ·
-[Synchronised charts](#synchronised-charts) · [Dates and locales](#dates-locales-and-format-tokens) ·
+[Synchronised charts](#synchronised-charts) · [Editing](#editing) · [Dates and locales](#dates-locales-and-format-tokens) ·
 [Theming](#theming) · [Styling hooks](#styling-hooks-across-bindings) · [CSP](#content-security-policy) ·
 [SSR](#server-side-rendering-all-bindings) · [Examples](#examples-gallery).
 
@@ -207,7 +207,7 @@ options = {
 line from the exit edge to the entry edge, its head along the line and its lag label beside the
 midpoint.
 
-Per task: `style` (see [Task styles](#task-styles)) and `draggable`; the flat `barColor`,
+Per task: `style` (see [Task styles](#task-styles)), `draggable` and `editable` (see [Editing](#read-only-tasks-and-fields)); the flat `barColor`,
 `progressColor`, `textColor`, `rowColor` and `className` still work but are deprecated aliases
 of `style.color` / `progressColor` / `textColor` / `rowColor` / `className`.
 For full control replace the bar renderer (`renderBar` in the Web Component / bindings,
@@ -339,7 +339,7 @@ options = {
 
 ```ts
 options = {
-  toolbar: { zoom: true, fit: true, today: true, viewToggle: true, panelToggle: false, overflow: 'menu' }, // `false` hides the toolbar
+  toolbar: { zoom: true, fit: true, today: true, viewToggle: true, panelToggle: false, overflow: 'menu', undo: true }, // `false` hides the toolbar
   legend: { position: 'bottom' }, // 'bottom' | 'toolbar' (`showLegend` turns the legend on)
   markers: { lane: 'auto' }, // 'auto' | true | false
 };
@@ -362,6 +362,10 @@ annotations = [{ x1: new Date(2026, 2, 2), label: { text: 'Code freeze' }, color
   `'menu'` (default) moves the zoom levels, then the views, then Today into a **More** button
   (`labels.more`), a WAI-ARIA menu button (↓ / ↑, Home / End, Enter / Space, Esc, Tab and an outside
   press close it); `'wrap'` wraps them onto more lines. A toolbar that fits renders as it always did.
+- **Undo and Redo.** `toolbar.undo` (default `true`) adds two icon buttons after the panel toggle while the chart
+  keeps an [editing history](#history) (`editing` on, not `controlled`): `labels.undo` / `labels.redo`,
+  `aria-disabled` while there is nothing to undo or redo, in the toolbar's arrow-key set and never moved into the
+  More menu.
 - **Legend.** `showLegend` turns it on. It lists the today marker (with `showToday`), every
   annotation and, when those options are on, the critical path and the baseline; each entry
   has a shape as well as a colour. `legend.position: 'bottom'` (default) puts it in a strip
@@ -501,6 +505,336 @@ b.syncGroup = group;
 - Keep the group in a plain constant (Svelte: `const` or `$state.raw`, never a deep `$state`): it
   is passed by identity and never copied.
 
+### Editing
+
+```ts
+options = {
+  editing: {
+    cells: true, // edit task-list cells: F2, Enter, double-click or typing
+    progress: { step: 5 }, // the progress grip and ↑ / ↓ in move mode, in % (`true` = step 5)
+    dependencies: { create: true, delete: true, parentChild: false }, // draw / delete links; parent ↔ child links
+    validate: (change, { tasks, proposed }) => (isAllowed(proposed) ? true : 'Not allowed'), // after the built-in checks
+    history: { limit: 100, coalesceMs: 800 }, // undo / redo; `false` keeps none
+    controlled: false, // true: the app owns the tasks (see below)
+  },
+};
+```
+
+`editing` is off by default. `true` turns on every feature with the defaults above; in the object form
+every feature is on unless you set it to `false` (`dependencies.parentChild` is the exception: off
+unless you set it). Drag and resize follow `enableDrag` / `enableResize` whatever `editing` is, but
+every change — a drag, a resize, move mode, the progress grip, a cell, a link, the API, undo — goes
+through the same pipeline once, so the events, the validation and the undo history are the same in
+every binding. Try it in the **Editing** cases of the [gallery](#examples-gallery).
+
+| Option                             | Default                                  | What it does                                                                                                                    |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `editing.cells`                    | `true`                                   | The cells of editable columns open an editor ([Cells](#cells))                                                                  |
+| `editing.progress`                 | `true` (`step: 5`)                       | The progress grip on bars and ↑ / ↓ in move mode, snapped to `step` %                                                           |
+| `editing.dependencies.create`      | `true`                                   | Draw links from a bar's connector, or with **L**; the `predecessors` cell ([Links](#links))                                     |
+| `editing.dependencies.delete`      | `true`                                   | Click an arrow, then Delete                                                                                                     |
+| `editing.dependencies.parentChild` | `false`                                  | Allow links between a task and its own ancestors or descendants                                                                 |
+| `editing.validate`                 | none                                     | Your own check, after the built-in ones: return `false` or a message to reject the change                                       |
+| `editing.history`                  | `true` (`limit: 100`, `coalesceMs: 800`) | Undo / redo: at most `limit` steps; consecutive keyboard, progress or cell changes of one task within `coalesceMs` are one step |
+| `editing.controlled`               | `false`                                  | The app owns the tasks: the chart applies nothing and keeps no history ([Controlled mode](#controlled-mode))                    |
+| `toolbar.undo`                     | `true`                                   | The toolbar's Undo / Redo buttons (shown while a history is kept)                                                               |
+
+#### The pipeline and its events
+
+Every change is one `GanttChange` (`{ source, updates, ops, column?, coalesceKey? }`; each update has the
+task's `before` and `after` fields), and runs through these steps:
+
+1. **Validate.** Built-in checks first — a link to itself, a duplicate link (one link per pair of tasks,
+   whatever its type), a link between a task and its own ancestor or descendant (unless `parentChild`), a loop,
+   an end before its start, a progress outside 0–100, a read-only task or field — then `editing.validate`.
+   A rejection stops here: nothing else fires, and the reason is announced (`labels.announceChangeRejected`;
+   a cell shows it under the editor).
+2. **`before-change`.** Call `detail.preventDefault()` in the handler, synchronously, to veto it. The
+   Web Component's event is also cancelable (`event.preventDefault()`). A veto is announced too.
+3. **Apply and record.** The tasks you passed are updated (`tasks`, `[(series)]`, or the data source through
+   `patch()`) and the step goes on the undo stack. With `controlled` nothing is applied.
+4. **The events**, in this order: one per op (`task-dragged`, `task-resized`, `task-progress-changed`,
+   `dependency-created`, `dependency-deleted`), then `task-updated` per changed task, then `tasks-change`, then
+   `history-change` (only when the undo state changed).
+
+Ops come from what changed, not from the gesture: a date typed in a Start cell fires `task-dragged` as a
+drag does, an End cell `task-resized`, the predecessors cell `dependency-created` / `dependency-deleted`,
+and an undo fires the inverse events (`source: 'undo'`). A change that changes nothing fires nothing.
+A change started from inside one of these listeners (`addDependency()`, `undo()`…) is refused (`false`).
+
+| Event (Angular output · React / Svelte callback · Vue)                                                                                                                                      | `detail`                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `before-change` · `(beforeChange)` · `onBeforeChange` · `@before-change`                                                                                                                    | `GanttBeforeChangeEvent` — `{ change, tasks, defaultPrevented, preventDefault() }`; `tasks` are the proposed tasks    |
+| `task-dragged` · `(taskDragged)` · `onTaskDragged` · `@task-dragged`                                                                                                                        | `TaskDragEvent` — `{ taskId, oldStart, oldEnd, newStart, newEnd, daysMoved }`                                         |
+| `task-resized` · `(taskResized)` · `onTaskResized` · `@task-resized`                                                                                                                        | `TaskResizeEvent` — `{ taskId, edge: 'start' \| 'end', oldStart, oldEnd, newStart, newEnd, daysDelta }`               |
+| `task-progress-changed` · `(taskProgressChanged)` · `onTaskProgressChanged` · `@task-progress-changed`                                                                                      | `TaskProgressEvent` — `{ taskId, oldProgress, newProgress }`                                                          |
+| `dependency-created` / `dependency-deleted` · `(dependencyCreated)` / `(dependencyDeleted)` · `onDependencyCreated` / `onDependencyDeleted` · `@dependency-created` / `@dependency-deleted` | `DependencyChangeEvent` — `{ fromId, toId, type, lag }`                                                               |
+| `task-updated` · `(taskUpdated)` · `onTaskUpdated` · `@task-updated`                                                                                                                        | `TaskUpdatedEvent` — `{ taskId, task, previous, fields, source }`                                                     |
+| `tasks-change` · `(tasksChange)` · `onTasksChange` · `@tasks-change`                                                                                                                        | `GanttTasksChangeEvent` — `{ tasks, change, applied }`: the tasks now, or the proposed ones when `applied` is `false` |
+| `history-change` · `(historyChange)` · `onHistoryChange` · `@history-change`                                                                                                                | `GanttHistoryState` — `{ canUndo, canRedo, undoLabel, redoLabel, undoCount, redoCount }`                              |
+
+`source` is `'drag' | 'resize' | 'progress' | 'keyboard' | 'cell' | 'link' | 'delete' | 'api' | 'undo' | 'redo'`.
+`applied` is `false` in controlled mode and when your handler set the tasks itself during `before-change`.
+`TaskResizeEvent.handle` (`'left' | 'right'`) is deprecated: use `edge`. In controlled mode the op events and
+`task-updated` still fire (with the proposed change), so you can log or save from them.
+
+#### Controlled mode
+
+With `editing: { controlled: true }` the app owns the tasks. The chart validates each change, offers it to
+`before-change` and reports it in `tasks-change` with the proposed tasks (`applied: false`); you set them
+yourself. It applies nothing and keeps no history (undo is yours: `GanttHistory` and `applyChange` /
+`invertChange` from `@gantryjs/core` are the pieces). This is how you approve a change asynchronously, or keep
+the plan in a store.
+
+```tsx
+// React
+<Gantry
+  tasks={tasks}
+  options={{ editing: { controlled: true } }}
+  onBeforeChange={d => {
+    if (isLocked(d.change)) d.preventDefault();
+  }}
+  onTasksChange={d => setTasks(d.tasks)}
+/>
+```
+
+```vue
+<!-- Vue -->
+<Gantry
+  :tasks="tasks"
+  :options="{ editing: { controlled: true } }"
+  @before-change="
+    d => {
+      if (isLocked(d.change)) d.preventDefault();
+    }
+  "
+  @tasks-change="d => (tasks = d.tasks)"
+/>
+<!-- const tasks = shallowRef(initial) -->
+```
+
+```svelte
+<!-- Svelte; let tasks = $state.raw(initial) -->
+<Gantry
+  {tasks}
+  options={{ editing: { controlled: true } }}
+  onBeforeChange={d => {
+    if (isLocked(d.change)) d.preventDefault();
+  }}
+  onTasksChange={d => (tasks = d.tasks)}
+/>
+```
+
+```html
+<!-- Angular -->
+<gantry
+  [series]="tasks()"
+  [options]="{ editing: { controlled: true } }"
+  (beforeChange)="isLocked($event.change) && $event.preventDefault()"
+  (tasksChange)="tasks.set($event.tasks)"
+/>
+```
+
+```ts
+// Web Component
+chart.options = { editing: { controlled: true } };
+chart.addEventListener('before-change', e => {
+  if (isLocked(e.detail.change)) e.preventDefault(); // or e.detail.preventDefault()
+});
+chart.addEventListener('tasks-change', e => (chart.tasks = e.detail.tasks));
+```
+
+In the other modes the chart applies the change itself, so the handlers only need to react:
+`onTasksChange` gives you the new tasks to keep in state (React `setTasks(d.tasks)`), and the Angular
+`series` is a model — bind `[(series)]="tasks"` to get the applied tasks back (a one-way `[series]` works too). Setting the tasks inside `before-change` counts as handling
+the change (`applied: false`, nothing recorded); in Angular do that with `series.set()` or a data-source write.
+Svelte copies the `tasks` prop one level: keep app-owned tasks in `$state.raw`; in Vue use `shallowRef`.
+
+#### Read-only tasks and fields
+
+| Set                                              | What the user can no longer change                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `task.editable: false`                           | Everything on that row: dates, progress, cells and links (pointer, keyboard, cell and API)                           |
+| `task.draggable: false`                          | The dates only: move, resize and the Start / End / Duration cells. Progress, the other cells and links stay editable |
+| `enableDrag` / `enableResize` off                | Moving / resizing every bar (and the Start / End / Duration cells they edit)                                         |
+| a parent with `rollup.dates` / `rollup.progress` | Those derived fields                                                                                                 |
+| milestones                                       | Resizing and progress                                                                                                |
+
+Edits that are not allowed don't show their handles (no grip, no connector, no `gantt-bar-draggable`) and are
+rejected whatever their source. They lock a bar's move and resize with `editing` off too.
+
+#### History
+
+```ts
+el.undo(); // → boolean (false: nothing to undo, no history, rejected or vetoed)
+el.redo();
+el.canUndo; // Angular: gantt.canUndo() — a signal
+el.clearHistory(); // task changes made elsewhere never clear it
+```
+
+- **Keys.** <kbd>Ctrl/⌘</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl/⌘</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> and
+  <kbd>Ctrl</kbd>+<kbd>Y</kbd> redo, while the chart keeps a history and the focus is inside it — but not in
+  text entry, not inside an open cell editor and not in move mode, where the browser's own keys stay. The toolbar
+  has Undo and Redo buttons after the panel toggle (`toolbar.undo`; `aria-disabled` when there is nothing to do,
+  never in the More menu).
+- **Steps.** One change is one step, and undo restores the data's own shape (a string `dependency` stays a string).
+  Move-mode commits of one task, progress changes and edits of one cell merge into one step within `coalesceMs`
+  (800 ms); pointer drags never merge. The oldest steps drop past `limit`. A step whose tasks are gone is skipped.
+- **Announcements.** Undo and redo are announced with what they did (`labels.announceUndo(…)`, `announceRedo(…)`);
+  `history-change` carries `undoLabel` / `redoLabel` ("Moved Design 2 days later") for your own buttons.
+- **`updateTask()` and `appendTasks()`** stay silent data writes: no `before-change`, no events, no history. They
+  write the raw input (`tasks` as you set it, `[(series)]`, or the data source through `patch()`).
+
+#### Cells
+
+With `editing.cells`, a task-list cell of an editable column opens an editor on <kbd>F2</kbd>,
+<kbd>Enter</kbd>, a double-click (`row-dblclick` still fires) or typing a character (it starts the text).
+
+| Key                                   | In the editor                                                  |
+| ------------------------------------- | -------------------------------------------------------------- |
+| <kbd>Enter</kbd>                      | Commit and close                                               |
+| <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> | Commit, then edit the next / previous editable cell of the row |
+| <kbd>Esc</kbd>                        | Cancel                                                         |
+| Focus leaves the cell                 | A valid value commits; an invalid one cancels, announced       |
+
+A commit is one `'cell'` change through the [pipeline](#the-pipeline-and-its-events) (so `before-change` can veto
+it and Undo reverts it). An invalid value keeps the editor open: the field gets `aria-invalid`, the message
+shows under the cell and is read from the alert region. While cell editing is on, every cell has `aria-readonly`
+(`"false"` on the ones you can edit). The editor is named `labels.ariaCellEditor(column, task)`.
+
+| Built-in column | Editor and accepted text                                                                                                                                              |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`          | Text, required (trimmed)                                                                                                                                              |
+| `start`, `end`  | `date`, or `datetime-local` on hour scales and for dates with a time. A new start keeps the duration; an end can't precede the start. Date-only values stay date-only |
+| `duration`      | `5`, `5d`, `2w`, `4h`, `1.5d` (`1,5d` too): more than 0; sets the end. Whole local calendar days plus real hours                                                      |
+| `progress`      | Number from 0 to 100 (`45` or `45%`), step `editing.progress.step`                                                                                                    |
+| `predecessors`  | Text, see below. The editor shows task **ids** (`research FS+2d; scope SS`); the cell shows names                                                                     |
+
+`name`, `start`, `end`, `duration`, `progress` and `predecessors` are editable by default (your own column over one
+of those keys too: the key says which field it edits); every other column isn't, and `id` never is. The
+field's rule applies on top: Start needs the bar to be movable, End and Duration resizable, Progress `editing.progress`,
+Predecessors `editing.dependencies.create`.
+
+**Predecessors.** Entries are separated by `;` or `,`. Each is `<task> [FS|SS|FF|SF] [±n[d|w|h]]`, case-insensitive: `research`,
+`research FS+2d`, `scope SS`, `a+2d`, `2FS-1w`. A task is an id, else a name that matches exactly one task (exact first,
+then ignoring case). The type defaults to FS, the lag to 0 and its unit to days (`w` = 7 days, `h` = 1/24). Empty text
+removes every link. An unknown task, a name shared by several tasks, a repeated link, a loop or a parent ↔ child link is
+an error with its message. Ids that contain `;` or `,` can't be referenced.
+
+**Custom columns.**
+
+```ts
+columns = [
+  {
+    key: 'estimate',
+    label: 'Estimate',
+    width: 90,
+    editable: row => row.task.type !== 'milestone', // true | false | per row
+    editor: 'number', // 'text' | 'number' | 'date' | 'datetime-local' | 'select', or your own (below)
+    editorOptions: { min: 1, max: 80 }, // number: min / max / step; select: { options: [{ value, label }] }
+    exportValue: row => String(row.task.data?.['estimate'] ?? ''), // the editor's first value
+    parse: text => ({ data: { estimate: Number(text) } }), // the text → the task fields; throw Error('…') to reject
+    validate: patch => (Number(patch.data?.['estimate']) > 80 ? 'At most 80 hours' : null),
+  },
+];
+```
+
+Without `parse`, the text is written to `task[key]` when `key` is a `GanttTask` field, else to `data[key]` (a number
+for `'number'`, a date for the date kinds; empty text clears it). In Angular the same fields are inputs of
+`ganttColumn`: `editable` (also a bare attribute), `editor`, `editorOptions`, `exportValue`, `parse`, `validate`.
+
+#### Custom editors
+
+`editor` can be your own function. It gets a `CellEditorContext` (`row`, `column`, `value`, `labels`, `invalid`,
+`setValue(text)`, `commit(move?)`, `cancel()`) and returns the editor's DOM node; call `setValue()` as the value
+changes and `commit()` / `cancel()` to finish. The chart focuses the node (or its first focusable child) and
+handles Enter, Tab and Escape unless the editor prevents them; chart shortcuts (`+ − T F`, Ctrl+A, Ctrl+Z) are ignored
+inside an open cell editor.
+
+```ts
+// Web Component · React · Vue · Svelte: a function returning a node
+const colour = ctx => {
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = ctx.value;
+  input.setAttribute('aria-label', ctx.labels.ariaCellEditor('Colour', ctx.row.task.name));
+  input.addEventListener('input', () => ctx.setValue(input.value));
+  return input;
+};
+columns = [
+  { key: 'colour', label: 'Colour', width: 70, editable: true, editor: colour, parse: v => ({ style: { color: v } }) },
+];
+```
+
+```html
+<!-- Angular: a template (import GanttCellEditorDirective next to GanttColumnDefDirective) -->
+<gantry [series]="tasks" [options]="{ editing: true }">
+  <ng-container ganttColumn="colour" label="Colour" [width]="70" editable>
+    <ng-template ganttCellEditor let-edit>
+      <input #p type="color" [value]="edit.value" (input)="edit.setValue(p.value)" />
+    </ng-template>
+  </ng-container>
+</gantry>
+```
+
+- Without `GanttCellEditorDirective` in `imports`, Angular takes the editor template for the cell template. A function
+  (`[editor]="fn"`) works too and wins over the template.
+- The node is mounted in the chart's shadow root in the Web Component and the wrappers: page CSS doesn't reach it, style
+  it inline (the `--gantt-*` variables do). In Angular it is in the light DOM and gets the editor look through its
+  `gantt-tl-editor` class.
+- An editor with several focusable fields must handle Tab itself (`preventDefault()` and move the focus): the chart
+  commits on Tab.
+- `editCell(taskId, columnKey)` opens an editor from code, also on a row scrolled out of view. After a mouse click on
+  your own button, `focusTask(id)` shows no focus ring on the bar (the browser's `:focus-visible` rules).
+
+#### Links
+
+With `editing.dependencies`, a bar shows a connector at each end while it is hovered, keyboard-focused or (touch) selected.
+
+- **Drag** from a connector to another bar, **or click** (tap) a connector and then the target bar, **or press L** on a
+  bar, move to another with the arrow keys and press Enter (or L).
+- A link from A to B makes B depend on A (`B.dependency` gains `{ taskId: 'A' }`). The type follows the ends: A's end to
+  B's start is FS, end → end FF, start → start SS, start → end SF; the keyboard makes FS. A new link has no lag (edit
+  it in the Predecessors cell).
+- While you draw, a dashed `path.gantt-link-preview` follows the pointer; an invalid target (the same task, a duplicate,
+  a loop, a parent ↔ child link, a read-only task) is marked and announced, and letting go creates nothing. Escape
+  cancels; a click on empty space cancels a click-mode link.
+- **Delete:** click an arrow (a 10 px band), then <kbd>Delete</kbd> or <kbd>Backspace</kbd> (`dependencies.delete`);
+  <kbd>Esc</kbd> deselects. The selected arrow is `gantt-arrow--selected` and announced.
+- `addDependency(fromId, toId, type = 'FS', lag = 0)` and `removeDependency(fromId, toId, type?)` do the same from code
+  (source `'api'`, validated, vetoable, undoable); both return whether they ran.
+
+While a link is drawn the Web Component matches `:state(linking)` and Angular's host has the class `gantry-linking`.
+
+#### Methods and the data source
+
+| Method (Angular: on the component)                 | What it does                                                                          |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `undo()` / `redo()` → `boolean`                    | Step through the history                                                              |
+| `canUndo` / `canRedo`                              | Web Component getters; signals in Angular (`gantt.canUndo()`)                         |
+| `clearHistory()`                                   | Forget every step                                                                     |
+| `addDependency(from, to, type?, lag?)` → `boolean` | Link two tasks                                                                        |
+| `removeDependency(from, to, type?)` → `boolean`    | Remove the links from `from` to `to`                                                  |
+| `editCell(taskId, columnKey)` → `boolean`          | Open a cell's editor (`false`: that cell can't be edited)                             |
+| `focusTask(id, { area })` → `boolean`              | Focus a bar (`'bar'`) or row (`'row'`); expands collapsed ancestors and scrolls to it |
+
+With a data source, edits go through `dataSource.patch(items => items.map(…))` (also `GanttDataSource.patch()` in Angular):
+they replace the loaded items without a fetch and keep the paging state, so the edit survives the next page; `reset()`
+drops them. `PagedLoader.patch()` is the same in `@gantryjs/core`.
+
+#### Breaking changes
+
+- Angular **`(rowClick)`** emits the clicked row (`GanttFlatRow`) from both panes, like every other binding, instead of
+  its `RowGeometry`: `$event.row.task` becomes `$event.task`.
+- Angular **`series`** is a model (`[(series)]`); `[series]` alone still works.
+- **`TaskResizeEvent`** has a required `edge: 'start' | 'end'`; `handle` is deprecated.
+- Hand-built objects need the new fields: `GanttLabels` (24 required labels: `undo`, `redo`, `ariaCellEditor`, the `announce…`
+  and `error…` ones), `ToolbarLabels` (`undo`, `redo`), `BarVisual` (`progressGrip`, `connectors`), `ArrowVisual`
+  (`points`, `selected`), `ToolbarItem` (`disabled`), `ResolvedToolbar` (`undo`), `BarOverlayLink` (`sourceSide`) and `BarHit`
+  (`'progress' | 'link-start' | 'link-end'`). `options.labels` stays partial.
+- A rolled-up parent (`rollup.dates`) and an `editable: false` task no longer start a drag.
+- In the Web Component, `updateTask()` / `appendTasks()` write the raw input (the data source's `patch()`), as Angular does.
+
 ### Dates, locales and format tokens
 
 Everything user-facing is translatable. Dates are formatted with the platform's `Intl` API from a
@@ -533,6 +867,9 @@ options = {
 
 - `new Date('2026-01-05')` (UTC midnight) is read as **that calendar day in local time**
   (`normalizeDateOnly: true`), so bars line up with day cells in every time zone; `parseDate()` helps too.
+  A `Date` can't say whether it was meant as a day or as an instant, so a time that happens to fall on
+  UTC midnight (17:00 in Los Angeles or 20:00 in New York in summer) is read as that day too: for plans
+  with hours west of UTC pass strings with a time (`'2026-01-05T17:00'`) or set `normalizeDateOnly: false`.
 - The x axis follows local calendar days, so daylight-saving changes never shift bars.
 - `endDateMode: 'inclusive'` makes a date-only `end` cover that whole day (default `'exclusive'`).
 
@@ -635,6 +972,7 @@ the variables, or the `density` and `responsive` options). On Angular all four a
 | Dark theme   | `:state(dark)`                                                                   | class `gantry-dark`                           |
 | Bar dragged  | `:state(dragging)`                                                               | class `gantry-dragging`                       |
 | Loading      | `:state(loading)`                                                                | class `gantry-loading`                        |
+| Link drawn   | `:state(linking)`                                                                | class `gantry-linking`                        |
 
 React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component column.
 
@@ -673,7 +1011,7 @@ React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component
 
 ### Examples gallery
 
-Twenty runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading…),
+Twenty-five runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing…),
 each in **all five** frameworks with the same controls and a code tab. A "Known differences"
 section on the Frameworks page lists what a framework does differently.
 
@@ -714,42 +1052,49 @@ to the bars' tab stop (the viewport while no bar is mounted; in the table view, 
 tab-stop row; while a state box covers the body, its Retry, else the toolbar). Pressing a draggable bar with the
 mouse focuses the timeline viewport, so <kbd>Escape</kbd> cancels the drag.
 
-| Focus on       | Key                                                         | Action                                                                                               |
-| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Toolbar        | `←` / `→` (wrapping), `Home` / `End`                        | Move between the controls                                                                            |
-|                | `Enter` / `Space`                                           | Press the button, check the radio                                                                    |
-| Task-list row  | `↑` / `↓`                                                   | Previous / next row (the header row is above the first row)                                          |
-|                | `PgUp` / `PgDn` · `Home` / `End`                            | One page up / down · first / last row                                                                |
-|                | `→`                                                         | Collapsed group: expand it; otherwise move into the row's first cell                                 |
-|                | `←`                                                         | Expanded group: collapse it; otherwise go to the parent row                                          |
-|                | `Enter`                                                     | Select only this row and fire `row-click`                                                            |
-|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | Select (toggles with `multiSelect`) · extend the range · toggle                                      |
-| Task-list cell | `←` / `→`                                                   | Previous / next cell; `←` on the first cell goes back to the row                                     |
-|                | `↑` / `↓` · `PgUp` / `PgDn`                                 | Same column, other row                                                                               |
-|                | `Home` / `End` · `Ctrl/⌘+Home` / `End`                      | First / last cell · same column, first / last row                                                    |
-|                | `Enter`, `Space`                                            | As on the row (a button or link inside a cell keeps them)                                            |
-| Header cell    | `←` / `→` · `↓`                                             | Previous / next header cell · the first row, same column                                             |
-|                | `Enter` / `Space`                                           | Sort by the column                                                                                   |
-| Bar            | `↑` / `↓` · `PgUp` / `PgDn` · `Home` / `End` (`Ctrl/⌘` too) | Focus the bar of the previous / next row, one page away, the first / last row (scrolled into view)   |
-|                | `←` / `→`                                                   | Pan the timeline by one bottom-tier header cell                                                      |
-|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | As in the task list                                                                                  |
-|                | `Enter` / `F2`                                              | **Move mode** on a movable bar; otherwise select only this row and fire `row-click`                  |
-| Move mode      | `←` / `→`                                                   | Move the bar one unit earlier / later (a day; an hour on hour scales)                                |
-|                | `Shift+←` / `→` · `Alt+←` / `→`                             | Resize the end · the start (task bars, with `enableResize`)                                          |
-|                | `Enter` / `F2`                                              | Commit: `task-dragged` / `task-resized` as after a pointer drop, then the change is announced        |
-|                | `Escape`, `Tab`, leaving the bar, a pointer press           | Cancel (announced)                                                                                   |
-| Splitter       | `←` / `→` · `Enter` / `Space`                               | Resize the panel · collapse / expand it                                                              |
-| Anywhere       | `Escape`                                                    | Cancel move mode or a drag, else close the tooltip, else clear the selection                         |
-|                | `Ctrl/⌘+A` (also with `Shift`)                              | Select all visible rows                                                                              |
-|                | `+` (or `=`) · `-` · `T` · `F`                              | Zoom in · zoom out · scroll to today · [fit to screen](#zoom) — off with `characterShortcuts: false` |
+| Focus on       | Key                                                         | Action                                                                                                                       |
+| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Toolbar        | `←` / `→` (wrapping), `Home` / `End`                        | Move between the controls                                                                                                    |
+|                | `Enter` / `Space`                                           | Press the button, check the radio                                                                                            |
+| Task-list row  | `↑` / `↓`                                                   | Previous / next row (the header row is above the first row)                                                                  |
+|                | `PgUp` / `PgDn` · `Home` / `End`                            | One page up / down · first / last row                                                                                        |
+|                | `→`                                                         | Collapsed group: expand it; otherwise move into the row's first cell                                                         |
+|                | `←`                                                         | Expanded group: collapse it; otherwise go to the parent row                                                                  |
+|                | `Enter`                                                     | Select only this row and fire `row-click`                                                                                    |
+|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | Select (toggles with `multiSelect`) · extend the range · toggle                                                              |
+| Task-list cell | `←` / `→`                                                   | Previous / next cell; `←` on the first cell goes back to the row                                                             |
+|                | `↑` / `↓` · `PgUp` / `PgDn`                                 | Same column, other row                                                                                                       |
+|                | `Home` / `End` · `Ctrl/⌘+Home` / `End`                      | First / last cell · same column, first / last row                                                                            |
+|                | `Enter`, `Space`                                            | As on the row (a button or link inside a cell keeps them)                                                                    |
+| Header cell    | `←` / `→` · `↓`                                             | Previous / next header cell · the first row, same column                                                                     |
+|                | `Enter` / `Space`                                           | Sort by the column                                                                                                           |
+| Bar            | `↑` / `↓` · `PgUp` / `PgDn` · `Home` / `End` (`Ctrl/⌘` too) | Focus the bar of the previous / next row, one page away, the first / last row (scrolled into view)                           |
+|                | `←` / `→`                                                   | Pan the timeline by one bottom-tier header cell                                                                              |
+|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | As in the task list                                                                                                          |
+|                | `Enter` / `F2`                                              | **Move mode** on a bar that can move, resize or change progress; otherwise select only this row and fire `row-click`         |
+|                | `L`                                                         | With `editing.dependencies`: start a [link](#links) from this bar; `Enter` / `L` on another bar creates it, `Escape` cancels |
+| Move mode      | `←` / `→`                                                   | Move the bar one unit earlier / later (a day; an hour on hour scales)                                                        |
+|                | `↑` / `↓`                                                   | With `editing.progress`: progress up / down by `step` %                                                                      |
+|                | `Shift+←` / `→` · `Alt+←` / `→`                             | Resize the end · the start (task bars, with `enableResize`)                                                                  |
+|                | `Enter` / `F2`                                              | Commit: `task-dragged` / `task-resized` / `task-progress-changed` as after a pointer drop, then the change is announced      |
+|                | `Escape`, `Tab`, leaving the bar, a pointer press           | Cancel (announced)                                                                                                           |
+| Task-list cell | `F2` · `Enter` · a character                                | With `editing.cells`: open the [cell's editor](#cells) (a character starts the text)                                         |
+| Cell editor    | `Enter` · `Tab` / `Shift+Tab` · `Escape`                    | Commit · commit and edit the next / previous cell · cancel                                                                   |
+| Selected arrow | `Delete` / `Backspace` · `Escape`                           | Remove the link · deselect it                                                                                                |
+| Splitter       | `←` / `→` · `Enter` / `Space`                               | Resize the panel · collapse / expand it                                                                                      |
+| Anywhere       | `Escape`                                                    | Cancel move mode, a drag, a link or a cell edit, else close the tooltip, else clear the selection                            |
+|                | `Ctrl/⌘+Z` · `Ctrl/⌘+Shift+Z` / `Ctrl+Y`                    | With an [editing history](#history): undo · redo (not in text entry or move mode)                                            |
+|                | `Ctrl/⌘+A` (also with `Shift`)                              | Select all visible rows                                                                                                      |
+|                | `+` (or `=`) · `-` · `T` · `F`                              | Zoom in · zoom out · scroll to today · [fit to screen](#zoom) — off with `characterShortcuts: false`                         |
 
 - Move mode works like a pointer drag: the same snapping and minimum length, the drag ghost, the
   readout chip with the new dates, and an announcement of each step; a movable bar is one with
-  `enableDrag` on and `task.draggable !== false`. While it is on, other plain keys do nothing.
+  `enableDrag` on, not `task.draggable: false` or `editable: false`, and its dates not rolled up. With
+  `editing.progress`, `↑` / `↓` change the progress too, and the key help says so. While it is on, other plain keys do nothing.
 - Shortcuts never fire while typing in an input, a select or a `contenteditable` cell, nor with
-  `Alt` / `AltGr` held; keys the chart doesn't use keep their browser default. `L`,
-  `Delete` and `Ctrl/⌘+Z` / `Y` are reserved for editing (dependency links, undo / redo), which
-  comes in a later release: for now they keep their default action too.
+  `Alt` / `AltGr` held, nor inside an open cell editor; keys the chart doesn't use keep their browser
+  default. `L`, `Delete` and `Ctrl/⌘+Z` / `Y` act only when their [editing](#editing) feature is on, and keep
+  their default action otherwise.
 - In a right-to-left layout the toolbar's `←` and `→` swap meaning.
 
 ### Touch and pointer
@@ -769,6 +1114,13 @@ mouse focuses the timeline viewport, so <kbd>Escape</kbd> cancels the drag.
   overlap. Their grips show on the bar under a mouse or pen, on the keyboard-focused bar and, on
   touch screens, on the selected bars. Milestones are hit 3 px around their shape, summary bars
   down to their end caps.
+- **Progress grip and connectors** (with [`editing`](#editing)). The hovered bar, the keyboard-focused bar and, on
+  touch screens, the selected bars also show a progress grip (`rect.gantt-progress-grip`) and a link connector at each end
+  (`rect.gantt-link-connector`); every target is at least 24 px both ways and stays inside its row. Drag the grip to
+  change the progress (a live fill, snapped to `editing.progress.step`, one undo step on release), drag from a connector
+  to another bar to link them, or tap a connector and then the target. A click on a dependency arrow selects it. The
+  cursor follows the part: `ew-resize` on the grip, `crosshair` on a connector and while linking, `pointer` over an arrow.
+  Grips and connectors are hit only where they show, so a press inside a narrow bar still moves it.
 - **Cancel.** `Escape`, `pointercancel` and removing the chart cancel a drag: the bar goes back,
   and the click that ends it selects nothing.
 - Both bindings hit-test bars by geometry (core `hitTestBar` on the row under the pointer), so a
@@ -820,6 +1172,11 @@ mouse focuses the timeline viewport, so <kbd>Escape</kbd> cancels the drag.
   to `.gantt-sr-alert` (`role="alert"`) at once — once: while the error state's box (itself
   `role="alert"`) shows, that region stays empty. Every text is a `labels` entry
   (`announceSelection`, `announceZoom`, `announceExpanded`, `announceEditStart`, …).
+- With [`editing`](#editing), every applied change is announced in words ("Design moved 2 days later", "Linked Research
+  to Build"), and so are a rejected or vetoed one (`announceChangeRejected`), undo and redo (`announceUndo` /
+  `announceRedo`), a link started, selected or deleted, and a cell edit's invalid value (the alert region). Task-list cells
+  carry `aria-readonly` while cells are editable; the cell editor is named by `labels.ariaCellEditor(column, task)`,
+  `aria-invalid` and `aria-describedby` its message.
 
 ### Forced colors
 
@@ -835,6 +1192,10 @@ bindings paint with system colours; the look outside that mode doesn't change.
 | Arrows                                                                                     | `CanvasText`                                            |
 | Grid lines, annotations, non-working time, loading placeholders                            | `GrayText`                                              |
 | Tooltip, drag readout, state boxes                                                         | `Canvas` / `CanvasText` with a border                   |
+| Progress grip, link connectors, the link being drawn, the selected arrow                   | `Highlight`                                             |
+| Invalid link targets, an invalid cell editor                                               | dashed `CanvasText`                                     |
+| Cell editor                                                                                | `Field` / `FieldText`                                   |
+| Disabled Undo / Redo                                                                       | `GrayText`                                              |
 
 A custom `renderBar` SVG and custom Angular bar components keep their own paints unless they add
 forced-colors rules of their own (built-in bars on the critical path carry the class
@@ -867,6 +1228,7 @@ npm i @gantryjs/angular
 | **Lazy load**      | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry                                  |
 | **Drag & resize**  | Pointer Events for bars, the splitter and column widths: 3 px mouse threshold, 350 ms touch long-press, auto-scroll at the edges, 24 px resize targets |
 | **Selection**      | Single / Ctrl+Click toggle / Shift+Click range, and the same with `Space` / `Ctrl+Space` / `Shift+Space`                                               |
+| **Editing**        | `options.editing`: cell editors, a progress grip, drawn links, undo / redo and a cancelable `(beforeChange)` — see [Editing](#editing)                 |
 | **Keyboard**       | One tab stop each for the toolbar, the task list (row-first treegrid) and the bars; keyboard move / resize mode; `+` `-` `T` `F` shortcuts             |
 | **Accessibility**  | `region` landmark, `treegrid` task list, bars as a `listbox`, debounced live regions, forced colors, WCAG 2.2 AA palette                               |
 | **Sorting**        | Click a sortable column header: ascending → descending → original order                                                                                |
@@ -1135,7 +1497,9 @@ columns = computed<ColumnDef[]>(() => [
 ```
 
 Its inputs are `ganttColumn` (the key), `label`, `width`, `minWidth`, `maxWidth`, `visible`,
-`sortable`, `sortValue` and `render`; a cell template goes inside an `<ng-container ganttColumn>`
+`sortable`, `sortValue` and `render`, and for [cell editing](#cells) `editable` (also a bare attribute), `editor`,
+`editorOptions`, `exportValue`, `parse` and `validate`; an `<ng-template ganttCellEditor let-edit>` is the column's
+[custom editor](#custom-editors); a cell template goes inside an `<ng-container ganttColumn>`
 (an `<ng-template ganttColumn>` can't hold one). The inputs you leave unset come from the column
 with the same key: over one of your `[columns]` a definition overrides only what it sets (a new
 cell keeps the column's sort rule); over a built-in column, a cell of your own sorts only with
@@ -1323,7 +1687,7 @@ const routes: Routes = [
 
 | Input                         | Type                              | Default                                                                               |
 | ----------------------------- | --------------------------------- | ------------------------------------------------------------------------------------- |
-| `series`                      | `GanttTask[]`                     | `[]`                                                                                  |
+| `series` (model)              | `GanttTask[]`                     | `[]`: bind `[(series)]` to get the tasks the chart applied                            |
 | `dataSource`                  | `GanttDataSource \| null`         | `null`                                                                                |
 | `options`                     | `GanttOptions`                    | `{}`                                                                                  |
 | `annotations`                 | `GanttAnnotation[]`               | `[]`                                                                                  |
@@ -1338,16 +1702,22 @@ const routes: Routes = [
 | `errorMessage`                | `string \| null \| undefined`     | `null`: a non-blank message shows the error state with Retry                          |
 | `syncGroup`                   | `GanttSyncGroup \| null`          | `null`: charts sharing a group share range, zoom, scroll and panel width              |
 
-| Output                     | Payload                                                                                |
-| -------------------------- | -------------------------------------------------------------------------------------- |
-| `viewModeChange`           | the new zoom level (`ViewMode` or a custom level name)                                 |
-| `taskDragged`              | `TaskDragEvent`                                                                        |
-| `taskResized`              | `TaskResizeEvent`                                                                      |
-| `selectionChange`          | `SelectionChangeEvent`                                                                 |
-| `rowClick` / `rowDblClick` | `RowGeometry` / `GanttFlatRow`                                                         |
-| `stateChange`              | `GanttState` — panel, view, zoom, column widths, collapsed rows or sort changed        |
-| `loadError`                | `{ error, page }` — a data-source page failed after its retries                        |
-| `retry`                    | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }` |
+| Output                                    | Payload                                                                                |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `viewModeChange`                          | the new zoom level (`ViewMode` or a custom level name)                                 |
+| `taskDragged`                             | `TaskDragEvent`                                                                        |
+| `taskResized`                             | `TaskResizeEvent`                                                                      |
+| `selectionChange`                         | `SelectionChangeEvent`                                                                 |
+| `rowClick` / `rowDblClick`                | `GanttFlatRow` (a double-click on an editable cell fires `rowDblClick` too)            |
+| `stateChange`                             | `GanttState` — panel, view, zoom, column widths, collapsed rows or sort changed        |
+| `loadError`                               | `{ error, page }` — a data-source page failed after its retries                        |
+| `retry`                                   | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }` |
+| `beforeChange`                            | `GanttBeforeChangeEvent` — `$event.preventDefault()` vetoes the change                 |
+| `tasksChange`                             | `GanttTasksChangeEvent` — `{ tasks, change, applied }`                                 |
+| `taskUpdated`                             | `TaskUpdatedEvent` — one per changed task                                              |
+| `taskProgressChanged`                     | `TaskProgressEvent`                                                                    |
+| `dependencyCreated` / `dependencyDeleted` | `DependencyChangeEvent`                                                                |
+| `historyChange`                           | `GanttHistoryState`                                                                    |
 
 - **Boolean inputs** take attribute values: `<gantry showLegend>` is `true`, `showToolbar="false"`
   is `false`.
@@ -1356,6 +1726,9 @@ const routes: Routes = [
   `zoomIn()` / `zoomOut()` / `setViewMode()`, a restored state or a new `options.viewMode`; it does
   not fire for a value the parent sets through `[viewMode]`, nor on the first render. Between
   `[viewMode]` and `options.viewMode`, the one that changed last wins.
+- **`series` is a model.** `[(series)]="tasks"` keeps the tasks you pass in sync with the edits the chart applies
+  (drags, cells, links, undo…); `(tasksChange)` reports each one. See [Editing](#editing) for the events and
+  `[series]` with `editing.controlled`.
 - **`syncGroup`** takes a `createGanttSyncGroup()` group (see [Synchronised charts](#synchronised-charts)).
   A chart leaves its group when it is destroyed or the input changes.
 - **`loading` / `errorMessage` / `retry`** drive the chart's
@@ -1370,16 +1743,17 @@ const routes: Routes = [
 `ViewMode`, the themes, the labels and the date, tree, critical-path and theme helpers) and these
 Angular pieces:
 
-| Export                                                                       | What                                                       |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `GantryComponent`                                                            | `<gantry>`                                                 |
-| `GanttColumnDefDirective`                                                    | `ganttColumn` column definitions                           |
-| `GanttTooltipTemplateDirective`, `GanttTooltipTemplateContext`               | `<ng-template ganttTooltip>` [tooltip content](#tooltip)   |
-| `provideGantt`, `withBars`, `GanttGlobalConfig`, `GanttFeature`              | optional defaults ([Providers & setup](#providers--setup)) |
-| `provideGanttBar`, `GanttBarDef`, `GanttBarBase`                             | [custom bars](#custom-bar-component)                       |
-| `GanttTaskBarComponent`, `GanttMilestoneComponent`, `GanttGroupBarComponent` | the built-in bars, reusable for another `barType`          |
-| `GanttDataSource`, `createGanttDataSource`, `GanttDataSourceConfig`          | [lazy loading](#lazy-load-with-ganttdatasource)            |
-| `ColumnDef`                                                                  | `ColumnDef<TemplateRef<ColumnCellContext>>`                |
+| Export                                                                       | What                                                                                                          |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `GantryComponent`                                                            | `<gantry>`                                                                                                    |
+| `GanttColumnDefDirective`                                                    | `ganttColumn` column definitions                                                                              |
+| `GanttCellEditorDirective`, `CellEditorTemplateContext`                      | `<ng-template ganttCellEditor>` [cell editors](#custom-editors)                                               |
+| `GanttTooltipTemplateDirective`, `GanttTooltipTemplateContext`               | `<ng-template ganttTooltip>` [tooltip content](#tooltip)                                                      |
+| `provideGantt`, `withBars`, `GanttGlobalConfig`, `GanttFeature`              | optional defaults ([Providers & setup](#providers--setup))                                                    |
+| `provideGanttBar`, `GanttBarDef`, `GanttBarBase`                             | [custom bars](#custom-bar-component)                                                                          |
+| `GanttTaskBarComponent`, `GanttMilestoneComponent`, `GanttGroupBarComponent` | the built-in bars, reusable for another `barType`                                                             |
+| `GanttDataSource`, `createGanttDataSource`, `GanttDataSourceConfig`          | [lazy loading](#lazy-load-with-ganttdatasource)                                                               |
+| `ColumnDef`                                                                  | `ColumnDef<TemplateRef<ColumnCellContext>, TemplateRef<CellEditorTemplateContext> \| ((ctx) => HTMLElement)>` |
 
 The services, the inner components (canvas, header, task list, toolbar, tooltip, load-more
 footer) and the keyboard directive are internal: drive the chart through its inputs, outputs and
@@ -1397,7 +1771,12 @@ gantt.getBarVisual(id): BarVisual | undefined    // geometry and paints, also fo
 gantt.criticalIds()                              // ReadonlySet<string>: the tasks on the critical path (signal)
 gantt.getSelectedTasks(): GanttTask[]
 gantt.setSelectedTasks(ids) / clearSelection() / selectAll()
-gantt.updateTask(id, patch) / appendTasks(tasks)
+gantt.updateTask(id, patch) / appendTasks(tasks) // silent writes: no events, no history
+gantt.undo() / redo(): boolean                   // editing history; gantt.canUndo() / canRedo() are signals
+gantt.clearHistory()
+gantt.addDependency(fromId, toId, type?, lag?) / removeDependency(fromId, toId, type?): boolean
+gantt.editCell(taskId, columnKey): boolean       // open a cell editor (editing.cells)
+gantt.focusTask(id, { area?: 'bar' | 'row' }): boolean
 gantt.collapseAll() / expandAll()
 gantt.setColumnVisible(key, visible, view?) / toggleColumnVisible(key, view?)
 gantt.setTheme(override) / patchTheme(patch) / resetTheme()

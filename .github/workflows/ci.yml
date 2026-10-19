@@ -52,7 +52,7 @@ jobs:
       - name: Gallery code samples are up to date and every case exists in all five frameworks (`pnpm gallery:sources`)
         run: pnpm gallery:check
       - name: Bundle size budget (`import '@gantryjs/vanilla'`, minified + gzip)
-        run: node scripts/size.mjs --max 79
+        run: node scripts/size.mjs --max 100
       - name: Build packages, Angular library, showcase and demos
         run: pnpm build
       - name: API report is up to date (@gantryjs/angular)

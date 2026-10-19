@@ -4,14 +4,21 @@
  */
 
 import type {
+  CellEditorContext,
   ColumnDef,
+  DependencyChangeEvent,
+  GanttBeforeChangeEvent,
   GanttFlatRow,
+  GanttHistoryState,
+  GanttTasksChangeEvent,
   GanttTask,
   GanttOptions,
   GanttAnnotation,
   GanttState,
   TaskDragEvent,
+  TaskProgressEvent,
   TaskResizeEvent,
+  TaskUpdatedEvent,
   SelectionChangeEvent,
   RetryEvent,
   PagedLoaderConfig,
@@ -24,8 +31,16 @@ import type { GanttDataSource } from './datasource/gantt-datasource';
 /** Custom cell content: a DOM node, or a string rendered as text. `ctx` carries "now" and the task index. */
 export type VanillaCellTemplate = (row: GanttFlatRow, ctx: ColumnContext) => Node | string;
 
-/** Column definition whose `cellTemplate` builds the cell's DOM content. */
-export type VanillaColumnDef = ColumnDef<VanillaCellTemplate>;
+/**
+ * Custom cell editor (`ColumnDef.editor`): returns the editor's DOM node, mounted in the cell inside
+ * the shadow root (page CSS does not reach it: style it on the node). The chart focuses it (or its first focusable child) and handles Enter / Tab / Esc unless
+ * the node calls `preventDefault()`; call `ctx.setValue()` as the value changes and `ctx.commit()` /
+ * `ctx.cancel()` to finish.
+ */
+export type VanillaCellEditor = (ctx: CellEditorContext) => HTMLElement;
+
+/** Column definition whose `cellTemplate` builds the cell's DOM content and whose `editor` builds a custom cell editor. */
+export type VanillaColumnDef = ColumnDef<VanillaCellTemplate, VanillaCellEditor>;
 
 /**
  * Custom bar renderer. Return an SVG element to replace the built-in bar, or
@@ -58,6 +73,24 @@ export interface GantryEventDetailMap {
    * also calls `dataSource.retry()`)
    */
   retry: RetryEvent;
+  /**
+   * A change is about to be applied (every edit: drag, resize, keyboard, progress, cell, link, API,
+   * undo / redo). Cancelable: `event.preventDefault()` or `detail.preventDefault()` (synchronously)
+   * vetoes it. Assigning `tasks` meanwhile counts as handled: nothing is applied (`applied: false`).
+   */
+  'before-change': GanttBeforeChangeEvent;
+  /** After every accepted change: the tasks now, or (controlled mode, `applied: false`) the tasks to set yourself */
+  'tasks-change': GanttTasksChangeEvent;
+  /** One per changed task, after the op events */
+  'task-updated': TaskUpdatedEvent;
+  /** A task's progress changed (progress grip, ↑ / ↓ in move mode, the progress cell, undo / redo) */
+  'task-progress-changed': TaskProgressEvent;
+  /** A dependency was added (link drawn, predecessors cell, `addDependency()`, undo / redo) */
+  'dependency-created': DependencyChangeEvent;
+  /** A dependency was removed (selected link + Delete, predecessors cell, `removeDependency()`, undo / redo) */
+  'dependency-deleted': DependencyChangeEvent;
+  /** The undo / redo state changed (`canUndo`, `canRedo`, labels, counts) */
+  'history-change': GanttHistoryState;
 }
 
 export type GantryEventMap = {
@@ -101,6 +134,13 @@ export const GANTRY_EVENTS = {
   'state-change': 'onStateChange',
   'load-error': 'onLoadError',
   retry: 'onRetry',
+  'before-change': 'onBeforeChange',
+  'tasks-change': 'onTasksChange',
+  'task-updated': 'onTaskUpdated',
+  'task-progress-changed': 'onTaskProgressChanged',
+  'dependency-created': 'onDependencyCreated',
+  'dependency-deleted': 'onDependencyDeleted',
+  'history-change': 'onHistoryChange',
 } as const satisfies Record<keyof GantryEventDetailMap, string>;
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */

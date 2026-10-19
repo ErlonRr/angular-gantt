@@ -3,17 +3,27 @@
  * site's /playground page). Controls edit a flat `PlaygroundState`; `playgroundOptions()` turns it
  * into the `GanttOptions` the preview runs and `playgroundCode()` prints those same options in the
  * syntax of each framework. A setup travels in links through `encodeState()` / `decodeState()`.
+ * `editEventText()` words the editing events the same way in both event logs.
  */
 
 import {
+  DEFAULT_LABELS,
   ViewMode,
   WEEK_FORMATS,
+  describeChange,
+  type DependencyChangeEvent,
+  type GanttBeforeChangeEvent,
   type GanttDensity,
+  type GanttEditingOptions,
+  type GanttHistoryState,
   type GanttOptions,
   type GanttRollupOptions,
   type GanttScale,
   type GanttStyleOptions,
+  type GanttTasksChangeEvent,
   type ScaleFormat,
+  type TaskProgressEvent,
+  type TaskUpdatedEvent,
   type WeekNumbering,
   type WeekStart,
 } from '@gantryjs/core';
@@ -66,6 +76,16 @@ export interface PlaygroundState {
   markerLane: string;
   toolbarFit: boolean;
   readoutFormat: string;
+  /** `'off'` or `'on'`: the switch of the Editing section, whose other controls apply only while it is on */
+  editing: string;
+  editCells: boolean;
+  editProgress: boolean;
+  progressStep: number;
+  linkCreate: boolean;
+  linkDelete: boolean;
+  linkParentChild: boolean;
+  historyLimit: number;
+  toolbarUndo: boolean;
 }
 
 export type PlaygroundKey = keyof PlaygroundState;
@@ -117,6 +137,16 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   markerLane: 'auto',
   toolbarFit: true,
   readoutFormat: 'scale',
+  // `editing` (resolveEditing): off by default; on, every feature but parent–child links
+  editing: 'off',
+  editCells: true,
+  editProgress: true,
+  progressStep: 5,
+  linkCreate: true,
+  linkDelete: true,
+  linkParentChild: false,
+  historyLimit: 100,
+  toolbarUndo: true,
 };
 
 interface ControlBase {
@@ -127,9 +157,13 @@ interface ControlBase {
   option: string;
   /** One line of help under the control. */
   hint?: string;
+  /** The control applies only while this holds; otherwise the playgrounds show it disabled (`controlEnabled`). */
+  when?: (s: PlaygroundState) => boolean;
 }
 export type PlaygroundControl =
   | (ControlBase & { kind: 'select'; choices: readonly (readonly [string | number, string])[] })
+  /** A row of toggle buttons (`div.gs-seg` > `button.gs-seg-btn[aria-pressed]`), for two or three short choices */
+  | (ControlBase & { kind: 'segmented'; choices: readonly (readonly [string, string])[] })
   | (ControlBase & { kind: 'range'; min: number; max: number; step?: number; unit?: string })
   | (ControlBase & { kind: 'check' });
 
@@ -189,6 +223,9 @@ const WEEK: Record<string, ScaleFormat> = {
 };
 /** `WEEK_FORMATS` member names by function, to print a format as code. */
 const WEEK_FORMAT_NAMES = new Map<unknown, string>(Object.entries(WEEK_FORMATS).map(([name, fn]) => [fn, name]));
+
+/** The Editing controls apply while editing is on. */
+const editingOn = (s: PlaygroundState): boolean => s.editing === 'on';
 
 export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
   {
@@ -615,6 +652,93 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
     ],
   },
   {
+    title: 'Editing',
+    controls: [
+      {
+        kind: 'segmented',
+        key: 'editing',
+        label: 'Editing',
+        option: 'editing',
+        choices: [
+          ['off', 'Off'],
+          ['on', 'On'],
+        ],
+        hint: 'Cells, progress, links and undo; the controls below need it on. Drag and resize work either way.',
+      },
+      {
+        kind: 'check',
+        key: 'editCells',
+        label: 'Edit cells',
+        option: 'editing.cells',
+        hint: 'F2, Enter, typing or a double-click edits a task list cell.',
+        when: editingOn,
+      },
+      {
+        kind: 'check',
+        key: 'editProgress',
+        label: 'Progress grip',
+        option: 'editing.progress',
+        hint: 'Drag the grip on a bar, or ↑ and ↓ while moving a bar with the keyboard.',
+        when: editingOn,
+      },
+      {
+        kind: 'range',
+        key: 'progressStep',
+        label: 'Progress step',
+        option: 'editing.progress.step',
+        min: 1,
+        max: 25,
+        unit: '%',
+        hint: 'How far the progress grip and ↑ / ↓ move the progress in one step.',
+        when: s => editingOn(s) && s.editProgress,
+      },
+      {
+        kind: 'check',
+        key: 'linkCreate',
+        label: 'Create links',
+        option: 'editing.dependencies.create',
+        hint: 'Drag from the dot at a bar’s end to another bar, click one then the other, or press L on a bar.',
+        when: editingOn,
+      },
+      {
+        kind: 'check',
+        key: 'linkDelete',
+        label: 'Delete links',
+        option: 'editing.dependencies.delete',
+        hint: 'Click an arrow, then press Delete.',
+        when: editingOn,
+      },
+      {
+        kind: 'check',
+        key: 'linkParentChild',
+        label: 'Parent–child links',
+        option: 'editing.dependencies.parentChild',
+        hint: 'Lets a task depend on its own parent or child.',
+        when: editingOn,
+      },
+      {
+        kind: 'range',
+        key: 'historyLimit',
+        label: 'Undo history',
+        option: 'editing.history.limit',
+        min: 10,
+        max: 200,
+        step: 10,
+        unit: 'steps',
+        hint: 'Ctrl/⌘+Z undoes, Ctrl/⌘+Shift+Z or Ctrl+Y redoes.',
+        when: editingOn,
+      },
+      {
+        kind: 'check',
+        key: 'toolbarUndo',
+        label: 'Undo buttons',
+        option: 'toolbar.undo',
+        hint: 'Undo and Redo in the toolbar.',
+        when: editingOn,
+      },
+    ],
+  },
+  {
     title: 'State',
     controls: [
       {
@@ -650,6 +774,29 @@ function rollupOption(s: PlaygroundState): GanttOptions['rollup'] {
   if (s.rollupProgress !== PLAYGROUND_DEFAULTS.rollupProgress) rollup.progress = ROLLUP_PROGRESS[s.rollupProgress];
   if (s.rollupSegments) rollup.segments = true;
   return Object.keys(rollup).length ? rollup : true;
+}
+
+/**
+ * `editing` for the state: left out while editing is off, `true` with every feature at its default,
+ * else the object form with the changed features only (in that form an unset feature is on, and
+ * parent–child links are off unless set). Links read `false` once none of them is allowed.
+ */
+function editingOption(s: PlaygroundState): GanttOptions['editing'] {
+  if (!editingOn(s)) return undefined;
+  const editing: GanttEditingOptions = {};
+  if (!s.editCells) editing.cells = false;
+  if (!s.editProgress) editing.progress = false;
+  else if (s.progressStep !== PLAYGROUND_DEFAULTS.progressStep) editing.progress = { step: s.progressStep };
+  if (!s.linkCreate && !s.linkDelete && !s.linkParentChild) editing.dependencies = false;
+  else {
+    const deps: Exclude<GanttEditingOptions['dependencies'], boolean | undefined> = {};
+    if (!s.linkCreate) deps.create = false;
+    if (!s.linkDelete) deps.delete = false;
+    if (s.linkParentChild) deps.parentChild = true;
+    if (Object.keys(deps).length) editing.dependencies = deps;
+  }
+  if (s.historyLimit !== PLAYGROUND_DEFAULTS.historyLimit) editing.history = { limit: s.historyLimit };
+  return Object.keys(editing).length ? editing : true;
 }
 
 /**
@@ -712,6 +859,8 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       panelToggle: ifChanged(s, 'panelToggle', s.panelToggle),
       fit: ifChanged(s, 'toolbarFit', s.toolbarFit),
       overflow: ifChanged(s, 'toolbarOverflow', s.toolbarOverflow as 'menu' | 'wrap'),
+      // The buttons show only while the chart keeps history: the choice counts while editing is on
+      undo: editingOn(s) ? ifChanged(s, 'toolbarUndo', s.toolbarUndo) : undefined,
     },
     legend: { position: ifChanged(s, 'legendPosition', s.legendPosition as 'bottom' | 'toolbar') },
     markers: { lane: ifChanged(s, 'markerLane', MARKER_LANE[s.markerLane] ?? 'auto') },
@@ -722,6 +871,7 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       showDelay: ifChanged(s, 'tooltipShowDelay', s.tooltipShowDelay),
       hideDelay: ifChanged(s, 'tooltipHideDelay', s.tooltipHideDelay),
     },
+    editing: editingOption(s),
   };
 }
 
@@ -739,6 +889,15 @@ export function playgroundCommand(before: PlaygroundState, after: PlaygroundStat
 export function valueText(value: number, unit: string | undefined): string {
   if (!unit) return String(value);
   return unit === '%' ? `${value}%` : `${value} ${unit}`;
+}
+
+/**
+ * Whether `control` applies in `state`: the Editing controls only while editing is on (the
+ * progress step also needs the progress grip). Playgrounds show the others disabled; their values
+ * stay in the state and the link, and count again once the control applies.
+ */
+export function controlEnabled(control: PlaygroundControl, state: PlaygroundState): boolean {
+  return control.when?.(state) ?? true;
 }
 
 /** The keys whose value differs from the playground defaults. */
@@ -764,6 +923,7 @@ function isValid(c: PlaygroundControl, v: unknown): boolean {
     case 'range':
       return typeof v === 'number' && Number.isFinite(v) && v >= c.min && v <= c.max;
     case 'select':
+    case 'segmented':
       return c.choices.some(([value]) => value === v);
   }
 }
@@ -788,6 +948,57 @@ export function decodeState(text: string | null | undefined): PlaygroundState {
     // A broken link opens the defaults
   }
   return state;
+}
+
+// ── Events ──────────────────────────────────────────────────
+
+/** The editing events both playground logs list, by DOM name, with their details. */
+export interface PlaygroundEditEvents {
+  'before-change': GanttBeforeChangeEvent;
+  'task-progress-changed': TaskProgressEvent;
+  'dependency-created': DependencyChangeEvent;
+  'dependency-deleted': DependencyChangeEvent;
+  'task-updated': TaskUpdatedEvent;
+  'tasks-change': GanttTasksChangeEvent;
+  'history-change': GanttHistoryState;
+}
+export type PlaygroundEditEvent = keyof PlaygroundEditEvents;
+
+/** A task's name by id, for the log lines. */
+type NameOf = (taskId: string) => string;
+
+/** `Design → Build · FS`, `Design → Build · SS +2d`. */
+function linkText(d: DependencyChangeEvent, nameOf: NameOf): string {
+  const lag = d.lag ? ` ${d.lag > 0 ? '+' : ''}${d.lag}d` : '';
+  return `${nameOf(d.fromId)} → ${nameOf(d.toId)} · ${d.type}${lag}`;
+}
+
+const EDIT_EVENT_TEXT: { [K in PlaygroundEditEvent]: (detail: PlaygroundEditEvents[K], nameOf: NameOf) => string } = {
+  'before-change': (d, nameOf) =>
+    `${d.change.source} · ${describeChange(d.change, nameOf, DEFAULT_LABELS) || 'no change'}`,
+  'task-progress-changed': (d, nameOf) =>
+    `${nameOf(d.taskId)} · ${Math.round(d.oldProgress)}% → ${Math.round(d.newProgress)}%`,
+  'dependency-created': linkText,
+  'dependency-deleted': linkText,
+  'task-updated': (d, nameOf) => `${nameOf(d.taskId)} · ${d.fields.join(', ')}`,
+  'tasks-change': d => `${d.change.source} · ${d.applied ? 'applied' : 'not applied'} · ${d.tasks.length} tasks`,
+  'history-change': d => `${d.undoCount} to undo · ${d.redoCount} to redo`,
+};
+
+/** The editing events, in the order the chart fires them (the op events after `before-change`). */
+export const PLAYGROUND_EDIT_EVENTS = Object.keys(EDIT_EVENT_TEXT) as PlaygroundEditEvent[];
+
+/**
+ * The line both playground logs show for an editing event (the Web Component's DOM event, or
+ * Angular's output of the same name in camelCase), with tasks by name: `drag · Design moved 2
+ * days later`, `Design · 40% → 45%`, `Design → Build · FS`, `2 to undo · 0 to redo`.
+ */
+export function editEventText<K extends PlaygroundEditEvent>(
+  event: K,
+  detail: PlaygroundEditEvents[K],
+  nameOf: NameOf,
+): string {
+  return EDIT_EVENT_TEXT[event](detail, nameOf);
 }
 
 // ── Code ────────────────────────────────────────────────────

@@ -8,6 +8,8 @@
 //
 //    div.gantt-toolbar[role=toolbar][aria-label]
 //      div.gantt-tb-group.gantt-tb-panel-group   button.gantt-tb-btn.gantt-tb-panel[aria-pressed]   (`panelToggle`)
+//      div.gantt-tb-group.gantt-tb-history     button.gantt-tb-btn.gantt-tb-undo|redo[aria-label][title][aria-disabled?]
+//                                               > svg.gantt-tb-icon   (`toolbar.undo` while the chart keeps history)
 //      div.gantt-tb-group                     button.gantt-tb-btn ×3 (zoom out, zoom in, fit)
 //                                               > svg.gantt-tb-icon[aria-hidden] > path…
 //      div.gantt-tb-group.gantt-tb-pills[role=radiogroup][aria-label]
@@ -26,14 +28,27 @@
 //            > svg.gantt-tb-icon? + span.gantt-tb-label
 //      div.gantt-legend.gantt-legend--toolbar (`legend.position: 'toolbar'`, while placed here)
 //
-//  Every built-in button carries `data-focus-key` (`panel`, `zoom-out`,
-//  `zoom-in`, `fit`, `zoom:<level>`, `today`, `view:<view>`, `more`; menu
-//  items `menu:<key>`): groups are keyed by `ToolbarGroup.key` and buttons
+//  Every built-in button carries `data-focus-key` (`panel`, `undo`, `redo`,
+//  `zoom-out`, `zoom-in`, `fit`, `zoom:<level>`, `today`, `view:<view>`,
+//  `more`; menu items `menu:<key>`): groups are keyed by `ToolbarGroup.key` and buttons
 //  by it, so a control keeps its node, and keyboard focus, across zooms,
 //  view switches and option changes. The panel toggle, the More button and
 //  the menu are attached only while shown (D26): at a width where
 //  everything fits, without `panelToggle`, the toolbar is the Phase 9
 //  toolbar.
+//
+//  History (Phase 11, D17): with `toolbar.undo` (default on) and while the
+//  chart keeps history (`editing.history`: editing on, not controlled)
+//  core adds the `history` group, Undo and Redo, after the panel group. It
+//  is built from `layout.historyState` (cut off on `canUndo` / `canRedo`),
+//  so `aria-disabled="true"` follows them (absent while available). A
+//  disabled control stays focusable and in the roving set (the tab stop
+//  skips it while nothing was focused yet: core `toolbarTabStop`), and its
+//  click, Enter or Space does nothing. Otherwise they run the chart
+//  editor's `undo()` / `redo()` (what the chart's methods run; the pipeline
+//  announces the result) and focus stays on the button. The group never
+//  moves into the More menu. With editing off it is never built (the
+//  history state is not even read): the toolbar is unchanged.
 //
 //  Overflow (D3): the width the groups get is the chart's (`layout.mainWidth`,
 //  measured by GantryComponent), less the `[ganttToolbar]` slot's border box
@@ -71,6 +86,7 @@
 //
 //  Each control emits its action; GantryComponent runs it (zoomIn,
 //  zoomOut, fitToScreen, scrollToToday, setViewMode, setView, togglePanel).
+//  Undo and Redo run the chart's editor (`GanttEditorService`) directly.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -109,6 +125,7 @@ import {
   toolbarMenuKey,
   toolbarTabStop,
   type Command,
+  type GanttHistoryState,
   type GanttView,
   type GanttZoomLevel,
   type MoveCommand,
@@ -122,6 +139,7 @@ import {
   type ToolbarMenuState,
 } from '@gantryjs/core';
 
+import { GanttEditorService } from '../editing/gantt-editor.service';
 import { GanttIconComponent } from '../icons/gantt-icon.component';
 import { GanttLegendComponent } from '../legend/gantt-legend.component';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
@@ -232,6 +250,7 @@ function sameData(a: unknown, b: unknown): boolean {
             [attr.aria-controls]="item.expanded === true ? menuId : null"
             [attr.aria-label]="item.ariaLabel"
             [attr.title]="item.title"
+            [attr.aria-disabled]="item.disabled"
             [attr.tabindex]="item.focusKey === tabStop() ? 0 : -1"
             (click)="activate(item)"
           >
@@ -330,6 +349,14 @@ function sameData(a: unknown, b: unknown): boolean {
       .gantt-tb-pill:hover {
         color: var(--gantt-text);
         border-color: var(--gantt-border);
+      }
+      /* Undo / Redo with nothing to undo / redo: muted, no hover change, the default cursor (still
+         focusable, so they keep their focus ring) */
+      .gantt-tb-btn[aria-disabled='true'],
+      .gantt-tb-btn[aria-disabled='true']:hover {
+        color: var(--gantt-text-muted);
+        border-color: var(--gantt-border);
+        cursor: default;
       }
       .gantt-tb-btn:focus-visible,
       .gantt-tb-pill:focus-visible {
@@ -432,8 +459,9 @@ function sameData(a: unknown, b: unknown): boolean {
 
       /* Forced colours (D25): the checked radio and menu item Highlight / HighlightText, opting out of
          forcing (the Canvas text backplate would hide HighlightText); the pressed panel toggle
-         Highlight; the More menu Canvas / CanvasText. The focus ring is the chart's
-         --gantt-focus-ring, Highlight in this mode */
+         Highlight; a disabled Undo / Redo GrayText (important: over the disabled :hover rule); the
+         More menu Canvas / CanvasText. The focus ring is the chart's --gantt-focus-ring, Highlight in
+         this mode */
       @media (forced-colors: active) {
         .gantt-tb-pill[aria-checked='true'],
         .gantt-tb-menu-item[aria-checked='true'] {
@@ -445,6 +473,10 @@ function sameData(a: unknown, b: unknown): boolean {
         .gantt-tb-btn[aria-pressed='true'] {
           color: Highlight;
           border-color: Highlight;
+        }
+        .gantt-tb-btn[aria-disabled='true'] {
+          color: GrayText !important;
+          border-color: GrayText !important;
         }
         .gantt-tb-menu {
           background-color: Canvas;
@@ -464,6 +496,7 @@ export class GanttToolbarComponent {
     fit: true,
     panelToggle: false,
     overflow: 'menu',
+    undo: true,
   });
   readonly zoomLevels = input<readonly GanttZoomLevel[]>([]);
   /** Name of the zoom level shown (checks its radio) */
@@ -482,6 +515,8 @@ export class GanttToolbarComponent {
 
   protected readonly labels = inject(GanttI18nService).labels;
   protected readonly layout = inject(GanttLayoutService);
+  /** The chart's change pipeline: Undo / Redo */
+  private readonly editor = inject(GanttEditorService);
   private readonly doc = inject(DOCUMENT);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
@@ -514,6 +549,16 @@ export class GanttToolbarComponent {
   /** The density's control size (`ResolvedGanttConfig.controlSize`) */
   private readonly controlSize = computed(() => this.layout.cfg().controlSize);
 
+  /**
+   * The undo / redo state while the chart keeps history (`editing.history`), else `null` (no
+   * history group; the state is not read). Cut off on what the buttons show: another step changes
+   * the counts and labels, not the toolbar.
+   */
+  private readonly history = computed<GanttHistoryState | null>(
+    () => (this.layout.cfg().editing.history ? this.layout.historyState() : null),
+    { equal: (a, b) => a === b || (!!a && !!b && a.canUndo === b.canUndo && a.canRedo === b.canRedo) },
+  );
+
   /** Core `buildToolbar()`: the groups in display order, each with its controls */
   protected readonly groups = computed<ToolbarGroup[]>(() =>
     buildToolbar({
@@ -522,6 +567,8 @@ export class GanttToolbarComponent {
       labels: this.labels(),
       viewMode: this.currentView(),
       view: this.view(),
+      // Undo / Redo while the chart keeps history
+      history: this.history(),
     }),
   );
 
@@ -605,8 +652,12 @@ export class GanttToolbarComponent {
     });
   }
 
-  /** A built-in control was activated (click, or Enter / Space through the button's native click). */
+  /**
+   * A built-in control was activated (click, or Enter / Space through the button's native click).
+   * An `aria-disabled` one (Undo / Redo with nothing to do) is focusable but inert.
+   */
   protected activate(item: ToolbarItem): void {
+    if (item.disabled === true) return;
     if (item.action.type === 'menu') {
       this.dispatch({ type: 'open', via: 'click', checked: toolbarMenuChecked(this.menuItems()) });
     } else {
@@ -638,6 +689,14 @@ export class GanttToolbarComponent {
         return this.togglePanel.emit();
       case 'menu':
         // The More button: its menu (see `activate`)
+        return;
+      case 'undo':
+        // The chart's undo() / redo(): through the pipeline, which announces the result (a disabled
+        // button never gets here)
+        this.editor.undo();
+        return;
+      case 'redo':
+        this.editor.redo();
         return;
     }
   }

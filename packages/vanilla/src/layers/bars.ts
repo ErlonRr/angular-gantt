@@ -18,11 +18,17 @@
  * The keys are `interaction/timeline-keys.ts`.
  *
  * The bar overlay (D4, `g.gantt-bar-overlay` between the bars and the annotation labels,
- * attached only while it shows something): the focus ring of the bar focused from the keyboard
- * (`focusVisibleBarId`, core `BarVisual.focusRect`) and the resize grips (`handles.*.grip`) of
- * that bar, of the bar under a fine pointer (`hoveredBarId`) and, on coarse pointers, of the
- * selected bars. Its look is in `styles/canvas.css.ts` (`--gantt-focus-ring`); it works the same
- * for custom bars and adds no node to the bars themselves.
+ * attached only while it shows something) paints core `computeBarOverlay` (Phase 11, D11), one
+ * `rect` per shape, keyed by its key, in its order: the focus ring of the bar focused from the
+ * keyboard (`focusVisibleBarId`, core `BarVisual.focusRect`), then the resize grips
+ * (`handles.*.grip`), the progress grip (`progressGrip.grip`) and the link connectors
+ * (`connectors.*.dot`, with their `--source` / `--target` / `--invalid` modifiers) of that bar, of
+ * the bar under a fine pointer (`hoveredBarId`), on coarse pointers of the selected bars, of the
+ * bar whose progress is being edited (`progressPreview`) and of a link session's ends
+ * (`inputs.link`). The pointer hits the progress grip and the connectors only where they show
+ * (`overlayState`, `interaction/canvas-pointer.ts`). Without editing the list is the ring and the
+ * grips, as before. Its look is in `styles/canvas.css.ts` (`--gantt-focus-ring`); it works the
+ * same for custom bars and adds no node to the bars themselves.
  *
  * - Built-in bars (`createBar` / `patchBar`) keep their node for as long as their row stays
  *   mounted: a selection, a drag or a zoom patches them in place, and a scroll only adds and
@@ -37,25 +43,29 @@
  * The row style's classes (`visual.className`: `options.styles`, `task.style.className`, the
  * deprecated `task.className`) are part of a built-in bar's class (`paint/bars.ts`); a custom
  * node gets them added and removed one by one next to its own classes (as Angular's bar outlet
- * does), and reads the whole style in `ctx.style`.
+ * does), and reads the whole style in `ctx.style`. `gantt-bar-draggable` (and a custom bar's
+ * `ctx.draggable`) is the row's `editRules(row).move` (`graph.editRules`).
  */
 
 import {
   DRAG_SOURCE_OPACITY,
   barRoleDescription,
+  computeBarOverlay,
   tabStopIndex,
   taskAccessibleName,
+  type BarOverlayInput,
   type BarVisual,
   type GanttBarContext,
   type GanttFlatRow,
   type GanttI18n,
-  type Rect,
+  type OverlayShape,
   type RowGeometry,
 } from '@gantryjs/core';
 import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, toggleClass } from '../dom/patch';
-import { structuralEqual } from '../engine/inputs';
+import { structuralEqual, type Inputs } from '../engine/inputs';
+import { overlayLink } from '../interaction/link';
 import { createBar, patchBar, type BarPaintOptions } from '../paint/bars';
 import type { GanttBarRenderer } from '../types';
 import type { Layer, LayerContext } from './context';
@@ -92,13 +102,6 @@ interface Item {
   readonly node: SVGElement | null;
 }
 
-/** One shape of the bar overlay: a focus ring or a resize grip. */
-interface OverlayShape {
-  readonly key: string;
-  readonly className: 'gantt-bar-focus-ring' | 'gantt-bar-grip';
-  readonly rect: Rect & { readonly rx: number };
-}
-
 const same = (a: readonly unknown[] | undefined, b: readonly unknown[]) =>
   a?.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 
@@ -108,8 +111,29 @@ const NO_CLASSES: readonly string[] = [];
 const classList = (className: string | null): readonly string[] =>
   className ? className.split(/\s+/).filter(Boolean) : NO_CLASSES;
 
-/** The primary pointer is coarse (touch): selected bars show their grips. Read once per element. */
-const coarsePointer = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+/**
+ * The primary pointer is coarse (touch): selected bars show their grips (and their edit targets).
+ * Read once per element by the bars layer and once per connection by the pointer handler.
+ */
+export const coarsePointer = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+/**
+ * What `computeBarOverlay` reads besides the rows, from the inputs: the keyboard-focused and the
+ * hovered bar, the selection, the pointer kind, the link session (`overlayLink` of `inputs.link`:
+ * its source connector, the preview's target and validity) and the progress being edited. The
+ * bars layer reads it tracked; the pointer handler with `peek` (untracked), to hit exactly what
+ * shows.
+ */
+export function overlayState(I: Inputs, coarse: boolean, peek = false): Omit<BarOverlayInput, 'rows'> {
+  return {
+    focusVisibleId: peek ? I.focusVisibleBarId.peek() : I.focusVisibleBarId(),
+    hoveredId: peek ? I.hoveredBarId.peek() : I.hoveredBarId(),
+    selected: (peek ? I.selection.peek() : I.selection()).selected,
+    coarse,
+    link: overlayLink(peek ? I.link.peek() : I.link()),
+    progressPreview: peek ? I.progressPreview.peek() : I.progressPreview(),
+  };
+}
 
 const sameRow = (a: GanttFlatRow, b: GanttFlatRow) =>
   a === b ||
@@ -168,35 +192,22 @@ export function createBarsLayer(ctx: LayerContext): Layer {
   };
 
   /**
-   * The bar overlay: the focus ring of the keyboard-focused bar, the grips of that bar, of the
-   * hovered one and (coarse pointers) of the selected ones, for the mounted rows.
+   * The bar overlay: core `computeBarOverlay` over the mounted rows (their memoised visuals),
+   * painted as keyed `rect`s in its order.
    */
-  const paintOverlay = (
-    geos: readonly RowGeometry[],
-    keys: readonly string[],
-    visualOf: (geo: RowGeometry) => BarVisual,
-    selected: ReadonlySet<string>,
-  ): void => {
-    const ringId = I.focusVisibleBarId();
-    const hoverId = I.hoveredBarId();
-    const shapes: OverlayShape[] = [];
-    geos.forEach((geo, i) => {
-      const id = geo.row.task.id;
-      const ring = id === ringId;
-      if (!ring && id !== hoverId && !(coarse && selected.has(id))) return;
-      const v = visualOf(geo);
-      const key = keys[i]!;
-      if (ring) shapes.push({ key: `${key}\u0001ring`, className: 'gantt-bar-focus-ring', rect: v.focusRect });
-      if (!v.handles) return;
-      shapes.push({ key: `${key}\u0001left`, className: 'gantt-bar-grip', rect: v.handles.left.grip });
-      shapes.push({ key: `${key}\u0001right`, className: 'gantt-bar-grip', rect: v.handles.right.grip });
+  const paintOverlay = (geos: readonly RowGeometry[], visualOf: (geo: RowGeometry) => BarVisual): void => {
+    const shapes = computeBarOverlay({
+      ...overlayState(I, coarse),
+      rows: geos.map(geo => ({ id: geo.row.task.id, visual: visualOf(geo) })),
     });
     reconcile<OverlayShape, SVGRectElement>(
       dom.barOverlay,
       shapes,
       shape => shape.key,
       shape => s('rect', { class: shape.className }),
-      (el, { rect }) => {
+      (el, { className, rect }) => {
+        // A connector's modifiers change during a link session (same key)
+        setAttr(el, 'class', className);
         setAttr(el, 'x', rect.x);
         setAttr(el, 'y', rect.y);
         setAttr(el, 'width', rect.width);
@@ -229,7 +240,8 @@ export function createBarsLayer(ctx: LayerContext): Layer {
       const fontPx = G.metrics().fontPx;
       const critical = G.critical()?.criticalIds ?? NONE;
       const selected = I.selection().selected;
-      const enableDrag = I.enableDrag();
+      // Which bars can be dragged (`gantt-bar-draggable`): the rows' edit rules (D9)
+      const rulesOf = G.editRules();
       const dragged = G.draggedBarId();
       const rowCount = G.visibleRows().length;
       const vw = G.vWindow();
@@ -246,13 +258,13 @@ export function createBarsLayer(ctx: LayerContext): Layer {
       );
       setAttr(dom.viewport, 'tabindex', geos.length ? -1 : 0);
 
-      const keys = rowKeys(geos);
-      paintOverlay(geos, keys, visualOf, selected);
-      // Only the overlay changed (hover, keyboard focus): the bars stay as they are
+      paintOverlay(geos, visualOf);
+      // Only the overlay changed (hover, keyboard focus, a link session): the bars stay as they are
       const from: unknown[] = [geos, visualOf, renderBar, theme, tl, styleOf, fontPx, critical, selected];
-      from.push(enableDrag, dragged, stop, rowCount, i18n, cfg);
+      from.push(rulesOf, dragged, stop, rowCount, i18n, cfg);
       if (same(paintedFrom, from)) return;
       paintedFrom = from;
+      const keys = rowKeys(geos);
       const nextCustom = new Map<string, CustomBar>();
       const items = geos.map((geo, i): Item => {
         const task = geo.row.task;
@@ -261,7 +273,7 @@ export function createBarsLayer(ctx: LayerContext): Layer {
         const opts: BarPaintOptions = {
           fontPx,
           selected: selected.has(task.id),
-          draggable: enableDrag && task.draggable !== false,
+          draggable: rulesOf(geo.row).move,
           critical: isCritical,
         };
         const key = keys[i]!;

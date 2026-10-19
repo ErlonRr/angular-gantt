@@ -30,10 +30,47 @@ export interface ArrowVisual {
    * painters draw it with `dominant-baseline: central` and the default `text-anchor` (start).
    */
   lagLabel: { text: string; x: number; y: number; fontPx: number } | null;
+  /**
+   * The route as points, exit first and the head's tip last (orthogonal: the corners before
+   * rounding; straight: the two ends): what a click on the arrow is tested against
+   * (`hitTestArrow`). Painters don't draw it.
+   */
+  points: readonly (readonly [number, number])[];
+  /**
+   * The selected link (`editing.dependencies.delete`, `selectedArrowVisual`): `paint` is the
+   * focus ring, `width` 1 px more, with a `halo`. Painters add `gantt-arrow--selected` to the
+   * arrow's group.
+   */
+  selected: boolean;
+  /**
+   * The selected link's halo (`null` otherwise): a wide, translucent stroke of `paint` along `d`,
+   * painted behind the line (`path.gantt-arrow-halo`, the group's first child, only while
+   * selected), so the selection shows even where the arrow colour is the focus ring's.
+   */
+  halo: ArrowHalo | null;
+}
+
+/** The halo behind a selected link (`ArrowVisual.halo`). */
+export interface ArrowHalo {
+  /** `var(--gantt-focus-ring)` */
+  paint: Paint;
+  /** `stroke-width`: the link's width plus `SELECTED_ARROW_HALO` */
+  width: number;
+  /** `stroke-opacity` (`SELECTED_ARROW_HALO_OPACITY`) */
+  opacity: number;
 }
 
 /** Dash pattern of a link with a lag or lead. */
 export const ARROW_DASH = '5 3';
+
+/** How much wider (px) than the link the halo of a selected link is: 3 px on each side. */
+export const SELECTED_ARROW_HALO = 6;
+
+/** The `stroke-opacity` of a selected link's halo. */
+export const SELECTED_ARROW_HALO_OPACITY = 0.3;
+
+/** How far (px) from an arrow's route a click still hits it: a 10 px band. */
+export const ARROW_HIT_TOLERANCE = 5;
 
 type Pt = [number, number];
 
@@ -97,12 +134,14 @@ export function computeArrowVisual(
 
   const paint: Paint = isCritical ? themeVar('criticalColor') : (cfg.arrows.color ?? themeVar('arrowColor'));
   const lagText = lag ? (lag > 0 ? `+${lag}d` : `${lag}d`) : null;
-  const common: Pick<ArrowVisual, 'paint' | 'width' | 'dashed' | 'dash' | 'critical'> = {
+  const common: Pick<ArrowVisual, 'paint' | 'width' | 'dashed' | 'dash' | 'critical' | 'selected' | 'halo'> = {
     paint,
     width: isCritical ? width + 0.5 : width,
     dashed: lag !== 0,
     dash: lag !== 0 ? ARROW_DASH : null,
     critical: isCritical,
+    selected: false,
+    halo: null,
   };
 
   if (cfg.arrows.routing === 'straight') {
@@ -113,6 +152,10 @@ export function computeArrowVisual(
       head: line.head,
       ...common,
       lagLabel: lagText ? { text: lagText, x: line.labelAt.x, y: line.labelAt.y, fontPx: fontPx - 2 } : null,
+      points: [
+        [r2(ex), r2(ey)],
+        [r2(tipX), r2(ty)],
+      ],
     };
   }
 
@@ -170,7 +213,81 @@ export function computeArrowVisual(
     head,
     ...common,
     lagLabel: lagText && vertical ? { text: lagText, x: vertical[0] + 4, y: (ey + ty) / 2, fontPx: fontPx - 2 } : null,
+    points: [...points, [tipX, ty]],
   };
+}
+
+/**
+ * The selected look of an arrow (`editing.dependencies.delete`: a clicked link): the focus-ring
+ * paint (`var(--gantt-focus-ring)`, over the critical colour too), 1 px wider, `selected: true`,
+ * and a halo behind it (`SELECTED_ARROW_HALO` px wider than the link, the focus ring at
+ * `SELECTED_ARROW_HALO_OPACITY`): the selection stands out even where the arrows are painted in
+ * the focus ring's colour (the default themes). The same visual when it is already selected.
+ */
+export function selectedArrowVisual(v: ArrowVisual): ArrowVisual {
+  if (v.selected) return v;
+  const paint = themeVar('focusRing');
+  return {
+    ...v,
+    paint,
+    width: v.width + 1,
+    selected: true,
+    halo: { paint, width: v.width + SELECTED_ARROW_HALO, opacity: SELECTED_ARROW_HALO_OPACITY },
+  };
+}
+
+/** Squared distance from `(x, y)` to the segment `a`–`b`. */
+function segmentDistance2(x: number, y: number, a: readonly [number, number], b: readonly [number, number]): number {
+  const [ax, ay] = a;
+  const dx = b[0] - ax;
+  const dy = b[1] - ay;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+  const px = ax + t * dx - x;
+  const py = ay + t * dy - y;
+  return px * px + py * py;
+}
+
+/**
+ * Whether a pointer at `(x, y)` (timeline coordinates) hits the arrow: within `tolerance` px of
+ * its route (`points`, the head's tip included): a band `2 × tolerance` wide, 10 px by default.
+ * Bars win over arrows: hit-test the bar of the row first.
+ */
+export function hitTestArrow(
+  visual: Pick<ArrowVisual, 'points'>,
+  x: number,
+  y: number,
+  tolerance: number = ARROW_HIT_TOLERANCE,
+): boolean {
+  const pts = visual.points;
+  const first = pts[0];
+  if (!first) return false;
+  const t2 = tolerance * tolerance;
+  if (pts.length === 1) return segmentDistance2(x, y, first, first) <= t2;
+  for (let i = 1; i < pts.length; i++) {
+    if (segmentDistance2(x, y, pts[i - 1]!, pts[i]!) <= t2) return true;
+  }
+  return false;
+}
+
+/**
+ * The key of the link a pointer at `(x, y)` hits (`hitTestArrow`), or `null`. `links` are in
+ * drawing order (`ArrowIndex.query(y - tolerance, y + tolerance)`): the last one painted, which
+ * lies on top, wins. Links without a visual (`null`: an end has no row) are skipped.
+ */
+export function arrowAt<L extends { readonly key: string }>(
+  links: readonly L[],
+  visualOf: (link: L) => Pick<ArrowVisual, 'points'> | null,
+  x: number,
+  y: number,
+  tolerance: number = ARROW_HIT_TOLERANCE,
+): string | null {
+  for (let i = links.length - 1; i >= 0; i--) {
+    const link = links[i]!;
+    const v = visualOf(link);
+    if (v && hitTestArrow(v, x, y, tolerance)) return link.key;
+  }
+  return null;
 }
 
 /** Horizontal gap (px) between the middle of a straight link and its lag label (as orthogonal: 4). */

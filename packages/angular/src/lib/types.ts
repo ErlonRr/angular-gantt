@@ -14,7 +14,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { TemplateRef } from '@angular/core';
-import type { ColumnDef as CoreColumnDef, ColumnCellContext } from '@gantryjs/core';
+import type { CellEditorContext, ColumnDef as CoreColumnDef, ColumnCellContext } from '@gantryjs/core';
 
 export { DEFAULT_FORMATS, DEFAULT_LABELS, DependencyType } from '@gantryjs/core';
 export type {
@@ -41,5 +41,20 @@ export type {
   ViewMode,
 } from '@gantryjs/core';
 
-/** Column definition whose `cellTemplate` is an Angular `<ng-template ganttColumn>`. */
-export type ColumnDef = CoreColumnDef<TemplateRef<ColumnCellContext>>;
+/**
+ * What an `<ng-template ganttCellEditor>` receives: the editor's context, as `let-edit` or
+ * `let-edit="edit"` (its text, error, `setValue()`, `commit()` and `cancel()`).
+ */
+export interface CellEditorTemplateContext {
+  readonly $implicit: CellEditorContext;
+  readonly edit: CellEditorContext;
+}
+
+/**
+ * Column definition whose `cellTemplate` is an Angular `<ng-template ganttColumn>` and whose custom
+ * `editor` is an `<ng-template ganttCellEditor>`, or a function returning the editor's DOM node.
+ */
+export type ColumnDef = CoreColumnDef<
+  TemplateRef<ColumnCellContext>,
+  TemplateRef<CellEditorTemplateContext> | ((ctx: CellEditorContext) => HTMLElement)
+>;

@@ -47,7 +47,9 @@ paths:
   restore, the sync-group connection (created after the restore; `GanttSync` in `sync/gantt-sync.ts` reports level,
   panel width and natural range, writes `shared` / `level` / `panelWidthPx` without saving state), the responsive
   effect (re-reads the last width when `options.responsive` or `layout.view` change; `GanttResponsive` →
-  core `reduceResponsive` → `layout.view` without `saveState`), the load-state announcement (subscribed to the data
+  core `reduceResponsive` → `layout.view` without `saveState`), the history sync (`editor.syncHistory` follows
+  `cfg().editing.history`: creates, reconfigures or drops the `GanttHistory`, emitting `historyChange` when its state
+  changed), the load-state announcement (subscribed to the data
   source's `ɵsubscribe`, not inferred from signals), the bar outlet (component type changes, the host attributes it
   stamps) and `afterRenderEffect` / `afterEveryRender` for DOM work (scroll sync in the WC's order: fit request →
   group scroll → `initialScroll` → zoom anchoring / `sync.correct`; focus restore; tooltip placement and the tooltip
@@ -56,6 +58,17 @@ paths:
   object, critical flag, labels, the row's resolved style compared with core `sameTaskStyle`), never the clock. Each effect reads its other inputs in `untracked()`. Anything else
   is a `computed` / `linkedSignal`. Order matters: the `viewModeChange` effect is created before the `stateKey`
   restore, so a restored zoom level emits.
+- Editing (Phase 11): every task change goes through `GanttEditorService.commit` (`editing/gantt-editor.service.ts`,
+  the same algorithm as the WC's `engine/edit.ts`), built from the raw task. Links: `GanttLinkService`
+  (`editing/link.ts`, bar visuals bound by the keyboard directive) owns `layout.link` / `selectedLinkKey`; the
+  keyboard directive routes L / Delete / Ctrl+Z / Esc and ignores keys inside `.gantt-tl-cell--editing`. Cell
+  editing: `GanttCellEditService` (`editing/cell-edit.ts`) owns `layout.cellEdit`; the task list mounts the editor
+  with `[ganttCellEditorMount]` (once per start, so typing never re-renders it), fulfils `cells.takeFocusRequest()`
+  after render, and runs `handleCellKey` on its own `keydown` before the chart keymap; the editor's message also
+  goes to `.gantt-sr-alert`; the key or dblclick that opens an editor calls `ApplicationRef.tick()` (only from those
+  handlers) so fast typing reaches the field; the editor rules are `:host ::ng-deep` so a consumer's custom editor
+  gets them. `layout.arrowIndex` is shared by the canvas and the link service; `selectedLinkKey` is a
+  `linkedSignal` over it (cleared when the link disappears); the canvas draws `linkPreviewD` from the current bars.
 - Pointer: a mouse press on a bar focuses it (`preventDefault` + `focusBar` with `preventScroll`; touch / pen focus it
   when a drag starts); Escape during a press belongs to the press (window capture listener in
   `GanttDragService.trackPress`, removed when it ends). Row hover: the canvas (`rowIndexAtY`) and the task list

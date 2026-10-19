@@ -1,9 +1,11 @@
 /**
  * @file readout.css.ts
- * The drag readout chip (`div.gantt-drag-readout`, `layers/readout.ts`): absolutely placed in
- * the timeline viewport's scroll content by the `--x` / `--y` custom properties the readout
- * region writes (core `placeDragReadout`), and translated by `data-align` so `--x` is its left
- * edge (`start`), its centre (`center`) or its right edge (`end`). Its box is core's look:
+ * The drag readout chip (`div.gantt-drag-readout`, `layers/readout.ts`): the new dates of a drag,
+ * resize or keyboard move, or the new progress while the progress grip is dragged (Phase 11; the
+ * same chip and look for both). Absolutely placed in the timeline viewport's scroll content by
+ * the `--x` / `--y` custom properties the readout region writes (core `placeDragReadout`), and
+ * translated by `data-align` so `--x` is its left edge (`start`), its centre (`center`) or its
+ * right edge (`end`). Its box is core's look:
  * `DRAG_READOUT_HEIGHT` 20 px (border box), `DRAG_READOUT_PAD_X` 6 px, `DRAG_READOUT_FONT_PX`
  * 11 px at weight 600. Above the canvas, under the sticky header (which it never reaches: the
  * placement keeps it below the header). It takes no pointer and no selection.

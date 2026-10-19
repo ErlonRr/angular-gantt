@@ -1,7 +1,9 @@
 // The Options card: one group per playground section, one labelled control per option. Each
-// control is described by a hint that names the option it sets (`nonWorkingTime.weekends`).
+// control is described by a hint that names the option it sets (`nonWorkingTime.weekends`), and is
+// disabled while it does not apply (the Editing controls while editing is off).
 import {
   PLAYGROUND_SECTIONS,
+  controlEnabled,
   valueText,
   type PlaygroundControl,
   type PlaygroundKey,
@@ -16,14 +18,17 @@ export interface OptionsForm {
 
 interface BuiltControl {
   node: HTMLElement;
+  /** Shows the value of `state`. */
   sync(state: PlaygroundState): void;
+  /** The form controls to disable while the control does not apply. */
+  inputs: readonly (HTMLInputElement | HTMLSelectElement | HTMLButtonElement)[];
 }
 
 type OnChange = (key: PlaygroundKey, value: unknown) => void;
 
 /** Builds the controls of `PLAYGROUND_SECTIONS` into `root`; `onChange` receives every edit. */
 export function buildOptionsForm(root: HTMLElement, onChange: OnChange): OptionsForm {
-  const controls: BuiltControl[] = [];
+  const syncs: ((state: PlaygroundState) => void)[] = [];
   PLAYGROUND_SECTIONS.forEach((section, i) => {
     const titleId = `pg-section-${i}`;
     const group = h(
@@ -34,11 +39,15 @@ export function buildOptionsForm(root: HTMLElement, onChange: OnChange): Options
     for (const c of section.controls) {
       const built = buildControl(c, onChange);
       group.append(built.node);
-      controls.push(built);
+      syncs.push(state => {
+        built.sync(state);
+        const disabled = !controlEnabled(c, state);
+        for (const input of built.inputs) input.disabled = disabled;
+      });
     }
     root.append(group);
   });
-  return { sync: state => controls.forEach(c => c.sync(state)) };
+  return { sync: state => syncs.forEach(sync => sync(state)) };
 }
 
 function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
@@ -65,6 +74,33 @@ function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
         sync: state => {
           select.value = String(state[c.key]);
         },
+        inputs: [select],
+      };
+    }
+    case 'segmented': {
+      // A labelled group of toggle buttons, the one pressed being the value (`gs-seg`, as in the gallery)
+      const labelId = `${id}-label`;
+      const buttons = c.choices.map(([value, text]) => {
+        const button = h('button', { type: 'button', class: 'gs-seg-btn', 'aria-pressed': 'false' }, text);
+        button.addEventListener('click', () => onChange(c.key, value));
+        return { value, button };
+      });
+      return {
+        node: h(
+          'div',
+          { class: 'gs-field' },
+          h('span', { class: 'gs-label', id: labelId }, c.label),
+          h(
+            'div',
+            { class: 'gs-seg', role: 'group', id, 'aria-labelledby': labelId, 'aria-describedby': hintId },
+            ...buttons.map(b => b.button),
+          ),
+          hint,
+        ),
+        sync: state => {
+          for (const { value, button } of buttons) button.setAttribute('aria-pressed', String(state[c.key] === value));
+        },
+        inputs: buttons.map(b => b.button),
       };
     }
     case 'range': {
@@ -102,6 +138,7 @@ function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
           input.value = String(value);
           show(value);
         },
+        inputs: [input],
       };
     }
     case 'check': {
@@ -112,6 +149,7 @@ function buildControl(c: PlaygroundControl, onChange: OnChange): BuiltControl {
         sync: state => {
           input.checked = state[c.key] === true;
         },
+        inputs: [input],
       };
     }
   }

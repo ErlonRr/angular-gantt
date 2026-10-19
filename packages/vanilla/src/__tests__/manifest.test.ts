@@ -104,7 +104,7 @@ describe('custom-elements.json', () => {
     }
   });
 
-  it('lists the public properties: the settable ones and the read-only viewMode, view and criticalIds', () => {
+  it('lists the public properties: the settable ones and the read-only viewMode, view, criticalIds, canUndo and canRedo', () => {
     const fields = element.members.filter(m => m.kind === 'field');
     expect(names(fields)).toEqual(expect.arrayContaining([...GANTRY_PROPERTIES]));
     expect(names(fields).sort()).toEqual(prototypeApi().accessors.sort());
@@ -113,7 +113,7 @@ describe('custom-elements.json', () => {
         .filter(f => f.readonly)
         .map(f => f.name)
         .sort(),
-    ).toEqual(['criticalIds', 'view', 'viewMode']);
+    ).toEqual(['canRedo', 'canUndo', 'criticalIds', 'view', 'viewMode']);
     for (const spec of PROPERTY_TABLE) {
       const field = fields.find(f => f.name === spec.name)!;
       expect(field.readonly, spec.name).toBeUndefined();
@@ -124,7 +124,8 @@ describe('custom-elements.json', () => {
   it('lists the public methods and nothing private', () => {
     const methods = element.members.filter(m => m.kind === 'method');
     expect(names(methods).sort()).toEqual(prototypeApi().methods.sort());
-    expect(methods).toHaveLength(25);
+    // Phase 11 added undo, redo, clearHistory, addDependency, removeDependency, editCell and focusTask
+    expect(methods).toHaveLength(32);
     for (const member of element.members) {
       expect(member.name.startsWith('#'), member.name).toBe(false);
       expect(member.static, member.name).toBeUndefined();
@@ -163,8 +164,8 @@ describe('custom-elements.json', () => {
     for (const slot of slots) expect(slot.description, slot.name).toBeTruthy();
   });
 
-  it('lists the three custom states', () => {
-    expect(names(element.cssStates)).toEqual(['dark', 'dragging', 'loading']);
+  it('lists the four custom states', () => {
+    expect(names(element.cssStates)).toEqual(['dark', 'dragging', 'loading', 'linking']);
     for (const state of element.cssStates) expect(state.description, state.name).toBeTruthy();
   });
 

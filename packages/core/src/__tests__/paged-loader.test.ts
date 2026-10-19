@@ -31,7 +31,7 @@ describe('PagedLoader', () => {
     expect(listener).toHaveBeenCalled();
     listener.mockClear();
     unsubscribe();
-    loader.reset();
+    void loader.reset();
     expect(listener).not.toHaveBeenCalled();
   });
 

@@ -89,7 +89,10 @@ const OWN_PROPS: ReadonlySet<string> = new Set<string>([
  * A thin binding over the `<gantry-element>` Web Component: props are set as element properties
  * (the consumer's objects, unchanged), events arrive as `on*` callbacks with the event `detail`.
  * Props and listeners are applied in layout effects, so the element's first frame already shows
- * the passed props; a prop that goes back to `undefined` restores the element's default. The ref
+ * the passed props; a prop that goes back to `undefined` restores the element's default. Each edit
+ * calls `onBeforeChange` first, synchronously: `detail.preventDefault()` there vetoes it. Then
+ * `onTasksChange` gets the tasks after the change (`detail.tasks`; the proposed ones, with
+ * `applied: false`, in controlled mode), ready for `setTasks(detail.tasks)`. The ref
  * is the underlying `GantryElement`, exposing the imperative API (`zoomIn()`, `scrollToToday()`,
  * `getSelectedTasks()`, …). Children go into the element's light DOM (`<div slot="empty">`). The
  * element sizes itself (`:host`: block, 100% × 100%); `className` / `style` override that.

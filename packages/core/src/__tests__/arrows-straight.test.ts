@@ -60,6 +60,15 @@ describe("arrows.routing: 'orthogonal' (default) is unchanged", () => {
       dash: ARROW_DASH,
       critical: false,
       lagLabel: { text: '+2d', x: 116, y: 40, fontPx: 10 },
+      points: [
+        [100, 20],
+        [112, 20],
+        [112, 60],
+        [195, 60],
+        [200, 60],
+      ],
+      selected: false,
+      halo: null,
     } satisfies ArrowVisual);
 
     const ff = computeArrowVisual(from, bar(200, 80, 60), { type: DependencyType.FF }, orthogonal, rows, true);

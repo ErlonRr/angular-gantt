@@ -1,6 +1,10 @@
 // The Angular component of each gallery case, loaded on demand by /examples/:id: a case's own
 // component lives in ./cases/<id>/<id>-example.component.ts. The record lists every `CaseId`, so a
-// new case in the catalog doesn't compile until its component is here.
+// new case in the catalog doesn't compile until it has an entry here. While its component is being
+// written, a new case can point at the generic renderer (the shared data and options of
+// demo-kit/gallery):
+//
+//   newCase: () => import('./generic-case.component').then(m => m.GenericCaseComponent),
 
 import type { Type } from '@angular/core';
 import type { CaseId } from 'demo-kit/gallery/catalog';
@@ -28,6 +32,16 @@ export const CASE_COMPONENTS: Readonly<Record<CaseId, CaseLoader>> = {
     import('./cases/non-working/non-working-example.component').then(m => m.NonWorkingExampleComponent),
   'week-numbering': () =>
     import('./cases/week-numbering/week-numbering-example.component').then(m => m.WeekNumberingExampleComponent),
+  editing: () => import('./cases/editing/editing-example.component').then(m => m.EditingExampleComponent),
+  'cell-editing': () =>
+    import('./cases/cell-editing/cell-editing-example.component').then(m => m.CellEditingExampleComponent),
+  'custom-editors': () =>
+    import('./cases/custom-editors/custom-editors-example.component').then(m => m.CustomEditorsExampleComponent),
+  'dependency-editing': () =>
+    import('./cases/dependency-editing/dependency-editing-example.component').then(
+      m => m.DependencyEditingExampleComponent,
+    ),
+  controlled: () => import('./cases/controlled/controlled-example.component').then(m => m.ControlledExampleComponent),
   'multi-pipeline': () =>
     import('./cases/multi-pipeline/multi-pipeline-example.component').then(m => m.MultiPipelineExampleComponent),
   'custom-bars': () =>

@@ -9,6 +9,7 @@ import * as api from './public-api';
 const ANGULAR_VALUES = [
   'GantryComponent',
   'GanttBarBase',
+  'GanttCellEditorDirective',
   'GanttColumnDefDirective',
   'GanttDataSource',
   'GanttGroupBarComponent',

@@ -52,7 +52,7 @@ const tree = (): GanttTask[] => [
       [series]="tasks()"
       [options]="options()"
       [columns]="columns()"
-      (rowClick)="clicks.push($event.row.task.id)"
+      (rowClick)="clicks.push($event.task.id)"
     />
     <ng-template #noteCell><input class="note-input" /></ng-template>
   `,

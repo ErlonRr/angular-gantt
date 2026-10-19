@@ -50,9 +50,26 @@
  * Collapse toggles are `tabindex=-1` (the row expands with →). The keys themselves are
  * `interaction/grid-keys.ts`.
  *
+ * Cell editor (Phase 11, D14–D16, contract §3d, shared with Angular): while a cell is edited
+ * (`inputs.cellEdit`, `interaction/cell-edit.ts`) its row is pinned and raised and the cell shows
+ * the editor instead of its content (detached, built again when the editor closes):
+ *
+ *     div.gantt-tl-row.gantt-tl-row--editing > div.gantt-tl-cell.gantt-tl-cell--editing
+ *       input.gantt-tl-editor[type][aria-label][aria-invalid?][aria-describedby?]
+ *         | select.gantt-tl-editor (kind 'select') | the custom editor's node (+ class gantt-tl-editor)
+ *       div.gantt-tl-editor-error#gantry-<n>-editor-error   last child, attached only while invalid
+ *
+ * The editor is built once per edit (its text then belongs to it: typing re-runs nothing here),
+ * named `labels.ariaCellEditor(column, task)` and focused through its `editor:<id>:<column>` key
+ * (a custom node: the node, else its first focusable child). While `editing.cells` is on every
+ * cell carries `aria-readonly` (core `cellEditable`); with it off, no attribute.
+ *
  * Listeners are delegated: one click / dblclick and one pointerover / pointerleave (the hovered
  * row; a touch never hovers) on the rows group, one click / pointerdown on the header row, one
- * focusin on the list (where its tab stop goes), one click on the footer. Column
+ * focusin on the list (where its tab stop goes), one keydown / input / focusout on the list for
+ * the cell editor (keys `grid-keys.ts` `handleCellKey`; a double-click on an editable cell opens
+ * it too, `row-dblclick` still fires; clicks inside the editor are its own), one click on the
+ * footer. Column
  * resizing captures the pointer on the handle (`interaction/column-resize.ts`) and is aborted when
  * the element disconnects.
  *
@@ -63,6 +80,7 @@
  */
 
 import {
+  cellEditable,
   computeCellVisual,
   gridTabStop,
   rowPaint,
@@ -78,10 +96,12 @@ import { h } from '../dom/h';
 import { createPool, reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp, setText, toggleClass } from '../dom/patch';
 import type { MountedRow } from '../engine/graph/tasklist';
+import type { EditRulesOf } from '../engine/graph/visuals';
 import type { GanttLoadMoreState, SortState } from '../engine/inputs';
+import { editorFocusKey, type CellEditSession } from '../interaction/cell-edit';
 import { createColumnResize } from '../interaction/column-resize';
-import { cycleSort, setCollapsed } from '../interaction/grid-keys';
-import { signal } from '../reactive';
+import { cycleSort, handleCellKey, setCollapsed } from '../interaction/grid-keys';
+import { computed, signal } from '../reactive';
 import type { VanillaColumnDef } from '../types';
 import type { Layer, LayerContext } from './context';
 import { showNode } from './skeleton';
@@ -89,21 +109,61 @@ import { showNode } from './skeleton';
 /** Rows kept for reuse after leaving the window (a scroll recycles them at the other end). */
 const POOL_SIZE = 64;
 
+/** Task lists built so far: the error node's id is unique per element (`gantry-<n>-editor-error`, as Angular's `uid`) */
+let nextUid = 0;
+
+/** What a custom editor's focus goes to: the node itself, else its first focusable child. */
+const FOCUSABLE = 'input, select, textarea, button, a[href], [tabindex], [contenteditable]';
+
+/** Whether a cell is editable (core `cellEditable` with the row's edit rules); `null` while `editing.cells` is off. */
+type EditableOf = (col: VanillaColumnDef, row: GanttFlatRow) => boolean;
+
+/** The open editor's state the task list paints (its text is the editor's own: typing re-runs nothing). */
+interface EditView {
+  readonly taskId: string;
+  readonly columnKey: string;
+  readonly error: string | null;
+}
+
+const sameEditView = (a: EditView | null, b: EditView | null) =>
+  a === b || (!!a && !!b && a.taskId === b.taskId && a.columnKey === b.columnKey && a.error === b.error);
+
+/** A mounted cell editor. */
+interface EditorMount {
+  /** The edit it belongs to (one per `start`) */
+  readonly context: CellEditSession['context'];
+  /** The cell's child: `input` / `select.gantt-tl-editor`, or the custom editor's node (class added) */
+  readonly node: HTMLElement;
+  /** What takes focus and carries the name, `aria-invalid` and `aria-describedby` (the node or its first focusable child) */
+  readonly field: HTMLElement;
+  /** A built-in editor: its `input` events are the text */
+  readonly builtin: boolean;
+}
+
 /** What a row's cells are rendered from: they render again only when one of these changes. */
 interface CellEnv {
   readonly cols: readonly VanillaColumnDef[];
   readonly ctx: ColumnContext;
   readonly labels: GanttLabels;
   readonly indent: number;
+  /** Which cells can be edited (`aria-readonly`), `null` while `editing.cells` is off (no attribute) */
+  readonly editable: EditableOf | null;
 }
 
 const sameEnv = (a: CellEnv | undefined, b: CellEnv) =>
-  a !== undefined && a.cols === b.cols && a.ctx === b.ctx && a.labels === b.labels && a.indent === b.indent;
+  a !== undefined &&
+  a.cols === b.cols &&
+  a.ctx === b.ctx &&
+  a.labels === b.labels &&
+  a.indent === b.indent &&
+  a.editable === b.editable;
 
 /** What a row element shows (also how the delegated listeners find the row of an event). */
 interface RowState {
   readonly row: GanttFlatRow;
   readonly env: CellEnv;
+  /** The column whose cell shows the editor, `null` = none */
+  readonly editCol: string | null;
 }
 
 /** A cell's inner nodes, by what the cell shows. */
@@ -181,6 +241,22 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   let stopCell: HTMLElement | null = null;
   root.append(head, body);
 
+  // ── Cell editor (Phase 11, D14–D16, §3d) ─────────────────
+  const errorId = `gantry-${++nextUid}-editor-error`;
+  /** The editor's message: the editing cell's last child while the text is invalid */
+  const errorNode = h('div', { class: 'gantt-tl-editor-error', attrs: { id: errorId } });
+  /** The open editor without its text: typing re-runs nothing here */
+  const editView = computed(
+    (): EditView | null => {
+      const state = I.cellEdit();
+      return state && { taskId: state.taskId, columnKey: state.columnKey, error: state.error };
+    },
+    { equals: sameEditView },
+  );
+  let editor: EditorMount | null = null;
+  /** `env.editable`, kept while the edit rules (and so the config) are the same */
+  let editableCache: { rules: EditRulesOf; fn: EditableOf } | null = null;
+
   const pool = createPool(() => h('div', { class: 'gantt-tl-row', attrs: { role: 'row', tabindex: -1 } }), POOL_SIZE);
 
   // ── Interaction ──────────────────────────────────────────
@@ -195,9 +271,13 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     return el ? rowState.get(el)?.row : undefined;
   };
 
+  /** An event inside the open editor (its clicks and keys are the editor's). */
+  const inEditor = (target: EventTarget | null): boolean =>
+    !!(target as Element | null)?.closest?.('.gantt-tl-cell--editing');
+
   body.addEventListener('click', e => {
     const row = rowOf(e.target);
-    if (!row) return;
+    if (!row || inEditor(e.target)) return;
     if ((e.target as Element).closest('.gantt-collapse-btn')) {
       e.stopPropagation();
       setCollapsed(ctx, row, !I.collapsedIds.peek().has(row.task.id));
@@ -205,9 +285,16 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     }
     ctx.rowClick(row, e);
   });
+  // A double-click on an editable cell (not on a control inside it) also opens its editor
   body.addEventListener('dblclick', e => {
-    const row = rowOf(e.target);
-    if (row) ctx.emit('row-dblclick', row);
+    const target = e.target as Element;
+    const row = rowOf(target);
+    if (!row || inEditor(target)) return;
+    const cell = target.closest('.gantt-tl-cell');
+    const key = cell && cellKeys.get(cell);
+    // Mounted and focused at once: a key typed right away reaches the field
+    if (key != null && !target.closest('button, a[href]') && ctx.cells.start(row.task.id, key)) ctx.renderNow();
+    ctx.emit('row-dblclick', row);
   });
   // The hovered row (mouse and pen; never while a bar is dragged): its tint shows in both panes
   const hover = (id: string | null): void => {
@@ -219,6 +306,30 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
   });
   body.addEventListener('pointerleave', e => {
     if (e.pointerType !== 'touch') hover(null);
+  });
+  // F2 / Enter / typing on an editable cell and the editor's Enter / Tab / Escape, before the
+  // element's keymap (`keyboard.ts`, on the shadow root) sees them
+  root.addEventListener('keydown', e => handleCellKey(ctx, e));
+  // A built-in editor's text (a custom editor calls `setValue`)
+  root.addEventListener('input', e => {
+    const m = editor;
+    if (m?.builtin && e.target === m.node) ctx.cells.input((m.node as HTMLInputElement | HTMLSelectElement).value);
+  });
+  // Focus leaving the editor's cell commits it (else cancels), once focus has settled: a press
+  // elsewhere, Tab out of a custom editor, or the editor removed with its row
+  root.addEventListener('focusout', e => {
+    const cell = editor?.node.parentElement;
+    const open = ctx.cells.active();
+    if (!cell || !open || !cell.contains(e.target as Node)) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && cell.contains(next)) return;
+    queueMicrotask(() => {
+      const now = ctx.cells.active();
+      if (now?.taskId !== open.taskId || now.columnKey !== open.columnKey) return;
+      const active = ctx.shadow.activeElement;
+      if (active && editor?.node.parentElement?.contains(active)) return;
+      ctx.cells.blur();
+    });
   });
   // The keys are `interaction/grid-keys.ts`; this only records where the list's tab stop goes
   root.addEventListener('focusin', e => {
@@ -324,11 +435,17 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     colIndex: number,
     row: GanttFlatRow,
     env: CellEnv,
+    editing: boolean,
   ): void => {
     setAttr(cell, 'aria-colindex', colIndex);
     setAttr(cell, 'data-focus-key', `cell:${row.task.id}:${col.key}`);
     cellKeys.set(cell, col.key);
     setStyleProp(cell, 'justify-content', justify(col.align));
+    // While editing cells: editable cells are `aria-readonly=false`, the others `true`
+    setAttr(cell, 'aria-readonly', env.editable ? String(!env.editable(col, row)) : null);
+    // The editing cell shows its editor (`placeEditor`); its content is built again when it closes
+    toggleClass(cell, 'gantt-tl-cell--editing', editing);
+    if (editing) return;
     const template = col.cellTemplate;
     const kind = template ? 'template' : col.key === 'name' ? 'name' : 'text';
     let p = cellParts.get(cell);
@@ -385,6 +502,65 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     }
   };
 
+  // ── Cell editor ──────────────────────────────────────────
+  /** Builds the editor of an edit (§3d): a built-in `input` / `select`, or the column's own node. */
+  const buildEditor = (s: CellEditSession, labels: GanttLabels): EditorMount => {
+    const value = I.cellEdit.peek()?.value ?? s.editor.value;
+    const { input } = s.editor;
+    const factory = s.editor.kind === 'custom' && typeof s.column.editor === 'function' ? s.column.editor : null;
+    let node: HTMLElement;
+    let field: HTMLElement;
+    if (factory) {
+      node = factory(s.context);
+      node.classList.add('gantt-tl-editor');
+      field = node.matches(FOCUSABLE) ? node : (node.querySelector<HTMLElement>(FOCUSABLE) ?? node);
+      // Nothing focusable inside: the node itself takes focus (the keys reach the chart through it)
+      if (field === node && !node.matches(FOCUSABLE)) setAttr(node, 'tabindex', -1);
+    } else if (input.type === 'select') {
+      const select = h(
+        'select',
+        { class: 'gantt-tl-editor' },
+        (input.options ?? []).map(o => h('option', { attrs: { value: o.value } }, o.label)),
+      );
+      select.value = value;
+      node = field = select;
+    } else {
+      const el = h('input', {
+        class: 'gantt-tl-editor',
+        attrs: { type: input.type, min: input.min, max: input.max, step: input.step, autocomplete: 'off' },
+      });
+      el.value = value;
+      // F2 / Enter / double-click select the text; a typed character stays with the caret after it
+      if (!s.seeded && (input.type === 'text' || input.type === 'number')) {
+        el.addEventListener('focus', () => el.select(), { once: true });
+      }
+      node = field = el;
+    }
+    if (!field.hasAttribute('aria-label') && !field.hasAttribute('aria-labelledby')) {
+      setAttr(field, 'aria-label', labels.ariaCellEditor(s.column.label, s.row.task.name));
+    }
+    setAttr(field, 'data-focus-key', editorFocusKey(s.taskId, s.columnKey));
+    return { context: s.context, node, field, builtin: !factory };
+  };
+
+  /** Shows the editor in its cell (the content detached) with its error state. */
+  const placeEditor = (cell: HTMLElement, m: EditorMount, error: string | null): void => {
+    if (m.node.parentNode !== cell) {
+      cell.replaceChildren(m.node);
+      // Built again from scratch when the editor closes
+      cellParts.delete(cell);
+      setAttr(cell, 'data-status', null);
+      setAttr(cell, 'title', null);
+    }
+    setAttr(m.field, 'aria-invalid', error ? 'true' : null);
+    setAttr(m.field, 'aria-describedby', error ? errorId : null);
+    if (m.node !== m.field) setAttr(m.node, 'aria-invalid', error ? 'true' : null);
+    if (error) {
+      setText(errorNode, error);
+      if (cell.lastChild !== errorNode) cell.appendChild(errorNode);
+    } else errorNode.remove();
+  };
+
   // ── Rows ─────────────────────────────────────────────────
   const updateRow = (
     el: HTMLElement,
@@ -396,8 +572,10 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     styleOf: StyleResolver,
     env: CellEnv,
     tabStop: boolean,
+    edit: EditView | null,
   ): void => {
     const id = row.task.id;
+    const editCol = edit !== null && editor !== null && edit.taskId === id ? edit.columnKey : null;
     const isSelected = selected.has(id);
     const style = styleOf(row);
     setAttr(el, 'data-task-id', id);
@@ -413,13 +591,14 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     toggleClass(el, 'gantt-tl-row--group', row.hasChildren);
     toggleClass(el, 'gantt-tl-row--pinned', pinnedTop !== null);
     toggleClass(el, 'gantt-tl-row--hover', id === hoveredId);
+    toggleClass(el, 'gantt-tl-row--editing', editCol !== null);
     setStyleProp(el, 'top', pinnedTop === null ? null : `${pinnedTop}px`);
     setStyleProp(el, 'grid-template-columns', grid);
     setStyleProp(el, 'height', `${rowHeight}px`);
     setStyleProp(el, 'background-color', rowPaint({ row }, isSelected, style));
 
     const prev = rowState.get(el);
-    if (prev?.row !== row || !sameEnv(prev.env, env)) {
+    if (prev?.row !== row || !sameEnv(prev.env, env) || prev.editCol !== editCol) {
       let icon: HTMLElement | null = null;
       reconcile(
         el,
@@ -427,14 +606,18 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         uniqueKeys((c: VanillaColumnDef) => c.key),
         createCell,
         (cell, col, i) => {
-          updateCell(cell, col, i + 1, row, env);
+          updateCell(cell, col, i + 1, row, env, col.key === editCol);
           const p = cellParts.get(cell);
           if (p?.kind === 'name') icon ??= p.icon;
         },
       );
       rowIcons.set(el, icon);
     }
-    rowState.set(el, { row, env });
+    rowState.set(el, { row, env, editCol });
+    if (editCol !== null && editor !== null) {
+      const cell = [...el.children].find(c => cellKeys.get(c) === editCol);
+      if (cell) placeEditor(cell as HTMLElement, editor, edit?.error ?? null);
+    }
     // The icon takes the style's colour (patched on every paint: the style may change without the
     // row, e.g. options.styles); the stylesheet gives every other one the muted text
     const icon = rowIcons.get(el);
@@ -476,7 +659,21 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
       const sort = I.sort();
       const ds = I.dataSource();
       const loadState = I.loadState();
-      const env: CellEnv = { cols, ctx: G.columnCtx(), labels, indent: cfg.indentSize };
+      // Editing cells: which cells can be edited, kept while the edit rules are the same
+      let editable: EditableOf | null = null;
+      if (cfg.editing.cells) {
+        const rules = G.editRules();
+        if (editableCache?.rules !== rules) {
+          editableCache = { rules, fn: (col, row) => cellEditable(col, row, rules(row), cfg) };
+        }
+        editable = editableCache.fn;
+      }
+      const env: CellEnv = { cols, ctx: G.columnCtx(), labels, indent: cfg.indentSize, editable };
+      // The open editor: built once per edit, while its row is shown (pinned through `focusedRowId`)
+      const edit = editView();
+      const session = edit ? ctx.cells.session() : null;
+      if (!session) editor = null;
+      else if (editor?.context !== session.context) editor = buildEditor(session, labels);
       const focusedId = I.focusedRowId();
       if (focusedId !== null) lastFocusedId = focusedId;
       // The scroll offset is current here: the window (read above) changes whenever a row crosses the top
@@ -528,7 +725,7 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
         uniqueKeys((m: MountedRow) => m.row.task.id),
         () => pool.acquire(),
         (el, m) => {
-          updateRow(el, m, grid, cfg.rowHeight, selected, hoveredId, styleOf, env, m === rowStop);
+          updateRow(el, m, grid, cfg.rowHeight, selected, hoveredId, styleOf, env, m === rowStop, edit);
           if (m === stop) stopRowEl = el;
         },
         bottom,

@@ -57,7 +57,9 @@ field — see [Configuration](https://github.com/ErlonRr/gantryjs#configuration)
   `errorMessage`, `syncGroup`. Each is set as an element property, and only when it changes.
 - **Callback props** receive the [event](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#events)
   `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`,
-  `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry`. The listeners are attached before the first
+  `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry`, and the editing callbacks `onBeforeChange`,
+  `onTasksChange`, `onTaskUpdated`, `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted` and
+  `onHistoryChange` (see [Editing](#editing)). The listeners are attached before the first
   property is set, so events fired while the chart starts (`onViewModeChange` for
   `options.viewMode`) arrive too; a changed callback is used from the next event on. Callbacks
   run untracked: an event fired inside your `$effect` (`gantt.setViewMode(mode)`) does not make
@@ -111,6 +113,35 @@ the zoom level, the horizontal scroll and the task-list width. `createGanttSyncG
 scroll, range, panel })` turns parts off (each is `true` by default). The group reaches the
 element as it is, never copied. To switch groups, keep the current one in `$state.raw`; `null`,
 or `undefined` once a group was set, takes the chart out of the group.
+
+### Editing
+
+With `options={{ editing: true }}` the chart edits its own tasks (cells, a progress grip, links, undo / redo; every
+option is in [Editing](https://github.com/ErlonRr/gantryjs#editing)). Each change calls `onBeforeChange` first, then the op callbacks and
+`onTasksChange`. `onBeforeChange` runs synchronously: `detail.preventDefault()` vetoes the change. Keep the tasks in
+state from `onTasksChange`, which gives the tasks after the change (use `$state.raw`: the chart gets the very array
+it proposed, and Svelte copies a `$state` proxy only one level):
+
+```svelte
+<script lang="ts">
+  let tasks = $state.raw<GanttTask[]>(initial);
+</script>
+
+<Gantry
+  {tasks}
+  options={{ editing: true }}
+  onBeforeChange={d => {
+    if (isLocked(d.change)) d.preventDefault();
+  }}
+  onTasksChange={d => (tasks = d.tasks)}
+/>
+```
+
+With `editing: { controlled: true }` the chart applies nothing: `onTasksChange` carries the proposed tasks
+(`applied: false`) and `tasks = d.tasks` is how you accept them. Undo and redo are methods on `bind:element`
+(`gantt?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the
+[Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)). A custom cell editor is a function that returns a DOM node
+(`editor: ctx => node` in a column), not a snippet.
 
 ### Options and behaviour
 

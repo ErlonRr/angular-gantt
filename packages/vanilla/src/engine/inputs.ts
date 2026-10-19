@@ -8,13 +8,18 @@
 
 import {
   emptySelection,
+  type CellEditState,
   type DragPreview,
   type GanttAnnotation,
+  type GanttHistoryState,
   type GanttOptions,
   type GanttSyncGroup,
   type GanttTask,
   type GanttThemeOverrides,
   type GanttView,
+  type LinkMode,
+  type LinkPreview,
+  type LinkSide,
   type SelectionState,
   type SharedTimelineRange,
   type SortDirection,
@@ -38,6 +43,41 @@ export interface GanttLoadMoreState {
   /** The last page failed: show the error and a Retry button */
   error?: boolean | undefined;
 }
+
+/** The link being drawn (`interaction/link.ts`): from which bar and side, how, and its preview. */
+export interface LinkState {
+  /** The predecessor's task id */
+  readonly sourceId: string;
+  readonly side: LinkSide;
+  readonly mode: LinkMode;
+  /** The preview path to the pointer or the target (`null` until there is one to draw) */
+  readonly preview: LinkPreview | null;
+  /**
+   * The last pointer position (content px; `null` / unset from the keys): where a preview without
+   * a target ends when the bars move under it (`graph.linkPreviewPath`)
+   */
+  readonly pointer?: { readonly x: number; readonly y: number } | null | undefined;
+}
+
+/** A progress being edited (the progress grip, ↑ / ↓ in move mode): the bar draws this progress meanwhile. */
+export interface ProgressPreviewState {
+  readonly taskId: string;
+  /** 0–100 */
+  readonly progress: number;
+}
+
+/**
+ * The history state of a chart that keeps none (editing off, `history: false`, controlled mode).
+ * Not frozen: it may reach the `history-change` listeners, and Vue / Svelte proxy what they store.
+ */
+export const EMPTY_HISTORY: GanttHistoryState = {
+  canUndo: false,
+  canRedo: false,
+  undoLabel: null,
+  redoLabel: null,
+  undoCount: 0,
+  redoCount: 0,
+};
 
 /** Heights of the horizontal scrollbars of the task-list panel and the timeline viewport (px). */
 export interface ScrollbarHeights {
@@ -130,6 +170,21 @@ export interface Inputs {
   readonly loadState: WritableSignal<GanttLoadMoreState | null>;
   /** The clock: ticks every minute while connected (today line, statuses) */
   readonly nowTick: WritableSignal<Date>;
+
+  // ── Editing (Phase 11) ──────────────────────────────────
+  /** The cell being edited (core `reduceCellEdit`; `interaction/cell-edit.ts`), `null` = none */
+  readonly cellEdit: WritableSignal<CellEditState>;
+  /** The link being drawn (`interaction/link.ts`), `null` = none */
+  readonly link: WritableSignal<LinkState | null>;
+  /** The selected dependency arrow (its `ArrowLink` key, `interaction/link.ts`), `null` = none */
+  readonly selectedLinkKey: WritableSignal<string | null>;
+  /** A progress being edited (the bar draws it: `graph/visuals.ts`), `null` = none */
+  readonly progressPreview: WritableSignal<ProgressPreviewState | null>;
+  /**
+   * The undo / redo state (written by `engine/edit.ts` only; `EMPTY_HISTORY` while the chart keeps
+   * no history). Equal states do not notify.
+   */
+  readonly historyState: WritableSignal<GanttHistoryState>;
 
   // ── Measurements ────────────────────────────────────────
   // Read only in the scroll handlers (`interaction/scroll.ts`), when the element connects and in
@@ -226,6 +281,11 @@ export function createInputs(): Inputs {
     loadState: signal<GanttLoadMoreState | null>(null, { equals: structuralEqual }),
     // The engine's clock: the one place that reads the time
     nowTick: signal(new Date(), { equals: sameTime }),
+    cellEdit: signal<CellEditState>(null),
+    link: signal<LinkState | null>(null),
+    selectedLinkKey: signal<string | null>(null),
+    progressPreview: signal<ProgressPreviewState | null>(null, { equals: structuralEqual }),
+    historyState: signal<GanttHistoryState>(EMPTY_HISTORY, { equals: structuralEqual }),
     scrollTop: num(),
     scrollLeft: num(),
     canvasW: num(),

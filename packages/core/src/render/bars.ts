@@ -24,6 +24,28 @@ export const FOCUS_RING_OFFSET = 3;
 export const FOCUS_RING_MARGIN = FOCUS_RING_OFFSET + 1;
 /** Extra pointer target (px) around a milestone's shape. */
 export const MILESTONE_HIT_PAD = 3;
+/**
+ * Side (px) of a link connector's pointer target (WCAG 2.5.8): a square just outside the bar's
+ * other targets (its hit box and resize handles), holding the dot.
+ */
+export const CONNECTOR_HIT = 24;
+/** Diameter (px) of a link connector's visible dot. */
+export const CONNECTOR_DOT = 10;
+/**
+ * Gap (px) between a link connector's dot and the inner edge of its pointer target: the bar's
+ * edge, or the outer edge of its resize handle (or of a milestone's padded hit box) when that
+ * reaches further out.
+ */
+export const CONNECTOR_GAP = 2;
+/**
+ * Width (px) of the progress grip's pointer target (WCAG 2.5.8): centred on the progress edge,
+ * kept between the resize handles.
+ */
+export const PROGRESS_GRIP_HIT = 24;
+/** The visible progress grip: a pill this wide (px) on the bar's bottom edge. */
+const PROGRESS_GRIP_WIDTH = 10;
+/** Height (px) of the visible progress grip. */
+const PROGRESS_GRIP_HEIGHT = 6;
 /** Width of a resize grip (px): a pill centred on the bar edge. */
 const GRIP_WIDTH = 6;
 /** Height of a resize grip: the bar height minus this inset, clamped to `GRIP_MIN`…`GRIP_MAX`. */
@@ -77,8 +99,46 @@ export interface BarHandle {
   grip: Rect & { rx: number };
 }
 
-/** What a pointer position hits on a bar (`hitTestBar`). */
-export type BarHit = 'left' | 'right' | 'bar';
+/**
+ * What a pointer position hits on a bar (`hitTestBar`), in hit order: a resize handle (`'left'`,
+ * `'right'`), the progress grip (`'progress'`), a link connector (`'link-start'`, `'link-end'`),
+ * else the body (`'bar'`).
+ */
+export type BarHit = 'left' | 'right' | 'progress' | 'link-start' | 'link-end' | 'bar';
+
+/** A link connector at one end of a bar (`editing.dependencies.create`): drag or click it to link. */
+export interface BarConnector {
+  /** The task edge it links from / to */
+  side: 'start' | 'end';
+  /** Centre of the dot (a link preview starts or ends here) */
+  cx: number;
+  cy: number;
+  /**
+   * Pointer target: a `CONNECTOR_HIT` square holding the dot, just outside the bar's hit box and
+   * resize handle on its side (disjoint from both and from the other connector), on the bar's
+   * centre line, kept inside the row (a row lower than `CONNECTOR_HIT` clips it)
+   */
+  hit: Rect;
+  /**
+   * The visible dot (the bar overlay paints it): a `CONNECTOR_DOT` circle drawn as a rect with
+   * `rx`, `CONNECTOR_GAP` outside the hit's inner edge, centred on `cx`, `cy`
+   */
+  dot: Rect & { rx: number };
+}
+
+/** The progress grip of a bar (`editing.progress`): drag it to change the progress. */
+export interface BarProgressGrip {
+  /** x of the progress edge (the hit and the grip may sit beside it, between the resize handles) */
+  x: number;
+  /**
+   * Pointer target: `PROGRESS_GRIP_HIT` wide, centred on the progress edge but kept between the
+   * resize handles (or inside the bar without them); at least `PROGRESS_GRIP_HIT` tall, taller
+   * when the bar and the grip's lower half need it, never past the row; centred on the row
+   */
+  hit: Rect;
+  /** The visible grip (the bar overlay paints it): a pill on the bar's bottom edge at the progress edge, inside `hit` */
+  grip: Rect & { rx: number };
+}
 
 /**
  * One child segment drawn inside a collapsed parent's bar (`rollup.segments`): `x` and `width` in
@@ -115,6 +175,21 @@ export interface BarVisual {
    * The two `hit` rects never overlap.
    */
   handles: { left: BarHandle; right: BarHandle } | null;
+  /**
+   * The progress grip: task and group bars that draw their progress (`bar.progress.show`; groups
+   * also `groupBar.showProgress`), whose progress can be edited (`progressEditable`) and that
+   * leave room for it: between the resize handles (the bar, without them) at least twice
+   * `PROGRESS_GRIP_HIT` — the grip and as much again of body to move the bar by. `null` otherwise
+   * (milestones always).
+   */
+  progressGrip: BarProgressGrip | null;
+  /**
+   * Link connectors at both ends (`linkable`; every kind), `null` otherwise. Their targets lie
+   * outside the hit box and the resize handles, so every pointer target of a bar — handles,
+   * progress grip, connectors — is at least 24 px both ways (in a row at least that tall),
+   * disjoint from the others and inside the row.
+   */
+  connectors: { start: BarConnector; end: BarConnector } | null;
   /**
    * Focus ring: the bar's box (milestones: the shape's box; summary bars: with their end caps)
    * inflated by `FOCUS_RING_OFFSET`, its corner radius grown to match
@@ -159,6 +234,12 @@ export interface BarVisualInput {
   style?: ResolvedTaskStyle | undefined;
   /** Child segments to draw inside the bar (`rollupSegments`); clipped to the bar, ignored for milestones */
   segments?: readonly BarSegment[] | null | undefined;
+  /** The progress can be edited here (`editRules(…).progress`): adds the `progressGrip` (when it has room) */
+  progressEditable?: boolean | undefined;
+  /** Links can start or end here (`editRules(…).linkFrom` / `linkTo`): adds the `connectors` */
+  linkable?: boolean | undefined;
+  /** Progress to draw instead of the task's, 0–100 (a progress drag's preview) */
+  progress?: number | undefined;
 }
 
 const LABEL_POSITIONS: ReadonlySet<string> = new Set(['inside', 'left', 'right', 'auto', 'none']);
@@ -282,7 +363,7 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
       : kind === 'group'
         ? cfg.bar.progress.show && cfg.groupBar.showProgress
         : false;
-  const pct = Math.min(Math.max(task.progress ?? 0, 0), 100);
+  const pct = Math.min(Math.max(input.progress ?? task.progress ?? 0, 0), 100);
   // Theme bars darken with the progress-overlay token (at `bar.progress.opacity`)
   const progressPaint: Paint = style.progressColor ?? cfg.bar.progress.color ?? PAINTS.progressOverlay;
   if (showProgress && pct > 0) {
@@ -324,6 +405,11 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
   }
   if (hitBox.y + hitBox.height > geo.y + rh) hitBox.height = Math.max(0, geo.y + rh - hitBox.y);
 
+  const box = { x, y, width, height, cy };
+  const progressGrip: BarVisual['progressGrip'] =
+    input.progressEditable && showProgress ? barProgressGrip(box, pct, handles, geo) : null;
+  const connectors: BarVisual['connectors'] = input.linkable ? barConnectors(box, handles, hitBox, geo) : null;
+
   const opt = cfg.bar.label;
   const position = style.label && LABEL_POSITIONS.has(style.label) ? style.label : opt.position;
   const label = computeLabel(task, kind, { x, y, width, height, cy }, cfg, fontPx, position);
@@ -360,6 +446,8 @@ export function computeBarVisual(input: BarVisualInput): BarVisual {
     baseline,
     caps,
     handles,
+    progressGrip,
+    connectors,
     focusRect,
     hitBox,
     className: style.className || null,
@@ -409,21 +497,109 @@ function barHandles(
   return { left: handle(bar.x, bar.x - outward), right: handle(right, right - inward) };
 }
 
+const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
+/**
+ * The progress grip of a bar whose progress is `pct` (0–100), or `null` without room: the space
+ * between the resize handles (the bar, without them) must hold twice `PROGRESS_GRIP_HIT`. The
+ * target is centred on the progress edge, then moved inside that space (at 0 % and 100 % it sits
+ * next to the handle); the visible pill is centred on the edge and on the bar's bottom edge,
+ * then moved inside the target (only a bar nearly as tall as its row moves it up).
+ */
+function barProgressGrip(
+  bar: { x: number; y: number; width: number; height: number },
+  pct: number,
+  handles: BarVisual['handles'],
+  geo: RowGeometry,
+): BarProgressGrip | null {
+  const lo = handles ? handles.left.hit.x + handles.left.hit.width : bar.x;
+  const hi = handles ? handles.right.hit.x : bar.x + bar.width;
+  const size = PROGRESS_GRIP_HIT;
+  if (hi - lo < size * 2) return null;
+  const edge = bar.x + (bar.width * pct) / 100;
+  const hitX = clamp(edge - size / 2, lo, hi - size);
+  // Tall enough for the pill on the bar's bottom edge (half of it below the bar)
+  const hitHeight = Math.min(geo.height, Math.max(size, bar.height + PROGRESS_GRIP_HEIGHT));
+  const hitY = geo.y + (geo.height - hitHeight) / 2;
+  const w = PROGRESS_GRIP_WIDTH;
+  const h = Math.min(PROGRESS_GRIP_HEIGHT, hitHeight);
+  return {
+    x: edge,
+    hit: { x: hitX, y: hitY, width: size, height: hitHeight },
+    grip: {
+      x: clamp(edge - w / 2, hitX, hitX + size - w),
+      y: clamp(bar.y + bar.height - h / 2, hitY, hitY + hitHeight - h),
+      width: w,
+      height: h,
+      rx: h / 2,
+    },
+  };
+}
+
+/**
+ * The link connectors of a bar: on each side a `CONNECTOR_HIT` square just outside everything
+ * else the bar is hit by (its hit box and its resize handle), on the bar's centre line and inside
+ * the row; the dot `CONNECTOR_GAP` beyond the square's inner edge.
+ */
+function barConnectors(
+  bar: { x: number; width: number; cy: number },
+  handles: BarVisual['handles'],
+  hitBox: Rect,
+  geo: RowGeometry,
+): { start: BarConnector; end: BarConnector } {
+  let inStart = Math.min(bar.x, hitBox.x);
+  let inEnd = Math.max(bar.x + bar.width, hitBox.x + hitBox.width);
+  if (handles) {
+    inStart = Math.min(inStart, handles.left.hit.x);
+    inEnd = Math.max(inEnd, handles.right.hit.x + handles.right.hit.width);
+  }
+  const size = CONNECTOR_HIT;
+  const hitHeight = Math.min(size, geo.height);
+  const hitY = clamp(bar.cy - size / 2, geo.y, geo.y + geo.height - hitHeight);
+  const r = CONNECTOR_DOT / 2;
+  const connector = (side: 'start' | 'end', inner: number, dir: -1 | 1): BarConnector => {
+    const cx = inner + dir * (CONNECTOR_GAP + r);
+    return {
+      side,
+      cx,
+      cy: bar.cy,
+      hit: { x: dir < 0 ? inner - size : inner, y: hitY, width: size, height: hitHeight },
+      dot: { x: cx - r, y: bar.cy - r, width: CONNECTOR_DOT, height: CONNECTOR_DOT, rx: r },
+    };
+  };
+  return { start: connector('start', inStart, -1), end: connector('end', inEnd, 1) };
+}
+
 /** Whether `(x, y)` lies in `r` (edges included); an empty rect contains nothing. */
 function rectContains(r: Rect, x: number, y: number): boolean {
   return r.width > 0 && r.height > 0 && x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
 }
 
+/** What `hitTestBar` reads: the handles and the hit box, and the editing targets when there are any. */
+export type BarHitTarget = Pick<BarVisual, 'handles' | 'hitBox'> &
+  Partial<Pick<BarVisual, 'progressGrip' | 'connectors'>>;
+
 /**
- * What a pointer at `(x, y)` (timeline coordinates, the same space as the visual) hits on a bar:
- * a resize handle first, then the bar body (`hitBox`), else `null`. Bindings find the row from
- * `y` and pass that row's visual, so built-in and custom bars hit the same way.
+ * What a pointer at `(x, y)` (timeline coordinates, the same space as the visual) hits on a bar,
+ * in this order: a resize handle (`'left'`, `'right'`), the progress grip (`'progress'`), a link
+ * connector (`'link-start'`, `'link-end'`), then the bar body (`hitBox`, `'bar'`), else `null`.
+ * Bindings find the row from `y` and pass that row's visual, so built-in and custom bars hit the
+ * same way. `editTargets: false` skips the progress grip and the connectors (a bar whose overlay
+ * doesn't show them: a press there is on the body, or on nothing).
  */
-export function hitTestBar(v: Pick<BarVisual, 'handles' | 'hitBox'>, x: number, y: number): BarHit | null {
+export function hitTestBar(v: BarHitTarget, x: number, y: number, editTargets = true): BarHit | null {
   const h = v.handles;
   if (h) {
     if (rectContains(h.left.hit, x, y)) return 'left';
     if (rectContains(h.right.hit, x, y)) return 'right';
+  }
+  if (editTargets) {
+    if (v.progressGrip && rectContains(v.progressGrip.hit, x, y)) return 'progress';
+    const c = v.connectors;
+    if (c) {
+      if (rectContains(c.start.hit, x, y)) return 'link-start';
+      if (rectContains(c.end.hit, x, y)) return 'link-end';
+    }
   }
   return rectContains(v.hitBox, x, y) ? 'bar' : null;
 }

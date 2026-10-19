@@ -20,12 +20,23 @@
  *
  * A button or link inside a cell (the collapse toggle, a consumer's template) keeps Enter and
  * Space. The task-list layer paints the roving `tabindex` (one tab stop for the whole grid).
+ *
+ * Cell editing (Phase 11, D15; `handleCellKey`, bound on the task list so it runs before the
+ * keymap): on an editable cell F2 / Enter open its editor and a printable key opens a text (or,
+ * for digits, number) editor seeded with that character (core `cellEditKey`, which wins over the
+ * single-key shortcuts there); in the editor Enter commits, Tab / Shift+Tab commit and edit the
+ * next / previous editable cell, Escape cancels — unless a custom editor prevented the key. Keys
+ * typed during an IME composition are left alone, and the grid's navigation ignores the editor.
+ * The key that opens an editor (F2, Enter, a typed character; Tab / Shift+Tab to the next one)
+ * renders it at once (`ctx.renderNow`): its field has focus before the next key, so fast typing
+ * loses nothing.
  */
 
 import {
   HEADER_ROW,
   ROW_FOCUS,
   bodyHeight,
+  cellEditKey,
   isGridEdgeJump,
   isKeySelectionCommand,
   keySelectionModifiers,
@@ -122,11 +133,56 @@ function focusPosition(ctx: LayerContext, row: number, col: number): void {
 }
 
 /**
+ * The cell-editing keys (D15), from the task list's own `keydown` listener (before the keymap):
+ * prevents what it used, so the keymap leaves it alone.
+ * - In the open editor: Enter → commit, Tab / Shift+Tab → commit and edit the next / previous
+ *   editable cell of the row, Escape → cancel (focus back to the cell). A key the custom editor
+ *   prevented, and any other key, stays the editor's.
+ * - On an editable cell with focus (not a control inside it): F2 / Enter → edit, a printable key
+ *   → edit seeded with it (text editors; digits for number editors).
+ */
+export function handleCellKey(ctx: LayerContext, event: KeyboardEvent): void {
+  if (event.isComposing) return;
+  const origin = event.composedPath()[0];
+  if (!(origin instanceof Element)) return;
+  const { cells } = ctx;
+  if (cells.active() && origin.closest('.gantt-tl-cell--editing')) {
+    if (event.defaultPrevented) return;
+    const kind = cells.session()?.editor.kind ?? 'text';
+    const action = cellEditKey(event, { editing: true, kind });
+    if (action === null) return;
+    event.preventDefault();
+    if (action === 'cancel') cells.cancel();
+    else cells.commit(action === 'commit-next' ? 'next' : action === 'commit-prev' ? 'prev' : undefined);
+    // Tab / Shift+Tab opened the next editor: its field has focus before the next key
+    if (action !== 'commit' && action !== 'cancel' && cells.active()) ctx.renderNow();
+    return;
+  }
+  if (event.defaultPrevented || !origin.classList.contains('gantt-tl-cell')) return;
+  // Text editors take every key another kind takes: anything else (arrows, Space…) is not resolved
+  if (cellEditKey(event, { editing: false, kind: 'text' }) === null) return;
+  const rowEl = origin.closest('.gantt-tl-row');
+  const row = rowEl ? rowOf(ctx, rowEl) : undefined;
+  const col = ctx.graph.tlColumns.peek()[columnOf(origin)];
+  if (!row || !col) return;
+  const kind = cells.kindOf(row.task.id, col.key);
+  if (kind === null) return;
+  const action = cellEditKey(event, { editing: false, kind });
+  if (action !== 'start' && action !== 'seed') return;
+  if (!cells.start(row.task.id, col.key, action === 'seed' ? event.key : undefined)) return;
+  event.preventDefault();
+  // The field is mounted and focused now: the keys typed right after this one reach it
+  ctx.renderNow();
+}
+
+/**
  * A grid key on `origin` (inside the task list). Returns `true` when the grid used it (the caller
  * prevents its default action), `false` to let the global shortcuts or the browser have it.
  */
 export function handleGridKey(ctx: LayerContext, event: KeyboardEvent, origin: Element, cmd: Command): boolean {
   const { graph: G } = ctx;
+  // An open cell editor keeps its keys (a custom editor's buttons, arrows…)
+  if (origin.closest('.gantt-tl-cell--editing')) return false;
   const head = origin.closest('.gantt-tl-col-header');
   const rowEl = head ? null : origin.closest('.gantt-tl-row');
   // The footer ("Load more", Retry) keeps its own keys

@@ -285,7 +285,7 @@
               "type": {
                 "text": "GanttTask[]"
               },
-              "description": "Tasks to display (a tree through `parentId`). Ignored while a `dataSource` is set."
+              "description": "The tasks as you set them (with a data source, its items while connected), as Angular's\n`series`: the chart's repairs (a missing `end`, an unknown `parentId`) stay inside the chart, so\n`el.tasks = el.tasks.map(…)` never loses data."
             },
             {
               "kind": "field",
@@ -640,7 +640,7 @@
                   }
                 }
               ],
-              "description": "Merge `patch` into the task with this id."
+              "description": "Merge `patch` into the task with this id: a silent data write (no `before-change`, no history),\ninto the `dataSource` when there is one (so the next page keeps it), else into `tasks`."
             },
             {
               "kind": "method",
@@ -658,7 +658,170 @@
                   }
                 }
               ],
-              "description": "Add tasks after the current ones."
+              "description": "Add tasks after the current ones (silently; into the `dataSource` when there is one)."
+            },
+            {
+              "kind": "method",
+              "name": "undo",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "description": "Undo the last change (`false` when there is nothing to undo, no history, or it was rejected or vetoed)."
+            },
+            {
+              "kind": "method",
+              "name": "redo",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "description": "Redo the last undone change (`false` when there is nothing to redo, or it was rejected or vetoed)."
+            },
+            {
+              "kind": "field",
+              "name": "canUndo",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "There is a change to undo (refreshed on `history-change`; `false` while the chart keeps no history).",
+              "readonly": true
+            },
+            {
+              "kind": "field",
+              "name": "canRedo",
+              "type": {
+                "text": "boolean"
+              },
+              "description": "There is an undone change to redo.",
+              "readonly": true
+            },
+            {
+              "kind": "method",
+              "name": "clearHistory",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Forget every undo and redo step (task changes made elsewhere never clear the history)."
+            },
+            {
+              "kind": "method",
+              "name": "addDependency",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "fromId",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "toId",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "type",
+                  "default": "'FS'",
+                  "type": {
+                    "text": "DependencyType"
+                  }
+                },
+                {
+                  "name": "lag",
+                  "default": "0"
+                }
+              ],
+              "description": "Make `toId` depend on `fromId` (source `'api'`): validated like a drawn link (no self link,\nduplicate, loop, or parent ↔ child link unless `editing.dependencies.parentChild`), vetoable,\nundoable. Returns whether it was added (or handed to the app in controlled mode)."
+            },
+            {
+              "kind": "method",
+              "name": "removeDependency",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "fromId",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "toId",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "type",
+                  "optional": true,
+                  "type": {
+                    "text": "DependencyType"
+                  }
+                }
+              ],
+              "description": "Remove the links from `fromId` to `toId` (only those of `type` when given; source `'api'`). Returns whether one was removed."
+            },
+            {
+              "kind": "method",
+              "name": "editCell",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "taskId",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "columnKey",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ],
+              "description": "Open the editor of a task-list cell (`editing.cells`); `false` when that cell can't be edited."
+            },
+            {
+              "kind": "method",
+              "name": "focusTask",
+              "return": {
+                "type": {
+                  "text": "boolean"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "options",
+                  "default": "{}",
+                  "type": {
+                    "text": "{ area?: 'bar' | 'row' | undefined }"
+                  }
+                }
+              ],
+              "description": "Focus a task's bar (`area: 'bar'`, the default) or its task-list row (`'row'`): its collapsed\nancestors expand, its row is kept mounted and scrolled into view. The other area is used while\nthe view hides the requested one. Its focus ring shows even when a pointer triggered the call\n(a button): `focus({ focusVisible: true })` where supported, and the bar's own ring. Returns\n`false` for an unknown id."
             },
             {
               "kind": "method",
@@ -906,6 +1069,55 @@
               },
               "description": "Retry was pressed on the error state: `{ source: 'error' }` for `errorMessage` (load again, then clear it), `{ source: 'dataSource' }` after a failed first data-source page (the element calls `dataSource.retry()`).",
               "name": "retry"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttBeforeChangeEvent>"
+              },
+              "description": "A change is about to be applied (any edit, the API, undo / redo): `{ change, tasks }` (the proposed tasks). Cancelable: `event.preventDefault()` or `detail.preventDefault()`, synchronously, vetoes it; assigning `tasks` meanwhile counts as handled (nothing applied).",
+              "name": "before-change"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttTasksChangeEvent>"
+              },
+              "description": "After every accepted change: `{ tasks, change, applied }`; `applied: false` in controlled mode (`editing.controlled`: set `tasks` yourself).",
+              "name": "tasks-change"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<TaskUpdatedEvent>"
+              },
+              "description": "One per changed task, after the op events: `{ taskId, task, previous, fields, source }`.",
+              "name": "task-updated"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<TaskProgressEvent>"
+              },
+              "description": "A task's progress changed: `{ taskId, oldProgress, newProgress }`.",
+              "name": "task-progress-changed"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<DependencyChangeEvent>"
+              },
+              "description": "A dependency was added: `{ fromId, toId, type, lag }`.",
+              "name": "dependency-created"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<DependencyChangeEvent>"
+              },
+              "description": "A dependency was removed: `{ fromId, toId, type, lag }`.",
+              "name": "dependency-deleted"
+            },
+            {
+              "type": {
+                "text": "CustomEvent<GanttHistoryState>"
+              },
+              "description": "The undo / redo state changed: `{ canUndo, canRedo, undoLabel, redoLabel, undoCount, redoCount }`.",
+              "name": "history-change"
             }
           ],
           "attributes": [
@@ -993,6 +1205,10 @@
             {
               "description": "`loading` is on, or a data-source page is loading.",
               "name": "loading"
+            },
+            {
+              "description": "A dependency link is being drawn (`editing.dependencies`).",
+              "name": "linking"
             }
           ],
           "superclass": {

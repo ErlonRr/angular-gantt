@@ -20,37 +20,60 @@
 //     its ring) or a pointer press. A bar focused from the keyboard is
 //     `layout.focusVisibleBarId` (a key pressed on a bar the pointer
 //     focused makes it so; a pointer press anywhere clears it);
-//   - the bar overlay (`g.gantt-bar-overlay`, `overlay` / `shown`): the
-//     focus ring (`BarVisual.focusRect`) of `focusVisibleBarId` and the
-//     resize grips (`handles.*.grip`) of that bar, of the bar under a fine
-//     pointer (`layout.hoveredBarId`) and, on coarse pointers, of the
-//     selected bars — per mounted row, in row order: ring, left grip,
-//     right grip. Attached only while it holds a shape.
+//   - the bar overlay (`g.gantt-bar-overlay`, `overlay` / `shown`): core
+//     `computeBarOverlay` (D11 of Gantry 2 phase 11, the Web Component's
+//     `layers/bars.ts`) over the mounted rows, in its order — per bar the
+//     focus ring (`BarVisual.focusRect`) of `focusVisibleBarId`, the
+//     resize grips (`handles.*.grip`), the progress grip
+//     (`progressGrip.grip`) and the link connectors (`connectors.*.dot`,
+//     with their `--source` / `--target` / `--invalid` modifiers) of that
+//     bar, of the bar under a fine pointer (`layout.hoveredBarId`), on
+//     coarse pointers of the selected bars, of the bar whose progress is
+//     dragged (`layout.progressPreview`) and of a link session's ends
+//     (`layout.link`). Without editing: the ring and the grips, as before.
+//     Attached only while it holds a shape. The canvas hits the progress
+//     grip and the connectors only where they show (`hitTargets`).
 // ─────────────────────────────────────────────────────────────
 
 import { DOCUMENT, DestroyRef, Injectable, computed, inject, linkedSignal, signal, untracked } from '@angular/core';
-import { tabStopIndex, type BarVisual, type Rect } from '@gantryjs/core';
+import {
+  computeBarOverlay,
+  tabStopIndex,
+  type BarHitTarget,
+  type BarOverlayInput,
+  type BarOverlayLink,
+  type BarVisual,
+  type OverlayShape,
+} from '@gantryjs/core';
 
 import { type RowGeometry } from '../types';
-import { GanttLayoutService } from '../layout/gantt-layout.service';
+import { GanttLayoutService, type GanttLinkState } from '../layout/gantt-layout.service';
 import { GanttScrollService } from '../scroll/gantt-scroll.service';
 import { GanttSelectionService } from '../selection/gantt-selection.service';
-
-/** One shape of the bar overlay: a focus ring or a resize grip. */
-export interface BarOverlayShape {
-  /** `<task id>\u0001ring` / `\u0001left` / `\u0001right` */
-  readonly key: string;
-  readonly className: 'gantt-bar-focus-ring' | 'gantt-bar-grip';
-  readonly rect: Rect & { readonly rx: number };
-}
 
 /** Keys that alone don't make focus "visible" (pressing them with a pointer is common). */
 const MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'AltGraph', 'Meta', 'CapsLock', 'Fn']);
 
-const NO_SHAPES: readonly BarOverlayShape[] = [];
+const NO_SHAPES: readonly OverlayShape[] = [];
 const NONE: ReadonlySet<string> = new Set();
 
-const sameShapes = (a: readonly BarOverlayShape[], b: readonly BarOverlayShape[]): boolean =>
+/**
+ * The link session as the bar overlay shows it (the Web Component's `overlayLink`): its source
+ * connector, the preview's target connector and whether that target is valid.
+ */
+export function overlayLink(state: GanttLinkState | null): BarOverlayLink | null {
+  if (!state) return null;
+  const p = state.preview;
+  return {
+    sourceId: state.sourceId,
+    sourceSide: state.side,
+    targetId: p?.targetId ?? null,
+    targetSide: p?.targetSide ?? null,
+    valid: p?.valid ?? false,
+  };
+}
+
+const sameShapes = (a: readonly OverlayShape[], b: readonly OverlayShape[]): boolean =>
   a === b ||
   (a.length === b.length &&
     a.every((s, i) => {
@@ -114,38 +137,73 @@ export class GanttBarFocusService {
   readonly viewportTabIndex = computed<0 | -1>(() => (this.layout.mountedGeometries().length ? -1 : 0));
 
   /**
-   * The bar overlay's shapes: the focus ring of the keyboard-focused bar, the grips of that bar, of
-   * the hovered one and (coarse pointers) of the selected ones, for the mounted rows in row order.
+   * The bar overlay's shapes (core `computeBarOverlay`) for the mounted rows: the focus ring of the
+   * keyboard-focused bar, the grips, progress grip and link connectors of that bar, of the hovered
+   * one, (coarse pointers) of the selected ones, of the bar whose progress is dragged and of a link
+   * session's ends. Compared by value: a hover that changes nothing repaints nothing.
    */
-  readonly overlay = computed<readonly BarOverlayShape[]>(
+  readonly overlay = computed<readonly OverlayShape[]>(
     () => {
       const visualOf = this.visualSource()?.();
-      const ringId = this.layout.focusVisibleBarId();
-      const hoverId = this.layout.hoveredBarId();
-      const selected = this.coarse() ? this.selection.selectedIds() : NONE;
-      if (!visualOf || (ringId === null && hoverId === null && selected.size === 0)) return NO_SHAPES;
-      const shapes: BarOverlayShape[] = [];
-      for (const geo of this.layout.mountedGeometries()) {
-        const id = geo.row.task.id;
-        const ring = id === ringId;
-        if (!ring && id !== hoverId && !selected.has(id)) continue;
-        const v = visualOf(geo);
-        if (ring) shapes.push({ key: `${id}\u0001ring`, className: 'gantt-bar-focus-ring', rect: v.focusRect });
-        if (!v.handles) continue;
-        shapes.push({ key: `${id}\u0001left`, className: 'gantt-bar-grip', rect: v.handles.left.grip });
-        shapes.push({ key: `${id}\u0001right`, className: 'gantt-bar-grip', rect: v.handles.right.grip });
-      }
-      return shapes;
+      const state = this.overlayState();
+      if (
+        !visualOf ||
+        (state.focusVisibleId === null &&
+          state.hoveredId === null &&
+          state.selected.size === 0 &&
+          state.link === null &&
+          state.progressPreview === null)
+      )
+        return NO_SHAPES;
+      return computeBarOverlay({
+        ...state,
+        rows: this.layout.mountedGeometries().map(geo => ({ id: geo.row.task.id, visual: visualOf(geo) })),
+      });
     },
     { equal: sameShapes },
   );
 
-  /** Attach `g.gantt-bar-overlay`: it holds a ring or a grip */
+  /** Attach `g.gantt-bar-overlay`: it holds a shape */
   readonly shown = computed(() => this.overlay().length > 0);
 
   /** The chart's bar visual of a geometry (memoised per geometry by GantryComponent); bound once. */
   bindVisuals(visuals: () => (geo: RowGeometry) => BarVisual): void {
     this.visualSource.set(visuals);
+  }
+
+  /**
+   * What `computeBarOverlay` reads besides the rows (the Web Component's `overlayState`): the
+   * keyboard-focused and the hovered bar, the selection (coarse pointers only), the pointer kind,
+   * the link session and the progress being dragged. Tracked where it is read.
+   */
+  private overlayState(): Omit<BarOverlayInput, 'rows'> {
+    const coarse = this.coarse();
+    return {
+      focusVisibleId: this.layout.focusVisibleBarId(),
+      hoveredId: this.layout.hoveredBarId(),
+      selected: coarse ? this.selection.selectedIds() : NONE,
+      coarse,
+      link: overlayLink(this.layout.link()),
+      progressPreview: this.layout.progressPreview(),
+    };
+  }
+
+  /**
+   * The pointer targets of the bar `taskId` (visual `v`) as they show (D11): its resize handles and
+   * body always; its progress grip and link connectors only while the overlay draws them (core
+   * `computeBarOverlay` of that one row, from the state the overlay is painted from, read
+   * untracked). Without editing the visual has neither. The canvas hit-tests this.
+   */
+  hitTargets(taskId: string, v: BarVisual): BarHitTarget {
+    if (!v.progressGrip && !v.connectors) return v;
+    const shapes = untracked(() => computeBarOverlay({ ...this.overlayState(), rows: [{ id: taskId, visual: v }] }));
+    const shows = (cls: string): boolean => shapes.some(shape => shape.className.startsWith(cls));
+    return {
+      handles: v.handles,
+      hitBox: v.hitBox,
+      progressGrip: shows('gantt-progress-grip') ? v.progressGrip : null,
+      connectors: shows('gantt-link-connector') ? v.connectors : null,
+    };
   }
 
   /**
@@ -181,6 +239,16 @@ export class GanttBarFocusService {
       doc.removeEventListener('keydown', onKey, { capture: true });
       doc.removeEventListener('pointerdown', onPointer, { capture: true });
     });
+  }
+
+  /**
+   * Focus will be moved by a script that wants its ring shown (`focusTask()`, maybe from a button
+   * a pointer pressed): the modality becomes the keyboard's, and a bar `activeId` names that
+   * already has focus shows its ring now (the Web Component's `focus.keyboard`).
+   */
+  showFocus(activeId: string | null): void {
+    this.keyboard = true;
+    if (activeId !== null) this.layout.focusVisibleBarId.set(activeId);
   }
 
   /**

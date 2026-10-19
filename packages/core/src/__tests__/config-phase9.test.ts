@@ -154,7 +154,7 @@ describe('labels: Phase 9', () => {
     expect(DEFAULT_LABELS.viewChart).toBe('Chart only');
   });
 
-  it('the edit-mode help no longer offers Up / Down for progress (Phase 11)', () => {
+  it('the edit-mode help leaves Up / Down to announceEditProgressHelp (added when progress is editable)', () => {
     const text =
       'Editing Backend. Arrow keys move, Shift+Arrow resizes the end, Alt+Arrow resizes the start, ' +
       'Enter saves, Escape cancels.';

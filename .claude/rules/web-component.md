@@ -54,6 +54,14 @@ paths:
     `keyboard-edit.ts` (move mode → `dragPreview`). `tooltip-triggers.ts`: focus, Escape (capture
     phase), scroll, outside press and the dismiss rules. Also `splitter.ts`, `column-resize.ts`,
     `columns.ts`, `selection.ts`, `scroll.ts`.
+- **Editing (Phase 11).** Every task change — drag, resize, move mode, progress grip, link, cell, API — goes
+  through `ctx.edit.commit` (`engine/edit.ts`: core `prepareChange` → cancelable `before-change` → apply to the raw
+  input or `dataSource.patch()` → history → events), built from the raw task (`ctx.edit.rawTask(id)`). Never write
+  `tasksIn` from a feature (`updateTask()` / `appendTasks()` are the silent data writes). Edit targets (progress
+  grip, connectors) are hit only where the overlay shows them; permissions come from core `editRules`; keys inside
+  `.gantt-tl-cell--editing` belong to the editor. A connection effect deselects `selectedLinkKey` once its link
+  isn't drawn; the link preview `d` is `graph.linkPreviewPath` (follows a zoom); the key or double-click that opens a
+  cell editor calls `ctx.renderNow()` so fast typing reaches the field. The `tasks` getter returns the raw input.
 - **The region / layer contract.** `paint()` reads inputs and graph nodes (every read is a
   dependency, so the region re-runs only when they change) and **only writes** the DOM. It never
   reads layout (`clientWidth`, `getBoundingClientRect`, …): sizes reach the graph as input signals

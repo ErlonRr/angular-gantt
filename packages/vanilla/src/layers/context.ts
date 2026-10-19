@@ -13,10 +13,14 @@
  */
 
 import type { Announcer, GanttFlatRow, GanttView } from '@gantryjs/core';
+import type { Editor } from '../engine/edit';
 import type { Graph } from '../engine/engine';
 import type { Inputs } from '../engine/inputs';
+import type { CellEditApi } from '../interaction/cell-edit';
 import type { Columns } from '../interaction/columns';
 import type { Drag } from '../interaction/drag';
+import type { LinkApi } from '../interaction/link';
+import type { ProgressDrag } from '../interaction/progress';
 import type { Selection } from '../interaction/selection';
 import type { GantryEventDetailMap } from '../types';
 import type { FocusTracker } from './focus-restore';
@@ -36,8 +40,11 @@ export interface HostApi extends HTMLElement {
   selectAll(): void;
 }
 
-/** Dispatches one of the element's public events (`bubbles` + `composed`). */
-export type Emit = <K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]) => void;
+/**
+ * Dispatches one of the element's public events (`bubbles` + `composed`; `before-change` is also
+ * `cancelable`). Returns `false` when a listener called `preventDefault()` on a cancelable event.
+ */
+export type Emit = <K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]) => boolean;
 
 export interface LayerContext {
   /** The `<gantry-element>` (its public API) */
@@ -52,6 +59,17 @@ export interface LayerContext {
   readonly dom: Skeleton;
   readonly drag: Drag;
   readonly selection: Selection;
+  /**
+   * The change pipeline and the history (`engine/edit.ts`): every task change goes through
+   * `edit.commit()` (never `inputs.tasksIn.set` in a feature); build changes from `edit.rawTask(id)`
+   */
+  readonly edit: Editor;
+  /** Drawing, selecting and deleting dependency links (`interaction/link.ts`) */
+  readonly link: LinkApi;
+  /** The progress-grip drag (`interaction/progress.ts`) */
+  readonly progress: ProgressDrag;
+  /** Cell editing (`interaction/cell-edit.ts`; `editCell()` starts it) */
+  readonly cells: CellEditApi;
   /** Keeps keyboard focus on a control a layer rebuilds (`capture()` before replacing nodes) */
   readonly focus: FocusTracker;
   readonly emit: Emit;
@@ -66,6 +84,12 @@ export interface LayerContext {
   readonly setBusy: (busy: boolean) => void;
   /** A row clicked (or Enter / Space) in either pane: selection rules, then `row-click` */
   readonly rowClick: (row: GanttFlatRow, event: MouseEvent | KeyboardEvent) => void;
+  /**
+   * Flushes the pending frame now (no-op while flushing or disconnected): only from an event
+   * handler that must see its result before the next event — the key or double-click that opens a
+   * cell editor mounts and focuses its field at once, so fast typing loses no key
+   */
+  readonly renderNow: () => void;
   /**
    * The sync-group link (`layers/sync.ts`) for the interactions: the splitter reports the panel
    * width it sets (`reportPanel`; never for a width the group applied)

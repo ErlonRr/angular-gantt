@@ -122,6 +122,7 @@ describe('<gantry-element> keyboard move mode', () => {
     expect(resized).toEqual([
       {
         taskId: 'b',
+        edge: 'end',
         handle: 'right',
         oldStart: day(4),
         oldEnd: day(10),
@@ -202,7 +203,7 @@ describe('<gantry-element> keyboard move mode', () => {
     expect(press(el, 'f')).toBe(true);
     expect(press(el, '+')).toBe(true);
     expect(press(el, ' ')).toBe(true);
-    // ↑/↓ (progress) wait for Phase 11's event: used, nothing changes
+    // ↑/↓ change the progress only with `editing.progress` (scaffold-p11.test.ts): used, nothing changes
     expect(press(el, 'ArrowDown')).toBe(true);
     expect(fit).not.toHaveBeenCalled();
     expect(el.viewMode).toBe(ViewMode.Day);

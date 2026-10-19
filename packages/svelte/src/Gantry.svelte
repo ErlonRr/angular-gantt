@@ -7,6 +7,11 @@
   (`zoomIn()`, `scrollToToday()`, …). Other props (`class`, `id`, `style`, `aria-*`, …) go to the
   element. No inline style of its own: `:host` sizes the element (block, 100% × 100%).
 
+  Editing: every change runs `onBeforeChange` first and synchronously, so calling
+  `detail.preventDefault()` there vetoes it; `onTasksChange` then gets the tasks after the change
+  (`detail.tasks`, the proposed ones with `applied: false` in controlled mode), ready to store back
+  in the state passed as `tasks` (`$state.raw` keeps big plans cheap).
+
   Light DOM: the `empty` snippet is rendered as `<div slot="empty">` (the element's empty-state
   slot), then `children` as it is. `empty` exists because Svelte can't pass `<div slot="empty">`
   through `children` cleanly: written as a direct child of <Gantry> it is a legacy named slot (never
@@ -76,6 +81,13 @@
     onStateChange,
     onLoadError,
     onRetry,
+    onBeforeChange,
+    onTasksChange,
+    onTaskUpdated,
+    onTaskProgressChanged,
+    onDependencyCreated,
+    onDependencyDeleted,
+    onHistoryChange,
     element = $bindable(),
     empty,
     children,
@@ -111,6 +123,13 @@
     onStateChange: () => onStateChange,
     onLoadError: () => onLoadError,
     onRetry: () => onRetry,
+    onBeforeChange: () => onBeforeChange,
+    onTasksChange: () => onTasksChange,
+    onTaskUpdated: () => onTaskUpdated,
+    onTaskProgressChanged: () => onTaskProgressChanged,
+    onDependencyCreated: () => onDependencyCreated,
+    onDependencyDeleted: () => onDependencyDeleted,
+    onHistoryChange: () => onHistoryChange,
   };
 
   // Listeners first: assigning a property can fire an event at once (`view-mode-change`), so they

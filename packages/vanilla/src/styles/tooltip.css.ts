@@ -24,7 +24,7 @@ export const TOOLTIP_CSS = `
     }
     .gantt-tooltip-rows, .gantt-tooltip-rows dd { margin: 0; }
     .gantt-tooltip-row { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
-    .gantt-tooltip-label { opacity: 0.6; }
+    .gantt-tooltip-label { opacity: 0.75; }
     .gantt-tooltip-row--progress { flex-wrap: wrap; row-gap: 3px; margin: 6px 0 0; }
     .gantt-tooltip-track {
       flex: 0 0 100%; height: 3px; overflow: hidden;

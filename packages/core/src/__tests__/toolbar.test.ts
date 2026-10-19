@@ -34,6 +34,7 @@ const ALL: ResolvedToolbar = {
   fit: true,
   panelToggle: false,
   overflow: 'menu',
+  undo: true,
 };
 
 const LEVELS: GanttZoomLevel[] = ['Hour', 'Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
@@ -159,6 +160,7 @@ describe('buildToolbar — controls', () => {
       pressed: null,
       haspopup: null,
       expanded: null,
+      disabled: null,
       action: { type: 'today' },
     });
   });
@@ -309,6 +311,7 @@ describe('buildToolbar — panel toggle (toolbar.panelToggle)', () => {
         pressed: true,
         haspopup: null,
         expanded: null,
+        disabled: null,
         action: { type: 'togglePanel' },
       },
     ]);
@@ -444,6 +447,8 @@ describe('toolbar icons', () => {
     'viewChart',
     'panel',
     'more',
+    'undo',
+    'redo',
   ];
 
   it('defines every icon on a 16 px grid, stroked with currentColor at 1.5 px', () => {

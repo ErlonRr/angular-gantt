@@ -20,6 +20,26 @@ const EVENT_NAMES: Record<string, { callback: string; vue: string; angular: stri
   'view-mode-change': { callback: 'onViewModeChange', vue: '@view-mode-change', angular: '(viewModeChange)' },
   'state-change': { callback: 'onStateChange', vue: '@state-change', angular: '(stateChange)' },
   'load-error': { callback: 'onLoadError', vue: '@load-error', angular: '(loadError)' },
+  retry: { callback: 'onRetry', vue: '@retry', angular: '(retry)' },
+  'before-change': { callback: 'onBeforeChange', vue: '@before-change', angular: '(beforeChange)' },
+  'tasks-change': { callback: 'onTasksChange', vue: '@tasks-change', angular: '(tasksChange)' },
+  'task-updated': { callback: 'onTaskUpdated', vue: '@task-updated', angular: '(taskUpdated)' },
+  'task-progress-changed': {
+    callback: 'onTaskProgressChanged',
+    vue: '@task-progress-changed',
+    angular: '(taskProgressChanged)',
+  },
+  'dependency-created': {
+    callback: 'onDependencyCreated',
+    vue: '@dependency-created',
+    angular: '(dependencyCreated)',
+  },
+  'dependency-deleted': {
+    callback: 'onDependencyDeleted',
+    vue: '@dependency-deleted',
+    angular: '(dependencyDeleted)',
+  },
+  'history-change': { callback: 'onHistoryChange', vue: '@history-change', angular: '(historyChange)' },
 };
 
 const API = GANTRY_API;
@@ -322,7 +342,7 @@ type SectionId = 'properties' | 'methods' | 'events' | 'css-properties' | 'parts
         </div>
         <p class="api-note">
           <app-inline-code
-            text="Angular’s \`(viewModeChange)\` emits the level itself (it is the \`[(viewMode)]\` model) and \`(rowClick)\` a \`RowGeometry\`; the other payloads are the same."
+            text="Angular’s \`(viewModeChange)\` emits the level itself (it is the \`[(viewMode)]\` model) and \`[(series)]\` is a model (the tasks the chart applied); the other payloads are the same. Veto \`before-change\` with \`detail.preventDefault()\` in every binding (the element’s event also takes \`event.preventDefault()\`)."
           />
           See the <a class="gs-link" routerLink="/frameworks">Frameworks</a> page for each binding.
         </p>

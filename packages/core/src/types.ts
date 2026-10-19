@@ -142,6 +142,13 @@ export interface GanttTask {
   draggable?: boolean | undefined;
 
   /**
+   * `false`: a read-only row — its dates, progress, cells and links can't be changed by the user
+   * (pointer, keyboard or cell). `draggable: false` locks the dates only. Default: editable, as far
+   * as `editing`, `enableDrag` and `enableResize` allow.
+   */
+  editable?: boolean | undefined;
+
+  /**
    * Explicit status from your data; wins over the derived one (built-in `status` column).
    * Built-in values are translated (`labels.status*`), any other string is shown as is.
    * Default: derived from progress, dates and now (see `taskStatus`).
@@ -333,12 +340,53 @@ export interface ColumnCellContext {
 }
 
 /**
+ * A built-in cell editor: `input[type=text|number|date|datetime-local]`, or a `select` over
+ * `editorOptions.options`.
+ */
+export type CellEditorKind = 'text' | 'number' | 'date' | 'datetime-local' | 'select';
+
+/** Settings of a built-in cell editor (`ColumnDef.editorOptions`). */
+export interface CellEditorOptions {
+  /** `number`: the smallest value */
+  min?: number | undefined;
+  /** `number`: the largest value */
+  max?: number | undefined;
+  /** `number`: the step of the spin buttons */
+  step?: number | undefined;
+  /** `select`: the choices, in order */
+  options?: readonly { value: string; label: string }[] | undefined;
+}
+
+/**
+ * What a custom cell editor receives (`ColumnDef.editor` as a function; Angular's
+ * `<ng-template ganttCellEditor let-edit>`). DOM-free: each binding decides the editor's node type.
+ * The chart focuses the editor and handles Enter (commit), Tab / Shift+Tab (commit and edit the
+ * next / previous editable cell of the row) and Escape (cancel) unless the editor prevented them.
+ */
+export interface CellEditorContext {
+  readonly row: GanttFlatRow;
+  readonly column: ColumnDef;
+  /** The editor's text: the start value (`exportValue`, else the cell text, or the typed character) until `setValue` */
+  readonly value: string;
+  readonly labels: GanttLabels;
+  /** The current error message (shown under the cell, `aria-invalid`), or `null` */
+  readonly invalid: string | null;
+  /** Set the editor's text: what `commit()` parses */
+  setValue(value: string): void;
+  /** Parse, validate and apply; `'next'` / `'prev'` then edits the next / previous editable cell of the row */
+  commit(move?: 'next' | 'prev'): void;
+  /** Close the editor without a change */
+  cancel(): void;
+}
+
+/**
  * Column definition. `TTemplate` is the framework-specific cell template
  * type (e.g. Angular's `TemplateRef<ColumnCellContext>`); framework-free
- * consumers can ignore it and use `render` instead.
+ * consumers can ignore it and use `render` instead. `TEditor` is the
+ * framework-specific custom cell editor (`editor`).
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export interface ColumnDef<TTemplate = any> {
+export interface ColumnDef<TTemplate = any, TEditor = any> {
   key: string;
   label: string;
   /** Initial width in px */
@@ -367,6 +415,32 @@ export interface ColumnDef<TTemplate = any> {
   tableOnly?: boolean | undefined;
   /** Grow to fill the remaining panel width (default: the last column grows) */
   flex?: boolean | undefined;
+  /**
+   * The cell can be edited (with `editing.cells` on): `true`, `false`, or per row. Default: `false`
+   * for custom columns; the built-in `name`, `start`, `end`, `duration`, `progress` and
+   * `predecessors` columns are editable, the other built-ins read-only. A read-only row
+   * (`task.editable: false`) is never edited.
+   */
+  editable?: boolean | ((row: GanttFlatRow) => boolean) | undefined;
+  /**
+   * The cell editor: a built-in kind, or a custom editor (`TEditor`: a function returning a DOM
+   * node in the Web Component and the React / Vue / Svelte wrappers; a template or a function in
+   * Angular). Default: the built-in column's editor, `'text'` for custom columns.
+   */
+  editor?: CellEditorKind | TEditor | undefined;
+  /** Settings of a built-in editor (`min` / `max` / `step`, the `select` options) */
+  editorOptions?: CellEditorOptions | undefined;
+  /** The cell's value as text: the editor's first value (and the CSV export's). Default: `render`, else the field's value */
+  exportValue?: ((row: GanttFlatRow, ctx: ColumnContext) => string) | undefined;
+  /**
+   * The editor's text → the task fields to change; throw `new Error(message)` to reject it (the
+   * message shows under the cell). Default: the built-in column's parser; for a custom column the
+   * text, written to `task[key]` when `key` is a `GanttTask` field, else to `data[key]`.
+   */
+  parse?: ((value: string, row: GanttFlatRow, ctx: ColumnContext) => Partial<GanttTask>) | undefined;
+  /** Checks the parsed fields: return a message to reject them, or nothing to accept */
+  validate?:
+    ((patch: Partial<GanttTask>, row: GanttFlatRow, ctx: ColumnContext) => string | null | undefined) | undefined;
 }
 
 // ─── Annotations ─────────────────────────────────────────────
@@ -510,6 +584,10 @@ export interface GanttLabels {
   hidePanel: string;
   /** Toolbar: the menu button holding the controls that don't fit (`toolbar.overflow: 'menu'`) */
   more: string;
+  /** Toolbar: undo the last change (`toolbar.undo`, while the chart keeps history) */
+  undo: string;
+  /** Toolbar: redo the last undone change */
+  redo: string;
   /** Week label used by `WEEK_FORMATS.label` ("Week 12") */
   week: string;
   // Legend
@@ -580,6 +658,8 @@ export interface GanttLabels {
   ariaBarRole: string;
   ariaExpand: (name: string) => string;
   ariaCollapse: (name: string) => string;
+  /** Accessible name of a cell editor: the column's label and the task's name ("Start, Design") */
+  ariaCellEditor: (column: string, name: string) => string;
   // Accessible names of bars (`taskAccessibleName`)
   /** "65% complete" */
   ariaProgress: (progress: number) => string;
@@ -611,6 +691,8 @@ export interface GanttLabels {
   announceZoom: (level: string) => string;
   /** Keyboard edit mode entered: name plus the key help */
   announceEditStart: (name: string) => string;
+  /** Added to `announceEditStart` when the progress can be edited too (↑ / ↓ in move mode) */
+  announceEditProgressHelp: string;
   announceEditCancel: (name: string) => string;
   /** Committed without any change */
   announceEditNoChange: (name: string) => string;
@@ -620,6 +702,16 @@ export interface GanttLabels {
   announceLinkStart: (name: string) => string;
   announceLinkCreated: (from: string, to: string) => string;
   announceLinkCancel: string;
+  /** A link was selected (a click on its arrow): it can be deleted */
+  announceLinkSelected: (from: string, to: string) => string;
+  /** A link was deleted */
+  announceLinkDeleted: (from: string, to: string) => string;
+  /** A change was undone; `what` describes it (`describeChange`) */
+  announceUndo: (what: string) => string;
+  /** A change was redone */
+  announceRedo: (what: string) => string;
+  /** A change was rejected (validation, `before-change` veto); `reason` is the error message */
+  announceChangeRejected: (reason: string) => string;
   /**
    * Movement of a drag, e.g. "+3d" / "-2h" (`amount` in snap units).
    * @deprecated Not shown since 2.0: the drag readout (`dragReadout`) shows the new dates and duration.
@@ -641,6 +733,41 @@ export interface GanttLabels {
   // Legend
   legendCritical: string;
   legendBaseline: string;
+  // Editing: change descriptions and error messages
+  /** A cell edit, in announcements and the history ("Edited Start of Design") */
+  describeEdit: (name: string, column: string) => string;
+  /** A required value (the name) is empty */
+  errorRequired: string;
+  /** Not a number */
+  errorNumber: string;
+  /** A number out of range */
+  errorRange: (min: number, max: number) => string;
+  /** Not a date */
+  errorDate: string;
+  /** Not a duration */
+  errorDuration: string;
+  /** The end would come before the start */
+  errorEndBeforeStart: string;
+  /** A predecessor reference matches no task */
+  errorUnknownTask: (ref: string) => string;
+  /** A predecessor name matches more than one task */
+  errorAmbiguousTask: (ref: string) => string;
+  /** A link from a task to itself */
+  errorSelfLink: string;
+  /** The link already exists */
+  errorDuplicateLink: string;
+  /** The link would close a loop of dependencies */
+  errorCycle: string;
+  /** A link between a task and its own ancestor or descendant (`editing.dependencies.parentChild` off) */
+  errorParentChild: string;
+  /** A predecessors edit adds a link while `editing.dependencies.create` is off */
+  errorLinkCreate: string;
+  /** A predecessors edit removes a link while `editing.dependencies.delete` is off */
+  errorLinkDelete: string;
+  /** The task is read-only (`task.editable: false`, or a rolled-up field) */
+  errorReadOnly: string;
+  /** The app vetoed the change (`before-change`); read after `announceChangeRejected` */
+  errorRejected: string;
 }
 
 const unitCount = (n: number, unit: AnnounceUnit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
@@ -672,6 +799,8 @@ export const DEFAULT_LABELS: GanttLabels = {
   showPanel: 'Show task list',
   hidePanel: 'Hide task list',
   more: 'More',
+  undo: 'Undo',
+  redo: 'Redo',
   week: 'Week',
   legend: 'Legend',
   today: 'Today',
@@ -725,6 +854,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   ariaBarRole: 'bar',
   ariaExpand: name => `Expand ${name}`,
   ariaCollapse: name => `Collapse ${name}`,
+  ariaCellEditor: (column, name) => `${column}, ${name}`,
   ariaProgress: p => `${p}% complete`,
   ariaCritical: 'critical',
   ariaBaseline: 'planned baseline shown',
@@ -743,6 +873,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   announceEditStart: name =>
     `Editing ${name}. Arrow keys move, Shift+Arrow resizes the end, Alt+Arrow resizes the start, ` +
     `Enter saves, Escape cancels.`,
+  announceEditProgressHelp: 'Up and Down change the progress.',
   announceEditCancel: name => `Edit of ${name} cancelled`,
   announceEditNoChange: name => `${name} unchanged`,
   announceExpanded: name => `${name} expanded`,
@@ -750,6 +881,11 @@ export const DEFAULT_LABELS: GanttLabels = {
   announceLinkStart: name => `Linking from ${name}. Move to another task and press Enter, or Escape to cancel.`,
   announceLinkCreated: (from, to) => `Linked ${from} to ${to}`,
   announceLinkCancel: 'Linking cancelled',
+  announceLinkSelected: (from, to) => `Link from ${from} to ${to} selected. Press Delete to remove it.`,
+  announceLinkDeleted: (from, to) => `Removed the link from ${from} to ${to}`,
+  announceUndo: what => `Undone: ${what}`,
+  announceRedo: what => `Redone: ${what}`,
+  announceChangeRejected: reason => `Not changed: ${reason}`,
   dragDelta: (amount, unit) => `${amount > 0 ? '+' : ''}${amount}${unit === 'hour' ? 'h' : 'd'}`,
   dragReadout: (range, duration) => `${range} · ${duration}`,
   ttCritical: 'Critical path',
@@ -759,6 +895,23 @@ export const DEFAULT_LABELS: GanttLabels = {
   ttSuccessors: 'Successors',
   legendCritical: 'Critical path',
   legendBaseline: 'Baseline',
+  describeEdit: (name, column) => `Edited ${column} of ${name}`,
+  errorRequired: 'Enter a value',
+  errorNumber: 'Enter a number',
+  errorRange: (min, max) => `Enter a number from ${min} to ${max}`,
+  errorDate: 'Enter a valid date',
+  errorDuration: 'Enter a duration such as 5d, 2w or 4h',
+  errorEndBeforeStart: 'The end can’t be before the start',
+  errorUnknownTask: ref => `No task “${ref}”`,
+  errorAmbiguousTask: ref => `More than one task is called “${ref}”: use its ID`,
+  errorSelfLink: 'A task can’t depend on itself',
+  errorDuplicateLink: 'These tasks are already linked',
+  errorCycle: 'This link would make a loop',
+  errorParentChild: 'A task can’t be linked to its own parent or child',
+  errorLinkCreate: 'New links can’t be added here',
+  errorLinkDelete: 'Links can’t be removed here',
+  errorReadOnly: 'This task can’t be edited',
+  errorRejected: 'the change was not accepted',
 };
 
 // ─── i18n: date & header formats ─────────────────────────────
@@ -1028,6 +1181,12 @@ export interface GanttToolbarOptions {
    * views, into a "More" menu; `'wrap'` wraps them onto more lines. Default `'menu'`.
    */
   overflow?: 'menu' | 'wrap' | undefined;
+  /**
+   * Undo and Redo buttons after the task list toggle. They show only while the chart keeps
+   * history (`editing` on, `history` not off, not `controlled`) and never move into the More menu.
+   * Default true.
+   */
+  undo?: boolean | undefined;
 }
 
 /** Below `breakpoint` px of chart width, the chart shows `view`. */
@@ -1088,6 +1247,56 @@ export interface GanttMarkerOptions {
    * never cover bars. `'auto'` (default) shows it when at least one annotation has a label.
    */
   lane?: 'auto' | boolean | undefined;
+}
+
+/**
+ * Interactive editing (`GanttOptions.editing`). In the object form every feature is on unless it is
+ * set to `false`; `dependencies.parentChild` is the exception (off unless set).
+ */
+export interface GanttEditingOptions {
+  /** Edit the cells of editable columns (F2, Enter, typing, double-click). Default true */
+  cells?: boolean | undefined;
+  /** The progress grip on task bars and ↑ / ↓ in move mode, `step` in % (default 5). Default true */
+  progress?: boolean | { step?: number | undefined } | undefined;
+  /**
+   * Links: `create` (drag from a bar's connector to another bar, click a connector then a bar, or
+   * L then Enter), `delete` (click an arrow, then Delete) and `parentChild` (allow links between a
+   * task and its own ancestors or descendants). Default `true` = create and delete, no parent–child.
+   */
+  dependencies?:
+    | boolean
+    | {
+        create?: boolean | undefined;
+        delete?: boolean | undefined;
+        parentChild?: boolean | undefined;
+      }
+    | undefined;
+  /**
+   * Your own check, after the built-in ones (links, dates, progress range, read-only rows): return
+   * `false` or a message to reject the change (announced, shown under an edited cell). Anything
+   * else accepts it.
+   */
+  validate?: ((change: GanttChange, ctx: GanttValidateContext) => boolean | string | null | undefined) | undefined;
+  /**
+   * Undo / redo (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z or Ctrl+Y, the methods and `toolbar.undo`): at most
+   * `limit` steps (default 100); consecutive keyboard, progress or cell changes of one task within
+   * `coalesceMs` (default 800) make one step. Default true; always off when `controlled`.
+   */
+  history?: boolean | { limit?: number | undefined; coalesceMs?: number | undefined } | undefined;
+  /**
+   * The app owns the tasks: a change is validated and announced, `before-change` can veto it, and
+   * the events carry the proposed tasks (`tasks-change` with `applied: false`), but the chart
+   * applies nothing and keeps no history — set the tasks yourself. Default false
+   */
+  controlled?: boolean | undefined;
+}
+
+/** What `editing.validate` receives besides the change. */
+export interface GanttValidateContext {
+  /** The chart's tasks before the change */
+  tasks: readonly GanttTask[];
+  /** The tasks with the change applied */
+  proposed: readonly GanttTask[];
 }
 
 /** UI state that can be persisted (`stateKey`) or restored (`setState`). */
@@ -1230,6 +1439,14 @@ export interface GanttOptions {
   keyboard?: GanttKeyboardOptions | undefined;
   /** Tooltip trigger, timing and custom content (`tooltipEnabled` turns it on) */
   tooltip?: GanttTooltipOptions | undefined;
+  /**
+   * Interactive editing: cells, the progress grip, creating and deleting links, undo / redo
+   * (`GanttEditingOptions`). `true` turns every feature on; the object form turns on each feature
+   * it does not set to `false`. Drag and resize follow `enableDrag` / `enableResize` either way, and
+   * every change — drag, resize, keyboard, API — goes through the same pipeline (`before-change`,
+   * `tasks-change`). Default false.
+   */
+  editing?: boolean | GanttEditingOptions | undefined;
 }
 
 // ─── Events emitted by the component ─────────────────────────
@@ -1245,6 +1462,9 @@ export interface TaskDragEvent {
 
 export interface TaskResizeEvent {
   taskId: string;
+  /** The edge that moved: the task's start or its end */
+  edge: 'start' | 'end';
+  /** @deprecated Use `edge`: `'left'` is `'start'`, `'right'` is `'end'`. */
   handle: 'left' | 'right';
   oldStart: Date;
   oldEnd: Date;
@@ -1262,6 +1482,101 @@ export interface DependencyChangeEvent {
   toId: string;
   type: DependencyType;
   lag: number;
+}
+
+/** A task's progress changed (the progress grip, ↑ / ↓ in move mode, the `progress` cell). */
+export interface TaskProgressEvent {
+  taskId: string;
+  oldProgress: number;
+  newProgress: number;
+}
+
+// ─── Editing: changes and their events ───────────────────────
+
+/** What made a change. */
+export type GanttChangeSource =
+  'drag' | 'resize' | 'progress' | 'keyboard' | 'cell' | 'link' | 'delete' | 'api' | 'undo' | 'redo';
+
+/**
+ * One task's changed fields. `after` holds the new values; `before` holds exactly the same fields
+ * with their old values (`undefined` where the field was not set), so it restores the task as it was.
+ */
+export interface GanttTaskUpdate {
+  taskId: string;
+  before: Partial<GanttTask>;
+  after: Partial<GanttTask>;
+}
+
+/**
+ * What a change does, derived from its field updates (`deriveOps`), whatever the gesture: equal
+ * start and end shifts → `move`; one edge → `resize`; both edges by different amounts → `move` then
+ * `resize` (end); progress → `progress`; a dependency added / removed → `link` / `unlink`. Each op
+ * fires its event (`task-dragged`, `task-resized`, `task-progress-changed`, `dependency-created`,
+ * `dependency-deleted`).
+ */
+export type GanttChangeOp =
+  | { op: 'move'; event: TaskDragEvent }
+  | { op: 'resize'; event: TaskResizeEvent }
+  | { op: 'progress'; event: TaskProgressEvent }
+  | { op: 'link'; event: DependencyChangeEvent }
+  | { op: 'unlink'; event: DependencyChangeEvent };
+
+/** One change to the tasks: one `before-change`, one undo step. */
+export interface GanttChange {
+  source: GanttChangeSource;
+  /** The field updates, in order */
+  updates: readonly GanttTaskUpdate[];
+  /** The ops derived from `updates` (`deriveOps`), in order */
+  ops: readonly GanttChangeOp[];
+  /** The column key of a cell edit */
+  column?: string | undefined;
+  /** Consecutive changes with the same key within `history.coalesceMs` make one undo step */
+  coalesceKey?: string | undefined;
+}
+
+/**
+ * `before-change` detail: the change about to be applied and the tasks it would give. Call
+ * `preventDefault()` (synchronously) to veto it; the Web Component's event is also cancelable.
+ */
+export interface GanttBeforeChangeEvent {
+  readonly change: GanttChange;
+  /** The proposed tasks: the current tasks with the change applied */
+  readonly tasks: readonly GanttTask[];
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+}
+
+/** `tasks-change` detail: after every accepted change (in controlled mode too). */
+export interface GanttTasksChangeEvent {
+  /** The tasks now (`applied`), or the proposed tasks to set yourself (controlled mode) */
+  tasks: GanttTask[];
+  change: GanttChange;
+  /** The chart applied the change (`false` in controlled mode or when the app set the tasks during `before-change`) */
+  applied: boolean;
+}
+
+/** `task-updated` detail: one per changed task, after the op events. */
+export interface TaskUpdatedEvent {
+  taskId: string;
+  /** The task with the change */
+  task: GanttTask;
+  /** The task before it */
+  previous: GanttTask;
+  /** The changed field names */
+  fields: string[];
+  source: GanttChangeSource;
+}
+
+/** The undo / redo state (`history-change` detail). */
+export interface GanttHistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  /** What Undo would undo (`describeChange`), or `null` */
+  undoLabel: string | null;
+  /** What Redo would redo, or `null` */
+  redoLabel: string | null;
+  undoCount: number;
+  redoCount: number;
 }
 
 /** The user pressed Retry: on the error state (`'error'`) or after a failed data-source page (`'dataSource'`). */

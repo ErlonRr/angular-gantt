@@ -6,6 +6,9 @@
 // focus ring reads `--gantt-focus-ring`, which the chart's host sets to Highlight in this mode.
 // Read from the compiled component definitions (encapsulation attributes folded back into
 // `:host(…)`), then from the styles a rendered chart injects (each rule must reach its element).
+// Phase 11 (plan 3d) adds the editing nodes, each rule in the component painting its node; the
+// toolbar's disabled Undo / Redo GrayText (step 4.8), and `Field` / `FieldText` (the cell editor)
+// join the system colours.
 import { describe, it, expect } from 'vitest';
 import {
   Component,
@@ -37,7 +40,7 @@ import { GanttArrowComponent } from './arrows/gantt-arrow.component';
 import { GanttIconComponent } from './icons/gantt-icon.component';
 
 const FORCED = '@media (forced-colors: active)';
-const SYSTEM = /\b(Canvas|CanvasText|Highlight|HighlightText|GrayText|ButtonFace|ButtonText)\b/;
+const SYSTEM = /\b(Canvas|CanvasText|Highlight|HighlightText|GrayText|ButtonFace|ButtonText|Field|FieldText)\b/;
 
 /** A selector with Angular's encapsulation attributes folded back: `[_nghost-…]` → `:host(…)`, no `[_ngcontent-…]`. */
 function normalise(selector: string): string {
@@ -137,7 +140,7 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
     },
   ],
   [
-    'toolbar (checked radio and menu item, pressed toggle, More menu)',
+    'toolbar (checked radio and menu item, pressed toggle, disabled Undo / Redo, More menu)',
     GanttToolbarComponent,
     {
       '.gantt-tb-pill[aria-checked=true]': {
@@ -153,6 +156,8 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
         color: 'HighlightText',
       },
       '.gantt-tb-btn[aria-pressed=true]': { color: 'Highlight', 'border-color': 'Highlight' },
+      // Important: over the normal `[aria-disabled]:hover` rule (more specific), as the Web Component's
+      '.gantt-tb-btn[aria-disabled=true]': { color: 'GrayText !important', 'border-color': 'GrayText !important' },
       '.gantt-tb-menu': { 'background-color': 'Canvas', color: 'CanvasText', 'border-color': 'CanvasText' },
     },
   ],
@@ -175,10 +180,24 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
       '.gantt-tl-row--selected .gantt-tl-cell:focus-visible': { 'outline-color': 'HighlightText' },
       '.gantt-tl-row--selected .gantt-collapse-btn:focus-visible': { 'outline-color': 'HighlightText' },
       '.gantt-col-resize:hover': { 'background-color': 'Highlight' },
+      // Phase 11 (step 4.7): the cell editor Field / FieldText (also in the selected row), its ring
+      // Highlight, an invalid value a 2 px dashed CanvasText outline, the message CanvasText on Canvas
+      ':host .gantt-tl-editor:focus-visible': { 'outline-color': 'Highlight !important' },
+      ':host .gantt-tl-editor': {
+        'background-color': 'Field !important',
+        color: 'FieldText !important',
+        'border-color': 'FieldText !important',
+      },
+      ':host .gantt-tl-editor[aria-invalid=true]': { outline: '2px dashed CanvasText !important' },
+      '.gantt-tl-editor-error': {
+        'background-color': 'Canvas !important',
+        color: 'CanvasText !important',
+        'border-color': 'CanvasText !important',
+      },
     },
   ],
   [
-    'canvas (rows, bands, grid, today)',
+    'canvas (rows, bands, grid, today, link preview)',
     GanttCanvasComponent,
     {
       '.gantt-rows > rect': { fill: 'Canvas !important' },
@@ -188,6 +207,14 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
       'pattern > line': { stroke: 'GrayText !important' },
       '.gantt-grid > line': { stroke: 'GrayText !important' },
       '.gantt-today': { stroke: 'Highlight !important' },
+      // Phase 11: the link being drawn Highlight, an invalid target a 2 px dashed CanvasText
+      '.gantt-link-preview': { fill: 'Highlight !important', stroke: 'Highlight !important' },
+      '.gantt-link-preview--invalid': {
+        fill: 'CanvasText !important',
+        stroke: 'CanvasText !important',
+        'stroke-width': '2px',
+        'stroke-dasharray': '4 2',
+      },
     },
   ],
   [
@@ -282,6 +309,15 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
     {
       '.gantt-bar-focus-ring': { stroke: 'Highlight' },
       '.gantt-bar-grip': { fill: 'Canvas', stroke: 'Highlight' },
+      // Phase 11: the progress grip as the grips, the link connectors (target filled, invalid dashed)
+      '.gantt-progress-grip': { fill: 'Canvas !important', stroke: 'Highlight !important' },
+      '.gantt-link-connector': { fill: 'Canvas !important', stroke: 'Highlight !important' },
+      '.gantt-link-connector--target': { fill: 'Highlight !important' },
+      '.gantt-link-connector--invalid': {
+        stroke: 'CanvasText !important',
+        'stroke-width': '2px',
+        'stroke-dasharray': '4 2',
+      },
     },
   ],
   [
@@ -297,6 +333,9 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
       path: { stroke: 'CanvasText !important' },
       polygon: { fill: 'CanvasText !important' },
       text: { fill: 'CanvasText !important' },
+      // Phase 11: the link selected for deletion
+      ':host(.gantt-arrow--selected) path': { stroke: 'Highlight !important' },
+      ':host(.gantt-arrow--selected) polygon': { fill: 'Highlight !important' },
     },
   ],
 ];
@@ -377,6 +416,45 @@ describe('forced-colors rules (D25)', () => {
         '.gantt-tl-row--selected',
       ].sort(),
     );
+  });
+
+  it('Phase 11 modifiers come after their base rule (same specificity: the later rule wins)', () => {
+    /** Index of the first forced rule of `type` listing `selector` (normalised). */
+    const at = (type: Type<unknown>, selector: string) =>
+      split(cssOf(type))
+        .forced.flatMap(body => rulesOf(body))
+        .findIndex(r => r.selectors.some(s => normalise(s) === selector));
+    for (const [type, base, modifier] of [
+      [GanttBarOverlayComponent, '.gantt-link-connector', '.gantt-link-connector--target'],
+      [GanttBarOverlayComponent, '.gantt-link-connector', '.gantt-link-connector--invalid'],
+      [GanttCanvasComponent, '.gantt-link-preview', '.gantt-link-preview--invalid'],
+      [GanttArrowComponent, 'path', ':host(.gantt-arrow--selected) path'],
+      [GanttArrowComponent, 'polygon', ':host(.gantt-arrow--selected) polygon'],
+    ] as const) {
+      expect(at(type, base), base).toBeGreaterThanOrEqual(0);
+      expect(at(type, modifier), modifier).toBeGreaterThan(at(type, base));
+    }
+  });
+
+  it('the cell editor’s rules come after the task list’s selected-row and focus-ring rules (they win in a selected row)', () => {
+    const rules = split(cssOf(GanttTaskListComponent)).forced.flatMap(body => rulesOf(body));
+    const at = (selector: string) => rules.findIndex(r => r.selectors.some(s => normalise(s) === selector));
+    const editor = Math.min(
+      ...[
+        ':host .gantt-tl-editor',
+        ':host .gantt-tl-editor:focus-visible',
+        ':host .gantt-tl-editor[aria-invalid=true]',
+      ].map(at),
+    );
+    expect(editor).toBeGreaterThanOrEqual(0);
+    for (const before of [
+      '.gantt-tl-row--selected',
+      '.gantt-tl-row--selected *',
+      '.gantt-tl-row--selected:focus-visible',
+      '.gantt-tl-row--selected .gantt-tl-cell:focus-visible',
+    ])
+      expect(at(before), before).toBeLessThan(editor);
+    expect(at('.gantt-tl-editor-error')).toBeGreaterThan(at('.gantt-tl-row--selected *'));
   });
 
   it('the icon takes its control’s (forced) text colour', () => {
@@ -474,6 +552,16 @@ class Host {
   readonly gantt = viewChild.required(GantryComponent);
 }
 
+@Component({
+  imports: [GantryComponent],
+  template: `<gantry style="height: 400px" [series]="tasks" [options]="options" />`,
+})
+class EditingHost {
+  readonly tasks = TASKS;
+  readonly options: GanttOptions = { viewMode: ViewMode.Week, initialScroll: false, editing: true };
+  readonly gantt = viewChild.required(GantryComponent);
+}
+
 /** The forced-colors selectors of the document's style elements: as injected, and normalised. */
 function injectedForcedSelectors(): { real: string; norm: string }[] {
   const out: { real: string; norm: string }[] = [];
@@ -538,5 +626,45 @@ describe('forced-colors rules on a rendered chart', () => {
       return !reals.some(sel => chart.querySelector(sel) !== null);
     });
     expect(missing).toEqual([]);
+  });
+
+  it('the disabled Undo / Redo rule reaches the history group (editing on, empty history)', async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(EditingHost);
+    await f.whenStable();
+    const chart = f.nativeElement as HTMLElement;
+    const reals = injectedForcedSelectors()
+      .filter(s => s.norm === '.gantt-tb-btn[aria-disabled=true]')
+      .map(s => s.real);
+    expect(reals.length).toBeGreaterThan(0);
+    const hits = [...chart.querySelectorAll(reals.join(', '))].map(b => b.getAttribute('class'));
+    expect(hits).toEqual(['gantt-tb-btn gantt-tb-undo', 'gantt-tb-btn gantt-tb-redo']);
+  });
+
+  it('the cell editor rules reach an open, invalid editor and its message (step 4.7)', async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(EditingHost);
+    await f.whenStable();
+    const chart = f.nativeElement as HTMLElement;
+    expect(f.componentInstance.gantt().editCell('b', 'progress')).toBe(true);
+    await f.whenStable();
+    const input = chart.querySelector<HTMLInputElement>('input.gantt-tl-editor')!;
+    input.value = '150';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await f.whenStable();
+    const injected = injectedForcedSelectors();
+    const missing = [
+      // `:host ::ng-deep`: the rules reach a consumer's custom editor node too
+      ':host .gantt-tl-editor',
+      ':host .gantt-tl-editor:focus-visible',
+      ':host .gantt-tl-editor[aria-invalid=true]',
+      '.gantt-tl-editor-error',
+    ].filter(norm => {
+      const reals = injected.filter(s => s.norm === norm).map(s => s.real.replace(/:focus-visible/g, ''));
+      return !reals.some(sel => chart.querySelector(sel) !== null);
+    });
+    expect(missing).toEqual([]);
+    input.blur();
   });
 });
