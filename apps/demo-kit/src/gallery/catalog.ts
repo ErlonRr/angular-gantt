@@ -25,6 +25,10 @@ export const CASE_IDS = [
   'custom-editors',
   'dependency-editing',
   'controlled',
+  'export-image',
+  'export-csv',
+  'print',
+  'export-toolbar',
   'multi-pipeline',
   'custom-bars',
   'custom-columns',
@@ -40,7 +44,7 @@ export const CASE_IDS = [
 export type CaseId = (typeof CASE_IDS)[number];
 
 export type GalleryCategory =
-  'data' | 'structure' | 'scheduling' | 'editing' | 'multiple' | 'custom' | 'locale' | 'layout' | 'scale';
+  'data' | 'structure' | 'scheduling' | 'editing' | 'export' | 'multiple' | 'custom' | 'locale' | 'layout' | 'scale';
 
 export interface GalleryCategoryInfo {
   id: GalleryCategory;
@@ -70,6 +74,11 @@ export const GALLERY_CATEGORIES: readonly GalleryCategoryInfo[] = [
     label: 'Editing',
     summary:
       'Change the plan in the chart: bars, progress, links and cells, with undo, validation and app-owned state.',
+  },
+  {
+    id: 'export',
+    label: 'Export and print',
+    summary: 'Save the plan as SVG, PNG or CSV, and print it on paper with the header and task list on every page.',
   },
   {
     id: 'multiple',
@@ -117,8 +126,10 @@ export type NoteId =
   | 'series-model'
   | 'view-mode-event'
   | 'before-change'
+  | 'before-export'
   | 'empty-content'
   | 'custom-bars'
+  | 'export-custom-bars'
   | 'custom-cells'
   | 'custom-tooltip'
   | 'cell-editor'
@@ -132,7 +143,10 @@ export type NoteId =
   | 'methods'
   | 'history-state'
   | 'array-updates'
-  | 'responsive-first-frame';
+  | 'responsive-first-frame'
+  | 'export-methods'
+  | 'print-css'
+  | 'export-ssr';
 
 /**
  * When a case page is ready (the e2e smoke test): `charts` charts inside `.gs-case`, each painted;
@@ -319,6 +333,52 @@ export const GALLERY_CASES: readonly GalleryCase[] = [
     tags: ['editing.controlled', 'before-change', 'preventDefault()'],
     ready: { charts: 1 },
     notes: ['series-model', 'before-change'],
+    isNew: true,
+  },
+
+  // ── Export and print ──────────────────────────────────────
+  {
+    id: 'export-image',
+    title: 'Export SVG and PNG',
+    summary:
+      'Download the plan as an SVG or PNG image, in the theme shown, light or dark, for the whole plan or the dates on screen, and preview the SVG on the page.',
+    category: 'export',
+    tags: ['exportSvg()', 'download()', 'theme', 'range'],
+    ready: { charts: 1 },
+    notes: ['export-methods'],
+    isNew: true,
+  },
+  {
+    id: 'export-csv',
+    title: 'Export a CSV table',
+    summary:
+      'Preview and download the tasks as CSV, with the columns shown or all of them, as data or as the cells show them; names that look like formulas are made safe for spreadsheets.',
+    category: 'export',
+    tags: ['exportCsv()', 'columns', 'values', 'formula injection'],
+    ready: { charts: 1 },
+    notes: ['export-methods'],
+    isNew: true,
+  },
+  {
+    id: 'print',
+    title: 'Print on paper',
+    summary:
+      'Print every row of a 60-row schedule on as many pages as it takes, on A4, Letter or A3, with the header and the task list repeated on each page.',
+    category: 'export',
+    tags: ['print()', 'paper', 'fit', 'repeatTable', '@media print'],
+    ready: { charts: 1 },
+    notes: ['export-methods', 'print-css'],
+    isNew: true,
+  },
+  {
+    id: 'export-toolbar',
+    title: 'Export from the toolbar',
+    summary:
+      'The toolbar’s Export menu saves SVG, PNG and CSV files and prints, custom flag bars included; a switch blocks PNG before it starts, and a log lists each export.',
+    category: 'export',
+    tags: ['toolbar.export', 'before-export', 'export', 'custom bars'],
+    ready: { charts: 1 },
+    notes: ['before-export', 'custom-bars', 'export-custom-bars'],
     isNew: true,
   },
 

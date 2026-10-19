@@ -9,7 +9,10 @@
  * SVG attributes.
  *
  * The More menu hangs under the toolbar at its end (the toolbar is its containing block), above
- * the panes' sticky headers, splitter and state box (z-index 14).
+ * the panes' sticky headers, splitter and state box (z-index 14). The Export menu (Phase 12,
+ * toolbar.export) is the same menu: it hangs at the same place. The Export button sits at the
+ * far end like More, right after the views while they show; it never shows with More (core moves
+ * the export group into More first).
  *
  * Undo and Redo (the history group, Phase 11) are plain icon buttons; while there is nothing to
  * undo / redo they are aria-disabled: muted, with no hover change and the default cursor (still
@@ -30,6 +33,11 @@ export const TOOLBAR_CSS = `
     .gantt-tb-group + .gantt-tb-more-group { border-left: none; }
     .gantt-tb-views + .gantt-tb-more-group { margin-left: 0; border-left: 1px solid var(--gantt-border); }
     .gantt-tb-more-group ~ .gantt-legend--toolbar { margin-left: 0; }
+    /* Export: at the far end too, right after the views while they show (it moves into More first) */
+    .gantt-tb-export-group { margin-left: auto; }
+    .gantt-tb-group + .gantt-tb-export-group { border-left: none; }
+    .gantt-tb-views + .gantt-tb-export-group { margin-left: 0; border-left: 1px solid var(--gantt-border); }
+    .gantt-tb-export-group ~ .gantt-legend--toolbar { margin-left: 0; }
     .gantt-tb-btn, .gantt-tb-pill {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
       box-sizing: border-box; min-width: var(--gantry-control-size, 32px); min-height: var(--gantry-control-size, 32px); margin: 0; padding: 0 7px;
@@ -48,7 +56,7 @@ export const TOOLBAR_CSS = `
     .gantt-tb-icon { flex: none; display: block; fill: none; stroke: currentColor; }
     .gantt-tb-label { display: block; }
 
-    /* ── More menu (WAI-ARIA menu button) ───────────────── */
+    /* ── More and Export menus (WAI-ARIA menu buttons) ──── */
     .gantt-tb-menu {
       position: absolute; top: 100%; inset-inline-end: 8px; z-index: 14;
       display: flex; flex-direction: column; box-sizing: border-box; min-width: 160px; max-height: 70vh; overflow-y: auto;

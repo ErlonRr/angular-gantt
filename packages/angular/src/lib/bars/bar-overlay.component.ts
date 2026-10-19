@@ -76,6 +76,13 @@ import { GanttBarFocusService } from './bar-focus.service';
       .gantt-link-connector--invalid {
         stroke: var(--gantt-status-overdue);
       }
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no focus ring, grip or
+         connector */
+      @media print {
+        :host {
+          display: none;
+        }
+      }
       /* Forced colours (D25): the ring and the grips' outline Highlight, the grips Canvas; the progress
          grip as the grips, the connectors Canvas outlined Highlight, the target one filled Highlight,
          an invalid target a 2 px dashed CanvasText outline */

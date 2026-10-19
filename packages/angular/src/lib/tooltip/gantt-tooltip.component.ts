@@ -302,6 +302,13 @@ function isEditable(target: EventTarget | undefined): boolean {
         overflow-wrap: anywhere;
       }
 
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no tooltip, open or not */
+      @media print {
+        :host {
+          display: none;
+        }
+      }
+
       /* Forced colours (D25): Canvas / CanvasText with a CanvasText border, labels at full
          opacity; the progress track outlined, its fill CanvasText (inline paint: !important) */
       @media (forced-colors: active) {

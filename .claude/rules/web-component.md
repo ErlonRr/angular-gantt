@@ -122,6 +122,20 @@ paths:
   focusable node. Bars are `option`s of the svg `listbox`; announcements go through
   `ctx.announce`. Don't add `focus` / `blur` / `focusin` / `focusout` listeners to SVG elements
   (Chromium makes them Tab stops): listen on an HTML ancestor.
+- **Export (Phase 12).** The five methods call `engine.exportChart(request)`, the only
+  `import('../export/run')` (a lazy chunk: never import `export/` statically; `scripts/size.mjs` budgets the entry
+  chunk); one import promise is shared by every call (reset on rejection) and the print lock is taken before any
+  await. The chart is read at call time by `engine/export-capture.ts` (entry chunk, plain values peeked from the
+  graph); `export/source.ts` builds the `ChartExportSource` from that capture; `export/run.ts` runs
+  svg / csv / png / download / print (cancelable `before-export` → file → `export`; one print per chart, locked
+  before `before-export`). DOM helpers: `download.ts` (`a[download]` in the shadow root, URL revoked after
+  `DOWNLOAD_REVOKE_MS`), `rasterize.ts` (`svgToPng`), `print.ts` (`printPages`: hidden `about:blank` frame built
+  with `h` / `setAttr`, adopted sheet, cleanup on `afterprint` or `PRINT_CLEANUP_MS`), `serialize.ts`
+  (`serializeSvg` = `XMLSerializer` + core `sanitizeSvgMarkup`, the same rules as headless exports; `''` → built-in
+  bar).
+  `ctx.runExport(format, 'toolbar')` never rejects (alert region + `console.error`). `inputs.exportMenuOpen` sits
+  beside `menuOpen` (one `#gantt-tb-menu` node, one menu open at a time, `closeToolbarMenu` closes both).
+  `styles/print.css.ts` (`@media print`, no `!important`) is last before forced colours.
 - **Class names** are shared with Angular (`.g-*` header, `.gantt-*` elsewhere). The e2e selector
   contract and the paint snapshots rely on them and on element order: keep the anchor classes,
   `data-task-id` and the SVG layer order (`layers/skeleton.ts`).

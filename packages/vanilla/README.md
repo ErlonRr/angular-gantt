@@ -136,6 +136,8 @@ All are `CustomEvent`s (they bubble and cross the shadow boundary); the payload 
 | `state-change`                              | `GanttState` — panel width / collapsed, view, zoom, column widths, collapsed rows, sort  |
 | `load-error`                                | `{ error, page }` — a data-source page failed after its automatic retries                |
 | `retry`                                     | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }`   |
+| `before-export`                             | `GanttBeforeExportEvent` — `{ format, trigger, fileName, preventDefault() }`; cancelable |
+| `export`                                    | `GanttExportEvent` — `{ format, trigger, fileName, size, pages }`                        |
 
 `retry` carries `{ source: 'error' }` for the `errorMessage` state (load again, then clear
 `errorMessage`) and `{ source: 'dataSource' }` after a failed first data-source page (the element
@@ -156,6 +158,10 @@ chart.addEventListener('tasks-change', e => save(e.detail.tasks)); // after ever
 
 With `options.editing.controlled` the chart applies nothing: set the tasks yourself from `tasks-change`
 (`chart.tasks = e.detail.tasks`). See [Controlled mode](https://github.com/ErlonRr/gantryjs#controlled-mode).
+
+`before-export` and `export` wrap every `download()` and `print()`, from the API or the toolbar's Export menu
+(`trigger: 'api' | 'toolbar'`): veto one with `event.preventDefault()` or `event.detail.preventDefault()` in
+`before-export`, synchronously. See [Export and print](#export-and-print).
 
 `addEventListener` is typed: `gantt.addEventListener('task-dragged', e => e.detail.daysMoved)`.
 `GantryEventDetailMap` / `GantryEventMap` type the payloads, and `GANTRY_EVENTS` maps each event
@@ -182,6 +188,10 @@ to its binding callback name (`'task-dragged'` → `onTaskDragged`).
 | `getState()` / `setState(state)`                                                     | UI state snapshot (see `state-change`)                                                              |
 | `getBarVisual(id)`                                                                   | A bar's computed geometry (e.g. to anchor a popover), also for rows out of view                     |
 | `setTheme(theme)` / `patchTheme(patch)` / `resetTheme()`                             | Replace / merge / drop the custom theme overrides (see [Theming](#theming))                         |
+| `exportSvg(options?)` / `exportCsv(options?)` → `Promise<string>`                    | The chart as SVG text / the tasks as CSV text, drawn from the model (every row); no event           |
+| `exportPng(options?)` → `Promise<Blob>`                                              | The chart as a PNG; rejects with a `RangeError` when it only fits the canvas below scale 1          |
+| `download('svg' \| 'png' \| 'csv', options?)` → `Promise<boolean>`                   | Save a file (`before-export`, then `export`); `false` when vetoed                                   |
+| `print(options?)` → `Promise<boolean>`                                               | Print every row on paper (`before-export`, then `export`); `false` when vetoed or already printing  |
 
 ## Slots
 
@@ -356,6 +366,40 @@ trusted-types 'none'`:
 A strict `style-src` needs constructable stylesheets (Chromium 73+, Firefox 101+, Safari 16.4+).
 Older engines fall back to a `<style>` element in the shadow root and the theme variables on the
 host's inline style, which needs `style-src 'unsafe-inline'`. There is no nonce option.
+
+Exports: `exportPng()`, `download('png')` and `print()` draw the SVG from a `blob:` URL, so they need
+`img-src blob:`; SVG and CSV downloads need nothing more. The print frame is built node by node too (no `srcdoc`) and
+gets its page CSS as a constructable stylesheet. The export code is a separate chunk the element imports on its first
+export, served next to the element's own code.
+
+## Export and print
+
+```js
+const chart = document.querySelector('gantry-element');
+chart.options = { toolbar: { export: true }, export: { fileName: 'roadmap' } }; // an Export menu in the toolbar
+
+const svg = await chart.exportSvg(); // '<svg …>…</svg>', every row, colours resolved
+const csv = await chart.exportCsv({ columns: 'all', delimiter: ';' });
+await chart.download('png', { theme: 'light' }); // roadmap.png; false when a listener vetoed it
+await chart.print({ paper: 'letter', orientation: 'portrait' }); // the whole plan, header and task list on every page
+
+chart.addEventListener('before-export', e => {
+  if (e.detail.format === 'png') e.preventDefault(); // cancel, synchronously
+});
+chart.addEventListener('export', e => console.log(e.detail.fileName, e.detail.size, e.detail.pages));
+```
+
+The five methods are async and draw the chart again from its model (not from the shadow DOM), so every shown row is
+in the file, not only the mounted ones. `download()` and `print()` fire `before-export` (cancelable), then `export`;
+the data methods fire nothing. While `renderBar` is set, its nodes are serialized into images: only attributes and
+inline styles travel (not `::part()` or page CSS; no script, animation or remote resource), and
+`customBars: 'builtin'` draws built-in bars instead. The export code loads on the first export (a lazy chunk), so the
+element's own bundle barely grows: the chart is read when the method is called (`el.exportCsv()` then
+`el.tasks = next` exports the old tasks), `before-export` fires once that code has loaded, and every method rejects
+when it can't be loaded (offline after a deploy; the next call tries again). Under `@media print` the
+element hides its toolbar, splitter and overlays by itself, but Ctrl+P prints only the mounted rows: `print()` prints
+every row. Options, defaults, the CSV values, pagination and the limits are in
+[Export and print](https://github.com/ErlonRr/gantryjs#export-and-print).
 
 ## Exports
 

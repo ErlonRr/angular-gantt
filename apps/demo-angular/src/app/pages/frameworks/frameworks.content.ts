@@ -207,7 +207,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
       'Removing an attribute restores the property’s default. The element never writes attributes back.',
       'Data goes in properties: `tasks`, `options`, `columns`, `annotations`, `dataSource` and `renderBar`.',
       'Give the element a height: it fills its container (`display: block; height: 100%`).',
-      'Events are `CustomEvent`s that bubble and cross the shadow boundary, with the payload in `event.detail`. `before-change` is cancelable: `event.preventDefault()` (or `event.detail.preventDefault()`) vetoes an edit.',
+      'Events are `CustomEvent`s that bubble and cross the shadow boundary, with the payload in `event.detail`. `before-change` is cancelable: `event.preventDefault()` (or `event.detail.preventDefault()`) vetoes an edit; so is `before-export`, for a `download()` or `print()`.',
     ],
     readmeUrl: packageReadme('vanilla'),
     npmUrl: PACKAGES.vanilla.npmUrl,
@@ -219,7 +219,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
       "`document.createElement('gantry-element')` and `querySelector` return a typed `GantryElement`, and `addEventListener` types each event’s `detail`.",
       'Replace an array to update it (`gantt.tasks = [...gantt.tasks, task]`). Re-assigning equal `options` changes nothing.',
       'Assigning `undefined` restores a property’s default (`gantt.options = undefined`). Properties set before the element is defined are applied when it upgrades.',
-      'Methods: `zoomIn()`, `setViewMode(mode)`, `scrollToToday()`, `scrollToTask(id)`, `getState()` / `setState(state)`, and for editing `undo()`, `redo()`, `editCell(id, key)`, `addDependency()` and `focusTask(id)`. Read-only: `viewMode`, `view`, `criticalIds`, `canUndo` and `canRedo`.',
+      'Methods: `zoomIn()`, `setViewMode(mode)`, `scrollToToday()`, `scrollToTask(id)`, `getState()` / `setState(state)`, for editing `undo()`, `redo()`, `editCell(id, key)`, `addDependency()` and `focusTask(id)`, and the async exports `exportSvg()`, `exportCsv()`, `exportPng()`, `download(format)` and `print()`. Read-only: `viewMode`, `view`, `criticalIds`, `canUndo` and `canRedo`.',
       "Dark mode: `darkMode = true`, `false` or `'auto'` (follows `prefers-color-scheme`); the element matches `:state(dark)` while it is dark.",
     ],
     readmeUrl: packageReadme('vanilla'),
@@ -235,9 +235,9 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
     notes: [
       'Inputs: `series` (the tasks; a model, `[(series)]` gets the edited tasks back), `options`, `columns`, `annotations`, `dataSource`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`, `tooltipEnabled` and `showLegend`. Boolean inputs take attribute values: `showLegend` is `true`, `showToolbar="false"` is `false`.',
       '`viewMode` is a model: `[(viewMode)]="zoom"` stays in sync with the toolbar, the `+` / `-` keys and `setViewMode()`.',
-      'Outputs: `(taskDragged)`, `(taskResized)`, `(selectionChange)`, `(rowClick)`, `(rowDblClick)`, `(viewModeChange)`, `(stateChange)`, `(loadError)` and `(retry)`, plus the editing outputs `(beforeChange)`, `(tasksChange)`, `(taskUpdated)`, `(taskProgressChanged)`, `(dependencyCreated)`, `(dependencyDeleted)` and `(historyChange)`.',
+      'Outputs: `(taskDragged)`, `(taskResized)`, `(selectionChange)`, `(rowClick)`, `(rowDblClick)`, `(viewModeChange)`, `(stateChange)`, `(loadError)` and `(retry)`, plus the editing outputs `(beforeChange)`, `(tasksChange)`, `(taskUpdated)`, `(taskProgressChanged)`, `(dependencyCreated)`, `(dependencyDeleted)` and `(historyChange)`, and the export outputs `(beforeExport)` and `(export)`.',
       'Editing (`options.editing`): `(beforeChange)` is vetoed with `$event.preventDefault()`; `undo()`, `redo()`, `editCell()`, `addDependency()` and the `canUndo()` / `canRedo()` signals are on the component. A custom cell editor is an `<ng-template ganttCellEditor let-edit>` (import `GanttCellEditorDirective`).',
-      'Methods on the component: `viewChild(GantryComponent)`, then `zoomIn()`, `scrollToTask(id)`, `getState()`, …',
+      "Methods on the component: `viewChild(GantryComponent)`, then `zoomIn()`, `scrollToTask(id)`, `getState()`, …, and the async exports (`await chart().download('svg')`, `exportCsv()`, `print()`; `(beforeExport)` is vetoed with `$event.preventDefault()`). `exportSvg()` and `exportCsv()` also work during server rendering.",
       "Dark mode: `[darkMode]` takes `true`, `false` or `'auto'`; left `undefined`, the `provideGantt({ darkMode })` default applies, else light. `provideGantt()` is optional and sets defaults (theme, dark mode, locale, labels, formats) for the application, a route or a component.",
     ],
     readmeUrl: `${SITE.repoUrl}#angular-gantryjsangular`,
@@ -249,11 +249,11 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
     files: [{ title: 'Roadmap.tsx', code: REACT }],
     notes: [
       'Props are the element’s properties (`tasks`, `options`, `darkMode`, …) plus `className`, `style` and any HTML attribute. They are set before the chart paints its first frame, so it never shows its defaults first.',
-      'Callbacks receive the event `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry` and the editing ones (`onBeforeChange`, `onTasksChange`, `onTaskUpdated`, `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange`). The latest callback is called, without re-adding listeners.',
+      'Callbacks receive the event `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry` and the editing ones (`onBeforeChange`, `onTasksChange`, `onTaskUpdated`, `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange`) and the export ones (`onBeforeExport`, `onExport`). The latest callback is called, without re-adding listeners.',
       'With `options={{ editing: true }}`, keep the tasks from `onTasksChange={d => setTasks(d.tasks)}` and veto a change with `d.preventDefault()` in `onBeforeChange` (synchronously).',
       'Props are compared by reference: pass a new array or object to update. Keep `dataSource`, `renderBar` and `columns` stable (`useMemo`, `useCallback`, state); `options` can be an inline object.',
       'Setting a prop back to `undefined` (or leaving it out) restores the element’s default, e.g. `showToolbar={compact ? false : undefined}`.',
-      'The `ref` is the `GantryElement` with its methods; dark mode is `darkMode="auto"` or your own theme flag (`darkMode={isDark}`).',
+      'The `ref` is the `GantryElement` with its methods (the exports are async: `await ref.current?.download(\'svg\')`); dark mode is `darkMode="auto"` or your own theme flag (`darkMode={isDark}`).',
     ],
     readmeUrl: packageReadme('react'),
     npmUrl: PACKAGES.react.npmUrl,
@@ -264,9 +264,9 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
     files: [{ title: 'Roadmap.vue', code: VUE }],
     notes: [
       'Props are the element’s properties. An omitted prop keeps the element’s default (booleans are not cast to `false`), and a prop that becomes `undefined` restores it.',
-      'Events carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`, `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry` and the editing ones (`@before-change`, `@tasks-change`, `@task-updated`, `@task-progress-changed`, `@dependency-created`, `@dependency-deleted`, `@history-change`).',
+      'Events carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`, `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry`, the editing ones (`@before-change`, `@tasks-change`, `@task-updated`, `@task-progress-changed`, `@dependency-created`, `@dependency-deleted`, `@history-change`) and the export ones (`@before-export`, `@export`).',
       'With `:options="{ editing: true }"`, keep the tasks (a `shallowRef`) from `@tasks-change="d => (tasks = d.tasks)"` and veto a change with `d.preventDefault()` in `@before-change` (synchronously).',
-      'The template ref exposes `element`: the `GantryElement` with its methods, already set in the parent’s `onMounted`.',
+      "The template ref exposes `element`: the `GantryElement` with its methods (the exports are async: `await chart.value?.element?.download('svg')`), already set in the parent’s `onMounted`.",
       'Array props are watched one level deep (`push`, `splice`, replacing an item); changing a field of an item is not: replace the item. An inline `:options="{ … }"` costs nothing.',
       'Dark mode: `dark-mode="auto"`, or bind it to your theme (`:dark-mode="isDark"`).',
     ],
@@ -278,8 +278,8 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
     files: [{ title: 'Roadmap.svelte', code: SVELTE }],
     notes: [
       'Props are the element’s properties, each set only when it changes. Other props (`class`, `id`, `style`, `aria-*`, attributes such as `dark-mode`) go to the element.',
-      'Callback props receive the event `detail`: `onTaskDragged`, `onSelectionChange`, `onViewModeChange`, `onTasksChange`, `onBeforeChange`, …. The listeners are attached before the first property is set, so events fired while the chart starts arrive too.',
-      '`bind:element` gives the `GantryElement` with its methods (`zoomIn()`, `scrollToTask()`, `setState()`, …).',
+      'Callback props receive the event `detail`: `onTaskDragged`, `onSelectionChange`, `onViewModeChange`, `onTasksChange`, `onBeforeChange`, `onBeforeExport`, `onExport`, …. The listeners are attached before the first property is set, so events fired while the chart starts arrive too.',
+      "`bind:element` gives the `GantryElement` with its methods (`zoomIn()`, `scrollToTask()`, `setState()`, …, and the async exports: `await gantt?.download('svg')`).",
       'A prop you never pass leaves the element alone; a prop that goes back to `undefined` restores the element’s default.',
       '`tasks`, `columns`, `annotations` and `options` are copied one level: assigning a new array always updates the chart, and so do `push` / `splice` on `$state`. For large plans keep tasks in `$state.raw`.',
     ],
@@ -292,7 +292,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
 export const SSR_NOTES: { label: string; text: string }[] = [
   {
     label: 'Angular',
-    text: "`<gantry>` renders on the server: the HTML already has the rows, the bars, the theme tokens and the `region` role. Observers, timers and listeners start after the first browser render; with `darkMode: 'auto'` the chart is light until the browser reports the colour scheme.",
+    text: "`<gantry>` renders on the server: the HTML already has the rows, the bars, the theme tokens and the `region` role. Observers, timers and listeners start after the first browser render; with `darkMode: 'auto'` the chart is light until the browser reports the colour scheme. `exportSvg()` and `exportCsv()` work on the server too.",
   },
   {
     label: 'React',
@@ -313,9 +313,9 @@ export const SSR_NOTES: { label: string; text: string }[] = [
 ];
 
 export const SERVER_CODE = `// server.ts — @gantryjs/core has no DOM and no framework: it runs in Node
-import { computeCriticalPath, DependencyType } from '@gantryjs/core';
+import { computeCriticalPath, createExportSource, exportChartCsv, exportChartSvg, DependencyType } from '@gantryjs/core';
 
-const { criticalIds } = computeCriticalPath([
+const tasks = [
   { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
   {
     id: 'b',
@@ -324,7 +324,13 @@ const { criticalIds } = computeCriticalPath([
     end: new Date('2026-02-28'),
     dependency: { taskId: 'a', type: DependencyType.FS },
   },
-]);`;
+];
+const { criticalIds } = computeCriticalPath(tasks);
+
+// The same SVG and CSV the charts' exportSvg() and exportCsv() give in the browser
+const source = createExportSource({ tasks, options: { viewMode: 'Week', criticalPath: true } });
+const svg = exportChartSvg(source, { theme: 'light' });
+const csv = exportChartCsv(source, { columns: 'all' });`;
 
 export const TYPES_CODE = `import { GANTRY_EVENTS, type GanttOptions } from '@gantryjs/vanilla';
 
@@ -347,6 +353,7 @@ export const CSP_NOTES: string[] = [
   'Its CSS is one constructable stylesheet per document, shared by every instance, plus a per-instance theme sheet, both through `adoptedStyleSheets`.',
   'Every style is a CSSOM property write; the host gets no `style` attribute.',
   "A strict `style-src` needs constructable stylesheets (Chromium 73+, Firefox 101+, Safari 16.4+). Older engines fall back to a `<style>` element and inline theme variables, which need `style-src 'unsafe-inline'`. There is no nonce option.",
+  "Exports, in every binding: `exportPng()`, `download('png')` and `print()` draw the SVG from a `blob:` URL, so they need `img-src blob:`; SVG and CSV downloads need nothing more. The print frame is built node by node too (no `srcdoc`) and gets its page CSS as a constructable stylesheet.",
 ];
 
 export const LOCALE_CODE = `// The same options object in every binding

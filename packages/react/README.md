@@ -49,11 +49,13 @@ export function Roadmap() {
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,
   `onSelectionChange`, `onRowClick`, `onRowDblClick`, `onViewModeChange`, `onStateChange`,
   `onLoadError`, `onRetry`, and the editing callbacks `onBeforeChange`, `onTasksChange`, `onTaskUpdated`,
-  `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange` (see [Editing](#editing)).
+  `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange` (see [Editing](#editing)),
+  and the export callbacks `onBeforeExport` and `onExport` (see [Export and print](#export-and-print)).
 - **Children** go into the element's light DOM, where its slots pick them up:
   `<div slot="empty">…</div>` replaces the empty-state text (`labels.emptyState`).
 - **Ref** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is attached once the
-  props are set, so a callback ref can call `scrollToTask()` right away.
+  props are set, so a callback ref can call `scrollToTask()` right away. The exports are async methods there:
+  `await gantt.current?.download('svg')`, `exportCsv()`, `print()` (see [Export and print](#export-and-print)).
 - **Size** — the element fills its container (`display: block; width: 100%; height: 100%`, from
   its own `:host` style); a `className` or `style` overrides that. The wrapper adds no inline
   style of its own.
@@ -123,6 +125,36 @@ With `editing: { controlled: true }` the chart applies nothing: `onTasksChange` 
 (`applied: false`) and `setTasks(d.tasks)` is how you accept them. Undo and redo are methods on the ref
 (`gantt.current?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the [Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)).
 A custom cell editor is a function that returns a DOM node (`columns={[{ key, label, width, editor: ctx => node }]}`), not a React element.
+
+### Export and print
+
+```tsx
+const gantt = useRef<GantryElement>(null);
+
+return (
+  <>
+    <button onClick={() => void gantt.current?.download('svg')}>Save SVG</button>
+    <button onClick={() => void gantt.current?.print({ paper: 'letter' })}>Print</button>
+    <Gantry
+      ref={gantt}
+      tasks={tasks}
+      options={{ toolbar: { export: true }, export: { fileName: 'roadmap' } }}
+      onBeforeExport={d => {
+        if (d.format === 'png') d.preventDefault(); // cancel, synchronously
+      }}
+      onExport={d => console.log(d.fileName, d.size, d.pages)}
+    />
+  </>
+);
+```
+
+The export methods are async methods of the element on the ref: `exportSvg()` and `exportCsv()` resolve text,
+`exportPng()` a Blob, `download(format)` and `print()` whether they ran. Every `download()` and `print()`, from the
+ref or the toolbar's Export menu, calls `onBeforeExport` first (synchronous: `detail.preventDefault()` cancels the file
+or the print, so you can upload `await gantt.current?.exportSvg()` yourself instead), then `onExport` with the format,
+file name, size in bytes or page count. A `renderBar` node is serialized into images (attributes and inline styles
+only: no React component renders inside a bar). Options, defaults and limits are in
+[Export and print](https://github.com/ErlonRr/gantryjs#export-and-print).
 
 ### Options and behaviour
 

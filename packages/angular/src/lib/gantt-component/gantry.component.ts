@@ -69,6 +69,16 @@
 //  `canRedo` are signals. The link, progress and cell services
 //  (`editing/link.ts`, `progress.ts`, `cell-edit.ts`) are the gestures'
 //  (wave 4); the host has the class `gantry-linking` while a link is drawn.
+//
+//  Export and print (phase 12): `exportSvg()`, `exportCsv()`,
+//  `exportPng()`, `download()` and `print()` draw the plan from the
+//  chart's model (core `export/`, a snapshot of the layout graph), not
+//  from the painted DOM, through the chart's `GanttExportService`
+//  (`export/gantt-export.service.ts`, the toolbar's Export menu too).
+//  `download()` and `print()` emit `beforeExport` (veto with
+//  `preventDefault()`), then `export`. Custom bar components are drawn
+//  off-screen by the canvas (`renderCustomBarMarkup`). The `@media print`
+//  rules (`styles/print.css.ts`) are in the component's styles.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -151,7 +161,13 @@ import {
   type DependencyChangeEvent,
   type EditRules,
   type GanttBeforeChangeEvent,
+  type GanttBeforeExportEvent,
   type GanttChangeSource,
+  type GanttCsvExportOptions,
+  type GanttExportEvent,
+  type GanttPngExportOptions,
+  type GanttPrintOptions,
+  type GanttSvgExportOptions,
   type GanttHistoryState,
   type GanttTasksChangeEvent,
   type ResolvedTaskStyle,
@@ -204,6 +220,8 @@ import {
 import { GanttLinkService } from '../editing/link';
 import { GanttProgressService } from '../editing/progress';
 import { GanttCellEditService } from '../editing/cell-edit';
+import { GanttExportService, type GanttDownloadOptions, type GanttExportEvents } from '../export/gantt-export.service';
+import { PRINT_CSS } from '../styles/print.css';
 
 /** The control inside the chart that received focus last (focus restore when it is removed) */
 interface FocusRecord {
@@ -278,6 +296,7 @@ function barVisualOf(inputs: BarInputs, geo: RowGeometry, progress?: number): Ba
     GanttLinkService,
     GanttProgressService,
     GanttCellEditService,
+    GanttExportService,
   ],
   hostDirectives: [GanttKeyboardDirective],
   imports: [
@@ -685,6 +704,8 @@ function barVisualOf(inputs: BarInputs, geo: RowGeometry, progress?: number): Ba
         }
       }
     `,
+    // The page's own print (Ctrl+P) of the mounted chart (D17)
+    PRINT_CSS,
   ],
 })
 export class GantryComponent {
@@ -714,8 +735,12 @@ export class GantryComponent {
   private readonly editor = inject(GanttEditorService);
   /** Cell editing (`editCell()`) */
   private readonly cellEdit = inject(GanttCellEditService);
+  /** Export and print (`exportSvg()`…, the toolbar's Export menu) */
+  private readonly exporter = inject(GanttExportService);
 
   // ── DOM references ────────────────────────────────────────
+  /** The timeline body: an export's custom bars are rendered off-screen through its registry */
+  private readonly canvas = viewChild(GanttCanvasComponent);
   private readonly mainEl = viewChild<ElementRef<HTMLElement>>('mainEl');
   private readonly panelEl = viewChild<ElementRef<HTMLElement>>('panelEl');
   private readonly canvasEl = viewChild<ElementRef<HTMLElement>>('canvasEl');
@@ -809,6 +834,14 @@ export class GantryComponent {
   readonly dependencyDeleted = output<DependencyChangeEvent>();
   /** The undo / redo state changed (`canUndo`, `canRedo`, labels, counts) */
   readonly historyChange = output<GanttHistoryState>();
+  /**
+   * `download()` or `print()` is about to run (the API or the toolbar's Export menu): its format,
+   * trigger and file name (`null` for a print). Call `preventDefault()` on it, synchronously, to
+   * veto it (the call resolves `false`). `exportSvg()`, `exportCsv()` and `exportPng()` emit nothing.
+   */
+  readonly beforeExport = output<GanttBeforeExportEvent>();
+  /** A file was saved (`size` in bytes) or the plan was printed (`pages`) */
+  readonly export = output<GanttExportEvent>();
 
   /** The outputs of the editor's events, by the Web Component's names */
   private readonly editorOutputs: { readonly [K in keyof GanttEditorEvents]: OutputEmitterRef<GanttEditorEvents[K]> } =
@@ -822,6 +855,13 @@ export class GantryComponent {
       'dependency-created': this.dependencyCreated,
       'dependency-deleted': this.dependencyDeleted,
       'history-change': this.historyChange,
+    };
+
+  /** The outputs of the exports, by the Web Component's names */
+  private readonly exportOutputs: { readonly [K in keyof GanttExportEvents]: OutputEmitterRef<GanttExportEvents[K]> } =
+    {
+      'before-export': this.beforeExport,
+      export: this.export,
     };
 
   // ── Resolved configuration (shared render model) ─────────
@@ -938,11 +978,8 @@ export class GantryComponent {
   });
 
   // ── Live regions ──────────────────────────────────────────
-  /**
-   * Assertive `.gantt-sr-alert`: `labels.loadError` while the data source's last page failed under
-   * shown rows (with no rows the error state box, `role=alert`, says it: read once, not twice)
-   */
-  protected readonly srAlert = computed(() => {
+  /** The alert region's text: what `srAlert` derives, or a failed toolbar export written over it */
+  private readonly alertText = linkedSignal(() => {
     // A cell editor's message (an invalid value) wins while it shows
     const cell = this.cellEdit.alert();
     if (cell) return cell;
@@ -950,6 +987,13 @@ export class GantryComponent {
     if (error === null || error === undefined || this.layout.chartState().kind === 'error') return '';
     return this.i18n.labels().loadError;
   });
+  /**
+   * Assertive `.gantt-sr-alert`: `labels.loadError` while the data source's last page failed under
+   * shown rows (with no rows the error state box, `role=alert`, says it: read once, not twice). A
+   * failed export from the toolbar writes it too (`labels.announceExportFailed`, `announcePrintFailed`
+   * for a print), until the next change of the rest.
+   */
+  protected readonly srAlert: Signal<string> = this.alertText.asReadonly();
 
   // ── Focus ─────────────────────────────────────────────────
   /** The control that received focus last while focus is inside the chart (`null` once it left) */
@@ -1088,6 +1132,16 @@ export class GantryComponent {
         ),
     });
     this.layout.bindHistory(() => this.editor.state());
+    // Export and print: the inputs no service holds, the outputs, the host, the canvas' custom bars
+    this.exporter.bind({
+      options: () => this.options(),
+      showLegend: () => this.showLegend(),
+      mount: () => this.hostEl.nativeElement,
+      customBar: ctx => this.canvas()?.renderCustomBarMarkup(ctx) ?? null,
+      emit: (type, detail) => this.exportOutputs[type].emit(detail),
+      // The same message again is read again: its text changes
+      alert: text => this.alertText.update(shown => (shown === text ? `${text}\u00a0` : text)),
+    });
     // The history follows `editing.history` for the chart's lifetime: created, re-configured (trimmed)
     // or dropped (`historyChange` when that empties it), as the Web Component's element effect
     const historySettings = computed<GanttHistorySettings>(() => this.cfg().editing.history, {
@@ -1693,6 +1747,57 @@ export class GantryComponent {
   /** Add tasks at the end, silently (as `updateTask()`). */
   appendTasks(tasks: GanttTask[]): void {
     if (tasks.length) this.writeTasks(items => [...items, ...tasks]);
+  }
+
+  // ── Export and print ──────────────────────────────────────
+
+  /**
+   * The chart as an SVG image: the `<svg>` element as text (no XML declaration), drawn from the
+   * model — every shown row, the header, the task list in the split and table views, the legend;
+   * colours resolved, no CSS. `options` over `options.export.svg`. Works during server rendering
+   * too (custom bars drawn as built-in there).
+   */
+  exportSvg(options?: GanttSvgExportOptions): Promise<string> {
+    return this.exporter.exportSvg(options);
+  }
+
+  /**
+   * The tasks as CSV text (RFC 4180, `\r\n`, no byte order mark; formulas neutralised): every
+   * loaded task in display order by default. `options` over `options.export.csv`. Works during
+   * server rendering too.
+   */
+  exportCsv(options?: GanttCsvExportOptions): Promise<string> {
+    return this.exporter.exportCsv(options);
+  }
+
+  /**
+   * The chart as a PNG image, at `scale` (default 2) or the largest scale up to it that fits the
+   * canvas limits. Rejects with a `RangeError` when it only fits below actual size (use
+   * `exportSvg()`, `print()` or a `range`), and on the server. Needs `img-src blob:` under a
+   * Content Security Policy.
+   */
+  exportPng(options?: GanttPngExportOptions): Promise<Blob> {
+    return this.exporter.exportPng(options);
+  }
+
+  /**
+   * Saves the chart as a file: `'svg'`, `'png'` or `'csv'`, named `options.fileName` (else
+   * `options.export.fileName`, default `gantt`) with its extension. Emits `beforeExport` (veto
+   * with `preventDefault()`), then `export`; resolves `false` when vetoed. Rejects on the server.
+   */
+  download(format: 'svg' | 'png' | 'csv', options?: GanttDownloadOptions): Promise<boolean> {
+    return this.exporter.download(format, options);
+  }
+
+  /**
+   * Prints the whole plan on paper (`paper`, `orientation`, `fit`, header and task list repeated on
+   * every page) through a hidden frame: the browser's print dialog. Emits `beforeExport` (veto with
+   * `preventDefault()`), then `export`; resolves `false` when vetoed or while another print runs.
+   * Rejects with a `RangeError` over `maxPages`, and on the server. Needs `img-src blob:` under a
+   * Content Security Policy.
+   */
+  print(options?: GanttPrintOptions): Promise<boolean> {
+    return this.exporter.print(options);
   }
 
   // ── Editing ───────────────────────────────────────────────

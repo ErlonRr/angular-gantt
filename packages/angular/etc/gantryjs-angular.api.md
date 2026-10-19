@@ -10,7 +10,6 @@ import { BarHitTarget } from '@gantryjs/core';
 import { BarSegment } from '@gantryjs/core';
 import { BarVisual } from '@gantryjs/core';
 import { CellEditorContext } from '@gantryjs/core';
-import { CellEditorKind } from '@gantryjs/core';
 import { CellEditorOptions } from '@gantryjs/core';
 import { CellEditState } from '@gantryjs/core';
 import { ChartState } from '@gantryjs/core';
@@ -32,14 +31,21 @@ import { EditRules } from '@gantryjs/core';
 import { GanttAnnotation } from '@gantryjs/core';
 import { GanttBarContext } from '@gantryjs/core';
 import { GanttBeforeChangeEvent } from '@gantryjs/core';
+import { GanttBeforeExportEvent } from '@gantryjs/core';
+import { GanttCsvExportOptions } from '@gantryjs/core';
+import { GanttExportEvent } from '@gantryjs/core';
+import { GanttFileOptions } from '@gantryjs/core';
 import { GanttFlatRow } from '@gantryjs/core';
 import { GanttFormats } from '@gantryjs/core';
 import { GanttHistoryState } from '@gantryjs/core';
 import { GanttI18n } from '@gantryjs/core';
 import { GanttLabels } from '@gantryjs/core';
 import { GanttOptions } from '@gantryjs/core';
+import { GanttPngExportOptions } from '@gantryjs/core';
+import { GanttPrintOptions } from '@gantryjs/core';
 import { GanttRollupInfo } from '@gantryjs/core';
 import { GanttState } from '@gantryjs/core';
+import { GanttSvgExportOptions } from '@gantryjs/core';
 import { GanttSyncGroup } from '@gantryjs/core';
 import { GanttTask } from '@gantryjs/core';
 import { GanttTasksChangeEvent } from '@gantryjs/core';
@@ -126,6 +132,7 @@ export class GantryComponent {
     // Warning: (ae-forgotten-export) The symbol "BarVisualOf" needs to be exported by the entry point gantryjs-angular.d.ts
     protected readonly barVisual: Signal<BarVisualOf>;
     readonly beforeChange: OutputEmitterRef<GanttBeforeChangeEvent>;
+    readonly beforeExport: OutputEmitterRef<GanttBeforeExportEvent>;
     readonly canRedo: Signal<boolean>;
     readonly canUndo: Signal<boolean>;
     // (undocumented)
@@ -152,6 +159,7 @@ export class GantryComponent {
     readonly dataSource: InputSignal<GanttDataSource<GanttTask> | null>;
     readonly dependencyCreated: OutputEmitterRef<DependencyChangeEvent>;
     readonly dependencyDeleted: OutputEmitterRef<DependencyChangeEvent>;
+    download(format: 'svg' | 'png' | 'csv', options?: GanttDownloadOptions): Promise<boolean>;
     // (undocumented)
     protected readonly dragEnabled: Signal<boolean>;
     // Warning: (ae-forgotten-export) The symbol "DragReadout" needs to be exported by the entry point gantryjs-angular.d.ts
@@ -168,6 +176,10 @@ export class GantryComponent {
     readonly errorMessage: InputSignal<string | null | undefined>;
     // (undocumented)
     expandAll(): void;
+    readonly export: OutputEmitterRef<GanttExportEvent>;
+    exportCsv(options?: GanttCsvExportOptions): Promise<string>;
+    exportPng(options?: GanttPngExportOptions): Promise<Blob>;
+    exportSvg(options?: GanttSvgExportOptions): Promise<string>;
     fitToScreen(): void;
     focusTask(id: string, options?: {
         area?: 'bar' | 'row' | undefined;
@@ -220,6 +232,7 @@ export class GantryComponent {
     protected readonly panelPx: Signal<number>;
     // (undocumented)
     patchTheme(patch: GanttThemeOverrides): void;
+    print(options?: GanttPrintOptions): Promise<boolean>;
     redo(): boolean;
     removeDependency(fromId: string, toId: string, type?: DependencyType): boolean;
     resetTheme(): void;
@@ -390,6 +403,8 @@ export class GantryComponent {
         "dependencyCreated": "dependencyCreated";
         "dependencyDeleted": "dependencyDeleted";
         "historyChange": "historyChange";
+        "beforeExport": "beforeExport";
+        "export": "export";
     }, ["columnDefs", "tooltipTemplate"], ["[ganttToolbar]", "[tlFooter]", "[ganttEmpty]", "[ganttFooter]"], true, [{
         directive: typeof ɵGanttKeyboardDirective;
         inputs: {};
@@ -435,7 +450,7 @@ export class GanttColumnDefDirective {
     readonly cellTemplate: Signal<TemplateRef<ColumnCellContext> | undefined>;
     readonly def: Signal<ColumnDef>;
     readonly editable: InputSignalWithTransform<boolean | ((row: GanttFlatRow) => boolean) | undefined, string | boolean | ((row: GanttFlatRow) => boolean) | undefined>;
-    readonly editor: InputSignal<CellEditorKind | TemplateRef<CellEditorTemplateContext> | ((ctx: CellEditorContext) => HTMLElement) | undefined>;
+    readonly editor: InputSignal<ColumnDef['editor']>;
     readonly editorOptions: InputSignal<CellEditorOptions | undefined>;
     readonly editorTemplate: Signal<GanttCellEditorDirective | undefined>;
     readonly exportValue: InputSignal<((row: GanttFlatRow, ctx: ColumnContext) => string) | undefined>;
@@ -567,6 +582,9 @@ export interface GanttDataSourceConfig<T extends GanttTask = GanttTask> {
     retries?: number;
     retryDelay?: number;
 }
+
+// @public
+export type GanttDownloadOptions = (GanttSvgExportOptions | GanttPngExportOptions | GanttCsvExportOptions) & GanttFileOptions;
 
 // @public
 export interface GanttFeature {

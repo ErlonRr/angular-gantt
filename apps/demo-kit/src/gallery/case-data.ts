@@ -14,6 +14,9 @@ import { densityCase } from './cases/density';
 import { dependenciesCase } from './cases/dependencies';
 import { dependencyEditingCase } from './cases/dependency-editing';
 import { editingCase } from './cases/editing';
+import { exportCsvCase } from './cases/export-csv';
+import { exportImageCase } from './cases/export-image';
+import { exportToolbarCase } from './cases/export-toolbar';
 import { i18nCase } from './cases/i18n';
 import { keyboardCase } from './cases/keyboard';
 import { largeCase } from './cases/large';
@@ -23,6 +26,7 @@ import { multiPipelineCase } from './cases/multi-pipeline';
 import { nonWorkingCase } from './cases/non-working';
 import { onlyParentsCase } from './cases/only-parents';
 import { onlyParentsStyledCase } from './cases/only-parents-styled';
+import { printCase } from './cases/print';
 import { responsiveCase } from './cases/responsive';
 import { statesCase } from './cases/states';
 import { stylesCase } from './cases/styles';
@@ -47,6 +51,10 @@ export const CASE_DATA: Readonly<Record<CaseId, GalleryCaseData>> = {
   'custom-editors': customEditorsCase,
   'dependency-editing': dependencyEditingCase,
   controlled: controlledCase,
+  'export-image': exportImageCase,
+  'export-csv': exportCsvCase,
+  print: printCase,
+  'export-toolbar': exportToolbarCase,
   'multi-pipeline': multiPipelineCase,
   'custom-bars': customBarsCase,
   'custom-columns': customColumnsCase,

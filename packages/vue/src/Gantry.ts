@@ -139,7 +139,10 @@ function unwrap(value: unknown): unknown {
  * it. Then `tasksChange` carries the tasks after the change (`detail.tasks`; the proposed ones,
  * with `applied: false`, in controlled mode), ready for `@tasks-change="e => (tasks = e.tasks)"`. The
  * template ref exposes `element`: the `GantryElement` with its
- * imperative API (`zoomIn()`, `scrollToToday()`, `getSelectedTasks()`, …). The `empty` slot
+ * imperative API (`zoomIn()`, `scrollToToday()`, `getSelectedTasks()`, …) and the async exports
+ * (`await chart.value?.element?.download('svg')`, `exportCsv()`, `print()`, …): `download()` and
+ * `print()` emit `beforeExport` first, synchronously (`detail.preventDefault()` cancels), then
+ * `export` with the file name and size (`@before-export`, `@export`). The `empty` slot
  * (`<template #empty>…</template>`) replaces the empty-state text; the default slot is rendered
  * inside the element as it is (`<div slot="empty">…</div>` works too).
  */

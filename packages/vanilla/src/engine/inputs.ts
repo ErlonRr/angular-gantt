@@ -166,6 +166,12 @@ export interface Inputs {
   readonly narrow: WritableSignal<boolean>;
   /** The toolbar's More menu is open (`toolbar.overflow: 'menu'`, core `reduceMenu`) */
   readonly menuOpen: WritableSignal<boolean>;
+  /**
+   * The toolbar's Export menu is open (`toolbar.export`, core `reduceMenu`). One menu at a time:
+   * opening it closes More and the other way round (`layers/toolbar.ts`); `closeToolbarMenu`
+   * closes both
+   */
+  readonly exportMenuOpen: WritableSignal<boolean>;
   /** Data-source footer state (`null` without a data source) */
   readonly loadState: WritableSignal<GanttLoadMoreState | null>;
   /** The clock: ticks every minute while connected (today line, statuses) */
@@ -278,6 +284,7 @@ export function createInputs(): Inputs {
     shared: signal<SharedTimelineRange | null>(null, { equals: structuralEqual }),
     narrow: flag(false),
     menuOpen: flag(false),
+    exportMenuOpen: flag(false),
     loadState: signal<GanttLoadMoreState | null>(null, { equals: structuralEqual }),
     // The engine's clock: the one place that reads the time
     nowTick: signal(new Date(), { equals: sameTime }),

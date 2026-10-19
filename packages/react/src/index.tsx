@@ -94,7 +94,10 @@ const OWN_PROPS: ReadonlySet<string> = new Set<string>([
  * `onTasksChange` gets the tasks after the change (`detail.tasks`; the proposed ones, with
  * `applied: false`, in controlled mode), ready for `setTasks(detail.tasks)`. The ref
  * is the underlying `GantryElement`, exposing the imperative API (`zoomIn()`, `scrollToToday()`,
- * `getSelectedTasks()`, …). Children go into the element's light DOM (`<div slot="empty">`). The
+ * `getSelectedTasks()`, …) and the async exports (`await ref.current?.download('svg')`,
+ * `exportCsv()`, `print()`, …): `download()` and `print()` call `onBeforeExport` first,
+ * synchronously (`detail.preventDefault()` cancels), then `onExport` with the file name and size.
+ * Children go into the element's light DOM (`<div slot="empty">`). The
  * element sizes itself (`:host`: block, 100% × 100%); `className` / `style` override that.
  */
 export const Gantry = forwardRef<GantryElement, GantryProps>(function Gantry(props, ref) {

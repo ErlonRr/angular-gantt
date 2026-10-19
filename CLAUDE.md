@@ -24,6 +24,9 @@ Every edit — drag, resize, move mode, progress grip, cell, link, API, undo —
 checked in `packages/core/src/editing/` (`changes`, `pipeline` → `prepareChange`, `validate`, `permissions`
 → `editRules`, `history`, `cells`, `parse`, `sessions`); the bindings only run the pipeline
 (`before-change` → apply → events) and paint it.
+Exports (SVG, PNG, CSV, print) are re-rendered from the model in `packages/core/src/export/` (`createExportSource` →
+`buildExportModel` → `exportChartSvg` / `exportChartCsv` / `exportChartPages`); the bindings only build the source from
+their graph and run the DOM helpers (download, rasterize, print frame, serialize custom bars).
 Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/src`) only
 **paint** that model. If two bindings disagree, the bug is in the one that computes instead of painting.
 

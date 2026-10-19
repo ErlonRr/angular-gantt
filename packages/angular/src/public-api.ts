@@ -26,6 +26,7 @@ export { GanttTaskBarComponent } from './lib/bars/task-bar.component';
 export { GanttMilestoneComponent } from './lib/bars/milestone.component';
 export { GanttGroupBarComponent } from './lib/bars/group-bar.component';
 export { GanttDataSource, createGanttDataSource, type GanttDataSourceConfig } from './lib/datasource/gantt-datasource';
+export type { GanttDownloadOptions } from './lib/export/gantt-export.service';
 
 // Private (ɵ): not part of the API. The Angular compiler needs every class in a public component's
 // metadata to be reachable from the entry point (NG3001): GantryComponent's `hostDirectives`.

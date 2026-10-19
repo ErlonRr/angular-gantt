@@ -26,6 +26,7 @@ npm i @gantryjs/core
 | State models  | `buildToolbar`, `resolveChartState` / `skeletonRows`, `buildLegend` / `legendPlacement`, `buildTooltipModel` / `reduceTooltip` / `placeTooltip`, selection and saved state                                                                                                                                                                           |
 | Tree data     | `flattenTree`, `filterVisible`, `reindexVisible`, `sortRoots`, `columnComparator`, `findRowById`, `collectDescendants`, `buildDefaultColumns`                                                                                                                                                                                                        |
 | Editing       | `GanttChange` and the pipeline (`taskChange` / `dragChange` / `progressChange` / `linkChange`, `applyChange`, `invertChange`, `prepareChange`), `GanttHistory`, `validateChange` / `editRules` / `cellEditable`, `resolveCellEditor` / `commitCellValue`, `parsePredecessors` / `parseDuration`, `ProgressSession` / `LinkSession`, `resolveEditing` |
+| Export        | `createExportSource` (a chart snapshot without a binding), `exportChartSvg`, `exportChartCsv`, `exportChartPages` (print pages), `buildExportModel` / `renderExportSvg`, `paginateChart`, `planRaster`, `exportFileName` / `exportFileText`, `resolveExportCall`, `sanitizeSvgMarkup` (the custom-bar markup rules)                                  |
 | Scheduling    | `computeCriticalPath` (CPM with FS/SS/FF/SF dependencies and lag), `longestChain`                                                                                                                                                                                                                                                                    |
 | i18n          | `DEFAULT_LABELS`, `DEFAULT_FORMATS`                                                                                                                                                                                                                                                                                                                  |
 
@@ -47,6 +48,22 @@ const { criticalIds } = computeCriticalPath([
   },
 ]);
 ```
+
+Exports run here too, with no DOM: the same chart gives the same SVG and CSV as the bindings' `exportSvg()` /
+`exportCsv()`, so you can render a plan on a server or in a worker
+([Export and print](https://github.com/ErlonRr/gantryjs#export-and-print)):
+
+```ts
+import { createExportSource, exportChartCsv, exportChartPages, exportChartSvg, exportFileText } from '@gantryjs/core';
+
+const source = createExportSource({ tasks, options: { viewMode: 'Week' }, now: new Date(2026, 0, 15) });
+const svg = exportFileText('svg', exportChartSvg(source, { theme: 'light' })); // an .svg file's text
+const csv = exportChartCsv(source, { columns: 'all', delimiter: ';' }); // RFC 4180, formulas neutralised
+const { pages } = exportChartPages(source, { paper: 'a4' }); // one SVG per printed page
+```
+
+`@gantryjs/core` is published one file per module, so a bundler leaves out what an app never imports (the export
+code, for instance, until a chart exports).
 
 Sample data for demos and docs lives in a separate entry point, `@gantryjs/core/demo`:
 

@@ -768,6 +768,35 @@ export interface GanttLabels {
   errorReadOnly: string;
   /** The app vetoed the change (`before-change`); read after `announceChangeRejected` */
   errorRejected: string;
+  // Export and print
+  /** Toolbar: the Export menu button (`toolbar.export`), its menu and its section in the More menu */
+  exportMenu: string;
+  /** Export menu item: download an SVG image */
+  exportSvg: string;
+  /** Export menu item: download a PNG image */
+  exportPng: string;
+  /** Export menu item: download a CSV table */
+  exportCsv: string;
+  /** Export menu item: print the chart */
+  exportPrint: string;
+  /**
+   * `<desc>` of an exported image: the task count and the first and last date drawn, formatted
+   * with `formats.dateFormat` ("12 tasks from Mar 2, 2026 to Apr 30, 2026")
+   */
+  exportDescription: (count: number, start: string, end: string) => string;
+  /** Footer of a printed page, after the title ("Page 2 of 5") */
+  printPage: (page: number, total: number) => string;
+  /** A download is ready (`download()`, the toolbar): the file's name */
+  announceExportReady: (fileName: string) => string;
+  /** `print()` opened the print dialog with `pages` pages */
+  announcePrintReady: (pages: number) => string;
+  /**
+   * A file export started from the toolbar failed (alert region); `what` is the format's label
+   * (`exportSvg`, `exportPng`, `exportCsv`)
+   */
+  announceExportFailed: (what: string) => string;
+  /** A print started from the toolbar failed (alert region) */
+  announcePrintFailed: string;
 }
 
 const unitCount = (n: number, unit: AnnounceUnit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
@@ -912,6 +941,18 @@ export const DEFAULT_LABELS: GanttLabels = {
   errorLinkDelete: 'Links can’t be removed here',
   errorReadOnly: 'This task can’t be edited',
   errorRejected: 'the change was not accepted',
+  exportMenu: 'Export',
+  exportSvg: 'SVG image',
+  exportPng: 'PNG image',
+  exportCsv: 'CSV table',
+  exportPrint: 'Print…',
+  exportDescription: (count, start, end) =>
+    count === 1 ? `1 task from ${start} to ${end}` : `${count} tasks from ${start} to ${end}`,
+  printPage: (page, total) => `Page ${page} of ${total}`,
+  announceExportReady: fileName => `${fileName} is ready`,
+  announcePrintReady: pages => (pages === 1 ? 'Printing 1 page' : `Printing ${pages} pages`),
+  announceExportFailed: what => `Couldn’t export the ${what}`,
+  announcePrintFailed: 'Couldn’t print the chart',
 };
 
 // ─── i18n: date & header formats ─────────────────────────────
@@ -1187,6 +1228,13 @@ export interface GanttToolbarOptions {
    * Default true.
    */
   undo?: boolean | undefined;
+  /**
+   * An Export menu button after the view switch, with one item per `export.formats` (SVG image,
+   * PNG image, CSV table, Print…): each runs `download(format)` or `print()` (`trigger:
+   * 'toolbar'`). It is the first group to move into the More menu while the toolbar is too narrow.
+   * Default false.
+   */
+  export?: boolean | undefined;
 }
 
 /** Below `breakpoint` px of chart width, the chart shows `view`. */
@@ -1308,6 +1356,161 @@ export interface GanttState {
   columnWidths?: Record<string, number> | undefined;
   collapsedIds?: string[] | undefined;
   sort?: { key: string; dir: 'asc' | 'desc' } | null | undefined;
+}
+
+// ─── Export and print ────────────────────────────────────────
+
+/** What an export makes: an SVG or PNG image, a CSV table, or printed pages. */
+export type GanttExportFormat = 'svg' | 'png' | 'csv' | 'print';
+
+/** What started a `download()` / `print()`: the toolbar's Export menu, or a call of the method. */
+export type GanttExportTrigger = 'toolbar' | 'api';
+
+/**
+ * What an image (SVG, PNG) or a print draws. Exports are drawn from the chart's model, not copied
+ * from the screen: every shown row (collapse state and sort kept, none left out by scrolling), the
+ * header and marker lane, bands, grid lines, annotations, today, arrows, bars and the legend; never
+ * the selection, hover, focus, grips, previews, tooltip, toolbar or scrollbars.
+ */
+export interface GanttImageExportOptions {
+  /**
+   * The view to draw: `'auto'` = the view shown (table and timeline in `'split'`, the timeline in
+   * `'chart'`, the table in `'table'`). Default `'auto'`
+   */
+  view?: 'auto' | GanttView | undefined;
+  /**
+   * The dates drawn: `'all'` = the tasks' range (and a sync group's), whatever the chart's width;
+   * `'visible'` = the part of the timeline on screen (`'all'` without a screen); `{ start, end }` =
+   * those dates (the timeline is extended to cover them). Default `'all'`
+   */
+  range?: 'all' | 'visible' | { start: Date; end: Date } | undefined;
+  /**
+   * The colours: `'current'` = the palette shown (dark included); `'light'` / `'dark'` = that
+   * palette with the chart's theme overrides. Default `'current'`; `'light'` for print
+   */
+  theme?: 'current' | 'light' | 'dark' | undefined;
+  /**
+   * `'theme'` = the chart's background, `'transparent'` (SVG and PNG) or a CSS colour. Print always
+   * draws the theme's background. Default `'theme'`
+   */
+  background?: 'theme' | 'transparent' | (string & {}) | undefined;
+  /** Draw the legend strip at the bottom. Default: as the chart (`showLegend`, with entries) */
+  legend?: boolean | undefined;
+  /** Draw the today line and its header pointer. Default: `showToday` */
+  today?: boolean | undefined;
+  /** The image's `<title>` and the print document's title. Default `labels.ariaChart` */
+  title?: string | undefined;
+  /** The image's `<desc>`. Default `labels.exportDescription(count, start, end)` */
+  description?: string | undefined;
+  /**
+   * Custom bars: `'render'` = drawn as on screen (`renderBar`, Angular bar components; only
+   * attributes and inline styles travel), `'builtin'` = drawn as built-in bars. Default `'render'`
+   */
+  customBars?: 'render' | 'builtin' | undefined;
+}
+
+/** `exportSvg()` / `download('svg')` options. */
+export interface GanttSvgExportOptions extends GanttImageExportOptions {
+  /** `width` / `height` of the `<svg>` times this (the `viewBox` stays the same). Default 1 */
+  scale?: number | undefined;
+  /** Prefix of the image's ids (`<prefix>-title`, `<prefix>-desc`…). Default `gantry-export-<n>` (unique per call) */
+  idPrefix?: string | undefined;
+}
+
+/** `exportPng()` / `download('png')` options. */
+export interface GanttPngExportOptions extends GanttImageExportOptions {
+  /**
+   * Pixels per CSS pixel. Lowered (to 0.01) until the image fits `maxSide` and `maxPixels`; below 1
+   * the export fails with a `RangeError` (use `exportSvg()`, `print()` or a `range`). Default 2
+   */
+  scale?: number | undefined;
+  /** Largest width or height of the image in pixels. Default 16 384 */
+  maxSide?: number | undefined;
+  /** Largest number of pixels of the image. Default 16 777 216 (4096 × 4096, safe on iOS) */
+  maxPixels?: number | undefined;
+}
+
+/** `exportCsv()` / `download('csv')` options. */
+export interface GanttCsvExportOptions {
+  /**
+   * `'visible'` = the columns of the view shown (the split panel's in the chart view), `'all'` =
+   * every built-in and custom column, or a list of column keys. Default `'visible'`
+   */
+  columns?: 'visible' | 'all' | readonly string[] | undefined;
+  /**
+   * `'all'` = every loaded task in display order (children of collapsed rows included), `'shown'` =
+   * the rows shown. Default `'all'`
+   */
+  rows?: 'all' | 'shown' | undefined;
+  /**
+   * `'data'` = values (local ISO dates, numbers, status and type keys, predecessor ids),
+   * `'display'` = the cell texts. A column's `exportValue` wins in both. Default `'data'`
+   */
+  values?: 'data' | 'display' | undefined;
+  /** Field separator. Default `','` */
+  delimiter?: ',' | ';' | '\t' | undefined;
+  /** A first line with the column labels. Default true */
+  header?: boolean | undefined;
+  /** A UTF-8 byte order mark at the start of a downloaded file (so Excel reads UTF-8); `exportCsv()` returns text without it. Default true */
+  bom?: boolean | undefined;
+  /**
+   * A leading `'` on every cell starting with `=`, `+`, `-`, `@`, tab or CR that is not a plain
+   * number, so a spreadsheet shows it as text instead of running it (CSV injection). Default true
+   */
+  neutralizeFormulas?: boolean | undefined;
+}
+
+/** A sheet of paper: a named size, or `{ width, height, unit }` (portrait: width ≤ height). */
+export type GanttPaperSize =
+  'a4' | 'a3' | 'letter' | 'legal' | 'tabloid' | { width: number; height: number; unit: 'mm' | 'in' };
+
+/** `print()` options: the plan on as many pages as it takes. */
+export interface GanttPrintOptions extends GanttImageExportOptions {
+  /** Default `'a4'` */
+  paper?: GanttPaperSize | undefined;
+  /** `'auto'` = the drawing's own orientation (landscape when it is wider than tall). Default `'landscape'` */
+  orientation?: 'landscape' | 'portrait' | 'auto' | undefined;
+  /** Page margin in mm. Default 10 */
+  margin?: number | undefined;
+  /**
+   * `'width'` = the whole width scaled to the page width (never enlarged, at least `minScale`),
+   * then pages across; `'page'` = everything on one page; `'none'` = actual size times `scale`.
+   * Rows are never cut. Default `'width'`
+   */
+  fit?: 'width' | 'page' | 'none' | undefined;
+  /** Size with `fit: 'none'`. Default 1 */
+  scale?: number | undefined;
+  /** Smallest scale of `fit: 'width'`. Default 0.5 */
+  minScale?: number | undefined;
+  /** Draw the header on every page. Default true */
+  repeatHeader?: boolean | undefined;
+  /** Draw the task list on every column of pages (on the first only when it takes more than half the width). Default true */
+  repeatTable?: boolean | undefined;
+  /** A footer with the title and "Page n of N" (`labels.printPage`). Default true */
+  pageNumbers?: boolean | undefined;
+  /** More pages than this fail with a `RangeError`. Default 200 */
+  maxPages?: number | undefined;
+}
+
+/** The file of a `download()`. */
+export interface GanttFileOptions {
+  /** The file's name: sanitized for every OS, the extension added when missing. Default `export.fileName` */
+  fileName?: string | undefined;
+}
+
+/**
+ * `options.export`: the file name, the formats of the toolbar's Export menu, and the defaults of
+ * each format (a call's own options win over them).
+ */
+export interface GanttExportOptions {
+  /** The downloaded file's name, or a function of the format. Default `'gantt'` */
+  fileName?: string | ((format: 'svg' | 'png' | 'csv') => string) | undefined;
+  /** The items of the toolbar's Export menu (`toolbar.export`), in order. Default `['svg', 'png', 'csv', 'print']` */
+  formats?: readonly GanttExportFormat[] | undefined;
+  svg?: GanttSvgExportOptions | undefined;
+  png?: GanttPngExportOptions | undefined;
+  csv?: GanttCsvExportOptions | undefined;
+  print?: GanttPrintOptions | undefined;
 }
 
 // ─── Global options ───────────────────────────────────────────
@@ -1447,6 +1650,14 @@ export interface GanttOptions {
    * `tasks-change`). Default false.
    */
   editing?: boolean | GanttEditingOptions | undefined;
+
+  // ── Export and print ──
+  /**
+   * Defaults of the export methods (`exportSvg`, `exportPng`, `exportCsv`, `download`, `print`)
+   * and the toolbar's Export menu (`toolbar.export`): the file name, the menu's formats and the
+   * options of each format (`GanttExportOptions`).
+   */
+  export?: GanttExportOptions | undefined;
 }
 
 // ─── Events emitted by the component ─────────────────────────
@@ -1577,6 +1788,32 @@ export interface GanttHistoryState {
   redoLabel: string | null;
   undoCount: number;
   redoCount: number;
+}
+
+/**
+ * `before-export` detail: a `download()` or `print()` (from the toolbar or the API) is about to
+ * run. Call `preventDefault()` (synchronously) to cancel it; the Web Component's event is also
+ * cancelable. `exportSvg()`, `exportPng()` and `exportCsv()` fire no event.
+ */
+export interface GanttBeforeExportEvent {
+  readonly format: GanttExportFormat;
+  readonly trigger: GanttExportTrigger;
+  /** The file's name with its extension; `null` for print */
+  readonly fileName: string | null;
+  readonly defaultPrevented: boolean;
+  preventDefault(): void;
+}
+
+/** `export` detail: a `download()` or `print()` finished. */
+export interface GanttExportEvent {
+  format: GanttExportFormat;
+  trigger: GanttExportTrigger;
+  /** The file's name with its extension; `null` for print */
+  fileName: string | null;
+  /** Size of the file in bytes; `null` for print */
+  size: number | null;
+  /** Pages printed; `null` for a download */
+  pages: number | null;
 }
 
 /** The user pressed Retry: on the error state (`'error'`) or after a failed data-source page (`'dataSource'`). */

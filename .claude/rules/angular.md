@@ -159,6 +159,17 @@ paths:
 - `src/public-api.ts` has explicit named exports only, plus `@gantryjs/core` re-exported as a whole; never a local
   `export *` (the d.ts bundle would get `*_d_exports` namespaces that break api-extractor). Services and inner
   components stay internal.
+- Export (Phase 12): `GanttExportService` (`export/gantt-export.service.ts`, provided by `GantryComponent` and bound
+  once in its constructor) runs the WC's `export/run.ts` steps; `export/source.ts` builds the source in `untracked`
+  (theme overrides from `GanttThemeService.overrides`). The DOM helpers (`export/{download,rasterize,print,serialize}.ts`,
+  the WC's bodies with `setAttribute` / `style.setProperty`) sit behind the internal `GANTT_EXPORT_DOM` token (specs
+  replace it). Custom bars: `GanttCanvasComponent.renderCustomBarMarkup(ctx)` renders a non-built-in component
+  (identity check against `BUILTIN_BARS`) off-screen with `createComponent` on a detached `g`, strips Angular
+  attributes, serializes, destroys; on the server bars are built-in and `exportPng()` / `download()` / `print()`
+  reject before `beforeExport`. Print CSS: `styles/print.css.ts` last in `GantryComponent`'s `styles` plus a
+  `@media print` block in each component painting a hidden node (toolbar, load-more, tooltip, readout, bar overlay,
+  drag preview, canvas row hover / link preview), no `!important`. Toolbar: one `@if` menu block after the opener's
+  group, `exportState` beside `menuState`.
 - The API report `packages/angular/etc/gantryjs-angular.api.md` must match: `pnpm build:lib && pnpm api:angular`
   updates it, CI runs `pnpm api:angular:check`. Removing or renaming a public input, output, method or export is a
   breaking change: `'@gantryjs/angular': major` changeset (deprecate first outside a major).

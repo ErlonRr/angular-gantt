@@ -20,9 +20,13 @@
 //      div.gantt-tb-group.gantt-tb-pills.gantt-tb-views[role=radiogroup][aria-label]
 //                                             button.gantt-tb-pill[role=radio][aria-checked][aria-label][title]
 //                                               > svg.gantt-tb-icon
+//      div.gantt-tb-group.gantt-tb-export-group button.gantt-tb-btn.gantt-tb-export[aria-label][title]
+//                                               [aria-haspopup=menu][aria-expanded] > svg.gantt-tb-icon
+//                                               (`toolbar.export`; `aria-controls` while open)
 //      div.gantt-tb-group.gantt-tb-more-group button.gantt-tb-btn.gantt-tb-more[aria-haspopup=menu][aria-expanded]
 //                                               (while some groups don't fit; `aria-controls` while open)
-//      div.gantt-tb-menu[role=menu][id][aria-label]                                     (while open)
+//      div.gantt-tb-menu[role=menu][id][aria-label]   the More or the Export menu (while open), right
+//                                                     after the group of the button that opened it
 //        div.gantt-tb-menu-group[role=group][aria-label]
 //          button.gantt-tb-menu-item[role=menuitemradio|menuitem][aria-checked][tabindex=-1]
 //            > svg.gantt-tb-icon? + span.gantt-tb-label
@@ -30,12 +34,12 @@
 //
 //  Every built-in button carries `data-focus-key` (`panel`, `undo`, `redo`,
 //  `zoom-out`, `zoom-in`, `fit`, `zoom:<level>`, `today`, `view:<view>`,
-//  `more`; menu items `menu:<key>`): groups are keyed by `ToolbarGroup.key` and buttons
+//  `export`, `more`; menu items `menu:<key>`): groups are keyed by `ToolbarGroup.key` and buttons
 //  by it, so a control keeps its node, and keyboard focus, across zooms,
-//  view switches and option changes. The panel toggle, the More button and
-//  the menu are attached only while shown (D26): at a width where
-//  everything fits, without `panelToggle`, the toolbar is the Phase 9
-//  toolbar.
+//  view switches and option changes. The panel toggle, the export group,
+//  the More button and the menu are attached only while shown (D26): at a
+//  width where everything fits, without `panelToggle` and `toolbar.export`,
+//  the toolbar is the Phase 9 toolbar.
 //
 //  History (Phase 11, D17): with `toolbar.undo` (default on) and while the
 //  chart keeps history (`editing.history`: editing on, not controlled)
@@ -84,6 +88,29 @@
 //  its items holds focus, More is the toolbar's tab stop. A focused More or
 //  menu item that a render removes hands focus to the toolbar's tab stop.
 //
+//  Export (Phase 12, D16): with `toolbar.export` (default off) and at
+//  least one of `export.formats`, core adds the export group last (after
+//  the views): one icon menu button, Export, whose menu lists the formats
+//  (SVG image, PNG image, CSV table, Print…). It is a second menu button
+//  with the same keys, focus rules and closing rules as More (`reduceMenu`,
+//  `toolbarMenuKey`; it opens on its first item, as nothing in it is
+//  checked), painted by the same menu block (one id, the `aria-controls` of
+//  the button that opened it), named `labels.exportMenu`. That block sits
+//  after the last group, which is always the opener's: core moves the
+//  export group into More first, so Export and More never show together.
+//  One menu at a time: each has its own state (`menuState`, `exportState`),
+//  opening one closes the other, and a press outside, a width change and
+//  the toolbar going away close both. The export group is the first to move
+//  into More, where its formats become a section named `labels.exportMenu`
+//  (never a nested menu); an open Export menu whose group has moved (or
+//  gone) closes after the render, focus left alone. Choosing a format, from
+//  either menu, closes the menu back to its button first, then runs the
+//  chart's `GanttExportService.run(format, 'toolbar')` (`download()`, or
+//  `print()`; it never rejects: a failure is announced in the alert region).
+//
+//  Print (D17): under `@media print` the toolbar is not shown (its host is
+//  `display: none`, the Web Component's `.gantry-toolbar-container`).
+//
 //  Each control emits its action; GantryComponent runs it (zoomIn,
 //  zoomOut, fitToScreen, scrollToToday, setViewMode, setView, togglePanel).
 //  Undo and Redo run the chart's editor (`GanttEditorService`) directly.
@@ -125,6 +152,7 @@ import {
   toolbarMenuKey,
   toolbarTabStop,
   type Command,
+  type GanttExportFormat,
   type GanttHistoryState,
   type GanttView,
   type GanttZoomLevel,
@@ -136,10 +164,12 @@ import {
   type ToolbarLayout,
   type ToolbarMenuEvent,
   type ToolbarMenuItem,
+  type ToolbarMenuSection,
   type ToolbarMenuState,
 } from '@gantryjs/core';
 
 import { GanttEditorService } from '../editing/gantt-editor.service';
+import { GanttExportService } from '../export/gantt-export.service';
 import { GanttIconComponent } from '../icons/gantt-icon.component';
 import { GanttLegendComponent } from '../legend/gantt-legend.component';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
@@ -170,8 +200,29 @@ const isMove = (command: Command | null): command is MoveCommand => command?.sta
 /** The toolbar's column gap (`.gantt-toolbar { gap: 6px 10px }`): after the slot, before the legend. */
 const GROUP_GAP = 10;
 
-/** Toolbars made so far: the More menu's `id` (`gantry-<n>-tb-menu`) is unique in the page. */
+/** Toolbars made so far: the menu's `id` (`gantry-<n>-tb-menu`) is unique in the page. */
 let nextToolbarId = 0;
+
+/**
+ * Which menu: More's (`ToolbarLayout.menu`) or Export's (`ToolbarLayout.exportMenu`). Also the
+ * `data-focus-key` of the button that opens it.
+ */
+type MenuKind = 'more' | 'export';
+
+/** The menu the toolbar shows: which one, its name and its sections. */
+interface OpenMenu {
+  readonly kind: MenuKind;
+  /** `aria-label`: `labels.more` / `labels.exportMenu` */
+  readonly label: string;
+  readonly sections: readonly ToolbarMenuSection[];
+}
+
+/** The menu a menu button's action opens, or `null`. */
+const menuOf = (action: ToolbarAction): MenuKind | null =>
+  action.type === 'menu' ? 'more' : action.type === 'exportMenu' ? 'export' : null;
+
+/** The groups after the `[ganttToolbar]` slot, in core order: the views, Export, More */
+const TRAILING: ReadonlySet<string> = new Set(['views', 'export', 'more']);
 
 /**
  * Plain-data equality (primitives, arrays, plain objects): the fitted toolbar's cut-off, as the
@@ -203,10 +254,11 @@ function sameData(a: unknown, b: unknown): boolean {
       @for (group of trailing(); track group.key) {
         <ng-container *ngTemplateOutlet="groupTpl; context: { $implicit: group }" />
       }
-      <!-- The More menu: right after the More group, attached while open (D26) -->
-      @if (menu(); as sections) {
-        <div #menuEl class="gantt-tb-menu" role="menu" [attr.id]="menuId" [attr.aria-label]="labels().more">
-          @for (section of sections; track section.key) {
+      <!-- The open menu, More's or Export's: right after the group of its button (the last one: Export
+           and More never show together), attached while open (D26) -->
+      @if (menu(); as current) {
+        <div #menuEl class="gantt-tb-menu" role="menu" [attr.id]="menuId" [attr.aria-label]="current.label">
+          @for (section of current.sections; track section.key) {
             <div [attr.class]="section.className" role="group" [attr.aria-label]="section.ariaLabel">
               @for (item of section.items; track item.focusKey) {
                 <button
@@ -318,6 +370,20 @@ function sameData(a: unknown, b: unknown): boolean {
       .gantt-tb-more-group ~ .gantt-legend--toolbar {
         margin-left: 0;
       }
+      /* Export: at the far end too, right after the views while they show (it moves into More first) */
+      .gantt-tb-export-group {
+        margin-left: auto;
+      }
+      .gantt-tb-group + .gantt-tb-export-group {
+        border-left: none;
+      }
+      .gantt-tb-views + .gantt-tb-export-group {
+        margin-left: 0;
+        border-left: 1px solid var(--gantt-border);
+      }
+      .gantt-tb-export-group ~ .gantt-legend--toolbar {
+        margin-left: 0;
+      }
       /* Every control at least the density's control size square (the chart's private
          --gantry-control-size: 28 / 32 / 36 px, 32 px by default, WCAG 2.5.8), 16 px icons */
       .gantt-tb-btn,
@@ -381,8 +447,8 @@ function sameData(a: unknown, b: unknown): boolean {
         display: block;
       }
 
-      /* More menu (WAI-ARIA menu button): under the toolbar at its end (the toolbar is its containing
-         block), above the panes' sticky headers, splitter and state box */
+      /* More and Export menus (WAI-ARIA menu buttons): under the toolbar at its end (the toolbar is its
+         containing block), above the panes' sticky headers, splitter and state box */
       .gantt-tb-menu {
         position: absolute;
         top: 100%;
@@ -457,11 +523,19 @@ function sameData(a: unknown, b: unknown): boolean {
         border-left: 1px solid var(--gantt-border);
       }
 
+      /* Print (D17, the Web Component's styles/print.css.ts): the page's own print (Ctrl+P) shows no
+         toolbar, its menus included (the Web Component's .gantry-toolbar-container) */
+      @media print {
+        :host {
+          display: none;
+        }
+      }
+
       /* Forced colours (D25): the checked radio and menu item Highlight / HighlightText, opting out of
-         forcing (the Canvas text backplate would hide HighlightText); the pressed panel toggle
-         Highlight; a disabled Undo / Redo GrayText (important: over the disabled :hover rule); the
-         More menu Canvas / CanvasText. The focus ring is the chart's --gantt-focus-ring, Highlight in
-         this mode */
+         forcing (the Canvas text backplate would hide HighlightText); the pressed panel toggle and the
+         open menu button (More, Export) Highlight; a disabled Undo / Redo GrayText (important: over
+         the disabled :hover rule); the More and Export menus Canvas / CanvasText. The focus ring is the
+         chart's --gantt-focus-ring, Highlight in this mode */
       @media (forced-colors: active) {
         .gantt-tb-pill[aria-checked='true'],
         .gantt-tb-menu-item[aria-checked='true'] {
@@ -471,6 +545,11 @@ function sameData(a: unknown, b: unknown): boolean {
           color: HighlightText;
         }
         .gantt-tb-btn[aria-pressed='true'] {
+          color: Highlight;
+          border-color: Highlight;
+        }
+        .gantt-tb-more[aria-expanded='true'],
+        .gantt-tb-export[aria-expanded='true'] {
           color: Highlight;
           border-color: Highlight;
         }
@@ -497,6 +576,7 @@ export class GanttToolbarComponent {
     panelToggle: false,
     overflow: 'menu',
     undo: true,
+    export: false,
   });
   readonly zoomLevels = input<readonly GanttZoomLevel[]>([]);
   /** Name of the zoom level shown (checks its radio) */
@@ -517,16 +597,18 @@ export class GanttToolbarComponent {
   protected readonly layout = inject(GanttLayoutService);
   /** The chart's change pipeline: Undo / Redo */
   private readonly editor = inject(GanttEditorService);
+  /** The chart's export run: the Export menu's formats (`toolbar.export`) */
+  private readonly exporter = inject(GanttExportService);
   private readonly doc = inject(DOCUMENT);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
 
-  /** `id` of the More menu (`aria-controls` of More while it is open) */
+  /** `id` of the menu, More's or Export's (`aria-controls` of the button that opened it while it is open) */
   protected readonly menuId = `gantry-${++nextToolbarId}-tb-menu`;
 
   /** The built-in controls (the `[ganttToolbar]` content and the menu items are not among them) */
   private readonly controls = viewChildren<ElementRef<HTMLButtonElement>>('control');
-  /** The More menu's items, while it is open */
+  /** The open menu's items */
   private readonly menuItemRefs = viewChildren<ElementRef<HTMLButtonElement>>('menuItem');
   private readonly menuRef = viewChild<ElementRef<HTMLElement>>('menuEl');
   private readonly slotRef = viewChild.required<ElementRef<HTMLElement>>('slot');
@@ -545,9 +627,25 @@ export class GanttToolbarComponent {
     computation: () => TOOLBAR_MENU_CLOSED,
   });
   private readonly open = computed(() => this.menuState().open);
+  /** The Export menu's state: the same rules; never open with More's (opening one closes the other) */
+  private readonly exportState = linkedSignal<number, ToolbarMenuState>({
+    source: this.layout.mainWidth,
+    computation: () => TOOLBAR_MENU_CLOSED,
+  });
+  private readonly exportOpen = computed(() => this.exportState().open);
 
   /** The density's control size (`ResolvedGanttConfig.controlSize`) */
   private readonly controlSize = computed(() => this.layout.cfg().controlSize);
+
+  /**
+   * The Export menu's formats (`export.formats`) while the toolbar has one (`toolbar.export`), else
+   * `null` (no export group; the export options are not read). Compared by value: another option
+   * change leaves the toolbar alone.
+   */
+  private readonly exportInput = computed<{ formats: readonly GanttExportFormat[] } | null>(
+    () => (this.toolbar().export ? { formats: this.layout.cfg().export.formats } : null),
+    { equal: sameData },
+  );
 
   /**
    * The undo / redo state while the chart keeps history (`editing.history`), else `null` (no
@@ -569,13 +667,15 @@ export class GanttToolbarComponent {
       view: this.view(),
       // Undo / Redo while the chart keeps history
       history: this.history(),
+      // The Export menu button and its formats (`toolbar.export`)
+      export: this.exportInput(),
     }),
   );
 
   /**
    * Core `layoutToolbar()` for the chart's width less the slot and the legend in the toolbar: the
-   * groups shown (the More group last when some don't fit) and the menu's sections. Structurally
-   * compared: a resize changes it only when the controls change.
+   * groups shown (the More group last when some don't fit), the More menu's sections and the Export
+   * menu's. Structurally compared: a resize changes it only when the controls change.
    */
   protected readonly fitted = computed<ToolbarLayout>(
     () => {
@@ -585,6 +685,7 @@ export class GanttToolbarComponent {
         overflow: this.toolbar().overflow,
         labels: this.labels(),
         menuOpen: this.open(),
+        exportMenuOpen: this.exportOpen(),
       };
       const main = this.layout.mainWidth();
       const slot = this.slotW() > 0 ? this.slotW() + GROUP_GAP : 0;
@@ -602,21 +703,40 @@ export class GanttToolbarComponent {
   );
 
   /** The groups before the `[ganttToolbar]` slot */
-  protected readonly leading = computed(() => this.fitted().groups.filter(g => g.key !== 'views' && g.key !== 'more'));
-  /** The view switch and the More button, after the slot */
-  protected readonly trailing = computed(() => this.fitted().groups.filter(g => g.key === 'views' || g.key === 'more'));
-  /** The More menu's sections while it is open, else `null` (not attached) */
-  protected readonly menu = computed(() => (this.open() ? this.fitted().menu : null));
-  /** The menu's items in display (and arrow-key) order: `reduceMenu`'s count and indexes */
+  protected readonly leading = computed(() => this.fitted().groups.filter(g => !TRAILING.has(g.key)));
+  /** The view switch, the Export button and the More button, after the slot */
+  protected readonly trailing = computed(() => this.fitted().groups.filter(g => TRAILING.has(g.key)));
+  /**
+   * The open menu (More's or Export's, one at a time) while its button shows, else `null` (not
+   * attached): its name and its sections
+   */
+  protected readonly menu = computed<OpenMenu | null>(
+    () => {
+      const layout = this.fitted();
+      if (this.open() && layout.menu) return { kind: 'more', label: this.labels().more, sections: layout.menu };
+      if (this.exportOpen() && layout.exportMenu)
+        return { kind: 'export', label: this.labels().exportMenu, sections: layout.exportMenu };
+      return null;
+    },
+    {
+      equal: (a, b) => a === b || (!!a && !!b && a.kind === b.kind && a.label === b.label && a.sections === b.sections),
+    },
+  );
+  /** The More menu's items in display (and arrow-key) order: `reduceMenu`'s count and indexes */
   private readonly menuItems = computed(() => toolbarMenuItems(this.fitted().menu));
+  /** The Export menu's items, in the same order */
+  private readonly exportItems = computed(() => toolbarMenuItems(this.fitted().exportMenu));
   /** Every control in roving order */
   private readonly items = computed(() => toolbarItems(this.fitted().groups));
   /** `data-focus-key` of the one control with `tabindex=0` */
   protected readonly tabStop = computed(() => toolbarTabStop(this.items(), this.lastFocus()));
 
-  /** The More button or menu item that received focus last (handed to the tab stop when a render removes it) */
+  /**
+   * The menu button (More, Export) or menu item that received focus last (handed to the tab stop
+   * when a render removes it)
+   */
   private focused: HTMLElement | null = null;
-  /** The outside-press listener on the document, while the menu is open */
+  /** The outside-press listener on the document, while a menu is open */
   private outside: ((event: Event) => void) | null = null;
   /** Measures the slot (and the legend in the toolbar) once the chart has a width */
   private observer: ResizeObserver | null = null;
@@ -630,14 +750,20 @@ export class GanttToolbarComponent {
       const legend = this.legendRef()?.nativeElement ?? null;
       untracked(() => this.watch(on, legend));
     });
-    // The outside press closes the menu: listened to only while it is open
+    // The outside press closes the open menu: listened to only while one is open
     afterRenderEffect(() => {
-      const open = this.open();
+      const open = this.open() || this.exportOpen();
       untracked(() => this.listenOutside(open));
     });
-    // A focused More button or menu item that this render removed (the menu closed by a resize or a
-    // press, everything fits again) hands focus to the toolbar's tab stop, before the chart's focus
-    // restore would give it to the timeline
+    // An open Export menu whose button no longer shows (its group moved into More, or went) closes
+    // once rendered without it, focus left alone (a focused item it took away goes to the tab stop)
+    afterRenderEffect(() => {
+      const stale = this.exportOpen() && this.fitted().exportMenu === null;
+      if (stale) untracked(() => this.exportState.set(TOOLBAR_MENU_CLOSED));
+    });
+    // A focused menu button (More, Export) or menu item that this render removed (the menu closed by
+    // a resize or a press, everything fits again, Export moved into More) hands focus to the
+    // toolbar's tab stop, before the chart's focus restore would give it to the timeline
     afterRenderEffect({
       earlyRead: () => {
         this.fitted();
@@ -658,17 +784,30 @@ export class GanttToolbarComponent {
    */
   protected activate(item: ToolbarItem): void {
     if (item.disabled === true) return;
-    if (item.action.type === 'menu') {
-      this.dispatch({ type: 'open', via: 'click', checked: toolbarMenuChecked(this.menuItems()) });
+    const kind = menuOf(item.action);
+    if (kind !== null) {
+      // More or Export: opens on the checked item, else the first (Export: always)
+      this.dispatch(kind, { type: 'open', via: 'click', checked: toolbarMenuChecked(this.itemsOf(kind)) });
     } else {
       this.run(item.action);
     }
   }
 
-  /** A menu item was activated: its action, then the menu closes back to More. */
+  /**
+   * A menu item was activated: its action, then the menu closes back to its button. A format
+   * (Export menu, or its section in More) closes it first: the download or the print dialog starts
+   * from the button (and the dialog gives focus back to it).
+   */
   protected choose(item: ToolbarMenuItem): void {
-    this.run(item.action);
-    this.dispatch({ type: 'select' });
+    const kind = this.openKind();
+    if (kind === null) return;
+    if (item.action.type === 'export') {
+      this.dispatch(kind, { type: 'select' });
+      this.run(item.action);
+    } else {
+      this.run(item.action);
+      this.dispatch(kind, { type: 'select' });
+    }
   }
 
   protected run(action: ToolbarAction): void {
@@ -688,7 +827,8 @@ export class GanttToolbarComponent {
       case 'togglePanel':
         return this.togglePanel.emit();
       case 'menu':
-        // The More button: its menu (see `activate`)
+      case 'exportMenu':
+        // The More and Export buttons: their menus (see `activate`)
         return;
       case 'undo':
         // The chart's undo() / redo(): through the pipeline, which announces the result (a disabled
@@ -697,6 +837,11 @@ export class GanttToolbarComponent {
         return;
       case 'redo':
         this.editor.redo();
+        return;
+      case 'export':
+        // A format of the Export menu (or its section in More): `download()` / `print()` from the
+        // toolbar. It never rejects: a failure is announced in the alert region
+        void this.exporter.run(action.format, 'toolbar');
         return;
     }
   }
@@ -709,22 +854,24 @@ export class GanttToolbarComponent {
   protected onKeyDown(event: KeyboardEvent): void {
     if (event.defaultPrevented) return;
     if (this.menuItemOf(event.target)) {
+      const kind = this.openKind();
       const menuEvent = toolbarMenuKey(event, 'menu');
-      if (menuEvent) this.handleMenuKey(event, menuEvent);
+      if (menuEvent && kind !== null) this.handleMenuKey(kind, event, menuEvent);
       return;
     }
     const key = this.controlKey(event.target);
     if (key === null) return;
-    if (key === 'more') {
+    if (key === 'more' || key === 'export') {
       let menuEvent = toolbarMenuKey(event, 'button');
-      if (menuEvent?.type === 'open') menuEvent = { ...menuEvent, checked: toolbarMenuChecked(this.menuItems()) };
-      else if (!menuEvent && this.open()) {
-        // More itself holding focus with its menu open: Esc and Tab close it too
+      // Opens on the checked item (a zoom level, a view), else the first (Export: always)
+      if (menuEvent?.type === 'open') menuEvent = { ...menuEvent, checked: toolbarMenuChecked(this.itemsOf(key)) };
+      else if (!menuEvent && this.openKind() === key) {
+        // The menu button itself holding focus with its menu open: Esc and Tab close it too
         const close = toolbarMenuKey(event, 'menu');
         if (close?.type === 'close') menuEvent = close;
       }
       if (menuEvent) {
-        this.handleMenuKey(event, menuEvent);
+        this.handleMenuKey(key, event, menuEvent);
         return;
       }
     }
@@ -742,17 +889,19 @@ export class GanttToolbarComponent {
   protected onFocusIn(event: FocusEvent): void {
     const item = this.menuItemOf(event.target);
     if (item) {
-      // The menu's items are not tab stops: More stands for them in the roving set
+      const kind = this.openKind();
+      if (kind === null) return;
+      // The menu's items are not tab stops: the button that opened it stands for them in the roving set
       this.focused = item;
-      this.lastFocus.set('more');
+      this.lastFocus.set(kind);
       const key = item.getAttribute('data-focus-key');
-      this.dispatch({ type: 'focus', index: this.menuItems().findIndex(i => i.focusKey === key) });
+      this.dispatch(kind, { type: 'focus', index: this.itemsOf(kind).findIndex(i => i.focusKey === key) });
       return;
     }
     const key = this.controlKey(event.target);
     if (key === null) return;
     this.lastFocus.set(key);
-    this.focused = key === 'more' ? (event.target as Element).closest('button') : null;
+    this.focused = key === 'more' || key === 'export' ? (event.target as Element).closest('button') : null;
   }
 
   /** Focus moved to another control outside the toolbar: nothing to hand back. */
@@ -761,21 +910,44 @@ export class GanttToolbarComponent {
     if (next && !this.host.nativeElement.contains(next)) this.focused = null;
   }
 
-  private handleMenuKey(event: KeyboardEvent, menuEvent: ToolbarMenuEvent): void {
+  private handleMenuKey(kind: MenuKind, event: KeyboardEvent, menuEvent: ToolbarMenuEvent): void {
     if (menuEvent.type !== 'close' || menuEvent.reason !== 'tab') event.preventDefault();
-    this.dispatch(menuEvent);
+    this.dispatch(kind, menuEvent);
   }
 
-  /** Runs `event` through core `reduceMenu` and moves focus where it says. */
-  private dispatch(event: ToolbarMenuEvent): void {
-    const items = this.menuItems();
-    const { state, focus } = reduceMenu(this.menuState(), event, items.length);
-    this.menuState.set(state);
+  /** The state of `kind`'s menu. */
+  private stateOf(kind: MenuKind): WritableSignal<ToolbarMenuState> {
+    return kind === 'more' ? this.menuState : this.exportState;
+  }
+
+  /** The items of `kind`'s menu, in display order. */
+  private itemsOf(kind: MenuKind): readonly ToolbarMenuItem[] {
+    return kind === 'more' ? this.menuItems() : this.exportItems();
+  }
+
+  /** The open menu (one at a time), or `null`. */
+  private openKind(): MenuKind | null {
+    return this.open() ? 'more' : this.exportOpen() ? 'export' : null;
+  }
+
+  /**
+   * Runs `event` for the menu of `kind` through core `reduceMenu` and moves focus where it says.
+   * One menu at a time: opening one closes the other.
+   */
+  private dispatch(kind: MenuKind, event: ToolbarMenuEvent): void {
+    const own = this.stateOf(kind);
+    const items = this.itemsOf(kind);
+    const { state, focus } = reduceMenu(own(), event, items.length);
+    own.set(state);
+    if (state.open) {
+      const other = this.stateOf(kind === 'more' ? 'export' : 'more');
+      if (other().open) other.set(TOOLBAR_MENU_CLOSED);
+    }
     if (focus === 'item') {
       const key = items[state.active]?.focusKey;
       if (key !== undefined) this.focusMenuItem(key);
     } else if (focus === 'button') {
-      this.control('more')?.focus();
+      this.control(kind)?.focus();
     }
   }
 
@@ -786,7 +958,7 @@ export class GanttToolbarComponent {
     else afterNextRender(() => this.menuItemEl(key)?.focus(), { injector: this.injector });
   }
 
-  /** After a render: a focused More or menu item it removed hands focus to the toolbar's tab stop. */
+  /** After a render: a focused menu button or menu item it removed hands focus to the toolbar's tab stop. */
   private handOff(): void {
     const el = this.focused;
     if (!el || el.isConnected) return;
@@ -802,11 +974,13 @@ export class GanttToolbarComponent {
     if (on === (this.outside !== null)) return;
     if (on) {
       this.outside = event => {
+        const kind = this.openKind();
+        if (kind === null) return;
         const path = event.composedPath();
         const menu = this.menuRef()?.nativeElement;
-        const more = this.control('more');
-        if ((menu && path.includes(menu)) || (more && path.includes(more))) return;
-        this.dispatch({ type: 'close', reason: 'outside' });
+        const button = this.control(kind);
+        if ((menu && path.includes(menu)) || (button && path.includes(button))) return;
+        this.dispatch(kind, { type: 'close', reason: 'outside' });
       };
       this.doc.addEventListener('pointerdown', this.outside, { capture: true });
     } else {

@@ -25,6 +25,8 @@ import type {
   ColumnContext,
   GanttBarContext,
   GanttSyncGroup,
+  GanttBeforeExportEvent,
+  GanttExportEvent,
 } from '@gantryjs/core';
 import type { GanttDataSource } from './datasource/gantt-datasource';
 
@@ -91,6 +93,14 @@ export interface GantryEventDetailMap {
   'dependency-deleted': DependencyChangeEvent;
   /** The undo / redo state changed (`canUndo`, `canRedo`, labels, counts) */
   'history-change': GanttHistoryState;
+  /**
+   * A `download()` or `print()` is about to run (the toolbar's Export menu or the API): `{ format,
+   * trigger, fileName }` (`fileName` with its extension; `null` for print). Cancelable:
+   * `event.preventDefault()` or `detail.preventDefault()` (synchronously) vetoes it.
+   */
+  'before-export': GanttBeforeExportEvent;
+  /** A `download()` or `print()` ran: `{ format, trigger, fileName, size, pages }` (bytes; pages printed) */
+  export: GanttExportEvent;
 }
 
 export type GantryEventMap = {
@@ -141,6 +151,8 @@ export const GANTRY_EVENTS = {
   'dependency-created': 'onDependencyCreated',
   'dependency-deleted': 'onDependencyDeleted',
   'history-change': 'onHistoryChange',
+  'before-export': 'onBeforeExport',
+  export: 'onExport',
 } as const satisfies Record<keyof GantryEventDetailMap, string>;
 
 /** Callback props (`onTaskDragged`, …) receiving each event's `detail`. */

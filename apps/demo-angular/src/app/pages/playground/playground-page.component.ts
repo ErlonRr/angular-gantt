@@ -28,6 +28,7 @@ import {
   decodeState,
   editEventText,
   encodeState,
+  exportEventText,
   playgroundCode,
   playgroundCommand,
   playgroundOptions,
@@ -36,6 +37,8 @@ import {
   type PlaygroundControl,
   type PlaygroundEditEvent,
   type PlaygroundEditEvents,
+  type PlaygroundExportEvent,
+  type PlaygroundExportEvents,
   type PlaygroundKey,
   type PlaygroundState,
 } from 'demo-kit/playground';
@@ -143,6 +146,8 @@ function days(n: number): string {
             (taskUpdated)="onEdit('task-updated', $event)"
             (tasksChange)="onEdit('tasks-change', $event)"
             (historyChange)="onEdit('history-change', $event)"
+            (beforeExport)="onExport('before-export', $event)"
+            (export)="onExport('export', $event)"
           />
         </section>
 
@@ -436,6 +441,11 @@ export class PlaygroundPageComponent {
       outputName(event),
       editEventText(event, detail, id => this.name(id)),
     );
+  }
+
+  /** An export output (toolbar Export menu or a script), with the same text as the Web Component playground. */
+  protected onExport<K extends PlaygroundExportEvent>(event: K, detail: PlaygroundExportEvents[K]): void {
+    this.log(outputName(event), exportEventText(event, detail));
   }
 
   protected onSelection(e: SelectionChangeEvent): void {

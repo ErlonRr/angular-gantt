@@ -45,5 +45,8 @@ paths:
   `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted`, `onHistoryChange` (Vue `@before-change`…)
   synchronously with `event.detail`, so `detail.preventDefault()` in `onBeforeChange` vetoes. Svelte destructures
   them explicitly (React and Vue derive them from `GANTRY_EVENTS`).
+- Export events (Phase 12): `onBeforeExport` / `onExport` (Vue `@before-export` / `@export`) forward `event.detail`
+  synchronously, so `detail.preventDefault()` in `onBeforeExport` cancels a `download()` / `print()`; Svelte
+  destructures both. The export methods are the element's (React ref, Vue `element`, Svelte `bind:element`).
 - Named exports only (no default export); each package re-exports `@gantryjs/core`.
 - Verify: `pnpm typecheck` and the demo apps (`pnpm --filter demo-react typecheck`, etc.).

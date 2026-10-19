@@ -124,8 +124,9 @@ describe('custom-elements.json', () => {
   it('lists the public methods and nothing private', () => {
     const methods = element.members.filter(m => m.kind === 'method');
     expect(names(methods).sort()).toEqual(prototypeApi().methods.sort());
-    // Phase 11 added undo, redo, clearHistory, addDependency, removeDependency, editCell and focusTask
-    expect(methods).toHaveLength(32);
+    // Phase 11 added undo, redo, clearHistory, addDependency, removeDependency, editCell and focusTask;
+    // Phase 12 exportSvg, exportCsv, exportPng, download and print
+    expect(methods).toHaveLength(37);
     for (const member of element.members) {
       expect(member.name.startsWith('#'), member.name).toBe(false);
       expect(member.static, member.name).toBeUndefined();

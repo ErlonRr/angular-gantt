@@ -44,6 +44,10 @@ describe('Gantry.svelte props', () => {
     );
   });
 
+  it('destructures the Phase 12 export callbacks', () => {
+    expect(destructured()).toEqual(expect.arrayContaining(['onBeforeExport', 'onExport']));
+  });
+
   it('destructures nothing else but element, the empty and children snippets, and the rest', () => {
     const known = new Set<string>([
       ...GANTRY_PROPERTIES,

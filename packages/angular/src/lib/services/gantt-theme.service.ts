@@ -54,16 +54,17 @@ export class GanttThemeService {
     return mode === 'auto' ? this.prefersDark() : mode === true;
   });
 
-  /** Light/dark base ← global config ← `options.theme` ← API overrides (equal values keep the object) */
-  readonly resolvedTheme = computed<Required<GanttTheme>>(
-    () =>
-      resolveTheme(this.isDark(), {
-        ...this.globalConfig.theme,
-        ...this.sources()?.options().theme,
-        ...this.apiTheme(),
-      }),
-    { equal: sameTheme },
-  );
+  /** Every override on top of the light/dark base: global config ← `options.theme` ← `setTheme()` / `patchTheme()` */
+  readonly overrides = computed<GanttThemeOverrides>(() => ({
+    ...this.globalConfig.theme,
+    ...this.sources()?.options().theme,
+    ...this.apiTheme(),
+  }));
+
+  /** Light/dark base ← the overrides (equal values keep the object) */
+  readonly resolvedTheme = computed<Required<GanttTheme>>(() => resolveTheme(this.isDark(), this.overrides()), {
+    equal: sameTheme,
+  });
 
   /** Every `--gantt-*` token of the theme, the derived contrast tokens included (`themeToCss`), for a `[style]` binding */
   readonly style = computed<Record<string, string>>(() => Object.fromEntries(themeToCss(this.resolvedTheme())));

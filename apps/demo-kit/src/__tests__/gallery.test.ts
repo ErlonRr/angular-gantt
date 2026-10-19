@@ -15,7 +15,12 @@ import {
   buildColumnContext,
   commitCellValue,
   createBeforeChangeDetail,
+  createExportSource,
   editRules,
+  exportChartCsv,
+  exportChartPages,
+  exportChartSvg,
+  exportFileName,
   flattenTree,
   invertChange,
   linkChange,
@@ -26,6 +31,7 @@ import {
   taskChange,
   type ColumnDef,
   type GanttChange,
+  type GanttExportEvent,
   type GanttOptions,
   type GanttTask,
   type GanttTasksChangeEvent,
@@ -42,13 +48,33 @@ import {
   CUSTOM_EDITORS_MILESTONE,
   CUSTOM_EDITORS_OPTIONS,
   CUSTOM_EDITOR_COLUMNS,
+  CSV_COLUMNS,
+  CSV_VALUES,
   DEPENDENCY_EDITING_INITIAL,
   EDITING_OPTIONS,
   EDIT_LOG_LIMIT,
+  EXPORT_CSV_HINT,
+  EXPORT_CSV_INITIAL,
+  EXPORT_CSV_OPTIONS,
+  EXPORT_IMAGE_INITIAL,
+  EXPORT_IMAGE_OPTIONS,
+  EXPORT_LOG_LIMIT,
+  EXPORT_RANGES,
+  EXPORT_THEMES,
+  EXPORT_TOOLBAR_HINT,
+  EXPORT_TOOLBAR_INITIAL,
+  EXPORT_TOOLBAR_OPTIONS,
+  FLAG_BAR,
   FRAMEWORK_NOTES,
   GALLERY_CASES,
   GALLERY_CATEGORIES,
   GALLERY_FRAMEWORKS,
+  PRINT_FITS,
+  PRINT_HINT,
+  PRINT_INITIAL,
+  PRINT_OPTIONS,
+  PRINT_ORIENTATIONS,
+  PRINT_PAPERS,
   caseNeighbours,
   casesByCategory,
   cellEditingOptions,
@@ -56,14 +82,24 @@ import {
   controlledDecision,
   controlledTasks,
   createFakeTaskApi,
+  csvExportOptions,
+  csvPreviewLines,
   customEditorsTasks,
   currentGalleryRoute,
   dependenciesOf,
   dependencyEditingOptions,
   dependencyEditingTasks,
+  describeBlockedExport,
+  describeExport,
+  describeFailedExport,
   describeTasksChange,
   editingTasks,
+  exportCsvTasks,
+  exportImageTasks,
+  exportToolbarTasks,
+  formatBytes,
   galleryHash,
+  imageExportOptions,
   isCaseId,
   largeTasks,
   notesForCase,
@@ -71,6 +107,8 @@ import {
   parseGalleryHash,
   pipelineTasks,
   planTasks,
+  printOptionsOf,
+  printTasks,
   pushLog,
   seededRandom,
   statesProps,
@@ -120,8 +158,8 @@ function expectSound(tasks: GanttTask[]): void {
 }
 
 describe('gallery catalog', () => {
-  it('has 25 unique kebab-case ids, in catalog order', () => {
-    expect(CASE_IDS).toHaveLength(25);
+  it('has 29 unique kebab-case ids, in catalog order', () => {
+    expect(CASE_IDS).toHaveLength(29);
     expect(new Set(CASE_IDS).size).toBe(CASE_IDS.length);
     for (const id of CASE_IDS) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     expect(GALLERY_CASES.map(c => c.id)).toEqual([...CASE_IDS]);
@@ -708,6 +746,238 @@ describe('editing cases', () => {
       veto: false,
       line: 'Accepted: linked Research → Build (finish to start)',
     });
+  });
+});
+
+describe('export cases', () => {
+  const exported = (detail: Partial<GanttExportEvent>): GanttExportEvent => ({
+    format: 'svg',
+    trigger: 'api',
+    fileName: 'release-plan.svg',
+    size: 24_600,
+    pages: null,
+    ...detail,
+  });
+
+  it('sit in the Export category, after Editing, as new one-chart cases', () => {
+    const order = GALLERY_CATEGORIES.map(c => c.id);
+    expect(order.indexOf('export')).toBe(order.indexOf('editing') + 1);
+    expect(GALLERY_CATEGORIES[order.indexOf('export')]).toEqual({
+      id: 'export',
+      label: 'Export and print',
+      summary: 'Save the plan as SVG, PNG or CSV, and print it on paper with the header and task list on every page.',
+    });
+    const cases = GALLERY_CASES.filter(c => c.category === 'export');
+    expect(cases.map(c => c.id)).toEqual(['export-image', 'export-csv', 'print', 'export-toolbar']);
+    expect(CASE_IDS.indexOf('export-image')).toBe(CASE_IDS.indexOf('controlled') + 1);
+    for (const c of cases) {
+      expect(c.isNew, c.id).toBe(true);
+      expect(c.ready, c.id).toEqual({ charts: 1 });
+    }
+    expect(notesForCase('export-toolbar').map(n => n.id)).toEqual([
+      'before-export',
+      'custom-bars',
+      'export-custom-bars',
+    ]);
+    expect(FRAMEWORK_NOTES.find(n => n.id === 'export-ssr')?.cases).toEqual([]);
+  });
+
+  describe('export log', () => {
+    it('formats sizes in B, KB and MB with one decimal', () => {
+      const cases: [number, string][] = [
+        [0, '0 B'],
+        [980, '980 B'],
+        [999, '999 B'],
+        [1000, '1.0 KB'],
+        [1049, '1.0 KB'],
+        [1050, '1.1 KB'],
+        [24_600, '24.6 KB'],
+        [999_949, '999.9 KB'],
+        // Rounds up to 1000 KB: reads in MB
+        [999_950, '1.0 MB'],
+        [1_200_000, '1.2 MB'],
+        [999_950_000, '1.0 GB'],
+        [-5, '0 B'],
+        [Number.NaN, '0 B'],
+        [12.4, '12 B'],
+      ];
+      for (const [n, text] of cases) expect(formatBytes(n), String(n)).toBe(text);
+    });
+
+    it('describes saved files, prints and blocked exports in one line', () => {
+      expect(describeExport(exported({}))).toBe('Saved release-plan.svg (24.6 KB)');
+      expect(describeExport(exported({ format: 'png', fileName: 'release-plan.png', size: 1_234_567 }))).toBe(
+        'Saved release-plan.png (1.2 MB)',
+      );
+      expect(
+        describeExport(exported({ format: 'csv', fileName: 'budget-plan.csv', size: 980, trigger: 'toolbar' })),
+      ).toBe('Saved budget-plan.csv (980 B)');
+      expect(describeExport(exported({ format: 'print', fileName: null, size: null, pages: 3 }))).toBe(
+        'Printed 3 pages',
+      );
+      expect(describeExport(exported({ format: 'print', fileName: null, size: null, pages: 1 }))).toBe(
+        'Printed 1 page',
+      );
+      expect(describeExport(exported({ size: null }))).toBe('Saved release-plan.svg');
+      expect(describeBlockedExport('png')).toBe('Blocked: PNG image');
+      expect(describeBlockedExport('csv')).toBe('Blocked: CSV table');
+      // The menu's ellipsis is left out
+      expect(describeBlockedExport('print')).toBe('Blocked: Print');
+      expect(describeBlockedExport('svg', { ...DEFAULT_LABELS, exportSvg: 'Image SVG' })).toBe('Blocked: Image SVG');
+      expect(describeFailedExport(new RangeError('Too large'))).toBe('Failed: Too large');
+      expect(describeFailedExport('no window')).toBe('Failed: no window');
+      expect(EXPORT_LOG_LIMIT).toBe(EDIT_LOG_LIMIT);
+    });
+  });
+
+  it('build the same sound tasks for the same now', () => {
+    for (const build of [exportImageTasks, exportCsvTasks, printTasks, exportToolbarTasks]) {
+      expect(build(NOW)).toEqual(build(NOW));
+      expectSound(build(NOW));
+    }
+    expect(
+      exportImageTasks(NOW)
+        .filter(t => t.baseline)
+        .map(t => t.id),
+    ).toEqual(['wireframes', 'web']);
+    expect(exportToolbarTasks(NOW).filter(t => t.barType === FLAG_BAR.type)).toHaveLength(3);
+    expect(exportCsvTasks(NOW).map(t => t.name)).toEqual([
+      'Kick-off',
+      '=HYPERLINK("https://example.com","Approve")',
+      '+Budget review',
+      '-Scope cut',
+      '@Vendor sync',
+      'Launch',
+    ]);
+    // 60 rows over ten weeks, in six phases of nine tasks
+    const schedule = printTasks(NOW);
+    expect(schedule).toHaveLength(60);
+    expect(schedule.filter(t => t.type === TaskType.Group)).toHaveLength(6);
+    expect(Math.max(...schedule.map(t => depth(schedule, t)))).toBe(1);
+    const days = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 86_400_000);
+    const first = new Date(Math.min(...schedule.map(t => t.start.getTime())));
+    const last = new Date(Math.max(...schedule.map(t => t.end.getTime())));
+    expect(days(first, last)).toBeLessThanOrEqual(70);
+    expect(days(first, last)).toBeGreaterThan(63);
+    expect(schedule.at(-1)).toMatchObject({ id: 'finishes-9', name: 'Handover', type: TaskType.Milestone });
+  });
+
+  it('export-image: options, choices and the file name', () => {
+    expect(EXPORT_THEMES.map(c => c.label)).toEqual(['Shown', 'Light', 'Dark']);
+    expect(EXPORT_RANGES.map(c => c.label)).toEqual(['Whole plan', 'On screen']);
+    expect(imageExportOptions(EXPORT_IMAGE_INITIAL)).toEqual({ theme: 'current', range: 'all' });
+    expect(imageExportOptions({ theme: 'dark', range: 'visible' })).toEqual({ theme: 'dark', range: 'visible' });
+    const config = resolveConfig(EXPORT_IMAGE_OPTIONS);
+    expect(config.criticalPath).toBe(true);
+    expect(config.baseline).toBe(true);
+    expect(exportFileName(config.export, 'svg')).toBe('release-plan.svg');
+    expect(exportFileName(config.export, 'png')).toBe('release-plan.png');
+    // The image holds every task and both baselines
+    const svg = exportChartSvg(
+      createExportSource({ tasks: exportImageTasks(NOW), options: EXPORT_IMAGE_OPTIONS, now: NOW }),
+    );
+    expect(svg).toContain('<title id=');
+    expect(svg).toContain('Release plan');
+    expect(svg.match(/class="gantt-bar-baseline"/g)).toHaveLength(2);
+  });
+
+  it('export-csv: options, choices and the preview lines', () => {
+    expect(CSV_COLUMNS.map(c => [c.value, c.label])).toEqual([
+      ['visible', 'Shown'],
+      ['all', 'All'],
+    ]);
+    expect(CSV_VALUES.map(c => [c.value, c.label])).toEqual([
+      ['data', 'Data'],
+      ['display', 'As shown'],
+    ]);
+    expect(csvExportOptions(EXPORT_CSV_INITIAL)).toEqual({ columns: 'visible', values: 'data', bom: true });
+    expect(EXPORT_CSV_HINT).toMatch(/apostrophe/);
+    expect(exportFileName(resolveConfig(EXPORT_CSV_OPTIONS).export, 'csv')).toBe('budget-plan.csv');
+
+    const source = createExportSource({ tasks: exportCsvTasks(NOW), options: EXPORT_CSV_OPTIONS, now: NOW });
+    const csv = exportChartCsv(source, csvExportOptions(EXPORT_CSV_INITIAL));
+    const lines = csvPreviewLines(csv);
+    // A header, five tasks, then what is left out
+    expect(lines).toHaveLength(7);
+    expect(lines[0].split(',')).toHaveLength(4);
+    expect(lines[1]).toMatch(/^Kick-off,/);
+    expect(lines[2]).toMatch(/^"'=HYPERLINK\(""https:\/\/example\.com"",""Approve""\)",/);
+    expect(lines[3]).toMatch(/^'\+Budget review,/);
+    expect(lines[4]).toMatch(/^'-Scope cut,/);
+    expect(lines[5]).toMatch(/^'@Vendor sync,/);
+    expect(lines[6]).toBe('… 1 more row');
+    expect(csvPreviewLines(csv, 10)).toHaveLength(7);
+    expect(csvPreviewLines(csv, 10)[6]).toMatch(/^Launch,/);
+    // Every column of the catalogue, and the cells as shown
+    const all = exportChartCsv(source, csvExportOptions({ columns: 'all', values: 'display', bom: true }));
+    expect(csvPreviewLines(all)[0].split(',').length).toBeGreaterThan(4);
+  });
+
+  it('csvPreviewLines: records, not lines', () => {
+    expect(csvPreviewLines('')).toEqual([]);
+    expect(csvPreviewLines('a,b\r\n1,2')).toEqual(['a,b', '1,2']);
+    expect(csvPreviewLines('﻿a\r\n"x\r\ny",2\n3\r\n')).toEqual(['a', '"x↵y",2', '3']);
+    expect(csvPreviewLines('a\r\nb\r\nc', 2)).toEqual(['a', 'b', '… 1 more row']);
+    expect(csvPreviewLines('a\r\nb\r\nc\r\nd', 1)).toEqual(['a', '… 3 more rows']);
+    expect(csvPreviewLines('a\r\nb', 0)).toEqual(['… 2 more rows']);
+  });
+
+  it('print: choices, options and pages', () => {
+    expect(PRINT_PAPERS.map(c => [c.value, c.label])).toEqual([
+      ['a4', 'A4'],
+      ['letter', 'Letter'],
+      ['a3', 'A3'],
+    ]);
+    expect(PRINT_ORIENTATIONS.map(c => c.label)).toEqual(['Landscape', 'Portrait']);
+    expect(PRINT_FITS.map(c => [c.value, c.label])).toEqual([
+      ['width', 'Page width'],
+      ['page', 'One page'],
+      ['none', 'Actual size'],
+    ]);
+    expect(printOptionsOf(PRINT_INITIAL)).toEqual({
+      paper: 'a4',
+      orientation: 'landscape',
+      fit: 'width',
+      repeatTable: true,
+    });
+    expect(printOptionsOf({ paper: 'letter', orientation: 'portrait', fit: 'none', repeatTable: false })).toEqual({
+      paper: 'letter',
+      orientation: 'portrait',
+      fit: 'none',
+      repeatTable: false,
+    });
+    expect(PRINT_HINT).toMatch(/^Ctrl\+P/);
+    // The schedule takes several pages at the start, and one with "One page"
+    const source = createExportSource({ tasks: printTasks(NOW), options: PRINT_OPTIONS, now: NOW });
+    const pages = (state: Partial<typeof PRINT_INITIAL>) =>
+      exportChartPages(source, printOptionsOf({ ...PRINT_INITIAL, ...state })).pages.length;
+    expect(pages({})).toBeGreaterThan(1);
+    expect(pages({ fit: 'page' })).toBe(1);
+  });
+
+  it('export-toolbar: the export menu, the switch and the flag bars', () => {
+    const config = resolveConfig(EXPORT_TOOLBAR_OPTIONS);
+    expect(config.toolbar).toMatchObject({ export: true });
+    expect(exportFileName(config.export, 'png')).toBe('roadmap.png');
+    expect(EXPORT_TOOLBAR_INITIAL).toEqual({ blockPng: false });
+    expect(EXPORT_TOOLBAR_HINT).toMatch(/flag bars/);
+    // A third of the bar's height above it (5 to 10 px), pole on the bar's start
+    expect(FLAG_BAR.flagPath({ x: 100, y: 20, height: 21.6 })).toBe('M100 20V12.8L112.3 15.32L101.5 17.84V20Z');
+    expect(FLAG_BAR.flagPath({ x: 0, y: 40, height: 60 })).toMatch(/^M0 40V30L/);
+    expect(FLAG_BAR.flagPath({ x: 0, y: 10, height: 6 })).toMatch(/^M0 10V5L/);
+    // Custom markup reaches the image as drawn
+    const svg = exportChartSvg(
+      createExportSource({
+        tasks: exportToolbarTasks(NOW),
+        options: EXPORT_TOOLBAR_OPTIONS,
+        now: NOW,
+        customBar: ctx =>
+          ctx.row.task.barType === FLAG_BAR.type
+            ? `<path class="flag" d="${FLAG_BAR.flagPath(ctx.visual)}" fill="#2563eb"/>`
+            : null,
+      }),
+    );
+    expect(svg.match(/class="flag"/g)).toHaveLength(3);
   });
 });
 

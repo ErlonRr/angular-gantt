@@ -2,7 +2,9 @@
 //  gantry · state/toolbar.ts
 //  Toolbar model: groups, items, icons and the roving tab stop (Phase 9
 //  step 2.6), the panel toggle and the overflow layout with its "More"
-//  menu (Phase 10 step 2.5), the undo / redo group (Phase 11 step 2.6).
+//  menu (Phase 10 step 2.5), the undo / redo group (Phase 11 step 2.6),
+//  the export group and its menu (Phase 12: types in step 1.0, model in
+//  step 2.6).
 //  Both painters render `layoutToolbar()` (of `buildToolbar()`) as is,
 //  so they show the same controls in the same order with the same
 //  classes, roles and names:
@@ -16,17 +18,23 @@
 //      div.gantt-tb-group                           today                       (icon + text)
 //      div.gantt-tb-group.gantt-tb-pills.gantt-tb-views
 //                                                   split · table · chart       (icon radios)
+//      div.gantt-tb-group.gantt-tb-export-group     Export                      (menu button, `toolbar.export`)
 //      div.gantt-tb-group.gantt-tb-more-group       More                        (menu button, while needed)
-//      div.gantt-tb-menu[role=menu]                 the controls that don't fit (while open)
+//      div.gantt-tb-menu[role=menu]                 the export formats (`ToolbarLayout.exportMenu`) or
+//                                                   the controls that don't fit (`ToolbarLayout.menu`):
+//                                                   one menu at a time, while open, after the group of
+//                                                   the button that opened it
 //
 //  The built-in controls form one roving set (WAI-ARIA toolbar): one
 //  tab stop (`toolbarTabStop`), arrow keys move and wrap
 //  (`toolbarFocusMove`), and a radio is checked by Space / Enter / click,
-//  never by moving focus onto it. More is part of the set; its menu
-//  items are not (`reduceMenu` in state/menu.ts moves inside the menu).
+//  never by moving focus onto it. More and Export are part of the set;
+//  their menu items are not (`reduceMenu` in state/menu.ts moves inside
+//  the menu). The export group is the first to move into More, where its
+//  format items become a section: a menu is never nested in another.
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttHistoryState, GanttLabels, GanttView, GanttZoomLevel } from '../types';
+import type { GanttExportFormat, GanttHistoryState, GanttLabels, GanttView, GanttZoomLevel } from '../types';
 import type { ResolvedToolbar } from '../render/config';
 import type { MoveCommand } from '../interaction/keymap';
 
@@ -34,7 +42,18 @@ import type { MoveCommand } from '../interaction/keymap';
 
 /** The toolbar's built-in icons. */
 export type ToolbarIcon =
-  'zoomIn' | 'zoomOut' | 'fit' | 'today' | 'viewSplit' | 'viewTable' | 'viewChart' | 'panel' | 'more' | 'undo' | 'redo';
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'fit'
+  | 'today'
+  | 'viewSplit'
+  | 'viewTable'
+  | 'viewChart'
+  | 'panel'
+  | 'more'
+  | 'undo'
+  | 'redo'
+  | 'export';
 
 /** `viewBox` of every toolbar icon (a 16 px grid). */
 export const TOOLBAR_ICON_VIEWBOX = '0 0 16 16';
@@ -102,6 +121,8 @@ export const TOOLBAR_ICONS: Readonly<Record<ToolbarIcon, readonly string[]>> = {
   undo: ['M5.5 3L2.5 6l3 3', 'M2.5 6H10a3.5 3.5 0 0 1 0 7H5.5'],
   // Undo mirrored about x = 8
   redo: ['M10.5 3l3 3-3 3', 'M13.5 6H6a3.5 3.5 0 0 0 0 7h4.5'],
+  // An arrow pointing down into an open tray: "save a copy"
+  export: ['M8 2.5v7', 'M5 6.5l3 3 3-3', 'M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2'],
 };
 
 // ─── Model ────────────────────────────────────────────────────
@@ -125,6 +146,11 @@ export type ToolbarLabels = Pick<
   | 'more'
   | 'undo'
   | 'redo'
+  | 'exportMenu'
+  | 'exportSvg'
+  | 'exportPng'
+  | 'exportCsv'
+  | 'exportPrint'
 >;
 
 /** What a toolbar control does when pressed (or, for a radio, checked). */
@@ -141,20 +167,29 @@ export type ToolbarAction =
   | { type: 'menu' }
   /** Undo / Redo (`toolbar.undo`): the binding runs `undo()` / `redo()` */
   | { type: 'undo' }
-  | { type: 'redo' };
+  | { type: 'redo' }
+  /** The Export button (`toolbar.export`): the binding opens / closes the Export menu (`reduceMenu`) */
+  | { type: 'exportMenu' }
+  /**
+   * An Export menu item (or its copy in the More menu): the binding runs `download(format)`, or
+   * `print()` for `'print'`, with `trigger: 'toolbar'`
+   */
+  | { type: 'export'; format: GanttExportFormat };
 
 /** One built-in control: a `button` element. */
 export interface ToolbarItem {
   /**
    * `data-focus-key` of the button, unique in the toolbar and stable across paints (also the
    * key for keyed lists): `panel`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`,
-   * `zoom:<level name>`, `today`, `view:<view>`, `more`.
+   * `zoom:<level name>`, `today`, `view:<view>`, `export`, `more`; an Export menu item
+   * (`ToolbarGroup.menu`) `export:<format>`.
    */
   focusKey: string;
   /**
    * `class` of the button: `gantt-tb-btn`, `gantt-tb-btn gantt-tb-today`, `gantt-tb-pill`,
-   * `gantt-tb-btn gantt-tb-panel`, `gantt-tb-btn gantt-tb-undo`, `gantt-tb-btn gantt-tb-redo` or
-   * `gantt-tb-btn gantt-tb-more`
+   * `gantt-tb-btn gantt-tb-panel`, `gantt-tb-btn gantt-tb-undo`, `gantt-tb-btn gantt-tb-redo`,
+   * `gantt-tb-btn gantt-tb-export` or `gantt-tb-btn gantt-tb-more`; an Export menu item
+   * `gantt-tb-menu-item` (painted as its `ToolbarMenuItem`)
    */
   className: string;
   /** `role` attribute: `'radio'` for zoom levels and views, `null` for plain buttons (no attribute) */
@@ -174,9 +209,9 @@ export interface ToolbarItem {
   title: string | null;
   /** `aria-pressed` of a toggle button (the panel toggle: the task list shows), `null` for no attribute */
   pressed: boolean | null;
-  /** `aria-haspopup` (`'menu'` on the More button), `null` for no attribute */
+  /** `aria-haspopup` (`'menu'` on the More and Export buttons), `null` for no attribute */
   haspopup: 'menu' | null;
-  /** `aria-expanded` of the More button (its menu is open), `null` for no attribute */
+  /** `aria-expanded` of the More and Export buttons (their menu is open), `null` for no attribute */
   expanded: boolean | null;
   /**
    * `aria-disabled`: `true` on Undo / Redo while there is nothing to undo / redo (the button stays
@@ -189,9 +224,10 @@ export interface ToolbarItem {
 
 /**
  * Which built-in group: `panel` (the task list toggle), `history` (undo · redo), `zoom` (out · in ·
- * fit), `levels`, `today`, `views`, `more` (the More menu button, added by `layoutToolbar`).
+ * fit), `levels`, `today`, `views`, `export` (the Export menu button, `toolbar.export`), `more`
+ * (the More menu button, added by `layoutToolbar`).
  */
-export type ToolbarGroupKey = 'panel' | 'history' | 'zoom' | 'levels' | 'today' | 'views' | 'more';
+export type ToolbarGroupKey = 'panel' | 'history' | 'zoom' | 'levels' | 'today' | 'views' | 'export' | 'more';
 
 /** One `div` of the toolbar, holding its controls in order. */
 export interface ToolbarGroup {
@@ -204,6 +240,12 @@ export interface ToolbarGroup {
   ariaLabel: string | null;
   /** Never empty: a group with no control is left out */
   items: ToolbarItem[];
+  /**
+   * The items of the menu the group's button opens: the export group's format items (`export`
+   * actions, in `export.formats` order), `null` on every other group. A group moved into the More
+   * menu becomes a section of these items (`menu ?? items`)
+   */
+  menu: readonly ToolbarItem[] | null;
 }
 
 export interface ToolbarInput {
@@ -221,6 +263,11 @@ export interface ToolbarInput {
    * or omitted: no Undo / Redo buttons. Read by the `history` group (Phase 11 step 2.6).
    */
   history?: GanttHistoryState | null | undefined;
+  /**
+   * With `toolbar.export` on: the formats of the Export menu (`ResolvedExport.formats`); `null` or
+   * omitted: no export group. Read by the `export` group (Phase 12 step 2.6).
+   */
+  export?: { formats: readonly GanttExportFormat[] } | null | undefined;
 }
 
 const VIEWS: readonly { view: GanttView; icon: ToolbarIcon; label: 'viewSplit' | 'viewTable' | 'viewChart' }[] = [
@@ -228,6 +275,11 @@ const VIEWS: readonly { view: GanttView; icon: ToolbarIcon; label: 'viewSplit' |
   { view: 'table', icon: 'viewTable', label: 'viewTable' },
   { view: 'chart', icon: 'viewChart', label: 'viewChart' },
 ];
+
+/** The label of each Export menu item, by format (`export.formats`). */
+const EXPORT_LABELS: Readonly<
+  Record<GanttExportFormat, keyof Pick<ToolbarLabels, 'exportSvg' | 'exportPng' | 'exportCsv' | 'exportPrint'>>
+> = { svg: 'exportSvg', png: 'exportPng', csv: 'exportCsv', print: 'exportPrint' };
 
 /** The ARIA states a control does not use: no attribute. */
 const NO_STATE = { pressed: null, haspopup: null, expanded: null, disabled: null } as const;
@@ -312,13 +364,21 @@ export function zoomLevelLabel(
  * `gantt-tb-redo`, focus keys `undo` / `redo`, named by `labels.undo` / `labels.redo`), each
  * `aria-disabled` (`disabled: true`) while `canUndo` / `canRedo` is false. They stay in the roving
  * set and never move into the More menu.
+ *
+ * With `toolbar.export` and at least one format in `export.formats` the `export` group comes last
+ * (after the views): one icon menu button (`gantt-tb-btn gantt-tb-export`, focus key `export`,
+ * named and titled by `labels.exportMenu`, `aria-haspopup="menu"`, `aria-expanded` set by
+ * `layoutToolbar` from `exportMenuOpen`) in `div.gantt-tb-group.gantt-tb-export-group`. Its `menu`
+ * holds one item per format in `formats` order (focus key `export:<format>`, text
+ * `labels.exportSvg` / `exportPng` / `exportCsv` / `exportPrint`, action `{ type: 'export', format }`),
+ * painted through `ToolbarLayout.exportMenu`. Without them the toolbar is unchanged.
  */
 export function buildToolbar(input: ToolbarInput): ToolbarGroup[] {
   const { toolbar, labels, viewMode, view } = input;
   if (toolbar === false) return [];
   const groups: ToolbarGroup[] = [];
-  const push = (group: Omit<ToolbarGroup, 'items'>, items: ToolbarItem[]): void => {
-    if (items.length) groups.push({ ...group, items });
+  const push = (group: Omit<ToolbarGroup, 'items' | 'menu'>, items: ToolbarItem[]): void => {
+    if (items.length) groups.push({ ...group, items, menu: null });
   };
 
   if (toolbar.panelToggle) {
@@ -417,6 +477,39 @@ export function buildToolbar(input: ToolbarInput): ToolbarGroup[] {
       })),
     );
   }
+
+  // Known formats, each once, in the given order (`resolveConfig` already filters them)
+  const formats = toolbar.export
+    ? (input.export?.formats ?? []).filter((f, i, all) => Object.hasOwn(EXPORT_LABELS, f) && all.indexOf(f) === i)
+    : [];
+  if (formats.length) {
+    groups.push({
+      key: 'export',
+      className: 'gantt-tb-group gantt-tb-export-group',
+      role: null,
+      ariaLabel: null,
+      items: [
+        {
+          ...iconButton('export', 'export', labels.exportMenu, { type: 'exportMenu' }),
+          className: 'gantt-tb-btn gantt-tb-export',
+          haspopup: 'menu',
+          expanded: false,
+        },
+      ],
+      menu: formats.map((format): ToolbarItem => ({
+        focusKey: `export:${format}`,
+        className: 'gantt-tb-menu-item',
+        role: null,
+        checked: null,
+        icon: null,
+        text: labels[EXPORT_LABELS[format]],
+        ariaLabel: null,
+        title: null,
+        ...NO_STATE,
+        action: { type: 'export', format },
+      })),
+    });
+  }
   return groups;
 }
 
@@ -496,10 +589,12 @@ const METRICS = {
 } as const;
 
 /**
- * Groups moved into the More menu while the toolbar is too narrow, in this order. The panel toggle,
- * the history group (undo · redo) and the zoom buttons never move.
+ * Groups moved into the More menu while the toolbar is too narrow, in this order: the Export
+ * button first (its items become a More section, never a nested menu), then the zoom levels, the
+ * views and today. The panel toggle, the history group (undo · redo) and the zoom buttons never
+ * move. A group the toolbar doesn't have is skipped.
  */
-export const TOOLBAR_OVERFLOW_ORDER: readonly ToolbarGroupKey[] = ['levels', 'views', 'today'];
+export const TOOLBAR_OVERFLOW_ORDER: readonly ToolbarGroupKey[] = ['export', 'levels', 'views', 'today'];
 
 /** Sizes `estimateToolbarWidth` reads. */
 export interface ToolbarMetricsInput {
@@ -543,7 +638,8 @@ function controlWidth(item: ToolbarItem, controlSize: number, fontPx: number): n
  * gap and separator between groups and every control (icons, labels at `fontPx` with an average
  * glyph width, padding, at least `controlSize` square). Deterministic and DOM-free, on the generous
  * side so a toolbar estimated to fit does fit; `0` for no group. Content outside the model (the
- * legend in the toolbar, Angular's `[ganttToolbar]` slot) is not counted.
+ * legend in the toolbar, Angular's `[ganttToolbar]` slot) is not counted, nor are menu items
+ * (`ToolbarGroup.menu`: the export formats open in a popup; the Export button is counted).
  */
 export function estimateToolbarWidth(groups: readonly ToolbarGroup[], metrics: ToolbarMetricsInput): number {
   if (!groups.length) return 0;
@@ -558,7 +654,10 @@ export function estimateToolbarWidth(groups: readonly ToolbarGroup[], metrics: T
 
 /** One item of the More menu: a moved control. */
 export interface ToolbarMenuItem {
-  /** `data-focus-key`: `menu:` + the control's toolbar focus key (`menu:zoom:Day`, `menu:view:table`, `menu:today`) */
+  /**
+   * `data-focus-key`: `menu:` + the control's toolbar focus key (`menu:zoom:Day`, `menu:view:table`,
+   * `menu:today`, `menu:export:svg`)
+   */
   focusKey: string;
   /** `class` of the `button`: always `gantt-tb-menu-item` */
   className: string;
@@ -583,7 +682,11 @@ export interface ToolbarMenuSection {
   key: ToolbarGroupKey;
   /** `class` of the group div: always `gantt-tb-menu-group` */
   className: string;
-  /** `aria-label` of the group (the radio groups' labels), `null` for no attribute (today) */
+  /**
+   * `aria-label` of the group (the radio groups' labels; the export section of the More menu: the
+   * Export button's name, `labels.exportMenu`), `null` for no attribute (today; the Export menu's
+   * own section, as the menu is named)
+   */
   ariaLabel: string | null;
   items: ToolbarMenuItem[];
 }
@@ -606,6 +709,8 @@ export interface ToolbarLayoutInput {
   labels: Pick<GanttLabels, 'more'>;
   /** The More menu is open: `aria-expanded` of the More button (default `false`) */
   menuOpen?: boolean | undefined;
+  /** The Export menu is open: `aria-expanded` of the Export button (default `false`) */
+  exportMenuOpen?: boolean | undefined;
 }
 
 export interface ToolbarLayout {
@@ -613,6 +718,11 @@ export interface ToolbarLayout {
   groups: ToolbarGroup[];
   /** The More menu's sections in display order, or `null` when every group shows (no More button) */
   menu: ToolbarMenuSection[] | null;
+  /**
+   * The Export menu: one section (the export group's `menu` items) while the export group shows
+   * in the toolbar, `null` otherwise (no export group, or moved into More)
+   */
+  exportMenu: ToolbarMenuSection[] | null;
 }
 
 /** The More button's group (`div.gantt-tb-group.gantt-tb-more-group`). */
@@ -622,6 +732,7 @@ function moreGroup(labels: Pick<GanttLabels, 'more'>, open: boolean): ToolbarGro
     className: 'gantt-tb-group gantt-tb-more-group',
     role: null,
     ariaLabel: null,
+    menu: null,
     items: [
       {
         focusKey: 'more',
@@ -657,17 +768,62 @@ function menuItem(item: ToolbarItem): ToolbarMenuItem {
 }
 
 /**
+ * The Export menu of a group with a menu (the export group, `ToolbarGroup.menu`): one
+ * `gantt-tb-menu-group` section of its format items as menu items (`menuitem`, focus keys
+ * `menu:export:<format>`), unnamed (the menu itself carries `labels.exportMenu`). `[]` for a group
+ * without a menu. `layoutToolbar` returns it as `ToolbarLayout.exportMenu` while the group shows.
+ */
+export function exportMenuSections(group: ToolbarGroup): ToolbarMenuSection[] {
+  if (!group.menu?.length) return [];
+  return [{ key: group.key, className: 'gantt-tb-menu-group', ariaLabel: null, items: group.menu.map(menuItem) }];
+}
+
+/**
+ * A group moved into the More menu as one section: its menu's items when it has one (the export
+ * formats, named by the group's button: a menu is never nested), else its controls.
+ */
+function moreSection(group: ToolbarGroup): ToolbarMenuSection {
+  return {
+    key: group.key,
+    className: 'gantt-tb-menu-group',
+    ariaLabel: group.menu ? (group.ariaLabel ?? group.items[0]?.ariaLabel ?? null) : group.ariaLabel,
+    items: (group.menu ?? group.items).map(menuItem),
+  };
+}
+
+/** `groups` with the Export button's `aria-expanded` set to `open` (the same group objects where it already is). */
+function withExportExpanded(groups: readonly ToolbarGroup[], open: boolean): ToolbarGroup[] {
+  return groups.map(g =>
+    g.key === 'export' && g.items[0]?.expanded !== open
+      ? { ...g, items: g.items.map(i => (i.action.type === 'exportMenu' ? { ...i, expanded: open } : i)) }
+      : g,
+  );
+}
+
+/** `ToolbarLayout.exportMenu` for the groups that show: the export group's menu, else `null`. */
+function exportMenuOf(shown: readonly ToolbarGroup[]): ToolbarMenuSection[] | null {
+  const group = shown.find(g => g.key === 'export');
+  return group ? exportMenuSections(group) : null;
+}
+
+/**
  * Fit the toolbar to `width`: with `overflow: 'menu'`, while the groups don't fit
- * (`estimateToolbarWidth`), move the zoom levels, then the views, then today into a More menu
- * (`TOOLBAR_OVERFLOW_ORDER`), stopping as soon as the rest and the More button fit. The panel
- * toggle, Undo / Redo and the zoom buttons always stay (`estimateToolbarWidth` counts them);
- * whatever still doesn't fit wraps (CSS). A toolbar that
- * fits, an unmeasured width and `overflow: 'wrap'` give the groups as they are and no menu, so the
- * output only changes while the toolbar is too narrow.
+ * (`estimateToolbarWidth`), move the export group, then the zoom levels, then the views, then today
+ * into a More menu (`TOOLBAR_OVERFLOW_ORDER`), stopping as soon as the rest and the More button fit.
+ * The panel toggle, Undo / Redo and the zoom buttons always stay (`estimateToolbarWidth` counts
+ * them); whatever still doesn't fit wraps (CSS). A toolbar that fits, an unmeasured width and
+ * `overflow: 'wrap'` give the groups as they are and no menu, so the output only changes while the
+ * toolbar is too narrow. The More sections keep the display order; a moved export group becomes a
+ * section of its format items named `labels.exportMenu` (never a nested menu).
+ *
+ * The export group (`toolbar.export`): its button's `aria-expanded` follows `exportMenuOpen`, and
+ * `exportMenu` holds its menu (`exportMenuSections`) while it shows in the toolbar; `null` without
+ * it or once it has moved into More. Without an export group the layout is the one before Phase 12.
  */
 export function layoutToolbar(input: ToolbarLayoutInput): ToolbarLayout {
-  const { groups, width } = input;
-  const all: ToolbarLayout = { groups: [...groups], menu: null };
+  const { width } = input;
+  const groups = withExportExpanded(input.groups, input.exportMenuOpen === true);
+  const all: ToolbarLayout = { groups, menu: null, exportMenu: exportMenuOf(groups) };
   if (input.overflow !== 'menu' || !(width > 0) || !groups.length) return all;
   const metrics: ToolbarMetricsInput = { controlSize: input.controlSize, fontPx: input.fontPx };
   if (estimateToolbarWidth(groups, metrics) <= width) return all;
@@ -681,20 +837,18 @@ export function layoutToolbar(input: ToolbarLayoutInput): ToolbarLayout {
     if (estimateToolbarWidth([...kept, more], metrics) <= width) break;
   }
   if (!moved.size) return all;
+  const kept = groups.filter(g => !moved.has(g.key));
   return {
-    groups: [...groups.filter(g => !moved.has(g.key)), more],
-    menu: groups
-      .filter(g => moved.has(g.key))
-      .map(g => ({
-        key: g.key,
-        className: 'gantt-tb-menu-group',
-        ariaLabel: g.ariaLabel,
-        items: g.items.map(menuItem),
-      })),
+    groups: [...kept, more],
+    menu: groups.filter(g => moved.has(g.key)).map(moreSection),
+    exportMenu: exportMenuOf(kept),
   };
 }
 
-/** Every item of the More menu in display (and arrow-key) order: `reduceMenu`'s `count` and indexes. */
+/**
+ * Every item of a menu (`ToolbarLayout.menu`: More, or `ToolbarLayout.exportMenu`: Export) in
+ * display (and arrow-key) order: `reduceMenu`'s `count` and indexes.
+ */
 export function toolbarMenuItems(menu: readonly ToolbarMenuSection[] | null): ToolbarMenuItem[] {
   return menu ? menu.flatMap(s => s.items) : [];
 }

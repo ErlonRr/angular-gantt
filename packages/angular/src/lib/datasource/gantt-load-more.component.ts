@@ -134,6 +134,12 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
         outline: 2px solid var(--gantt-focus-ring);
         outline-offset: 1px;
       }
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no footer */
+      @media print {
+        :host {
+          display: none;
+        }
+      }
       /* Forced colours (D25): the loading button GrayText, as the Web Component's */
       @media (forced-colors: active) {
         .gantt-load-more-btn[aria-disabled='true'] {

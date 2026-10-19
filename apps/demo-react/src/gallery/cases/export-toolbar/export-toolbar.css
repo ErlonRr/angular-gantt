@@ -1,0 +1,10 @@
+/*
+ * Forced colours (Windows High Contrast): the built-in part of a flag bar follows the chart's own
+ * rules, the pennant keeps its fill attribute. Its `part` name (flagBar.ts) lets page CSS reach it
+ * inside the chart's shadow root with ::part().
+ */
+@media (forced-colors: active) {
+  gantry-element::part(flag-pennant) {
+    fill: CanvasText;
+  }
+}

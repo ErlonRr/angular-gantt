@@ -240,8 +240,14 @@ const RECORDED_EVENTS = [
   'dependency-created',
   'dependency-deleted',
   'history-change',
+  // Phase 12: `download()` / `print()` (toolbar or API): the cancelable before-export, then export
+  'before-export',
+  'export',
 ] as const;
 export type RecordedEvent = (typeof RECORDED_EVENTS)[number];
+
+/** What `download()` / `print()` export (core `GanttExportFormat`). */
+export type ExportFormat = 'svg' | 'png' | 'csv' | 'print';
 
 /** px per day of the built-in zoom levels (core `DEFAULT_ZOOM_LEVELS`). */
 export const LEVEL_PX_PER_DAY: Record<string, number> = {
@@ -304,6 +310,17 @@ export interface GanttSetup {
   box?: { width: number; height: number };
   /** Every `before-change` is vetoed with `detail.preventDefault()`, after it is recorded (phase 11) */
   veto?: boolean;
+  /**
+   * `before-export` of these formats is vetoed after it is recorded (phase 12): `event.preventDefault()`
+   * in the Web Component, `detail.preventDefault()` in Angular (outputs are not cancelable events)
+   */
+  vetoExport?: ExportFormat[];
+  /**
+   * Tasks with `barType: 'e2e-custom'` are custom bars (phase 12): the Web Component's `renderBar`
+   * returns a path marked `data-e2e-custom="<id>"`; Angular's fixture always registers a bar
+   * component for that type that paints the same mark
+   */
+  customBars?: boolean;
 }
 
 /** What `Gantt.set` changes after the chart is open. */
@@ -314,6 +331,7 @@ export interface GanttPatch {
   loading?: boolean;
   errorMessage?: string | null;
   veto?: boolean;
+  vetoExport?: ExportFormat[];
 }
 
 export const DEFAULT_OPTIONS: Record<string, unknown> = { viewMode: 'Day', initialScroll: false };
@@ -526,6 +544,29 @@ export class Gantt {
           el.addEventListener('before-change', e => {
             if (w['__GANTRY_VETO__']) (e as CustomEvent<{ preventDefault(): void }>).detail.preventDefault();
           });
+          // The export veto: the Web Component's event is cancelable itself
+          w['__GANTRY_VETO_EXPORT__'] = f.vetoExport ?? [];
+          el.addEventListener('before-export', e => {
+            const format = (e as CustomEvent<{ format: string }>).detail.format;
+            if ((w['__GANTRY_VETO_EXPORT__'] as string[]).includes(format)) e.preventDefault();
+          });
+          if (f.customBars) {
+            // The built-in bar with a marked path on top (the Angular fixture's E2eCustomBarComponent)
+            el['renderBar'] = (
+              ctx: { row: { task: { id: string }; barType: string }; visual: { path: string } },
+              renderDefault: () => SVGElement,
+            ) => {
+              if (ctx.row.barType !== 'e2e-custom') return null;
+              const g = renderDefault();
+              const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+              path.setAttribute('class', 'e2e-custom-bar');
+              path.setAttribute('d', ctx.visual.path);
+              path.setAttribute('fill', '#7C3AED');
+              path.setAttribute('data-e2e-custom', ctx.row.task.id);
+              g.append(path);
+              return g;
+            };
+          }
           old.replaceWith(el);
         },
         [fx, RECORDED_EVENTS, reviveSource()] as const,
@@ -566,6 +607,9 @@ export class Gantt {
           if (p.loading !== undefined) g['loading'] = p.loading;
           if (p.errorMessage !== undefined) g['errorMessage'] = p.errorMessage;
           if (p.veto !== undefined) (window as unknown as Record<string, unknown>)['__GANTRY_VETO__'] = p.veto;
+          if (p.vetoExport !== undefined) {
+            (window as unknown as Record<string, unknown>)['__GANTRY_VETO_EXPORT__'] = p.vetoExport;
+          }
         },
         [patch, this.setup.tooltipRender ?? false, reviveSource()] as const,
       );
@@ -590,6 +634,27 @@ export class Gantt {
           (...x: unknown[]) => unknown
         >;
         return JSON.parse(JSON.stringify(target[m](...(revive(a) as unknown[])) ?? null)) as unknown;
+      },
+      [method, args, reviveSource()] as const,
+    ) as Promise<R>;
+  }
+
+  /**
+   * Call an async public method of the chart and await it (`exportSvg`, `exportCsv`, `download`,
+   * `print`…): its result as JSON (a `Blob` crosses as `{}`, read it in the page instead).
+   */
+  callAsync<R = unknown>(method: string, ...args: unknown[]): Promise<R> {
+    return this.page.evaluate(
+      async ([m, a, src]) => {
+        // eslint-disable-next-line @typescript-eslint/no-implied-eval
+        const revive = new Function(`return ${src}`)() as (v: unknown) => unknown;
+        const w = window as unknown as { __GANTRY_API__?: { chart: Record<string, unknown> } };
+        const target = (w.__GANTRY_API__?.chart ?? document.querySelector('gantry-element')) as unknown as Record<
+          string,
+          (...x: unknown[]) => unknown
+        >;
+        const result = await target[m](...(revive(a) as unknown[]));
+        return JSON.parse(JSON.stringify(result ?? null)) as unknown;
       },
       [method, args, reviveSource()] as const,
     ) as Promise<R>;

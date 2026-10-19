@@ -40,6 +40,8 @@ const EVENT_NAMES: Record<string, { callback: string; vue: string; angular: stri
     angular: '(dependencyDeleted)',
   },
   'history-change': { callback: 'onHistoryChange', vue: '@history-change', angular: '(historyChange)' },
+  'before-export': { callback: 'onBeforeExport', vue: '@before-export', angular: '(beforeExport)' },
+  export: { callback: 'onExport', vue: '@export', angular: '(export)' },
 };
 
 const API = GANTRY_API;
@@ -342,7 +344,7 @@ type SectionId = 'properties' | 'methods' | 'events' | 'css-properties' | 'parts
         </div>
         <p class="api-note">
           <app-inline-code
-            text="Angular’s \`(viewModeChange)\` emits the level itself (it is the \`[(viewMode)]\` model) and \`[(series)]\` is a model (the tasks the chart applied); the other payloads are the same. Veto \`before-change\` with \`detail.preventDefault()\` in every binding (the element’s event also takes \`event.preventDefault()\`)."
+            text="Angular’s \`(viewModeChange)\` emits the level itself (it is the \`[(viewMode)]\` model) and \`[(series)]\` is a model (the tasks the chart applied); the other payloads are the same. Veto \`before-change\` and \`before-export\` with \`detail.preventDefault()\` in every binding (the element’s events also take \`event.preventDefault()\`)."
           />
           See the <a class="gs-link" routerLink="/frameworks">Frameworks</a> page for each binding.
         </p>

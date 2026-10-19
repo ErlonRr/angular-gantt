@@ -12,7 +12,7 @@
  * persistent nodes and caches; `disconnect()` runs when the element leaves the document.
  */
 
-import type { Announcer, GanttFlatRow, GanttView } from '@gantryjs/core';
+import type { Announcer, GanttExportFormat, GanttExportTrigger, GanttFlatRow, GanttView } from '@gantryjs/core';
 import type { Editor } from '../engine/edit';
 import type { Graph } from '../engine/engine';
 import type { Inputs } from '../engine/inputs';
@@ -95,6 +95,13 @@ export interface LayerContext {
    * width it sets (`reportPanel`; never for a width the group applied)
    */
   readonly sync: Pick<SyncLayer, 'reportPanel'>;
+  /**
+   * Runs an export from the toolbar's Export menu: `download(format)`, or `print()` for
+   * `'print'`, with `trigger` (plan §3c). The engine loads the export code on first use
+   * (`import('../export/run')`, a lazy chunk). Resolves `false` when `before-export` vetoed it or
+   * a print is running; never rejects (a toolbar failure goes to the alert region).
+   */
+  readonly runExport: (format: GanttExportFormat, trigger: GanttExportTrigger) => Promise<boolean>;
 }
 
 /** One region's painter. */

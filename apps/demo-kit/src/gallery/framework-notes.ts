@@ -57,6 +57,15 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     cases: ['controlled'],
   },
   {
+    id: 'before-export',
+    frameworks: ALL,
+    area: 'Events',
+    text: 'Veto a `download()` or `print()`, from the toolbar’s Export menu or from code, by calling `preventDefault()` on the `before-export` detail: `(beforeExport)` in Angular, `onBeforeExport` in React and Svelte, `@before-export` in Vue. The Web Component’s event is also cancelable, so `event.preventDefault()` works there too. Either way the veto must be synchronous. Angular emits the event inside the `download()` / `print()` call; the Web Component (and so React, Vue and Svelte) fires it once its export code has loaded (a lazy chunk, fetched on the first export), so code right after the call runs before it. Every binding draws the chart as it was when the method was called.',
+    workaround:
+      'To do something else with the file (upload it, say), veto the download and call `exportSvg()`, `exportPng()` or `exportCsv()` yourself: they return the data and fire no event.',
+    cases: ['export-toolbar'],
+  },
+  {
     id: 'empty-content',
     frameworks: ALL,
     area: 'Custom content',
@@ -70,7 +79,16 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     frameworks: ALL,
     area: 'Custom content',
     text: 'Custom bars are components in Angular (`provideGanttBar`, extending `GanttBarBase`); the other bindings use `renderBar`, a function that returns an SVG element, so no framework component renders inside a bar, and the element sits in the chart’s shadow root (page CSS reaches it only through `::part`).',
-    cases: ['custom-bars'],
+    cases: ['custom-bars', 'export-toolbar'],
+  },
+  {
+    id: 'export-custom-bars',
+    frameworks: ALL,
+    area: 'Export',
+    text: 'Exports draw custom bars as on screen: the Web Component, React, Vue and Svelte serialize the SVG element `renderBar` returns, and Angular renders each custom bar component once off-screen and serializes it (a component that extends a built-in bar counts as custom; a built-in component reused for another `barType` is drawn as built-in, and so is every bar during server rendering). Only attributes and inline styles travel: classes and stylesheet rules (page CSS, `::part`, an Angular component’s `styles`) don’t, and `foreignObject` and scripts are dropped.',
+    workaround:
+      "Paint custom bars with attributes (`fill`, `stroke`; `[attr.fill]` in an Angular template), from `ctx.visual.paint` or your own colours, or export them as built-in bars with `customBars: 'builtin'`.",
+    cases: ['export-toolbar'],
   },
   {
     id: 'custom-cells',
@@ -185,6 +203,32 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     workaround:
       'Where the first frame matters, start narrow screens in the chart view yourself (`options.view`, from a media query or the user agent on the server).',
     cases: ['responsive'],
+  },
+  {
+    id: 'export-methods',
+    frameworks: ALL,
+    area: 'Methods',
+    text: "The export methods `exportSvg()`, `exportPng()`, `exportCsv()`, `download(format)` and `print()` are async (they return promises): in Angular on the component (`chart = viewChild.required(GantryComponent)`, then `chart().download('svg')`), on the element itself for the Web Component, on the `ref` in React (`ref.current?.download('svg')`), on the component ref’s `element` in Vue (`chart.value?.element?.download('svg')`), and through `bind:element` in Svelte.",
+    workaround:
+      'Catch the rejection: a PNG too large for the browser’s canvas, or a print of more than `maxPages` pages, fails with a `RangeError` (an SVG has no such limit). In the Web Component (and so React, Vue and Svelte) every export method, `exportSvg()` and `exportCsv()` included, also rejects when its export code (loaded on the first export) can’t be fetched, offline after a new deploy say; the next call tries again.',
+    cases: ['export-image', 'export-csv', 'print'],
+  },
+  {
+    id: 'print-css',
+    frameworks: ALL,
+    area: 'Styling',
+    text: 'Printing the page (Ctrl+P): the chart hides its toolbar, splitter and overlays in `@media print` by itself. Your own print rules reach the Angular chart’s light DOM directly (`gantry .gantt-…`); the Web Component (and so React, Vue and Svelte) needs `gantry-element::part(…)`. Either way the page prints only the mounted rows (those in view): the chart doesn’t draw the others.',
+    workaround: 'To print every row, with the header and the task list on each page, call `print()`.',
+    cases: ['print'],
+  },
+  {
+    id: 'export-ssr',
+    frameworks: ALL,
+    area: 'Server rendering',
+    text: 'On the server, Angular’s `exportSvg()` and `exportCsv()` work (custom bars are drawn as built-in bars), while `exportPng()`, `download()` and `print()` need a browser: they reject before `(beforeExport)` is emitted. The React, Vue and Svelte wrappers render an empty `<gantry-element>` on the server.',
+    workaround:
+      'Elsewhere, export on the server with core: `exportChartSvg(createExportSource({ tasks, options }))` and `exportChartCsv(…)` run in Node.',
+    cases: [],
   },
 ];
 

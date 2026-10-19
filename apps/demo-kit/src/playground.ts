@@ -3,7 +3,8 @@
  * site's /playground page). Controls edit a flat `PlaygroundState`; `playgroundOptions()` turns it
  * into the `GanttOptions` the preview runs and `playgroundCode()` prints those same options in the
  * syntax of each framework. A setup travels in links through `encodeState()` / `decodeState()`.
- * `editEventText()` words the editing events the same way in both event logs.
+ * `editEventText()` and `exportEventText()` word the editing and export events the same way in both
+ * event logs.
  */
 
 import {
@@ -13,8 +14,11 @@ import {
   describeChange,
   type DependencyChangeEvent,
   type GanttBeforeChangeEvent,
+  type GanttBeforeExportEvent,
   type GanttDensity,
   type GanttEditingOptions,
+  type GanttExportEvent,
+  type GanttExportOptions,
   type GanttHistoryState,
   type GanttOptions,
   type GanttRollupOptions,
@@ -28,6 +32,7 @@ import {
   type WeekStart,
 } from '@gantryjs/core';
 import type { FrameworkId } from './site';
+import { formatBytes } from './gallery/export-log';
 
 export interface PlaygroundState {
   viewMode: string;
@@ -86,6 +91,13 @@ export interface PlaygroundState {
   linkParentChild: boolean;
   historyLimit: number;
   toolbarUndo: boolean;
+  toolbarExport: boolean;
+  pngScale: number;
+  printPaper: string;
+  printOrientation: string;
+  printFit: string;
+  csvValues: string;
+  csvBom: boolean;
 }
 
 export type PlaygroundKey = keyof PlaygroundState;
@@ -147,6 +159,14 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   linkParentChild: false,
   historyLimit: 100,
   toolbarUndo: true,
+  // `export` (resolveExport) and `toolbar.export`: the core defaults, left out of the code
+  toolbarExport: false,
+  pngScale: 2,
+  printPaper: 'a4',
+  printOrientation: 'landscape',
+  printFit: 'width',
+  csvValues: 'data',
+  csvBom: true,
 };
 
 interface ControlBase {
@@ -739,6 +759,83 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
     ],
   },
   {
+    title: 'Export',
+    controls: [
+      {
+        kind: 'check',
+        key: 'toolbarExport',
+        label: 'Export menu',
+        option: 'toolbar.export',
+        hint: 'A toolbar button that saves the plan as SVG, PNG or CSV, or prints it: turn it on to try the options below.',
+      },
+      {
+        kind: 'range',
+        key: 'pngScale',
+        label: 'PNG scale',
+        option: 'export.png.scale',
+        min: 1,
+        max: 4,
+        unit: '×',
+        hint: 'Image pixels per screen pixel, lowered when the image would be too large for the browser.',
+      },
+      {
+        kind: 'select',
+        key: 'printPaper',
+        label: 'Paper',
+        option: 'export.print.paper',
+        choices: [
+          ['a4', 'A4'],
+          ['a3', 'A3'],
+          ['letter', 'Letter'],
+          ['legal', 'Legal'],
+        ],
+        hint: 'Print… lays every row out on pages of this size; Ctrl+P prints only the page as you see it.',
+      },
+      {
+        kind: 'segmented',
+        key: 'printOrientation',
+        label: 'Orientation',
+        option: 'export.print.orientation',
+        choices: [
+          ['landscape', 'Landscape'],
+          ['portrait', 'Portrait'],
+          ['auto', 'Auto'],
+        ],
+        hint: 'Auto turns the page to the plan: landscape when it is wider than tall.',
+      },
+      {
+        kind: 'segmented',
+        key: 'printFit',
+        label: 'Fit',
+        option: 'export.print.fit',
+        choices: [
+          ['width', 'Page width'],
+          ['page', 'One page'],
+          ['none', 'Actual size'],
+        ],
+        hint: 'Page width shrinks the plan to the page (down to half size), then adds pages across. Rows are never cut.',
+      },
+      {
+        kind: 'segmented',
+        key: 'csvValues',
+        label: 'CSV values',
+        option: 'export.csv.values',
+        choices: [
+          ['data', 'Data'],
+          ['display', 'As shown'],
+        ],
+        hint: 'Data: ISO dates, numbers and keys for a spreadsheet. As shown: the texts of the cells.',
+      },
+      {
+        kind: 'check',
+        key: 'csvBom',
+        label: 'Byte order mark',
+        option: 'export.csv.bom',
+        hint: 'Starts the downloaded CSV with one, so Excel reads it as UTF-8.',
+      },
+    ],
+  },
+  {
     title: 'State',
     controls: [
       {
@@ -797,6 +894,25 @@ function editingOption(s: PlaygroundState): GanttOptions['editing'] {
   }
   if (s.historyLimit !== PLAYGROUND_DEFAULTS.historyLimit) editing.history = { limit: s.historyLimit };
   return Object.keys(editing).length ? editing : true;
+}
+
+/**
+ * `export` for the state: each format's changed defaults only (an object of unchanged ones prints
+ * nothing, and the chart resolves it to the core defaults).
+ */
+function exportOption(s: PlaygroundState): GanttExportOptions {
+  return {
+    png: { scale: ifChanged(s, 'pngScale', s.pngScale) },
+    print: {
+      paper: ifChanged(s, 'printPaper', s.printPaper as 'a4' | 'a3' | 'letter' | 'legal'),
+      orientation: ifChanged(s, 'printOrientation', s.printOrientation as 'landscape' | 'portrait' | 'auto'),
+      fit: ifChanged(s, 'printFit', s.printFit as 'width' | 'page' | 'none'),
+    },
+    csv: {
+      values: ifChanged(s, 'csvValues', s.csvValues as 'data' | 'display'),
+      bom: ifChanged(s, 'csvBom', s.csvBom),
+    },
+  };
 }
 
 /**
@@ -861,6 +977,7 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       overflow: ifChanged(s, 'toolbarOverflow', s.toolbarOverflow as 'menu' | 'wrap'),
       // The buttons show only while the chart keeps history: the choice counts while editing is on
       undo: editingOn(s) ? ifChanged(s, 'toolbarUndo', s.toolbarUndo) : undefined,
+      export: ifChanged(s, 'toolbarExport', s.toolbarExport),
     },
     legend: { position: ifChanged(s, 'legendPosition', s.legendPosition as 'bottom' | 'toolbar') },
     markers: { lane: ifChanged(s, 'markerLane', MARKER_LANE[s.markerLane] ?? 'auto') },
@@ -872,6 +989,7 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       hideDelay: ifChanged(s, 'tooltipHideDelay', s.tooltipHideDelay),
     },
     editing: editingOption(s),
+    export: exportOption(s),
   };
 }
 
@@ -885,10 +1003,10 @@ export function playgroundCommand(before: PlaygroundState, after: PlaygroundStat
   return after.groupsCollapsed ? 'collapseAll' : 'expandAll';
 }
 
-/** A range value with its unit, as every playground shows it: `36 px`, `600 ms`, `9 h`, `60%`. */
+/** A range value with its unit, as every playground shows it: `36 px`, `600 ms`, `9 h`, `60%`, `2×`. */
 export function valueText(value: number, unit: string | undefined): string {
   if (!unit) return String(value);
-  return unit === '%' ? `${value}%` : `${value} ${unit}`;
+  return unit === '%' || unit === '×' ? `${value}${unit}` : `${value} ${unit}`;
 }
 
 /**
@@ -999,6 +1117,33 @@ export function editEventText<K extends PlaygroundEditEvent>(
   nameOf: NameOf,
 ): string {
   return EDIT_EVENT_TEXT[event](detail, nameOf);
+}
+
+/** The export events both playground logs list, by DOM name, with their details. */
+export interface PlaygroundExportEvents {
+  'before-export': GanttBeforeExportEvent;
+  export: GanttExportEvent;
+}
+export type PlaygroundExportEvent = keyof PlaygroundExportEvents;
+
+const EXPORT_EVENT_TEXT: { [K in PlaygroundExportEvent]: (detail: PlaygroundExportEvents[K]) => string } = {
+  'before-export': d => [d.trigger, d.format, d.fileName].filter(Boolean).join(' · '),
+  export: d =>
+    d.format === 'print'
+      ? `${d.trigger} · print · ${d.pages ?? 0} ${d.pages === 1 ? 'page' : 'pages'}`
+      : `${d.trigger} · ${d.fileName ?? d.format}${d.size == null ? '' : ` · ${formatBytes(d.size)}`}`,
+};
+
+/** The export events, in the order the chart fires them (`export` once the file or print is done). */
+export const PLAYGROUND_EXPORT_EVENTS = Object.keys(EXPORT_EVENT_TEXT) as PlaygroundExportEvent[];
+
+/**
+ * The line both playground logs show for an export event (a `download()` or `print()`, from the
+ * toolbar's Export menu or a script): `toolbar · svg · gantt.svg`, `toolbar · gantt.svg · 24.6 KB`,
+ * `api · print · 3 pages`.
+ */
+export function exportEventText<K extends PlaygroundExportEvent>(event: K, detail: PlaygroundExportEvents[K]): string {
+  return EXPORT_EVENT_TEXT[event](detail);
 }
 
 // ── Code ────────────────────────────────────────────────────

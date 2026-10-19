@@ -56,6 +56,12 @@ const GHOST_I18N: GanttI18n = { labels: DEFAULT_LABELS, formats: DEFAULT_FORMATS
       :host {
         pointer-events: none;
       }
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no drag ghost */
+      @media print {
+        .gantt-drag-preview {
+          display: none;
+        }
+      }
       /* Forced colours (D25): the ghost Highlight (inline SVG paints: !important) */
       @media (forced-colors: active) {
         .gantt-drag-preview {

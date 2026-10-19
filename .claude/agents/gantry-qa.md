@@ -15,7 +15,11 @@ Playwright suite in `e2e/`. You do not edit source files.
    For the examples gallery (case pages in all five frameworks: ready contract, axe, code tabs,
    routes) run `pnpm e2e e2e/gallery.spec.ts` (`-g <case id>` or `-g react` to narrow it). For
    editing (drag + undo, progress grip, links, cells, controlled mode) run
-   `pnpm e2e e2e/editing.spec.ts e2e/gallery-editing.spec.ts`.
+   `pnpm e2e e2e/editing.spec.ts e2e/gallery-editing.spec.ts`. For exports (toolbar menu, downloads,
+   PNG, print, SVG / CSV byte parity WC = Angular, CSP) run
+   `pnpm e2e e2e/export.spec.ts e2e/gallery-export.spec.ts e2e/csp.spec.ts`; `print()` is checked
+   through `e2e/print-stub.ts` (wraps the print frame's `contentWindow.print`, records
+   `window.__prints`, fires `afterprint`), so no dialog opens.
 2. `pnpm build` (skip only if the caller says builds are fresh); if it fails, report the tail
    of the output and stop.
 3. `pnpm e2e [filter]`. When the caller gives an options object, also run

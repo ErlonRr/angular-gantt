@@ -1,7 +1,7 @@
 # Gantry
 
 > A free, full-featured, open-source Gantt chart for **every framework** — Angular, React, Vue, Svelte, or plain JavaScript.
-> Interactive editing (drag & resize with mouse, touch and keyboard, cells, links, progress, undo / redo), dependencies, critical path, baselines, virtual scrolling, theming and i18n — accessible (WCAG 2.2 AA, forced colors), MIT licensed, zero runtime dependencies.
+> Interactive editing (drag & resize with mouse, touch and keyboard, cells, links, progress, undo / redo), dependencies, critical path, baselines, virtual scrolling, export to SVG, PNG and CSV, paginated print, theming and i18n — accessible (WCAG 2.2 AA, forced colors), MIT licensed, zero runtime dependencies.
 
 ![Gantry Banner](https://raw.githubusercontent.com/ErlonRr/gantryjs/main/assets/gantry-banner.png)
 
@@ -84,7 +84,8 @@ On this page: [Timeline](#timeline-header-tiers-and-zoom) · [Week numbering](#w
 [Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
 [Panel and table](#task-list-panel-table-view-and-saved-state) · [Responsive and density](#responsive-layout-and-density) ·
 [Toolbar](#toolbar-legend-and-markers) · [Tooltip](#tooltip) · [States](#loading-error-and-empty-states) ·
-[Synchronised charts](#synchronised-charts) · [Editing](#editing) · [Dates and locales](#dates-locales-and-format-tokens) ·
+[Synchronised charts](#synchronised-charts) · [Editing](#editing) · [Export and print](#export-and-print) ·
+[Dates and locales](#dates-locales-and-format-tokens) ·
 [Theming](#theming) · [Styling hooks](#styling-hooks-across-bindings) · [CSP](#content-security-policy) ·
 [SSR](#server-side-rendering-all-bindings) · [Examples](#examples-gallery).
 
@@ -339,7 +340,16 @@ options = {
 
 ```ts
 options = {
-  toolbar: { zoom: true, fit: true, today: true, viewToggle: true, panelToggle: false, overflow: 'menu', undo: true }, // `false` hides the toolbar
+  toolbar: {
+    zoom: true,
+    fit: true,
+    today: true,
+    viewToggle: true,
+    panelToggle: false,
+    overflow: 'menu',
+    undo: true,
+    export: false,
+  }, // `false` hides the toolbar
   legend: { position: 'bottom' }, // 'bottom' | 'toolbar' (`showLegend` turns the legend on)
   markers: { lane: 'auto' }, // 'auto' | true | false
 };
@@ -359,9 +369,16 @@ annotations = [{ x1: new Date(2026, 2, 2), label: { text: 'Code freeze' }, color
   that shows / hides the task list (`aria-pressed`; `labels.showPanel` / `hidePanel`): hiding it
   goes to the chart view (from the table view too), showing it to the split view, as `togglePanel()`.
   `toolbar.overflow` decides what happens when the controls don't fit the measured width:
-  `'menu'` (default) moves the zoom levels, then the views, then Today into a **More** button
+  `'menu'` (default) moves the Export menu, then the zoom levels, then the views, then Today into a **More** button
   (`labels.more`), a WAI-ARIA menu button (↓ / ↑, Home / End, Enter / Space, Esc, Tab and an outside
   press close it); `'wrap'` wraps them onto more lines. A toolbar that fits renders as it always did.
+- **Export menu.** `toolbar.export` (default `false`) adds an Export icon button (`labels.exportMenu`) after the view
+  switch. It opens a menu with one item per [`export.formats`](#export-and-print) entry (`labels.exportSvg` "SVG image",
+  `exportPng` "PNG image", `exportCsv` "CSV table", `exportPrint` "Print…"; no formats, no button): an item runs
+  `download(format)` or `print()` with `trigger: 'toolbar'`. Same keys and focus rules as More (↓ opens on the first
+  item, ↑ on the last; focus goes back to the button after an item), and one of the two menus is open at a time. It is
+  the first group to move into More, where its formats become a section named `labels.exportMenu` (never a nested
+  menu). With `toolbar.export` off the toolbar is unchanged.
 - **Undo and Redo.** `toolbar.undo` (default `true`) adds two icon buttons after the panel toggle while the chart
   keeps an [editing history](#history) (`editing` on, not `controlled`): `labels.undo` / `labels.redo`,
   `aria-disabled` while there is nothing to undo or redo, in the toolbar's arrow-key set and never moved into the
@@ -835,6 +852,312 @@ drops them. `PagedLoader.patch()` is the same in `@gantryjs/core`.
 - A rolled-up parent (`rollup.dates`) and an `editable: false` task no longer start a drag.
 - In the Web Component, `updateTask()` / `appendTasks()` write the raw input (the data source's `patch()`), as Angular does.
 
+### Export and print
+
+```ts
+options = {
+  toolbar: { export: true }, // an Export menu in the toolbar (default false)
+  export: {
+    fileName: 'roadmap', // or format => `roadmap-${format}`; default 'gantt'
+    formats: ['svg', 'png', 'csv', 'print'], // the Export menu's items, in order
+    svg: { theme: 'light' }, // each format's defaults (tables below)
+    png: { scale: 2 },
+    csv: { delimiter: ';' },
+    print: { paper: 'a4', orientation: 'landscape', fit: 'width' },
+  },
+};
+```
+
+```ts
+const svg = await chart.exportSvg({ range: 'visible' }); // '<svg …>…</svg>'
+const csv = await chart.exportCsv({ columns: 'all' }); // CSV text
+const png = await chart.exportPng({ scale: 3 }); // a Blob
+await chart.download('png', { fileName: 'plan', theme: 'dark' }); // true; false when vetoed
+await chart.print({ paper: 'letter', orientation: 'portrait' }); // true once the print dialog returned
+```
+
+Exports are **drawn again from the chart's model** (`@gantryjs/core`), not copied from the screen: every shown
+row, not only the ones mounted, with resolved colours and no CSS. Both renderers build the same snapshot, so the
+Web Component (and React, Vue, Svelte) and Angular give byte-identical SVG and CSV for the same chart. Every method is
+async; a call's options win over `options.export.<format>`, which wins over the defaults, and an invalid number
+(a scale or limit ≤ 0, a negative margin or one that leaves no room on the paper, fewer than 1 page) keeps the
+default. An export draws the chart as it is when the method is called: changing the tasks right after the call
+doesn't change the file. Try it in the **Export and print**
+cases of the [gallery](#examples-gallery).
+
+| Option            | Default                          | What it does                                                                                                                                                                                                                                                          |
+| ----------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolbar.export`  | `false`                          | The toolbar's [Export menu](#toolbar-legend-and-markers): one item per format, running `download()` or `print()`                                                                                                                                                      |
+| `export.fileName` | `'gantt'`                        | A download's name, or a function of the format (`'svg' \| 'png' \| 'csv'`). Made safe on every OS (`/ \ : * ? " < > \|`, control and bidi characters, leading and trailing dots and spaces removed; at most 120 characters; `CON`, `NUL`… get a `_`), extension added |
+| `export.formats`  | `['svg', 'png', 'csv', 'print']` | The Export menu's items, in order (unknown and repeated ones dropped; an empty list hides the button)                                                                                                                                                                 |
+| `export.svg`      | below                            | `exportSvg()` and `download('svg')` defaults                                                                                                                                                                                                                          |
+| `export.png`      | below                            | `exportPng()` and `download('png')` defaults                                                                                                                                                                                                                          |
+| `export.csv`      | below                            | `exportCsv()` and `download('csv')` defaults                                                                                                                                                                                                                          |
+| `export.print`    | below                            | `print()` defaults                                                                                                                                                                                                                                                    |
+
+**Images** (`svg`, `png` and `print` options):
+
+| Option          | Default                                       | What it does                                                                                                                                                                                                   |
+| --------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `view`          | `'auto'`                                      | The view drawn: `'auto'` = the one shown (task list and timeline in `'split'`, the timeline in `'chart'`, the task list in `'table'`), or `'split'` / `'table'` / `'chart'`                                    |
+| `range`         | `'all'`                                       | `'all'` = the tasks' whole range (and the sync group's), whatever the chart's width; `'visible'` = the part of the timeline on screen; `{ start, end }` = those dates (the timeline is extended, then clipped) |
+| `theme`         | `'current'` (print: `'light'`)                | `'current'` = the palette shown (dark included); `'light'` / `'dark'` = that palette with the chart's theme overrides                                                                                          |
+| `background`    | `'theme'`                                     | `'theme'`, `'transparent'` or a CSS colour (SVG and PNG; print always uses the theme's)                                                                                                                        |
+| `legend`        | as the chart                                  | The legend strip at the bottom (default: `showLegend`, when it has entries)                                                                                                                                    |
+| `today`         | `showToday`                                   | The today line and its header pointer                                                                                                                                                                          |
+| `title`         | `labels.ariaChart`                            | The image's `<title>`; the print document's title (browsers use it as the PDF's name)                                                                                                                          |
+| `description`   | `labels.exportDescription(count, start, end)` | The image's `<desc>` ("12 tasks from Mar 2, 2026 to Apr 30, 2026", dates in `formats.dateFormat`)                                                                                                              |
+| `customBars`    | `'render'`                                    | `'render'` = custom bars as drawn on screen, `'builtin'` = as built-in bars (see [Custom bars](#custom-bars-in-exports))                                                                                       |
+| `svg.scale`     | `1`                                           | The `<svg>`'s `width` / `height` times this (the `viewBox` stays)                                                                                                                                              |
+| `svg.idPrefix`  | `gantry-export-<n>`                           | Prefix of the image's ids (`<prefix>-title`, `<prefix>-desc`…); the default is new for every image                                                                                                             |
+| `png.scale`     | `2`                                           | Pixels per CSS pixel, lowered (in 0.01 steps) until the image fits the limits; below 1 the export fails with a `RangeError`                                                                                    |
+| `png.maxSide`   | `16384`                                       | Largest width or height in pixels                                                                                                                                                                              |
+| `png.maxPixels` | `16777216`                                    | Largest number of pixels (4096 × 4096, safe on iOS)                                                                                                                                                            |
+
+**CSV** (`csv` options):
+
+| Option               | Default     | What it does                                                                                                                                                                                                                    |
+| -------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `columns`            | `'visible'` | `'visible'` = the columns of the view shown (the split panel's in the chart view); `'all'` = every built-in and custom column; or a list of keys: columns, or [raw task fields](#csv) such as `parentId` (unknown keys dropped) |
+| `rows`               | `'all'`     | `'all'` = every loaded task in display order, children of collapsed rows included; `'shown'` = the rows shown                                                                                                                   |
+| `values`             | `'data'`    | `'data'` = values, `'display'` = the cell texts (table below)                                                                                                                                                                   |
+| `delimiter`          | `','`       | `','`, `';'` or `'\t'`                                                                                                                                                                                                          |
+| `header`             | `true`      | A first line with the column labels                                                                                                                                                                                             |
+| `bom`                | `true`      | A UTF-8 byte order mark at the start of a downloaded file, so Excel reads it as UTF-8; `exportCsv()` never adds it                                                                                                              |
+| `neutralizeFormulas` | `true`      | [Formula neutralisation](#csv) (CSV injection)                                                                                                                                                                                  |
+
+**Print** (`print` options; the image options too):
+
+| Option         | Default       | What it does                                                                                                                                                                       |
+| -------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `paper`        | `'a4'`        | `'a4'`, `'a3'`, `'letter'`, `'legal'`, `'tabloid'`, or `{ width, height, unit: 'mm' \| 'in' }`                                                                                     |
+| `orientation`  | `'landscape'` | `'landscape'`, `'portrait'` or `'auto'` (landscape when the drawing is wider than tall)                                                                                            |
+| `margin`       | `10`          | Page margin in mm; twice the margin must stay under the paper's shorter side (a larger one keeps the default; a paper too small for the margin fails with a `RangeError`)          |
+| `fit`          | `'width'`     | `'width'` = the whole width scaled to the page width (never enlarged, at least `minScale`), then pages across; `'page'` = everything on one page; `'none'` = actual size × `scale` |
+| `scale`        | `1`           | Size with `fit: 'none'`                                                                                                                                                            |
+| `minScale`     | `0.5`         | Smallest scale of `fit: 'width'`                                                                                                                                                   |
+| `repeatHeader` | `true`        | The header tiers on every page                                                                                                                                                     |
+| `repeatTable`  | `true`        | The task list on every column of pages (see [Print](#print))                                                                                                                       |
+| `pageNumbers`  | `true`        | A footer "Title · Page n of N" (`labels.printPage`)                                                                                                                                |
+| `maxPages`     | `200`         | More pages fail with a `RangeError`                                                                                                                                                |
+
+#### Methods and events
+
+| Method (Angular: on the component)                | Resolves                                                                                                                                                                    | Rejects                                                                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `exportSvg(options?)` → `Promise<string>`         | The `<svg>` element as text (no XML declaration: ready to inline)                                                                                                           | Only in `<gantry-element>`: when its export code can't be loaded (below)                                                         |
+| `exportCsv(options?)` → `Promise<string>`         | CSV text without the byte order mark                                                                                                                                        | Only in `<gantry-element>`: when its export code can't be loaded (below)                                                         |
+| `exportPng(options?)` → `Promise<Blob>`           | An `image/png` Blob at `scale`, or the largest scale under it that fits the limits                                                                                          | `RangeError` when it fits only below scale 1 (use `exportSvg()`, `print()` or a `range`); `Error` when the browser can't draw it |
+| `download(format, options?)` → `Promise<boolean>` | `true` once the file is handed to the browser; `false` when `before-export` vetoed it. `format` is `'svg'`, `'png'` or `'csv'`; `options` are that format's plus `fileName` | As `exportPng()` for a PNG                                                                                                       |
+| `print(options?)` → `Promise<boolean>`            | `true` once the browser's `print()` returned; `false` when vetoed, or while another print of the chart runs                                                                 | `RangeError` over `maxPages`; `Error` when a page can't be drawn                                                                 |
+
+`exportSvg()`, `exportCsv()` and `exportPng()` return data and fire no event. `download()` and `print()` fire
+`before-export` before any work: call `detail.preventDefault()` there, synchronously, to cancel (the Web
+Component's event is also cancelable: `event.preventDefault()`); the call then resolves `false` and nothing else
+happens. Angular emits `(beforeExport)` inside the call; `<gantry-element>` (and React, Vue, Svelte) loads its export
+code on the first export (a lazy chunk) and fires `before-export` once it has loaded, so code right after the call
+runs first. Either way the file is the chart as it was at the call. Then the file is made and saved (a temporary
+`<a download>` with an object URL, revoked after 30 s) or the pages are printed, and `export` reports it. A failure
+rejects the promise and fires no `export`; in `<gantry-element>` every method also rejects when its export code can't
+be loaded (offline after a new deploy, say), and the next call tries again. An export started from the toolbar never
+rejects: its failure goes to the alert region (`labels.announceExportFailed('PNG image')`, "Couldn’t export the PNG
+image"; a print: `labels.announcePrintFailed`, "Couldn’t print the chart") and the console. Every run is announced:
+`labels.announceExportReady(fileName)` ("roadmap.svg is ready"), `labels.announcePrintReady(pages)` ("Printing 3
+pages"). Under a Content Security Policy, `exportPng()`, `download('png')` and `print()` need `img-src blob:`
+([CSP](#content-security-policy)).
+
+| Event (Angular output · React / Svelte callback · Vue)                   | `detail`                                                                                                                                       |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `before-export` · `(beforeExport)` · `onBeforeExport` · `@before-export` | `GanttBeforeExportEvent` — `{ format, trigger, fileName, defaultPrevented, preventDefault() }`; `fileName` has its extension, `null` for print |
+| `export` · `(export)` · `onExport` · `@export`                           | `GanttExportEvent` — `{ format, trigger, fileName, size, pages }`: `size` in bytes for a file, `pages` for a print (the other `null`)          |
+
+`format` is `'svg' | 'png' | 'csv' | 'print'`, `trigger` `'toolbar' | 'api'`. The methods are on the element, so each
+binding reaches them through its ref:
+
+| Binding       | Call                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Web Component | `await chart.download('svg')`                                                            |
+| Angular       | `chart = viewChild.required(GantryComponent)`, then `await this.chart().download('svg')` |
+| React         | `const chart = useRef<GantryElement>(null)`, then `await chart.current?.download('svg')` |
+| Vue           | `<Gantry ref="chart">`, then `await chart.value?.element?.download('svg')`               |
+| Svelte        | `<Gantry bind:element={chart}>`, then `await chart?.download('svg')`                     |
+
+```ts
+// Web Component: upload the SVG the toolbar would download
+chart.addEventListener('before-export', e => {
+  if (e.detail.format !== 'svg') return;
+  e.preventDefault(); // synchronously; or e.detail.preventDefault()
+  void chart.exportSvg().then(upload);
+});
+chart.addEventListener('export', e => console.log(e.detail.fileName, e.detail.size));
+```
+
+```html
+<!-- Angular -->
+<gantry
+  [series]="tasks"
+  [options]="{ toolbar: { export: true } }"
+  (beforeExport)="$event.format === 'png' && $event.preventDefault()"
+  (export)="log($event)"
+/>
+```
+
+```tsx
+// React (Svelte: the same callback props; Vue: @before-export / @export)
+<Gantry
+  ref={chart}
+  tasks={tasks}
+  options={{ toolbar: { export: true } }}
+  onBeforeExport={d => {
+    if (d.format === 'png') d.preventDefault();
+  }}
+  onExport={d => log(d)}
+/>
+```
+
+#### What an export draws
+
+- **Images** (SVG, PNG, print) draw the view as a document: **every shown row** (collapse state and sort kept, none
+  left out by scrolling or virtualisation), the header tiers and the marker lane, row colours, non-working time (the
+  hatch as a `<pattern>`), grid lines, annotations, the today line and pointer, dependency arrows (critical ones too),
+  bars with their progress, labels, baselines, summary caps, rollup segments and critical tone, and the legend strip.
+  Never the selection, hover, focus ring, grips, link connectors, previews, the drag ghost or readout, the tooltip,
+  an open cell editor, the toolbar, the splitter or scrollbars. An empty chart draws the header and
+  `labels.emptyState`. With a `range`, the bars it doesn't reach are left out (no custom bar is rendered for them);
+  links to them are still drawn.
+- **Collapsed rows** are left out of images, as on screen: call `expandAll()` first, or (headless)
+  `createExportSource({ …, collapsedIds: [] })`. A CSV has them by default (`rows: 'all'`).
+- **Theme.** Every colour is resolved for the export's palette: the file has presentation attributes (`fill`,
+  `stroke`, `font-*`) only — no `var(`, no `<style>`, no styling classes, no `foreignObject`, no script — so it opens
+  as drawn in Illustrator, Inkscape, Office and an `<img>`; nothing in it is loaded from elsewhere. The header's
+  current-period tint becomes the today colour at 14 % opacity.
+- **The SVG** is `role="img"` with `<title>` and `<desc>` (`aria-labelledby`) and `lang` (the locale), every text a
+  real `<text>` (searchable, selectable; a cut task-list cell keeps its full text in a `<title>`), `data-task-id` on
+  rows and bars, the painters' class names (`gantt-bar`, `g-tier`…) for post-processing and numbers rounded to 2
+  decimals. A downloaded `.svg` starts with the XML declaration; `exportSvg()` returns the `<svg>` element alone.
+- **A data source** exports the tasks loaded so far.
+
+#### Custom bars in exports
+
+- **Web Component, React, Vue, Svelte**: while `renderBar` is set, the export calls `renderBar(ctx, renderDefault)`
+  for every row; `null` or `undefined` draws the built-in bar, a node (a decorated `renderDefault()` too) is
+  serialized into the file.
+- **Angular**: each row whose bar type resolves to a component other than the built-in ones (a subclass of a built-in
+  bar counts as custom; a built-in component reused for another `barType` doesn't) is rendered off-screen once,
+  serialized and destroyed. On the server custom bars are drawn as built-in bars.
+- `ctx.theme` and `ctx.visual` are the export's (its palette, paints resolved), and the bar is never selected or
+  draggable. The markup keeps SVG drawing elements only (shapes, text, gradients, patterns, filters, `a`, `use`,
+  `image`): `script`, `style`, `foreignObject`, animations (`set`, `animate`…), `metadata`, HTML and other namespaces
+  are dropped with their content, and so are `on*`, `tabindex` and `autofocus` attributes, `javascript:`,
+  `vbscript:` and `data:` URLs (character references decoded; `data:image/png`, `jpeg`, `gif` and `webp` stay), any
+  `href` but a `#fragment` or such an image, and any `url(…)` but `url(#…)` (a `style` keeps its other
+  declarations): an export never loads anything from elsewhere. Then `var(--gantt-*)` is resolved with the export's
+  theme (values escaped). Headless markup (`createExportSource({ customBar })`) follows the same rules
+  (`sanitizeSvgMarkup` in `@gantryjs/core`).
+- Only attributes and inline styles travel: classes and stylesheet rules (page CSS, `::part()`, an Angular
+  component's `styles`) don't. Paint custom bars with attributes (a `fill` from
+  `resolvePaint(ctx.visual.paint.body, ctx.theme)`, `[attr.fill]` in an Angular template), or export them as built-in
+  bars with `customBars: 'builtin'` (also the way out for an Angular bar that measures the DOM or must be attached to
+  render).
+
+#### CSV
+
+RFC 4180: `\r\n` between records (none after the last), fields that hold the delimiter, `"`, CR or LF quoted, `"`
+doubled. Values per column (`values`; a column's `exportValue(row, ctx)` wins in both modes):
+
+| Column                                         | `'data'` (default)                                                                           | `'display'`     |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------- |
+| `id`, `name`                                   | the text                                                                                     | the cell text   |
+| `start`, `end`, `baselineStart`, `baselineEnd` | local ISO: `2026-03-02` at midnight, else `2026-03-02T09:30` (`:ss` when not zero)           | the cell text   |
+| `duration`                                     | days of the drawn span, a number (`.` decimal, at most 2 decimals)                           | the cell text   |
+| `progress`                                     | 0–100, a number                                                                              | `45%`           |
+| `predecessors`                                 | ids: `research FS+2d; scope SS`                                                              | names, as shown |
+| `status`, `type`                               | the key (`inProgress`, `milestone`; a custom status as it is)                                | the label       |
+| `variance`                                     | signed days, a number                                                                        | the cell text   |
+| your columns                                   | `render` text, else `task[key]` or `task.data[key]` (a date as local ISO, an object as JSON) | the cell text   |
+| a raw task field (no column has the key)       | the field as the chart holds it, under the key (below)                                       | the same        |
+
+**Raw task fields.** A key of `columns` that no column has but that is a task field — `parentId`, `dependency`,
+`collapsed`, `barType`, `status`, `editable`, `draggable`, `barColor`, `rowColor`, `textColor`, `progressColor`,
+`className` (and `id`, `name`, `start`, `end`, `progress`, `type` when a column doesn't take them) — exports the field
+as the chart holds it, with the key as its header, in both `values` modes: a date as local ISO, a number or boolean as
+it is, `dependency` as predecessor ids (`research FS+2d; scope SS`, what the Predecessors cell reads back), an unset
+field empty. So `exportCsv({ columns: ['id', 'name', 'parentId', 'start', 'end', 'dependency'] })` carries the tree
+and the links. Objects (`baseline`, `style`, `data`) are not fields here.
+
+**Formula neutralisation** (`neutralizeFormulas`, OWASP CSV injection): a cell — header cells included — that starts
+with `=`, `+`, `-`, `@`, tab or CR gets a leading `'`, unless it is a plain number (`-3`, `+2.5`, `1e3`), so a
+spreadsheet shows `=HYPERLINK(…)` as text instead of running it. It is applied before quoting.
+
+#### Print
+
+`print()` paginates the drawing in core and prints it through a hidden `about:blank` frame built with DOM APIs (no
+`srcdoc`, no HTML parsing: Trusted Types safe): each page is an `<img>` of an SVG page (`alt` = title and page), the
+`@page` size and margin a constructable stylesheet, the footer real text; the document's title is `title` and its
+`lang` the locale. It waits for every image, calls the frame's `print()`, then removes the frame on `afterprint` (or
+after 60 s). Focus never moves into the frame.
+
+- **Fit.** `'width'` scales the whole width to the page width, never above 1 and not below `minScale`, then adds pages
+  across; `'page'` fits everything on one page (never enlarged); `'none'` prints at `scale`. The task list is never
+  cut: the scale is lowered until it fits a page's width.
+- **Breaks.** Pages break only between rows (a row taller than a page gets a page of its own); a horizontal break
+  moves back to a bottom-tier cell boundary when that keeps at least half the page. Pages run down, then across, at
+  96 px per inch.
+- **Repeats.** `repeatHeader` draws the header on every page (without it, only the first page of each column has it).
+  `repeatTable` draws the task list on every column of pages, but only while it takes at most half of the page's
+  width: a wider task list is printed on the first column of pages only, and "Repeat task list" then changes nothing.
+- The legend goes on the last page of the first column (on a page of its own when it doesn't fit), wrapped at that
+  page's width. `pageNumbers` reserves a 24 px footer. Over `maxPages` the print fails with a `RangeError` ("The
+  print would take N pages, more than maxPages (M)…"): use `fit: 'page'`, a `range` or a larger `maxPages`. A margin
+  that leaves no room on the paper (twice the margin at least its shorter side) fails with a `RangeError` too.
+- **Ctrl+P** prints the page as it is. Both bindings carry `@media print` rules: no toolbar, splitter, load-more
+  footer, live regions, tooltip, readout, bar overlay, row hover or previews, exact colours, no scrollbars. But the
+  chart is virtualised, so only the mounted rows print: `print()` prints every row. Your own print rules reach the
+  Angular chart's light DOM (`gantry .gantt-…`); the Web Component's inner boxes need `gantry-element::part(…)`.
+
+#### On the server and in Node
+
+The export functions are pure core functions: they run in Node, workers and SSR with no DOM.
+`createExportSource({ tasks, options })` builds the chart snapshot a binding would build (the same rows pipeline,
+columns, styles, rollups and critical path), so the same input gives the same file:
+
+```ts
+import { writeFileSync } from 'node:fs';
+import { createExportSource, exportChartCsv, exportChartPages, exportChartSvg, exportFileText } from '@gantryjs/core';
+
+const source = createExportSource({
+  tasks,
+  options: { viewMode: 'Week', labels: { ariaChart: 'Roadmap' } },
+  now: new Date(2026, 0, 15), // the today line (default: the current time)
+  collapsedIds: [], // every row expanded (default: task.collapsed)
+});
+writeFileSync('roadmap.svg', exportFileText('svg', exportChartSvg(source, { theme: 'light' }))); // + XML declaration
+writeFileSync('roadmap.csv', exportFileText('csv', exportChartCsv(source), { bom: true })); // + byte order mark
+const { pages } = exportChartPages(source, { paper: 'letter' }); // one SVG per printed page
+```
+
+`createExportSource` also takes `columns`, `annotations`, `dark`, `sort` (`{ key, dir }`), `view`, `panelWidth`,
+`showLegend` and `customBar` (a function of the bar's context returning SVG markup, or `null` for the built-in bar).
+A PNG needs a canvas: in Node, turn the SVG into one with your own tool. In Angular, `exportSvg()` and `exportCsv()`
+also work during server rendering (custom bars drawn as built-in), while `exportPng()`, `download()` and `print()`
+reject with `Error('Gantry: download() needs a browser')` before `beforeExport`. The React, Vue and Svelte wrappers
+render an empty `<gantry-element>` on the server: export there with core.
+
+#### Limitations
+
+- **Web fonts are not embedded.** The SVG names the theme's `fontFamily`; a PNG and a print draw the SVG as an image,
+  which can't load web fonts, so the system's fallback font is used. End `fontFamily` with a generic family
+  (`'Inter, system-ui, sans-serif'`).
+- **Text is estimated.** With no DOM to measure, an export may cut a label with an ellipsis slightly differently
+  from the screen.
+- **Printing from a frame**: iOS Safari may print the whole page instead of the chart; Firefox's `print()` may return
+  before its dialog closes, so `print()` resolves early and a preview left open for more than 60 s loses its pages.
+  Chromium is tested end to end.
+- **Ctrl+P** prints the mounted rows only; `print()` prints every row.
+- **A data source** exports only the tasks loaded so far.
+- **A PNG** is one image per call (no tiles): a plan larger than the canvas limits fails with a `RangeError` —
+  export an SVG, print it, or pass a `range`.
+
 ### Dates, locales and format tokens
 
 Everything user-facing is translatable. Dates are formatted with the platform's `Intl` API from a
@@ -989,6 +1312,11 @@ React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component
   styles in `<style>` elements: give them the nonce with `ngCspNonce` on the root element or the
   `CSP_NONCE` token (`providers: [{ provide: CSP_NONCE, useValue: nonce }]`).
 - React, Vue and Svelte inherit the Web Component's policy.
+- **[Exports](#export-and-print)** (every binding): `exportPng()`, `download('png')` and `print()` draw the SVG from
+  a `blob:` URL, so they need `img-src blob:` (`data:` is not needed); SVG and CSV downloads need nothing. No Trusted
+  Types sink is used (no `innerHTML`, `srcdoc` or `DOMParser`), and the print frame's CSS is a constructable
+  stylesheet. The Web Component loads its export code on the first export (`import()` of a chunk next to the
+  element's), so `script-src` must allow where the element is served from.
 
 ### Server-side rendering (all bindings)
 
@@ -1008,10 +1336,13 @@ React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component
 
 - **Web Component alone**: importing `@gantryjs/vanilla` on the server is safe (the module top level
   guards `document` / `HTMLElement`); the chart paints in the browser.
+- **Exports in Node**: `createExportSource()` with `exportChartSvg()`, `exportChartCsv()` or `exportChartPages()`
+  from `@gantryjs/core` (see [On the server and in Node](#on-the-server-and-in-node)).
 
 ### Examples gallery
 
-Twenty-five runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing…),
+Twenty-nine runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing, export
+and print…),
 each in **all five** frameworks with the same controls and a code tab. A "Known differences"
 section on the Frameworks page lists what a framework does differently.
 
@@ -1177,6 +1508,11 @@ mouse focuses the timeline viewport, so <kbd>Escape</kbd> cancels the drag.
   `announceRedo`), a link started, selected or deleted, and a cell edit's invalid value (the alert region). Task-list cells
   carry `aria-readonly` while cells are editable; the cell editor is named by `labels.ariaCellEditor(column, task)`,
   `aria-invalid` and `aria-describedby` its message.
+- [Exports](#export-and-print): a download is announced (`labels.announceExportReady`, "roadmap.svg is ready"), and so
+  is a print (`announcePrintReady`, "Printing 3 pages"); a failed export from the toolbar goes to the alert region
+  (`announceExportFailed`, or `announcePrintFailed` for a print). The Export button is a menu button (`aria-haspopup="menu"`, `aria-expanded`), its menu a
+  `menu` of `menuitem`s. An exported SVG is `role="img"` with a `<title>`, a `<desc>` and its texts as text; a
+  printed page is an image whose `alt` is the title and the page number.
 
 ### Forced colors
 
@@ -1196,6 +1532,7 @@ bindings paint with system colours; the look outside that mode doesn't change.
 | Invalid link targets, an invalid cell editor                                               | dashed `CanvasText`                                     |
 | Cell editor                                                                                | `Field` / `FieldText`                                   |
 | Disabled Undo / Redo                                                                       | `GrayText`                                              |
+| The More or Export button while its menu is open                                           | `Highlight`                                             |
 
 A custom `renderBar` SVG and custom Angular bar components keep their own paints unless they add
 forced-colors rules of their own (built-in bars on the critical path carry the class
@@ -1218,26 +1555,27 @@ npm i @gantryjs/angular
 
 ## Features
 
-| Feature            | Detail                                                                                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Signals**        | State in `signal()` / `computed()` / `linkedSignal()`, the zoom level a `model()` (`[(viewMode)]`) — no RxJS                                           |
-| **Zoneless**       | Works with `provideZonelessChangeDetection()`, no `zone.js`                                                                                            |
-| **SSR-safe**       | No browser globals; observers, timers and listeners start after the first browser render                                                               |
-| **Custom bars**    | Any component extending `GanttBarBase`, provided per application, route or component with `provideGanttBar()`                                          |
-| **Virtual scroll** | Rows windowed vertically; header cells, bands and grid lines horizontally — zero CDK                                                                   |
-| **Lazy load**      | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry                                  |
-| **Drag & resize**  | Pointer Events for bars, the splitter and column widths: 3 px mouse threshold, 350 ms touch long-press, auto-scroll at the edges, 24 px resize targets |
-| **Selection**      | Single / Ctrl+Click toggle / Shift+Click range, and the same with `Space` / `Ctrl+Space` / `Shift+Space`                                               |
-| **Editing**        | `options.editing`: cell editors, a progress grip, drawn links, undo / redo and a cancelable `(beforeChange)` — see [Editing](#editing)                 |
-| **Keyboard**       | One tab stop each for the toolbar, the task list (row-first treegrid) and the bars; keyboard move / resize mode; `+` `-` `T` `F` shortcuts             |
-| **Accessibility**  | `region` landmark, `treegrid` task list, bars as a `listbox`, debounced live regions, forced colors, WCAG 2.2 AA palette                               |
-| **Sorting**        | Click a sortable column header: ascending → descending → original order                                                                                |
-| **Tooltip**        | One native popover per chart (Popover API), on hover, focus and tap, `<ng-template ganttTooltip>` content — zero CDK Overlay                           |
-| **Zoom**           | Toolbar, `+` / `-`, Ctrl/⌘ + wheel and pinch at the pointer, fit to screen (`F`, `fitToScreen()`)                                                      |
-| **States**         | `loading` skeleton, `errorMessage` with Retry (`retry` output), `[ganttEmpty]` content                                                                 |
-| **Dark / light**   | Auto `prefers-color-scheme` + manual toggle                                                                                                            |
-| **Animations**     | CSS transitions (panel, table view), off with `prefers-reduced-motion`                                                                                 |
-| **Dependencies**   | None at runtime besides `@gantryjs/core`                                                                                                               |
+| Feature            | Detail                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Signals**        | State in `signal()` / `computed()` / `linkedSignal()`, the zoom level a `model()` (`[(viewMode)]`) — no RxJS                                                 |
+| **Zoneless**       | Works with `provideZonelessChangeDetection()`, no `zone.js`                                                                                                  |
+| **SSR-safe**       | No browser globals; observers, timers and listeners start after the first browser render                                                                     |
+| **Custom bars**    | Any component extending `GanttBarBase`, provided per application, route or component with `provideGanttBar()`                                                |
+| **Virtual scroll** | Rows windowed vertically; header cells, bands and grid lines horizontally — zero CDK                                                                         |
+| **Lazy load**      | Paged `GanttDataSource` over the core `PagedLoader`: accumulates pages, retries automatically, error state with Retry                                        |
+| **Drag & resize**  | Pointer Events for bars, the splitter and column widths: 3 px mouse threshold, 350 ms touch long-press, auto-scroll at the edges, 24 px resize targets       |
+| **Selection**      | Single / Ctrl+Click toggle / Shift+Click range, and the same with `Space` / `Ctrl+Space` / `Shift+Space`                                                     |
+| **Editing**        | `options.editing`: cell editors, a progress grip, drawn links, undo / redo and a cancelable `(beforeChange)` — see [Editing](#editing)                       |
+| **Export & print** | `exportSvg()`, `exportPng()`, `exportCsv()`, `download()`, `print()`, a toolbar Export menu and `(beforeExport)` — see [Export and print](#export-and-print) |
+| **Keyboard**       | One tab stop each for the toolbar, the task list (row-first treegrid) and the bars; keyboard move / resize mode; `+` `-` `T` `F` shortcuts                   |
+| **Accessibility**  | `region` landmark, `treegrid` task list, bars as a `listbox`, debounced live regions, forced colors, WCAG 2.2 AA palette                                     |
+| **Sorting**        | Click a sortable column header: ascending → descending → original order                                                                                      |
+| **Tooltip**        | One native popover per chart (Popover API), on hover, focus and tap, `<ng-template ganttTooltip>` content — zero CDK Overlay                                 |
+| **Zoom**           | Toolbar, `+` / `-`, Ctrl/⌘ + wheel and pinch at the pointer, fit to screen (`F`, `fitToScreen()`)                                                            |
+| **States**         | `loading` skeleton, `errorMessage` with Retry (`retry` output), `[ganttEmpty]` content                                                                       |
+| **Dark / light**   | Auto `prefers-color-scheme` + manual toggle                                                                                                                  |
+| **Animations**     | CSS transitions (panel, table view), off with `prefers-reduced-motion`                                                                                       |
+| **Dependencies**   | None at runtime besides `@gantryjs/core`                                                                                                                     |
 
 ---
 
@@ -1702,22 +2040,24 @@ const routes: Routes = [
 | `errorMessage`                | `string \| null \| undefined`     | `null`: a non-blank message shows the error state with Retry                          |
 | `syncGroup`                   | `GanttSyncGroup \| null`          | `null`: charts sharing a group share range, zoom, scroll and panel width              |
 
-| Output                                    | Payload                                                                                |
-| ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| `viewModeChange`                          | the new zoom level (`ViewMode` or a custom level name)                                 |
-| `taskDragged`                             | `TaskDragEvent`                                                                        |
-| `taskResized`                             | `TaskResizeEvent`                                                                      |
-| `selectionChange`                         | `SelectionChangeEvent`                                                                 |
-| `rowClick` / `rowDblClick`                | `GanttFlatRow` (a double-click on an editable cell fires `rowDblClick` too)            |
-| `stateChange`                             | `GanttState` — panel, view, zoom, column widths, collapsed rows or sort changed        |
-| `loadError`                               | `{ error, page }` — a data-source page failed after its retries                        |
-| `retry`                                   | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }` |
-| `beforeChange`                            | `GanttBeforeChangeEvent` — `$event.preventDefault()` vetoes the change                 |
-| `tasksChange`                             | `GanttTasksChangeEvent` — `{ tasks, change, applied }`                                 |
-| `taskUpdated`                             | `TaskUpdatedEvent` — one per changed task                                              |
-| `taskProgressChanged`                     | `TaskProgressEvent`                                                                    |
-| `dependencyCreated` / `dependencyDeleted` | `DependencyChangeEvent`                                                                |
-| `historyChange`                           | `GanttHistoryState`                                                                    |
+| Output                                    | Payload                                                                                 |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `viewModeChange`                          | the new zoom level (`ViewMode` or a custom level name)                                  |
+| `taskDragged`                             | `TaskDragEvent`                                                                         |
+| `taskResized`                             | `TaskResizeEvent`                                                                       |
+| `selectionChange`                         | `SelectionChangeEvent`                                                                  |
+| `rowClick` / `rowDblClick`                | `GanttFlatRow` (a double-click on an editable cell fires `rowDblClick` too)             |
+| `stateChange`                             | `GanttState` — panel, view, zoom, column widths, collapsed rows or sort changed         |
+| `loadError`                               | `{ error, page }` — a data-source page failed after its retries                         |
+| `retry`                                   | `RetryEvent` — Retry pressed on the error state: `{ source: 'error' \| 'dataSource' }`  |
+| `beforeChange`                            | `GanttBeforeChangeEvent` — `$event.preventDefault()` vetoes the change                  |
+| `tasksChange`                             | `GanttTasksChangeEvent` — `{ tasks, change, applied }`                                  |
+| `taskUpdated`                             | `TaskUpdatedEvent` — one per changed task                                               |
+| `taskProgressChanged`                     | `TaskProgressEvent`                                                                     |
+| `dependencyCreated` / `dependencyDeleted` | `DependencyChangeEvent`                                                                 |
+| `historyChange`                           | `GanttHistoryState`                                                                     |
+| `beforeExport`                            | `GanttBeforeExportEvent` — `$event.preventDefault()` cancels a `download()` / `print()` |
+| `export`                                  | `GanttExportEvent` — `{ format, trigger, fileName, size, pages }`                       |
 
 - **Boolean inputs** take attribute values: `<gantry showLegend>` is `true`, `showToolbar="false"`
   is `false`.
@@ -1754,6 +2094,7 @@ Angular pieces:
 | `GanttTaskBarComponent`, `GanttMilestoneComponent`, `GanttGroupBarComponent` | the built-in bars, reusable for another `barType`                                                             |
 | `GanttDataSource`, `createGanttDataSource`, `GanttDataSourceConfig`          | [lazy loading](#lazy-load-with-ganttdatasource)                                                               |
 | `ColumnDef`                                                                  | `ColumnDef<TemplateRef<ColumnCellContext>, TemplateRef<CellEditorTemplateContext> \| ((ctx) => HTMLElement)>` |
+| `GanttDownloadOptions`                                                       | the options of `download(format, options)`: that format's options and `fileName`                              |
 
 The services, the inner components (canvas, header, task list, toolbar, tooltip, load-more
 footer) and the keyboard directive are internal: drive the chart through its inputs, outputs and
@@ -1781,6 +2122,9 @@ gantt.collapseAll() / expandAll()
 gantt.setColumnVisible(key, visible, view?) / toggleColumnVisible(key, view?)
 gantt.setTheme(override) / patchTheme(patch) / resetTheme()
 gantt.getState(): GanttState / setState(state, emit = true)
+await gantt.exportSvg(options?) / exportCsv(options?)        // Promise<string>; exportPng(options?): Promise<Blob>
+await gantt.download('svg' | 'png' | 'csv', options?)       // Promise<boolean>: false when (beforeExport) vetoed it
+await gantt.print(options?)                                  // Promise<boolean>: every row, on as many pages as it takes
 ```
 
 ---
@@ -1793,7 +2137,9 @@ gantt.getState(): GanttState / setState(state, emit = true)
 `darkMode: 'auto'`, the tooltip popover — starts after the first browser render
 (`afterNextRender`) and stops when the chart is destroyed (`DestroyRef`). The server HTML already
 has the rows, the bars, the theme tokens and the `region` role; with `darkMode: 'auto'` it is
-light until the browser reports the colour scheme.
+light until the browser reports the colour scheme. `exportSvg()` and `exportCsv()` work during server rendering too
+(custom bars drawn as built-in); `exportPng()`, `download()` and `print()` reject there, before `beforeExport` (see
+[On the server and in Node](#on-the-server-and-in-node)).
 
 ---
 

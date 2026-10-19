@@ -36,6 +36,8 @@ export interface FixtureTask {
   /** `GanttTaskStyle` (colours, height, radius, label, className) */
   style?: Record<string, unknown>;
   collapsed?: boolean;
+  /** A custom bar type (`'e2e-custom'`: the harness's custom bar, see `GanttSetup.customBars`) */
+  barType?: string;
 }
 
 /** A day shaded through `options.highlightTime` (functions don't cross into the page, so it travels as data). */
@@ -285,6 +287,8 @@ export const STYLED_OPTIONS: Record<string, unknown> = {
  * `editing` (phase 11) is the light week with `editing: true` (the toolbar's history group, the
  * cells' `aria-readonly`); paint.spec.ts then selects a link, opens an invalid cell editor and
  * hovers a bar (its grips, progress grip and link connectors). Hover opens no tooltip there.
+ * `export` (phase 12) is the light week with `toolbar.export: true`; paint.spec.ts opens the
+ * toolbar's Export menu by keyboard (the export group, its open button and the menu's items).
  */
 export type Scenario =
   | 'light-week'
@@ -297,7 +301,8 @@ export type Scenario =
   | 'forced'
   | 'styled'
   | 'narrow'
-  | 'editing';
+  | 'editing'
+  | 'export';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -311,6 +316,7 @@ export const SCENARIOS: readonly Scenario[] = [
   'styled',
   'narrow',
   'editing',
+  'export',
 ];
 
 /** The `narrow` scenario's box */
@@ -344,6 +350,8 @@ export function paintFixture(scenario: Scenario): PaintFixture {
       return { ...base, box: NARROW_BOX };
     case 'editing':
       return { ...base, options: { ...PAINT_OPTIONS, editing: true, tooltip: { trigger: 'focus' } } };
+    case 'export':
+      return { ...base, options: { ...PAINT_OPTIONS, toolbar: { export: true } } };
     default:
       return base;
   }

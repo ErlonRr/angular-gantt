@@ -20,11 +20,13 @@ import { LEGEND_CSS } from './legend.css';
 import { STATES_CSS } from './states.css';
 import { TOOLTIP_CSS } from './tooltip.css';
 import { READOUT_CSS } from './readout.css';
+import { PRINT_CSS } from './print.css';
 import { FORCED_COLORS_CSS } from './forced-colors.css';
 
 /**
  * The element's CSS text, in cascade order (also the text of the fallback style element). The
- * forced-colours sheet comes last: it overrides every region's colours.
+ * print rules come before the forced-colours sheet, which comes last: it overrides every region's
+ * colours.
  */
 export const BASE_CSS = [
   HOST_CSS,
@@ -38,6 +40,7 @@ export const BASE_CSS = [
   STATES_CSS,
   TOOLTIP_CSS,
   READOUT_CSS,
+  PRINT_CSS,
   FORCED_COLORS_CSS,
 ].join('');
 

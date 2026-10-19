@@ -10,6 +10,8 @@
 //   `data-theme`.
 // - editing (phase 11): axe with an open cell editor holding an invalid value (aria-invalid, the
 //   message under it, the alert region) and in keyboard link mode (the preview, the target connector).
+// - export (phase 12): axe with the toolbar's Export menu open, and with the More menu of a narrow
+//   chart holding the Export section.
 // The Web Component runs in the playground; Angular in the showcase's `/fixture` route, fed through
 // `window.__GANTRY_FIXTURE__` (view, dark mode, extra rows; the editing tests use the `Gantt` harness).
 import AxeBuilder from '@axe-core/playwright';
@@ -262,6 +264,35 @@ for (const target of TARGET_LIST) {
       expect((await focused(chart))?.taskId).toBe('docs');
       await expect(chart.get('path.gantt-link-preview')).toHaveCount(1);
       await expect(chart.get('.gantt-link-connector--target')).toHaveCount(1);
+      expect(await unexpectedViolations(page, target)).toEqual([]);
+    });
+
+    test('axe: no violations with the Export menu open, then with Export in the More menu', async ({ chart, page }) => {
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      const g = new Gantt(chart, target);
+      const options = { viewMode: 'Day', initialScroll: false, toolbar: { export: true } };
+      await g.open({ options });
+      const exportButton = chart.get('[data-focus-key="export"]');
+      await exportButton.focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(exportButton).toHaveAttribute('aria-expanded', 'true');
+      await expect.poll(() => chart.focusedKey()).toBe('menu:export:svg');
+      const menu = chart.get('.gantt-tb-menu[role="menu"]');
+      await expect(menu).toHaveAttribute('aria-label', 'Export');
+      await expect(exportButton).toHaveAttribute('aria-controls', (await menu.getAttribute('id'))!);
+      expect(await unexpectedViolations(page, target)).toEqual([]);
+      await page.keyboard.press('Escape');
+      await expect(menu).toHaveCount(0);
+      await expect.poll(() => chart.focusedKey()).toBe('export');
+
+      await g.open({ options, box: { width: 480, height: 600 } });
+      const more = chart.get('[data-focus-key="more"]');
+      await more.focus();
+      await page.keyboard.press('ArrowDown');
+      await expect(more).toHaveAttribute('aria-expanded', 'true');
+      await expect(chart.get('.gantt-tb-menu .gantt-tb-menu-group[aria-label="Export"] [role="menuitem"]')).toHaveCount(
+        4,
+      );
       expect(await unexpectedViolations(page, target)).toEqual([]);
     });
 

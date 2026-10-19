@@ -18,11 +18,14 @@ import {
   decodeState,
   editEventText,
   encodeState,
+  exportEventText,
   playgroundCommand,
   playgroundOptions,
   withValue,
   type PlaygroundEditEvent,
   type PlaygroundEditEvents,
+  type PlaygroundExportEvent,
+  type PlaygroundExportEvents,
   type PlaygroundState,
 } from 'demo-kit/playground';
 import { PACKAGES, SITE } from 'demo-kit/site';
@@ -160,6 +163,12 @@ gantt.addEventListener('dependency-deleted', e => logEdit('dependency-deleted', 
 gantt.addEventListener('task-updated', e => logEdit('task-updated', e.detail));
 gantt.addEventListener('tasks-change', e => logEdit('tasks-change', e.detail));
 gantt.addEventListener('history-change', e => logEdit('history-change', e.detail));
+
+// Export: a download or print from the toolbar's Export menu (`toolbar.export`) or a script
+const logExport = <K extends PlaygroundExportEvent>(event: K, detail: PlaygroundExportEvents[K]) =>
+  log.add(event, exportEventText(event, detail));
+gantt.addEventListener('before-export', e => logExport('before-export', e.detail));
+gantt.addEventListener('export', e => logExport('export', e.detail));
 
 showState();
 applyOptions();

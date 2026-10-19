@@ -41,6 +41,10 @@
  * error message Canvas / CanvasText with a CanvasText border; an aria-disabled toolbar button
  * (Undo / Redo with nothing to do) GrayText. The cell editor's rules come after the focus rings,
  * so an invalid editor keeps its dashed outline while it has focus.
+ *
+ * Export (Phase 12): the Export button and its menu are the More button and menu again
+ * (`.gantt-tb-btn`, `.gantt-tb-menu`, `.gantt-tb-menu-item`); either menu button, while its menu
+ * is open (`aria-expanded="true"`), takes Highlight as the pressed panel toggle does.
  */
 
 export const FORCED_COLORS_CSS = `
@@ -110,12 +114,16 @@ export const FORCED_COLORS_CSS = `
       .gantt-col-resize:hover { background-color: Highlight !important; }
       .gantt-load-more-btn[aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
 
-      /* ── Toolbar: the checked radio and menu item, the pressed panel toggle, a disabled Undo / Redo, the More menu ── */
+      /* ── Toolbar: the checked radio and menu item, the pressed panel toggle, the open menu button
+         (More, Export), a disabled Undo / Redo, the More and Export menus ── */
       .gantt-tb-pill[aria-checked="true"], .gantt-tb-menu-item[aria-checked="true"] {
         forced-color-adjust: none;
         background-color: Highlight !important; border-color: Highlight !important; color: HighlightText !important;
       }
       .gantt-tb-btn[aria-pressed="true"] { color: Highlight !important; border-color: Highlight !important; }
+      .gantt-tb-more[aria-expanded="true"], .gantt-tb-export[aria-expanded="true"] {
+        color: Highlight !important; border-color: Highlight !important;
+      }
       .gantt-tb-btn[aria-disabled="true"] { color: GrayText !important; border-color: GrayText !important; }
       .gantt-tb-menu { background-color: Canvas !important; color: CanvasText !important; border-color: CanvasText !important; }
 

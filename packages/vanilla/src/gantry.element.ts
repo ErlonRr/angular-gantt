@@ -56,6 +56,12 @@
  * the op events, `task-updated`, `tasks-change` and `history-change`. `options.editing` turns on
  * the editing surfaces (cells, progress, links, history); drag and resize follow `enableDrag` /
  * `enableResize` as before. `updateTask()` / `appendTasks()` stay silent data writes.
+ *
+ * Phase 12: `exportSvg()`, `exportCsv()`, `exportPng()`, `download()` and `print()` draw the plan
+ * from the chart's model (core `export/`), not from the painted DOM, as it was when the method was
+ * called (`engine/export-capture.ts`); their code is a lazy chunk (`export/run.ts`) loaded on first
+ * use. `download()` and `print()` fire the cancelable `before-export` once that code has loaded,
+ * then `export`.
  */
 
 import {
@@ -68,6 +74,11 @@ import {
   type GanttView,
   type ViewMode,
   type DependencyType,
+  type GanttCsvExportOptions,
+  type GanttFileOptions,
+  type GanttPngExportOptions,
+  type GanttPrintOptions,
+  type GanttSvgExportOptions,
   linkChange,
   zoomStep,
   fitZoomLevel,
@@ -230,6 +241,8 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @fires {CustomEvent<DependencyChangeEvent>} dependency-created - A dependency was added: `{ fromId, toId, type, lag }`.
  * @fires {CustomEvent<DependencyChangeEvent>} dependency-deleted - A dependency was removed: `{ fromId, toId, type, lag }`.
  * @fires {CustomEvent<GanttHistoryState>} history-change - The undo / redo state changed: `{ canUndo, canRedo, undoLabel, redoLabel, undoCount, redoCount }`.
+ * @fires {CustomEvent<GanttBeforeExportEvent>} before-export - A `download()` or `print()` is about to run (the toolbar's Export menu or the API): `{ format, trigger, fileName }` (`null` for print). Cancelable: `event.preventDefault()` or `detail.preventDefault()`, synchronously, vetoes it.
+ * @fires {CustomEvent<GanttExportEvent>} export - A `download()` or `print()` ran: `{ format, trigger, fileName, size, pages }` (`size` in bytes for files, `pages` for print).
  *
  * @slot empty - Shown in the empty state (no tasks and nothing loading); `labels.emptyState` when nothing is slotted.
  *
@@ -838,6 +851,54 @@ export class GantryElement extends BaseElement {
     else I.tasksIn.set(update(I.tasksIn.peek()));
   }
 
+  // ── Export and print (Phase 12: the export code loads on first use) ──
+
+  /**
+   * The chart as an SVG document (the `<svg>` element, no XML declaration), drawn from the chart's
+   * model as it is now: every shown row (not only those mounted), the header, the task list in the
+   * split and table views, the legend; colours resolved, no CSS. `options` over
+   * `options.export.svg`. Rejects only when the export code (loaded on first use) can't be loaded.
+   */
+  exportSvg(options?: GanttSvgExportOptions): Promise<string> {
+    return this.#engine.exportChart({ kind: 'svg', options }) as Promise<string>;
+  }
+  /**
+   * The tasks as CSV text (RFC 4180, `\r\n`, no byte order mark; formulas neutralised): every
+   * loaded task in display order by default, as they are now. `options` over `options.export.csv`.
+   * Rejects only when the export code (loaded on first use) can't be loaded.
+   */
+  exportCsv(options?: GanttCsvExportOptions): Promise<string> {
+    return this.#engine.exportChart({ kind: 'csv', options }) as Promise<string>;
+  }
+  /**
+   * The chart as a PNG image, at `scale` (default 2) or the largest scale up to it that fits the
+   * canvas limits. Rejects with a `RangeError` when it only fits below actual size (use
+   * `exportSvg()`, `print()` or a `range`). Needs `img-src blob:` under a Content Security Policy.
+   */
+  exportPng(options?: GanttPngExportOptions): Promise<Blob> {
+    return this.#engine.exportChart({ kind: 'png', options }) as Promise<Blob>;
+  }
+  /**
+   * Saves the chart as a file: `'svg'`, `'png'` or `'csv'`, named `options.fileName` (else
+   * `options.export.fileName`, default `gantt`) with its extension. Fires the cancelable
+   * `before-export`, then `export`; resolves `false` when a listener vetoed it.
+   */
+  download(
+    format: 'svg' | 'png' | 'csv',
+    options?: (GanttSvgExportOptions | GanttPngExportOptions | GanttCsvExportOptions) & GanttFileOptions,
+  ): Promise<boolean> {
+    return this.#engine.exportChart({ kind: 'download', format, options, trigger: 'api' }) as Promise<boolean>;
+  }
+  /**
+   * Prints the whole plan on paper (`paper`, `orientation`, `fit`, header and task list repeated on
+   * every page) through a hidden frame: the browser's print dialog. Fires the cancelable
+   * `before-export`, then `export`; resolves `false` when vetoed or while another print runs.
+   * Rejects with a `RangeError` over `maxPages`. Needs `img-src blob:` under a Content Security Policy.
+   */
+  print(options?: GanttPrintOptions): Promise<boolean> {
+    return this.#engine.exportChart({ kind: 'print', options, trigger: 'api' }) as Promise<boolean>;
+  }
+
   // ── Editing (every change runs through the pipeline: `before-change`, history, events) ──
 
   /** Undo the last change (`false` when there is nothing to undo, no history, or it was rejected or vetoed). */
@@ -1031,11 +1092,11 @@ export class GantryElement extends BaseElement {
 
   // ── Events ────────────────────────────────────────────────
 
-  /** Dispatches an event; `false` when a listener prevented a cancelable one (`before-change`). */
+  /** Dispatches an event; `false` when a listener prevented a cancelable one (`before-change`, `before-export`). */
   #emit<K extends keyof GantryEventDetailMap>(type: K, detail: GantryEventDetailMap[K]): boolean {
     /** @ignore The events are listed with `@fires` on the class (Custom Elements Manifest). */
     return this.dispatchEvent(
-      new CustomEvent(type, { detail, bubbles: true, composed: true, cancelable: type === 'before-change' }),
+      new CustomEvent(type, { detail, bubbles: true, composed: true, cancelable: type.startsWith('before-') }),
     );
   }
 }

@@ -50,6 +50,20 @@ paths:
   the input boundary; dates core generates itself (scale cells, bands, `now`) are already local
   and go through `calendarDays(d, false)`. Format with `formatDate` (`src/format/`, `Intl`-based,
   dayjs-compatible tokens): core has no runtime dependencies.
+- Exports (Phase 12) are re-rendered from the model, never serialized from a painter's DOM: `src/export/` —
+  `source.ts` (`createExportSource`, the headless snapshot with the WC rows pipeline; `ChartExportSource` is what
+  both bindings build), `model.ts` (`buildExportModel`), `timeline.ts` / `table.ts` / `legend.ts` (its parts),
+  `xml.ts` + `svg.ts` (`renderExportSvg`, `exportChartSvg`: presentation attributes only — no `var(`, `<style>`,
+  `foreignObject` or script —, user text through `escapeXml(stripInvalidXml(…))`, numbers through `num`),
+  `sanitize.ts` (`sanitizeSvgMarkup`: an allowlist of SVG drawing elements, no `on*`, no script/data URL in URL
+  attributes, no remote `href`/`url(…)`; the bindings' serializers call it too), `extent.ts` (internal),
+  `paginate.ts` (`paginateChart`, `printCss`, `exportChartPages`; the legend re-wrapped per page with
+  `legendAtWidth`), `csv.ts` (RFC 4180, formula neutralisation, raw task fields as extra keys),
+  `files.ts` (`resolveExportCall`, `exportFileName`, `exportFileText`, `createBeforeExportDetail`), `raster.ts`
+  (`planRaster`). Export geometry, colours, text fitting and defaults live only there (`resolveExport` in
+  `render/config.ts` repeats the PNG / print numbers; a test keeps them equal). Goldens:
+  `GANTRY_GOLDENS=1 npx vitest run --project core export-golden` (`-u` after a reviewed change). Core is built one
+  file per module (`preserveModules`): keep `sideEffects: false`.
 - Export new public symbols from `src/index.ts`; sample data stays in the `@gantryjs/core/demo` subpath.
 - Tests live in `src/__tests__/`. Build expected dates with `new Date(y, m, d)` so assertions
   hold in any time zone, and run `pnpm test:tz` for date or scale changes.

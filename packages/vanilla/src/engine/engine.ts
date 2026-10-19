@@ -32,6 +32,12 @@
  * (`interaction/{link,progress,cell-edit}.ts`) live as long as the element; a disconnect cancels them.
  * While connected, an effect deselects the selected link once it is no longer drawn (the app
  * changed the tasks, a collapsed row hides an end), so a link made again later is not selected.
+ *
+ * Exports (Phase 12): `exportChart()` reads the chart at once (`captureExport`: the export draws
+ * it as it was when the method was called), loads `export/run.ts` on first use (a lazy chunk; one
+ * import shared by every call, so calls run in order and one print locks out the next; a failed
+ * load is tried again by the next call) and runs the export on that capture; the toolbar's
+ * `ctx.runExport` reports a failure in the alert region instead of rejecting.
  */
 
 import {
@@ -94,6 +100,9 @@ import { tasklistGraph, type TasklistGraph } from './graph/tasklist';
 import { createLayers, disconnectLayers, registerRegions, REGIONS, type Layers, type Region } from './render';
 import { announceEffects, createLiveAnnouncer } from './announce';
 import { createEditor, type Editor } from './edit';
+import type { ExportRequest } from '../export/run';
+import type * as ExportCode from '../export/run';
+import { captureExport } from './export-capture';
 
 /**
  * The nodes every layer-specific graph module (`visuals`, `arrows`, `horizontal`, `tasklist`)
@@ -169,6 +178,12 @@ export interface Engine {
    * `initialPage`; a disconnected element unsubscribes and catches up when it reconnects.
    */
   setDataSource(ds: GanttDataSource | null): void;
+  /**
+   * Runs an export (plan §3c) of the chart as it is now (`captureExport`) with the export code,
+   * loaded on first use (`import('../export/run')`, a lazy chunk): the SVG or CSV text, the PNG
+   * `Blob`, or whether a download / print ran. Rejects when the export code can't be loaded.
+   */
+  exportChart(request: ExportRequest): Promise<string | Blob | boolean>;
 }
 
 export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHooks): Engine {
@@ -228,6 +243,17 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     onResized: e => dropped(e, 'resize'),
   });
   const selection = createSelection(inputs.selection, e => hooks.emit('selection-change', e));
+  /** The export code (`export/run.ts`, a lazy chunk): one import for every call, dropped when it fails */
+  let exportCode: Promise<typeof ExportCode> | null = null;
+  /** An export of the chart as it is now, by the export code loaded on first use */
+  const exportChart = (request: ExportRequest) => {
+    const snap = captureExport(engine);
+    exportCode ??= import('../export/run').catch((error: unknown) => {
+      exportCode = null;
+      throw error;
+    });
+    return exportCode.then(m => m.runExport(engine, request, snap));
+  };
   // The interactions below are built from the context (filled in right after it)
   const late: { link?: LinkApi; progress?: ProgressDrag; cells?: CellEditApi } = {};
   const ctx: LayerContext = {
@@ -264,6 +290,19 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     },
     // The layer exists once `layers` is built (only called from event handlers)
     sync: { reportPanel: px => layers.sync.reportPanel(px) },
+    // The toolbar's Export menu: a failure goes to the alert region (D9), never to the caller
+    runExport: (format, trigger) =>
+      exportChart(format === 'print' ? { kind: 'print', trigger } : { kind: 'download', format, trigger }).then(
+        ran => ran === true,
+        (error: unknown) => {
+          const { labels } = graph.i18n.peek();
+          const what = { svg: labels.exportSvg, png: labels.exportPng, csv: labels.exportCsv };
+          dom.srAlert.textContent =
+            format === 'print' ? labels.announcePrintFailed : labels.announceExportFailed(what[format]);
+          console.error('[gantry] export failed:', error);
+          return false;
+        },
+      ),
   };
   late.link = createLink(ctx);
   late.progress = createProgressDrag(ctx);
@@ -453,7 +492,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     applySheet(shadow, getBaseSheet(doc), BASE_CSS);
   };
 
-  return {
+  const engine: Engine = {
     inputs,
     graph,
     columns,
@@ -465,6 +504,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
     layers,
     runs,
     regionRuns,
+    exportChart,
     connect() {
       stop();
       adopt();
@@ -509,6 +549,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
       if (ds && same && owner) startDataSource(ds);
     },
   };
+  return engine;
 }
 
 /** A row as the events carry it: a rolled-up parent's row with its raw task (core `rollupSource`). */

@@ -10,11 +10,13 @@
 //   selected row;
 // - critical bars are dashed, the selected bar and row show in Highlight, the today line too;
 // - no SVG shape keeps a theme colour: SVG is not forced by the browser
-//   (`forced-color-adjust: preserve-parent-color`), so each paint must come from the rules.
+//   (`forced-color-adjust: preserve-parent-color`), so each paint must come from the rules;
+// - a toolbar button whose menu is open (`.gantt-tb-export[aria-expanded="true"]`,
+//   `.gantt-tb-more[aria-expanded="true"]`, phase 12) shows in Highlight, like a pressed toggle.
 // System colours are read from the page (the emulated palette), never hard-coded.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Chart } from './fixtures';
-import { paintFixture, renderFixture, type Target } from './paint-fixture';
+import { paintFixture, renderFixture, type PaintFixture, type Target } from './paint-fixture';
 
 const TARGET_LIST: readonly Target[] = ['vanilla', 'angular'];
 /** The chart element axe checks */
@@ -37,9 +39,14 @@ const frames = (chart: Chart) =>
   chart.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
 
 /** The `forced` fixture on `target` with forced colours (light or dark palette) and no motion. */
-async function open(chart: Chart, target: Target, colorScheme: 'light' | 'dark' = 'light'): Promise<void> {
+async function open(
+  chart: Chart,
+  target: Target,
+  colorScheme: 'light' | 'dark' = 'light',
+  patch: Partial<PaintFixture> = {},
+): Promise<void> {
   await chart.page.emulateMedia({ forcedColors: 'active', colorScheme, reducedMotion: 'reduce' });
-  const fx = paintFixture('forced');
+  const fx = { ...paintFixture('forced'), ...patch };
   await renderFixture(chart, target, fx);
   await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeVisible();
   for (const id of fx.selected) await expect(chart.get(`.gantt-tl-row--selected[data-task-id="${id}"]`)).toHaveCount(1);
@@ -226,6 +233,38 @@ for (const target of TARGET_LIST) {
       expect(chrome.today).toBe(sys.Highlight);
       expect(chrome.currentCell).toBe(`${sys.Highlight} / ${sys.HighlightText}`);
       expect(chrome.checkedRadio).toBe(sys.Highlight);
+    });
+
+    test('a toolbar button whose menu is open shows in Highlight: Export, then More', async ({ chart, page }) => {
+      const base = paintFixture('forced');
+      const options = { ...base.options, toolbar: { export: true } };
+      /** The open button's text and border colours */
+      const look = (key: string) =>
+        chart.get(`[data-focus-key="${key}"]`).evaluate(el => {
+          const cs = getComputedStyle(el);
+          return { expanded: el.getAttribute('aria-expanded'), color: cs.color, border: cs.borderTopColor };
+        });
+      const openMenu = async (key: string) => {
+        await chart.get(`[data-focus-key="${key}"]`).focus();
+        await page.keyboard.press('ArrowDown');
+        await expect(chart.get(`[data-focus-key="${key}"]`)).toHaveAttribute('aria-expanded', 'true');
+        await expect(chart.get('.gantt-tb-menu[role="menu"]')).toHaveCount(1);
+      };
+
+      await open(chart, target, 'light', { options });
+      const sys = await systemColors(chart);
+      const closed = await look('export');
+      expect(closed.expanded).toBe('false');
+      expect(closed.color).not.toBe(sys.Highlight);
+      await openMenu('export');
+      expect(await look('export')).toEqual({ expanded: 'true', color: sys.Highlight, border: sys.Highlight });
+
+      // A 480 px chart: Export moves into More
+      await open(chart, target, 'light', { options, box: { width: 480, height: 600 } });
+      await expect(chart.get('.gantt-tb-export')).toHaveCount(0);
+      await openMenu('more');
+      expect(await look('more')).toEqual({ expanded: 'true', color: sys.Highlight, border: sys.Highlight });
+      await expect(chart.get('.gantt-tb-menu .gantt-tb-menu-group[aria-label="Export"]')).toHaveCount(1);
     });
 
     test('every SVG paint in the chart is a system colour', async ({ chart }) => {

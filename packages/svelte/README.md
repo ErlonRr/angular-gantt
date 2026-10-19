@@ -59,13 +59,15 @@ field — see [Configuration](https://github.com/ErlonRr/gantryjs#configuration)
   `detail`: `onTaskDragged`, `onTaskResized`, `onSelectionChange`, `onRowClick`, `onRowDblClick`,
   `onViewModeChange`, `onStateChange`, `onLoadError`, `onRetry`, and the editing callbacks `onBeforeChange`,
   `onTasksChange`, `onTaskUpdated`, `onTaskProgressChanged`, `onDependencyCreated`, `onDependencyDeleted` and
-  `onHistoryChange` (see [Editing](#editing)). The listeners are attached before the first
+  `onHistoryChange` (see [Editing](#editing)), and the export callbacks `onBeforeExport` and `onExport` (see
+  [Export and print](#export-and-print)). The listeners are attached before the first
   property is set, so events fired while the chart starts (`onViewModeChange` for
   `options.viewMode`) arrive too; a changed callback is used from the next event on. Callbacks
   run untracked: an event fired inside your `$effect` (`gantt.setViewMode(mode)`) does not make
   that effect depend on the callback or on the state it reads.
 - **`bind:element`** — the underlying `GantryElement`, with its [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)
-  (`zoomIn()`, `scrollToTask()`, `setState()`, …).
+  (`zoomIn()`, `scrollToTask()`, `setState()`, …, and the async exports: `await gantt?.download('svg')`,
+  `exportCsv()`, `print()`; see [Export and print](#export-and-print)).
 - **`empty`** (snippet) — the empty-state content, rendered in `<div slot="empty">` inside the
   element (replaces `labels.emptyState`; see below).
 - **`children`** — rendered as they are in the element's light DOM, after `empty`.
@@ -142,6 +144,30 @@ With `editing: { controlled: true }` the chart applies nothing: `onTasksChange` 
 (`gantt?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the
 [Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)). A custom cell editor is a function that returns a DOM node
 (`editor: ctx => node` in a column), not a snippet.
+
+### Export and print
+
+```svelte
+<button onclick={() => gantt?.download('svg')}>Save SVG</button>
+<button onclick={() => gantt?.print({ paper: 'letter' })}>Print</button>
+<Gantry
+  bind:element={gantt}
+  {tasks}
+  options={{ toolbar: { export: true }, export: { fileName: 'roadmap' } }}
+  onBeforeExport={d => {
+    if (d.format === 'png') d.preventDefault();
+  }}
+  onExport={d => console.log(d.fileName, d.size, d.pages)}
+/>
+```
+
+The export methods are async methods of the element from `bind:element`: `exportSvg()` and `exportCsv()` resolve
+text, `exportPng()` a Blob, `download(format)` and `print()` whether they ran. Every `download()` and `print()`, from
+the element or the toolbar's Export menu, calls `onBeforeExport` first (synchronous: `detail.preventDefault()` cancels
+the file or the print, so you can upload `await gantt?.exportSvg()` yourself instead), then `onExport` with the format,
+file name, size in bytes or page count. A `renderBar` node is serialized into images (attributes and inline styles
+only: no snippet renders inside a bar). Options, defaults and limits are in
+[Export and print](https://github.com/ErlonRr/gantryjs#export-and-print).
 
 ### Options and behaviour
 

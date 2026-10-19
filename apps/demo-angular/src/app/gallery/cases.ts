@@ -42,6 +42,12 @@ export const CASE_COMPONENTS: Readonly<Record<CaseId, CaseLoader>> = {
       m => m.DependencyEditingExampleComponent,
     ),
   controlled: () => import('./cases/controlled/controlled-example.component').then(m => m.ControlledExampleComponent),
+  'export-image': () =>
+    import('./cases/export-image/export-image-example.component').then(m => m.ExportImageExampleComponent),
+  'export-csv': () => import('./cases/export-csv/export-csv-example.component').then(m => m.ExportCsvExampleComponent),
+  print: () => import('./cases/print/print-example.component').then(m => m.PrintExampleComponent),
+  'export-toolbar': () =>
+    import('./cases/export-toolbar/export-toolbar-example.component').then(m => m.ExportToolbarExampleComponent),
   'multi-pipeline': () =>
     import('./cases/multi-pipeline/multi-pipeline-example.component').then(m => m.MultiPipelineExampleComponent),
   'custom-bars': () =>

@@ -2,8 +2,9 @@
  * `demo-kit/gallery`: the examples gallery shared by every framework app. The catalog (cases,
  * categories, frameworks), the seeded task builders, each case's data and options
  * (`cases/<id>.ts`: `<ID>_OPTIONS`, `<camelId>Tasks(now)`, the choices of its controls), the
- * framework notes, the editing cases' change log (`edit-log.ts`) and the hash router. The generated
- * code samples are in `demo-kit/gallery/sources`.
+ * framework notes, the editing cases' change log (`edit-log.ts`), the export cases' log
+ * (`export-log.ts`) and the hash router. The generated code samples are in
+ * `demo-kit/gallery/sources`.
  */
 
 export * from './catalog';
@@ -13,6 +14,7 @@ export * from './router';
 export * from './framework-notes';
 export * from './case-data';
 export * from './edit-log';
+export * from './export-log';
 
 export * from './cases/states';
 export * from './cases/lazy';
@@ -29,6 +31,10 @@ export * from './cases/cell-editing';
 export * from './cases/custom-editors';
 export * from './cases/dependency-editing';
 export * from './cases/controlled';
+export * from './cases/export-image';
+export * from './cases/export-csv';
+export * from './cases/print';
+export * from './cases/export-toolbar';
 export * from './cases/multi-pipeline';
 export * from './cases/custom-bars';
 export * from './cases/custom-columns';

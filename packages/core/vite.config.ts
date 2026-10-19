@@ -13,6 +13,11 @@ export default defineConfig({
       fileName: (_format, name) => `${name}.js`,
     },
     sourcemap: true,
+    // One file per module (not one bundle), so a consumer's bundler keeps what isn't imported out of
+    // its entry: <gantry-element> loads the export code (export/*) only on its first export
+    rolldownOptions: {
+      output: { preserveModules: true, preserveModulesRoot: 'src' },
+    },
   },
   plugins: [dts({ include: ['src'], exclude: ['src/**/__tests__/**'], bundleTypes: true })],
 });

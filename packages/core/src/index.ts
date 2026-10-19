@@ -79,6 +79,21 @@ export * from './editing/cells';
 export * from './editing/sessions';
 export * from './render/overlay';
 export * from './render/links';
+// Export and print (Phase 12): the chart snapshot, the export model, SVG, print pages, CSV, files, PNG plan
+export * from './export/source';
+export * from './export/model';
+export * from './export/timeline';
+export * from './export/table';
+export * from './export/legend';
+// `num` stays internal (a too generic name for the package root)
+export { escapeXml, stripInvalidXml, inlineThemeVars } from './export/xml';
+// The custom-markup rules of every export (the bindings' `serializeSvg` call it on the serialized node)
+export { sanitizeSvgMarkup } from './export/sanitize';
+export * from './export/svg';
+export * from './export/paginate';
+export * from './export/csv';
+export * from './export/files';
+export * from './export/raster';
 // Engine helpers: arrow window index, drag ghost, quantised clock
 export { buildArrowIndex, type ArrowIndex, type ArrowLink } from './render/arrow-index';
 export { computeDragGhostVisual, DRAG_SOURCE_OPACITY, type GhostVisual, type GhostLabel } from './render/ghost';

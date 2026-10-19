@@ -52,6 +52,7 @@ const ALL: ResolvedToolbar = {
   panelToggle: false,
   overflow: 'menu',
   undo: true,
+  export: false,
 };
 const LEVELS: GanttZoomLevel[] = ['Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
 const small = (toolbar: ResolvedToolbar, view: GanttView = 'split'): ToolbarGroup[] =>
@@ -143,7 +144,7 @@ describe('layoutToolbar — wide: the toolbar as built (paint snapshots unchange
 
   it('builds no layout for an empty toolbar', () => {
     expect(layoutToolbar({ groups: [], width: 10, controlSize: 32, overflow: 'menu', labels: DEFAULT_LABELS })).toEqual(
-      { groups: [], menu: null },
+      { groups: [], menu: null, exportMenu: null },
     );
   });
 });
@@ -165,7 +166,8 @@ describe('layoutToolbar — narrow: zoom levels, then views, then today into the
     const out = layout(200);
     expect(keys(out.groups)).toEqual(['zoom', 'more']);
     expect(keys(out.menu)).toEqual(['levels', 'today', 'views']);
-    expect(TOOLBAR_OVERFLOW_ORDER).toEqual(['levels', 'views', 'today']);
+    // `export` first (Phase 12): skipped while the toolbar has no export group
+    expect(TOOLBAR_OVERFLOW_ORDER).toEqual(['export', 'levels', 'views', 'today']);
   });
 
   it("'wrap' never builds a menu", () => {
@@ -246,6 +248,7 @@ describe('layoutToolbar — the More button', () => {
       className: 'gantt-tb-group gantt-tb-more-group',
       role: null,
       ariaLabel: null,
+      menu: null,
       items: [
         {
           focusKey: 'more',
@@ -357,6 +360,7 @@ describe('layoutToolbar — the menu sections and items', () => {
       role: null,
       ariaLabel: null,
       items: [{ ...defaults({ toolbar: { panelToggle: true } }).groups[0].items[0] }],
+      menu: null,
     };
     const out = layoutToolbar({
       groups: [toggle],

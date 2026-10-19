@@ -3,17 +3,21 @@
 // 'script'; trusted-types 'none'`). The header is injected through `page.route`, so the page
 // (apps/demo-vanilla/csp.html) stays free of inline script and style. Every interaction must
 // leave zero `securitypolicyviolation` events and no console error (the shared fixture fails a
-// test that logs one).
+// test that logs one). Phase 12: `img-src` allows `blob:` (a PNG export draws its SVG from a blob
+// URL, print pages are blob-URL images), and the exports run under the same policy: `exportPng()`,
+// `download()` (a blob link) and `print()` (a hidden about:blank frame built with DOM APIs only,
+// its page CSS an adopted sheet).
 import { test as plain, type Locator, type Page } from '@playwright/test';
 import { test, expect, SEL, type Chart } from './fixtures';
 import { TARGETS } from '../playwright.config';
+import { installPrintStub, printFrames, prints } from './print-stub';
 
 const URL = `http://localhost:${TARGETS.vanilla.port}/csp.html`;
 const POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  "img-src 'self' data: blob:",
   "connect-src 'self'",
   "require-trusted-types-for 'script'",
   "trusted-types 'none'",
@@ -26,11 +30,11 @@ interface Violation {
   source: string;
 }
 
-/** Serves csp.html with the policy and records every violation into `window.__violations`. */
-async function withPolicy(page: Page): Promise<void> {
+/** Serves csp.html with `policy` and records every violation into `window.__violations`. */
+async function withPolicy(page: Page, policy = POLICY): Promise<void> {
   await page.route('**/csp.html', async route => {
     const response = await route.fetch();
-    await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': POLICY } });
+    await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': policy } });
   });
   await page.addInitScript(() => {
     const w = window as unknown as { __violations: unknown[] };
@@ -267,6 +271,47 @@ test.describe('strict CSP + Trusted Types', () => {
   });
 });
 
+test.describe('exports under the strict CSP', () => {
+  test('exportPng(), download() and print() run with zero violations', async ({ page, chart }) => {
+    await withPolicy(page);
+    // The stub reads no page SVG: fetching a blob URL would need connect-src blob:
+    await installPrintStub(page, { readSvgs: false });
+    await page.goto(URL);
+    await expect(chart.get(SEL.row).first()).toBeVisible();
+    await frames(page);
+    const host = chart.host();
+
+    // PNG: the SVG as a blob-URL image drawn on a canvas
+    const png = await host.evaluate(async el => {
+      const blob = await (el as HTMLElement & { exportPng(): Promise<Blob> }).exportPng();
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      return { type: blob.type, signature: [...bytes.slice(1, 4)].map(b => String.fromCharCode(b)).join('') };
+    });
+    expect(png).toEqual({ type: 'image/png', signature: 'PNG' });
+
+    // Downloads: a blob link clicked in the shadow root
+    for (const format of ['svg', 'png', 'csv'] as const) {
+      const [file] = await Promise.all([
+        page.waitForEvent('download'),
+        host.evaluate((el, f) => (el as HTMLElement & { download(f: string): Promise<boolean> }).download(f), format),
+      ]);
+      expect(file.suggestedFilename()).toBe(`gantt.${format}`);
+    }
+
+    // Print: the frame's document built with DOM APIs, its images blob URLs, its CSS adopted
+    expect(await host.evaluate(el => (el as HTMLElement & { print(): Promise<boolean> }).print())).toBe(true);
+    await expect.poll(async () => (await prints(page)).length).toBe(1);
+    const printed = (await prints(page))[0];
+    expect(printed.images.length).toBeGreaterThan(0);
+    expect(printed.images.every(img => img.complete && img.naturalWidth > 0)).toBe(true);
+    expect(printed.pageCss).toMatch(/@page/);
+    await expect.poll(() => printFrames(page)).toBe(0);
+
+    await frames(page);
+    expect(await violations(page)).toEqual([]);
+  });
+});
+
 test.describe('zoom gestures under the strict CSP', () => {
   test('Ctrl + wheel zooms at the pointer: the date under it stays, the page does not zoom', async ({
     page,
@@ -333,6 +378,20 @@ plain.describe('strict CSP controls', () => {
     const directives = (await violations(page)).map(v => v.directive);
     expect(directives).toContain('style-src-elem');
     expect(directives).toContain('require-trusted-types-for');
+  });
+
+  plain('without img-src blob: a PNG export is refused (documented)', async ({ page }) => {
+    await withPolicy(page, POLICY.replace(' data: blob:', ' data:'));
+    await page.goto(URL);
+    await expect(page.locator('gantry-element .gantt-tl-row').first()).toBeVisible();
+    const error = await page.locator('gantry-element').evaluate(el =>
+      (el as HTMLElement & { exportPng(): Promise<Blob> }).exportPng().then(
+        () => null,
+        (e: unknown) => (e as Error).message,
+      ),
+    );
+    expect(error).not.toBeNull();
+    expect((await violations(page)).map(v => v.directive)).toContain('img-src');
   });
 
   plain('without constructable stylesheets the style-element fallback is refused (documented)', async ({ page }) => {

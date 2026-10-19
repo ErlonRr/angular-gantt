@@ -31,5 +31,10 @@ paths:
 - Editing (Phase 11): a new editing option goes into the README "Editing" section (options table), a new event
   into its pipeline / event-order table with its payload, and a difference between bindings into
   `framework-notes.ts`; the gallery's `editing` category holds the editing cases.
+- Export (Phase 12): the README "Export and print" section is the reference (option tables, methods / events, what an
+  export draws, custom bars, CSV values, pagination, Node / SSR, limitations): a new export option goes into its
+  tables, a binding difference into `framework-notes.ts` (`export-methods`, `before-export`, `export-custom-bars`,
+  `print-css`, `export-ssr`). The gallery's `export` category ("Export and print") holds `export-image`,
+  `export-csv`, `print`, `export-toolbar`; shared log texts in `gallery/export-log.ts`.
 - On release, keep the "Recent Releases" `<details>` accordion in `README.md` and
   `packages/angular/README.md` to the last 5 releases (see the `/gantry-release` skill).

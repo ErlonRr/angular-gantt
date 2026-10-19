@@ -12,6 +12,11 @@
   (`detail.tasks`, the proposed ones with `applied: false` in controlled mode), ready to store back
   in the state passed as `tasks` (`$state.raw` keeps big plans cheap).
 
+  Export: the element's methods are async (`await element.download('csv')`, `exportSvg()`,
+  `exportCsv()`, `exportPng()`, `print()`). `download()` and `print()` (and the toolbar's export
+  menu) call `onBeforeExport` first and synchronously: `detail.preventDefault()` there cancels the
+  file or the print; `onExport` then gets the format, file name and size (pages for a print).
+
   Light DOM: the `empty` snippet is rendered as `<div slot="empty">` (the element's empty-state
   slot), then `children` as it is. `empty` exists because Svelte can't pass `<div slot="empty">`
   through `children` cleanly: written as a direct child of <Gantry> it is a legacy named slot (never
@@ -88,6 +93,8 @@
     onDependencyCreated,
     onDependencyDeleted,
     onHistoryChange,
+    onBeforeExport,
+    onExport,
     element = $bindable(),
     empty,
     children,
@@ -130,6 +137,8 @@
     onDependencyCreated: () => onDependencyCreated,
     onDependencyDeleted: () => onDependencyDeleted,
     onHistoryChange: () => onHistoryChange,
+    onBeforeExport: () => onBeforeExport,
+    onExport: () => onExport,
   };
 
   // Listeners first: assigning a property can fire an event at once (`view-mode-change`), so they

@@ -45,6 +45,7 @@ import {
   Directive,
   computed,
   input,
+  type InputSignal,
   TemplateRef,
   contentChild,
   contentChildren,
@@ -86,7 +87,8 @@ export class GanttColumnDefDirective {
     transform: editableAttribute,
   });
   /** A built-in editor kind, or a function returning the editor's DOM node (wins over a `ganttCellEditor` template) */
-  readonly editor = input<ColumnDef['editor']>(undefined);
+  // Annotated: an inferred union prints in a build-dependent order in the API report
+  readonly editor: InputSignal<ColumnDef['editor']> = input<ColumnDef['editor']>(undefined);
   /** Settings of a built-in editor (`min` / `max` / `step`, the `select` options) */
   readonly editorOptions = input<CellEditorOptions | undefined>(undefined);
   /** The cell's value as text: the editor's first value */

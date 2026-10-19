@@ -197,6 +197,12 @@ export function injectDragReadout(preview: Signal<DragPreview | null>): Signal<D
       :host([data-align='end']) {
         translate: -100% 0;
       }
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no readout chip */
+      @media print {
+        :host {
+          display: none;
+        }
+      }
       /* Forced colours (D25): Canvas / CanvasText with a CanvasText border */
       @media (forced-colors: active) {
         :host {

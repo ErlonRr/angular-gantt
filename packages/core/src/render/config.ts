@@ -7,7 +7,10 @@
 
 import type {
   GanttEditingOptions,
+  GanttExportFormat,
+  GanttExportOptions,
   GanttOptions,
+  GanttPaperSize,
   GanttScale,
   GanttZoomLevel,
   GanttLength,
@@ -78,6 +81,90 @@ export interface ResolvedToolbar {
   overflow: 'menu' | 'wrap';
   /** Undo / Redo buttons (shown only while the chart keeps history: `editing.history`) */
   undo: boolean;
+  /** The Export menu button (`toolbar.export`, default false) */
+  export: boolean;
+}
+
+// ─── Export and print (`options.export`) ─────────────────────
+
+/**
+ * What every image export (SVG, PNG, print) draws, with the defaults filled. `range`, `legend`,
+ * `today`, `title` and `description` stay `undefined` ("as the chart") until set: a call fills
+ * `range` and `today` (`resolveExportCall`), the model the rest from the chart (`buildExportModel`).
+ */
+export interface ResolvedImageExport {
+  view: 'auto' | GanttView;
+  range: 'all' | 'visible' | { start: Date; end: Date } | undefined;
+  theme: 'current' | 'light' | 'dark';
+  background: 'theme' | 'transparent' | (string & {});
+  legend: boolean | undefined;
+  today: boolean | undefined;
+  title: string | undefined;
+  description: string | undefined;
+  customBars: 'render' | 'builtin';
+}
+
+/** `export.svg` with its defaults. */
+export interface ResolvedSvgExport extends ResolvedImageExport {
+  /** Default 1 */
+  scale: number;
+  /** `undefined`: a new `gantry-export-<n>` per image */
+  idPrefix: string | undefined;
+}
+
+/** `export.png` with its defaults. */
+export interface ResolvedPngExport extends ResolvedImageExport {
+  /** Default `PNG_DEFAULT_SCALE` (2) */
+  scale: number;
+  /** Default `PNG_MAX_SIDE` (16 384) */
+  maxSide: number;
+  /** Default `PNG_MAX_PIXELS` (16 777 216) */
+  maxPixels: number;
+}
+
+/** `export.print` with its defaults (theme `'light'`). */
+export interface ResolvedPrintExport extends ResolvedImageExport {
+  paper: GanttPaperSize;
+  orientation: 'landscape' | 'portrait' | 'auto';
+  /** In mm (default `PRINT_DEFAULT_MARGIN_MM`, 10) */
+  margin: number;
+  fit: 'width' | 'page' | 'none';
+  /** `fit: 'none'` (default 1) */
+  scale: number;
+  /** `fit: 'width'` (default `PRINT_MIN_SCALE`, 0.5) */
+  minScale: number;
+  repeatHeader: boolean;
+  repeatTable: boolean;
+  pageNumbers: boolean;
+  /** Default `PRINT_MAX_PAGES` (200) */
+  maxPages: number;
+}
+
+/** `export.csv` with its defaults. */
+export interface ResolvedCsvExport {
+  columns: 'visible' | 'all' | readonly string[];
+  rows: 'all' | 'shown';
+  values: 'data' | 'display';
+  delimiter: ',' | ';' | '\t';
+  header: boolean;
+  bom: boolean;
+  neutralizeFormulas: boolean;
+}
+
+/** `options.export` with every default filled. */
+export interface ResolvedExport {
+  /**
+   * The file's base name for a format, as configured (`fileName`, default `'gantt'`): not yet
+   * sanitized and without the extension, which `exportFileName` adds. The same function for the
+   * same string, so equal options resolve equal.
+   */
+  fileName: (format: 'svg' | 'png' | 'csv') => string;
+  /** The Export menu's items: known formats, each once, in the given order */
+  formats: GanttExportFormat[];
+  svg: ResolvedSvgExport;
+  png: ResolvedPngExport;
+  csv: ResolvedCsvExport;
+  print: ResolvedPrintExport;
 }
 
 /** Undo steps kept by default (`editing.history.limit`). */
@@ -242,6 +329,8 @@ export interface ResolvedGanttConfig {
   markers: { lane: 'auto' | boolean };
   /** Interactive editing (`editing`, default off) */
   editing: ResolvedEditing;
+  /** Export and print defaults (`options.export`) */
+  export: ResolvedExport;
 }
 
 /** `LightTheme.barRadius` / `DarkTheme.barRadius` in px (when no metrics are passed). */
@@ -340,6 +429,160 @@ export function resolveEditing(editing: boolean | GanttEditingOptions | undefine
             coalesceMs: checked(historyOpts.coalesceMs, n => n >= 0, DEFAULT_COALESCE_MS),
           },
     controlled,
+  };
+}
+
+/** The base name of an exported file when `export.fileName` is not set. */
+export const DEFAULT_EXPORT_FILE_NAME = 'gantt';
+
+/** The toolbar Export menu's items when `export.formats` is not set. */
+export const DEFAULT_EXPORT_FORMATS: readonly GanttExportFormat[] = Object.freeze(['svg', 'png', 'csv', 'print']);
+
+const IMAGE_DEFAULTS: ResolvedImageExport = {
+  view: 'auto',
+  range: undefined,
+  theme: 'current',
+  background: 'theme',
+  legend: undefined,
+  today: undefined,
+  title: undefined,
+  description: undefined,
+  customBars: 'render',
+};
+
+/**
+ * Every format's defaults (`resolveExportFormat` without a base), frozen: shared by every config
+ * that sets nothing. The PNG and print numbers are `PNG_DEFAULT_SCALE`, `PNG_MAX_SIDE`,
+ * `PNG_MAX_PIXELS`, `PRINT_DEFAULT_MARGIN_MM`, `PRINT_MIN_SCALE` and `PRINT_MAX_PAGES` (`export/`),
+ * repeated here so this module imports none of the export code; a test keeps them equal.
+ */
+const FORMAT_DEFAULTS: { readonly [F in GanttExportFormat]: Readonly<ResolvedExport[F]> } = {
+  svg: Object.freeze({ ...IMAGE_DEFAULTS, scale: 1, idPrefix: undefined }),
+  png: Object.freeze({ ...IMAGE_DEFAULTS, scale: 2, maxSide: 16_384, maxPixels: 16_777_216 }),
+  csv: Object.freeze({
+    columns: 'visible',
+    rows: 'all',
+    values: 'data',
+    delimiter: ',',
+    header: true,
+    bom: true,
+    neutralizeFormulas: true,
+  }),
+  print: Object.freeze({
+    ...IMAGE_DEFAULTS,
+    theme: 'light',
+    paper: 'a4',
+    orientation: 'landscape',
+    margin: 10,
+    fit: 'width',
+    scale: 1,
+    minScale: 0.5,
+    repeatHeader: true,
+    repeatTable: true,
+    pageNumbers: true,
+    maxPages: 200,
+  }),
+};
+
+/**
+ * The numeric fields and the values they accept (others keep the base value); `maxPages` is
+ * rounded down to whole pages.
+ */
+const EXPORT_NUMBERS: Readonly<Record<string, (n: number) => boolean>> = {
+  scale: n => n > 0,
+  minScale: n => n > 0,
+  maxSide: n => n >= 1,
+  maxPixels: n => n >= 1,
+  maxPages: n => n >= 1,
+  margin: n => n >= 0,
+};
+
+/**
+ * The shorter side of each named paper in mm (`PAPER_SIZES_MM` of `export/paginate.ts`, repeated
+ * so this module imports none of the export code; a test keeps them equal).
+ */
+const PAPER_SHORT_SIDE_MM: Readonly<Record<string, number>> = {
+  a4: 210,
+  a3: 297,
+  letter: 215.9,
+  legal: 215.9,
+  tabloid: 279.4,
+};
+
+/** The shorter side of `paper` in mm, as `paginateChart` reads it (an unknown or invalid paper is A4). */
+function paperShortSideMm(paper: GanttPaperSize): number {
+  if (typeof paper !== 'object') return PAPER_SHORT_SIDE_MM[paper] ?? 210;
+  const short = Math.min(paper.width, paper.height) * (paper.unit === 'in' ? 25.4 : 1);
+  // Both sides positive (`NaN` fails too) and finite
+  return short > 0 && Number.isFinite(paper.width + paper.height) ? short : 210;
+}
+
+/** The function of every config without a `fileName` (or with the default one). */
+const defaultFileName = (): string => DEFAULT_EXPORT_FILE_NAME;
+
+/** Most configured names `fileNameOf` keeps a function for (the least recently used goes first). */
+const FILE_NAME_CACHE_SIZE = 32;
+
+/** One function per recently configured name (`ResolvedExport.fileName`): equal options resolve equal. */
+const fileNameFns = new Map<string, (format: 'svg' | 'png' | 'csv') => string>();
+
+function fileNameOf(name: GanttExportOptions['fileName']): ResolvedExport['fileName'] {
+  if (typeof name === 'function') return name;
+  if (typeof name !== 'string' || name === DEFAULT_EXPORT_FILE_NAME) return defaultFileName;
+  let fn = fileNameFns.get(name);
+  // Used again: the most recent one (a Map keeps insertion order)
+  if (fn) fileNameFns.delete(name);
+  else fn = () => name;
+  fileNameFns.set(name, fn);
+  if (fileNameFns.size > FILE_NAME_CACHE_SIZE) fileNameFns.delete(fileNameFns.keys().next().value!);
+  return fn;
+}
+
+/**
+ * One format's options over `base` (default: the built-in defaults): a set field of the format
+ * wins, an unset one keeps the base value, and so does a number out of range (a scale or limit
+ * ≤ 0, a negative margin or one that leaves no room on the paper — twice the margin at least its
+ * shorter side —, fewer than 1 page). `resolveConfig` resolves `options.export.<format>`
+ * with it, `resolveExportCall` (`export/files.ts`) a call's options over `config.export.<format>`.
+ */
+export function resolveExportFormat<F extends GanttExportFormat>(
+  format: F,
+  options: GanttExportOptions[F],
+  base?: ResolvedExport[F],
+): ResolvedExport[F] {
+  const b = base ?? (FORMAT_DEFAULTS[format] as ResolvedExport[F]);
+  if (!options) return b;
+  const o = options as Readonly<Record<string, unknown>>;
+  const out: Record<string, unknown> = { ...(b as object) };
+  for (const key in b) {
+    const v = o[key];
+    const ok = EXPORT_NUMBERS[key];
+    if (v !== undefined && (!ok || (typeof v === 'number' && Number.isFinite(v) && ok(v))))
+      out[key] = key === 'maxPages' ? Math.floor(v as number) : v;
+  }
+  // A print margin set here must leave room on the paper (`paginateChart` throws when the base one doesn't)
+  const margin = o['margin'];
+  if (
+    typeof margin === 'number' &&
+    out['margin'] === margin &&
+    2 * margin >= paperShortSideMm(out['paper'] as GanttPaperSize)
+  )
+    out['margin'] = (b as ResolvedPrintExport).margin;
+  return out as unknown as ResolvedExport[F];
+}
+
+/** `options.export` with every default filled (`ResolvedGanttConfig.export`). */
+export function resolveExport(o: GanttExportOptions | undefined): ResolvedExport {
+  return {
+    fileName: fileNameOf(o?.fileName),
+    // The known formats, each once, in order
+    formats: o?.formats
+      ? o.formats.filter((f, i, all) => DEFAULT_EXPORT_FORMATS.includes(f) && all.indexOf(f) === i)
+      : [...DEFAULT_EXPORT_FORMATS],
+    svg: resolveExportFormat('svg', o?.svg),
+    png: resolveExportFormat('png', o?.png),
+    csv: resolveExportFormat('csv', o?.csv),
+    print: resolveExportFormat('print', o?.print),
   };
 }
 
@@ -496,6 +739,7 @@ export function resolveConfig(
             panelToggle: toolbar?.panelToggle ?? false,
             overflow: toolbar?.overflow ?? 'menu',
             undo: toolbar?.undo ?? true,
+            export: toolbar?.export ?? false,
           },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
@@ -511,6 +755,7 @@ export function resolveConfig(
     legend: { position: options.legend?.position ?? 'bottom' },
     markers: { lane: options.markers?.lane ?? 'auto' },
     editing: resolveEditing(options.editing),
+    export: resolveExport(options.export),
   };
 }
 

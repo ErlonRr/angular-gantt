@@ -17,16 +17,23 @@
 //  component. `box` replaces the 1150 × 700 host size (the narrow
 //  scenarios of phase 10). Phase 11 records the seven editing outputs
 //  (`before-change` … `history-change`) and `veto` prevents every
-//  `before-change` (`detail.preventDefault()`).
+//  `before-change` (`detail.preventDefault()`). Phase 12 records
+//  `before-export` / `export`, `vetoExport` prevents the listed
+//  formats, and tasks with `barType: 'e2e-custom'` are drawn by a
+//  custom bar component (`E2eCustomBarComponent`).
 // ─────────────────────────────────────────────────────────────
 
 import { afterNextRender, ChangeDetectionStrategy, Component, signal, viewChild } from '@angular/core';
 import {
   GantryComponent,
+  GanttBarBase,
   GanttDataSource,
   GanttTooltipTemplateDirective,
+  provideGanttBar,
   type GanttAnnotation,
   type GanttBeforeChangeEvent,
+  type GanttBeforeExportEvent,
+  type GanttExportFormat,
   type GanttOptions,
   type GanttTask,
   type GanttTimeHighlight,
@@ -61,6 +68,8 @@ interface GantryFixture {
   box?: { width: number; height: number };
   /** Every `before-change` is vetoed with `detail.preventDefault()` (after it is recorded) */
   veto?: boolean;
+  /** `before-export` of these formats is vetoed with `detail.preventDefault()` (after it is recorded) */
+  vetoExport?: GanttExportFormat[];
 }
 
 /** What `window.__GANTRY_API__.set()` changes (dates as local ISO strings, like the fixture). */
@@ -71,6 +80,7 @@ interface FixturePatch {
   loading?: boolean;
   errorMessage?: string | null;
   veto?: boolean;
+  vetoExport?: GanttExportFormat[];
 }
 
 declare global {
@@ -97,6 +107,22 @@ function revive(value: unknown): unknown {
   return value;
 }
 
+/**
+ * The bar of `barType: 'e2e-custom'` (the export e2e): the bar's path in a fixed colour, given as
+ * attributes so an export carries it, marked with `data-e2e-custom="<task id>"`.
+ */
+@Component({
+  selector: 'g[appE2eCustomBar]',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  template: `<svg:path
+    class="e2e-custom-bar"
+    [attr.d]="ctx().visual.path"
+    fill="#7C3AED"
+    [attr.data-e2e-custom]="ctx().row.task.id"
+  />`,
+})
+export class E2eCustomBarComponent extends GanttBarBase {}
+
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
 function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] {
@@ -116,6 +142,7 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
   selector: 'app-fixture',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [GantryComponent, GanttTooltipTemplateDirective],
+  providers: [provideGanttBar({ type: 'e2e-custom', component: E2eCustomBarComponent })],
   // Two copies of the same chart: projected `[ganttEmpty]` content inside an @if would always fill
   // the slot (no fallback message), so the chart without custom empty content projects none.
   template: `
@@ -147,6 +174,8 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (dependencyCreated)="record('dependency-created', $event)"
         (dependencyDeleted)="record('dependency-deleted', $event)"
         (historyChange)="record('history-change', $event)"
+        (beforeExport)="beforeExport($event)"
+        (export)="record('export', $event)"
       >
         <div ganttEmpty class="fixture-empty">{{ emptyContent }}</div>
         @if (tooltipTemplate) {
@@ -183,6 +212,8 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (dependencyCreated)="record('dependency-created', $event)"
         (dependencyDeleted)="record('dependency-deleted', $event)"
         (historyChange)="record('history-change', $event)"
+        (beforeExport)="beforeExport($event)"
+        (export)="record('export', $event)"
       >
         @if (tooltipTemplate) {
           <ng-template ganttTooltip let-task="task">
@@ -227,6 +258,7 @@ export class FixtureComponent {
   protected readonly loading = signal(this.fixture.loading ?? false);
   protected readonly errorMessage = signal(this.fixture.errorMessage ?? null);
   private veto = this.fixture.veto === true;
+  private vetoExport: readonly GanttExportFormat[] = this.fixture.vetoExport ?? [];
 
   constructor() {
     const selected = this.fixture.selected ?? [];
@@ -242,6 +274,7 @@ export class FixtureComponent {
         if (patch.loading !== undefined) this.loading.set(patch.loading);
         if (patch.errorMessage !== undefined) this.errorMessage.set(patch.errorMessage);
         if (patch.veto !== undefined) this.veto = patch.veto;
+        if (patch.vetoExport !== undefined) this.vetoExport = patch.vetoExport;
       },
       get chart() {
         return gantt();
@@ -258,6 +291,12 @@ export class FixtureComponent {
   protected beforeChange(detail: GanttBeforeChangeEvent): void {
     this.record('before-change', detail);
     if (this.veto) detail.preventDefault();
+  }
+
+  /** Records `before-export`, then vetoes it when its format is in `vetoExport` (as the Web Component driver does). */
+  protected beforeExport(detail: GanttBeforeExportEvent): void {
+    this.record('before-export', detail);
+    if (this.vetoExport.includes(detail.format)) detail.preventDefault();
   }
 
   /** The fixture's options: revived dates, `highlightTime` from `highlight`, the tooltip renderer. */

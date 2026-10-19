@@ -1675,6 +1675,49 @@ a.gs-card:hover {
 .gs-case-log li:first-child {
   color: var(--gs-text);
 }
+/*
+ * The export cases: `figure.gs-case-preview` (an exported image, scaled down to fit, and its
+ * `figcaption`) and `pre.gs-case-csv[tabindex=0]` (the first lines of a CSV export; it scrolls
+ * sideways, so it takes focus).
+ */
+.gs-case-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  background: var(--gs-surface-2);
+}
+.gs-case-preview img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: var(--gs-radius-sm);
+  box-shadow: var(--gs-shadow-sm);
+}
+.gs-case-preview figcaption {
+  color: var(--gs-muted);
+  font-family: var(--gs-font-mono);
+  font-size: 12px;
+}
+.gs-case-csv {
+  margin: 0;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--gs-border);
+  border-radius: var(--gs-radius);
+  background: var(--gs-surface-2);
+  color: var(--gs-text);
+  font-family: var(--gs-font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
 /* Custom empty-state content inside a chart */
 .gs-case-empty {
   display: flex;
@@ -1715,6 +1758,7 @@ a.gs-card:focus-visible,
 }
 .gs-code pre:focus-visible,
 .gs-log:focus-visible,
+.gs-case-csv:focus-visible,
 .gs-table-wrap:focus-visible,
 .gs-scroll:focus-visible {
   outline: 2px solid var(--gs-accent-ring);

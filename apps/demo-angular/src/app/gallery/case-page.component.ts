@@ -76,7 +76,8 @@ const CODE_TABS: readonly { id: CodeTab; label: string }[] = [
         </ul>
       </nav>
       <ul class="gs-gallery-tags gs-case-tags" aria-label="Options and APIs">
-        @for (tag of c.tags; track tag) {
+        <!-- Plain strings, tracked by position: another case rewrites the items instead of recreating them -->
+        @for (tag of c.tags; track $index) {
           <li class="gs-tag">{{ tag }}</li>
         }
       </ul>

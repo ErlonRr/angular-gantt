@@ -17,8 +17,12 @@
  *   it does not depend on when effects run; the catch-up when the element connects is the
  *   baseline and is not announced.
  *
+ * - Exports (Phase 12, `export/run.ts`): `labels.announceExportReady(fileName)` after a download,
+ *   `labels.announcePrintReady(pages)` before the print dialog.
+ *
  * A failed page is not announced here: it goes once, undebounced, to the assertive
- * `.gantt-sr-alert` (see `engine.ts`).
+ * `.gantt-sr-alert` (see `engine.ts`), and so does a failed export started from the toolbar
+ * (`labels.announceExportFailed`, `labels.announcePrintFailed` for a print).
  */
 
 import { announceSelection, announceZoom, createAnnouncer, zoomLevelLabel, type Announcer } from '@gantryjs/core';

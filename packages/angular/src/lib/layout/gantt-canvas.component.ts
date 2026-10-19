@@ -113,6 +113,12 @@
 //    pointer) clear the hovered bar, its shapes, the hovered row and the
 //    cursor, until the pointer moves again; so does the chart's
 //    destruction.
+//
+//  Exports (Gantry 2 phase 12, D5): `renderCustomBarMarkup` renders a
+//  custom bar component off-screen once for an export's bar context (a
+//  detached svg `<g>` host, this chart's registry and injectors), and
+//  returns its sanitized markup (`serializeSvg`); built-in bars are drawn
+//  by core.
 // ─────────────────────────────────────────────────────────────
 
 import {
@@ -121,15 +127,21 @@ import {
   DOCUMENT,
   DestroyRef,
   ElementRef,
+  EnvironmentInjector,
+  Injector,
+  Renderer2,
   afterNextRender,
   computed,
+  createComponent,
   input,
+  inputBinding,
   linkedSignal,
   output,
   inject,
   signal,
   type Signal,
   type TemplateRef,
+  type Type,
   viewChild,
 } from '@angular/core';
 
@@ -168,6 +180,9 @@ import {
 } from '@gantryjs/core';
 
 import { GanttBarRegistry } from '../bar-registry';
+import { type GanttBarBase } from '../bars/bar-base';
+import { BUILTIN_BARS } from '../bars/builtin-defs';
+import { GANTT_EXPORT_DOM } from '../export/gantt-export.service';
 import { GanttBarOutletDirective } from '../bars/bar-outlet.directive';
 import { GanttBarOverlayComponent } from '../bars/bar-overlay.component';
 import { GanttBarFocusService } from '../bars/bar-focus.service';
@@ -242,6 +257,19 @@ const hoverCursor = (hit: BarPointerHit): Cursor => {
 const dragCursor = (part: BarHit): Cursor => (part === 'bar' ? 'grabbing' : linkSide(part) ? 'crosshair' : 'ew-resize');
 
 const noop = (): void => undefined;
+
+/** Angular's own marks on a rendered component (`ng-version`, the style scoping attributes) */
+const ANGULAR_ATTRIBUTE = /^(ng-version$|_nghost-|_ngcontent-)/;
+
+/** Removes Angular's own marks from `root` and its descendants: an exported file carries none. */
+function stripAngularAttributes(root: Element): void {
+  for (const el of [root, ...Array.from(root.querySelectorAll('*'))]) {
+    for (const name of el.getAttributeNames()) if (ANGULAR_ATTRIBUTE.test(name)) el.removeAttribute(name);
+  }
+}
+
+/** The built-in bar components: an export draws them itself (a subclass is a custom bar) */
+const BUILTIN_BAR_TYPES: ReadonlySet<Type<GanttBarBase>> = new Set(BUILTIN_BARS.map(def => def.component));
 
 @Component({
   selector: 'gantt-canvas',
@@ -549,6 +577,15 @@ const noop = (): void => undefined;
         stroke: var(--gantt-status-overdue);
       }
 
+      /* Print (Gantry 2 phase 12, D17; styles/print.css.ts): Ctrl+P prints no row hover and no link
+         being drawn (the tooltip, the bar overlay and the drag ghost hide themselves) */
+      @media print {
+        .gantt-row-hover,
+        .gantt-link-preview {
+          display: none;
+        }
+      }
+
       /* Forced colours (D25): SVG paints are not forced (preserve-parent-color) and are inline, so
          every one is set here with !important: rows Canvas (the hover tint hidden), non-working time
          GrayText at 0.15 (intensive hours Highlight), grid lines GrayText, today Highlight; the link
@@ -639,6 +676,11 @@ export class GanttCanvasComponent {
   private readonly hostEl = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly doc = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
+  /** What an export's off-screen custom bar is created with (`renderCustomBarMarkup`) */
+  private readonly renderer = inject(Renderer2);
+  private readonly injector = inject(Injector);
+  private readonly environmentInjector = inject(EnvironmentInjector);
+  private readonly exportDom = inject(GANTT_EXPORT_DOM);
 
   protected readonly config = this.layout.cfg;
   protected readonly timeline = this.layout.timeline;
@@ -836,6 +878,37 @@ export class GanttCanvasComponent {
     this.progress.bindVisual(() => this.baseVisual());
     // Browser only (never on the server): the pointer listeners, released with the chart
     afterNextRender(() => this.connectPointer());
+  }
+
+  // ── Exports ───────────────────────────────────────────────
+
+  /**
+   * A custom bar for an export (D5): the component this chart's registry resolves for the row's
+   * `barType`, rendered off-screen once with `ctx` (the export's context: its theme, the resolved
+   * visual, never selected or draggable) — created on a detached svg `<g>` host with the canvas'
+   * injectors, checked once, serialized (`serializeSvg`: no scripts, `foreignObject` or `on*`
+   * handlers) and destroyed. `null` draws core's built-in bar: a built-in bar type, no browser
+   * window, or a node the sanitiser drops whole. Only attributes and inline styles travel, not
+   * the component's stylesheet.
+   */
+  renderCustomBarMarkup(ctx: GanttBarContext): string | null {
+    const type = this.registry.resolve(ctx.row.barType);
+    const win = this.doc.defaultView;
+    if (BUILTIN_BAR_TYPES.has(type) || !win) return null;
+    const host = this.renderer.createElement('g', 'svg') as Element;
+    const ref = createComponent(type, {
+      hostElement: host,
+      environmentInjector: this.environmentInjector,
+      elementInjector: this.injector,
+      bindings: [inputBinding('ctx', () => ctx)],
+    });
+    try {
+      ref.changeDetectorRef.detectChanges();
+      stripAngularAttributes(host);
+      return this.exportDom.serializeSvg(host, win) || null;
+    } finally {
+      ref.destroy();
+    }
   }
 
   // ── Focus on the bars ─────────────────────────────────────

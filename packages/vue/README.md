@@ -53,14 +53,16 @@ function onDragged(e: TaskDragEvent) {
   and a prop that becomes `undefined` (or is dropped) restores it.
 - **Events** carry the event detail: `@task-dragged`, `@task-resized`, `@selection-change`,
   `@row-click`, `@row-dblclick`, `@view-mode-change`, `@state-change`, `@load-error`, `@retry`, and the editing events `@before-change`, `@tasks-change`, `@task-updated`,
-  `@task-progress-changed`, `@dependency-created`, `@dependency-deleted`, `@history-change` (see [Editing](#editing)).
+  `@task-progress-changed`, `@dependency-created`, `@dependency-deleted`, `@history-change` (see [Editing](#editing)),
+  and the export events `@before-export` and `@export` (see [Export and print](#export-and-print)).
 - **Slots** — rendered in the element's light DOM, where its own slots pick them up: the `empty`
   slot (`<template #empty>…</template>`) in a `<div slot="empty">`, which replaces the empty-state
   text (`labels.emptyState`), then the default slot as it is (a `<div slot="empty">…</div>`
   written there works too).
 - **Template ref** — exposes only `element`: the underlying `GantryElement`, with its
   [methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods). It is set
-  before the element is inserted, so it is there in the parent's `onMounted`.
+  before the element is inserted, so it is there in the parent's `onMounted`. The exports are async methods there:
+  `await gantt.value?.element?.download('svg')`, `exportCsv()`, `print()` (see [Export and print](#export-and-print)).
 - **Size** — the element fills its container (`display: block; width: 100%; height: 100%`, from
   its own `:host` style); a `class` or `style` on `<Gantry>` overrides that. The component adds no
   inline style of its own.
@@ -134,6 +136,32 @@ With `editing: { controlled: true }` the chart applies nothing: `@tasks-change` 
 (`gantt.value?.element?.undo()`, `canUndo`, `editCell()`, `addDependency()`…; the
 [Web Component's methods](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#methods)). A custom cell editor is a function that returns a DOM node
 (`editor: ctx => node` in a column), not a VNode.
+
+## Export and print
+
+```vue
+<button @click="gantt?.element?.download('svg')">Save SVG</button>
+<button @click="gantt?.element?.print({ paper: 'letter' })">Print</button>
+<Gantry
+  ref="gantt"
+  :tasks="tasks"
+  :options="{ toolbar: { export: true }, export: { fileName: 'roadmap' } }"
+  @before-export="
+    d => {
+      if (d.format === 'png') d.preventDefault();
+    }
+  "
+  @export="d => console.log(d.fileName, d.size, d.pages)"
+/>
+```
+
+The export methods are async methods of the element on the template ref's `element`: `exportSvg()` and
+`exportCsv()` resolve text, `exportPng()` a Blob, `download(format)` and `print()` whether they ran. Every `download()`
+and `print()`, from the ref or the toolbar's Export menu, emits `before-export` first (synchronous:
+`detail.preventDefault()` cancels the file or the print, so you can upload `await gantt.value?.element?.exportSvg()`
+yourself instead), then `export` with the format, file name, size in bytes or page count. A `renderBar` node is
+serialized into images (attributes and inline styles only: no Vue component renders inside a bar). Options, defaults
+and limits are in [Export and print](https://github.com/ErlonRr/gantryjs#export-and-print).
 
 ## Options and behaviour
 

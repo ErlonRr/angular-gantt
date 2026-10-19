@@ -33,6 +33,7 @@ const ALL: ResolvedToolbar = {
   panelToggle: false,
   overflow: 'menu',
   undo: true,
+  export: false,
 };
 const LEVELS: GanttZoomLevel[] = ['Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
 
@@ -241,6 +242,6 @@ describe('history group: width and overflow', () => {
   it("'wrap' keeps every group, history included", () => {
     const groups = buildToolbar(input());
     const out = layoutToolbar({ groups, width: 50, controlSize, overflow: 'wrap', labels: DEFAULT_LABELS });
-    expect(out).toEqual({ groups, menu: null });
+    expect(out).toEqual({ groups, menu: null, exportMenu: null });
   });
 });

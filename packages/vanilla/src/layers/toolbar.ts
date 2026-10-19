@@ -18,9 +18,13 @@
  *     div.gantt-tb-group.gantt-tb-pills.gantt-tb-views[role=radiogroup][aria-label]
  *                                            button.gantt-tb-pill[role=radio][aria-checked][aria-label][title]
  *                                              > svg.gantt-tb-icon
+ *     div.gantt-tb-group.gantt-tb-export-group button.gantt-tb-btn.gantt-tb-export[aria-label][title]
+ *                                              [aria-haspopup=menu][aria-expanded] > svg.gantt-tb-icon
+ *                                              (`toolbar.export`; `aria-controls` while open)
+ *     div.gantt-tb-menu[role=menu][id][aria-label]       the Export menu (while open): right after its group
  *     div.gantt-tb-group.gantt-tb-more-group button.gantt-tb-btn.gantt-tb-more[aria-haspopup=menu][aria-expanded]
  *                                              (while some groups don't fit; `aria-controls` while open)
- *     div.gantt-tb-menu[role=menu][id][aria-label]                                     (while open)
+ *     div.gantt-tb-menu[role=menu][id][aria-label]       the More menu (while open)
  *       div.gantt-tb-menu-group[role=group][aria-label]
  *         button.gantt-tb-menu-item[role=menuitemradio|menuitem][aria-checked][tabindex=-1]
  *           > svg.gantt-tb-icon? + span.gantt-tb-label
@@ -29,10 +33,11 @@
  *
  * Patched in place: groups are keyed by `ToolbarGroup.key` and buttons by `ToolbarItem.focusKey`
  * (`data-focus-key`: `panel`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`, `zoom:<level>`, `today`,
- * `view:<view>`, `more`), menu sections by their group key and menu items by `menu:<key>`, so a
- * control keeps its node, and keyboard focus, across zooms, view switches and option changes.
- * The panel toggle, the More button and the menu are attached only while shown (D26): at a width
- * where everything fits, without `panelToggle`, the toolbar is the Phase 9 toolbar.
+ * `view:<view>`, `export`, `more`), menu sections by their group key and menu items by
+ * `menu:<key>`, so a control keeps its node, and keyboard focus, across zooms, view switches and
+ * option changes. The panel toggle, the export group, the More button and the menu are attached
+ * only while shown (D26): at a width where everything fits, without `panelToggle` and
+ * `toolbar.export`, the toolbar is the Phase 9 toolbar.
  *
  * History (Phase 11, D17): with `toolbar.undo` (default on) and while the chart keeps history
  * (`editing.history`: editing on, not controlled) core adds the `history` group, Undo and Redo,
@@ -70,6 +75,21 @@
  * one holds focus, More is the toolbar's tab stop. A focused More or menu item a paint removes
  * hands focus to the toolbar's tab stop.
  *
+ * Export (Phase 12, D16): with `toolbar.export` (default off) and at least one of
+ * `export.formats`, core adds the export group last (after the views): one icon menu button,
+ * Export, whose menu lists the formats (SVG image, PNG image, CSV table, Print…). It is a second
+ * menu button with the same keys, focus rules and closing rules as More (`reduceMenu`,
+ * `toolbarMenuKey`; it opens on its first item, as nothing in it is checked), painted by the same
+ * menu painter into the same `div.gantt-tb-menu` (one id, the `aria-controls` of the button that
+ * opened it), named `labels.exportMenu` and placed right after the export group. One menu at a
+ * time: opening one closes the other (`inputs.menuOpen`, `inputs.exportMenuOpen`), and a press
+ * outside, a width change and the toolbar going away close both. The export group is the first to
+ * move into More, where its formats become a section named `labels.exportMenu` (never a nested
+ * menu); an open Export menu whose group has moved (or gone) closes after the flush without moving
+ * focus. Choosing a format, from either menu, closes the menu back to its button first, then runs
+ * `ctx.runExport(format, 'toolbar')` (`download()`, or `print()`, which never rejects: a failure
+ * is announced in the alert region).
+ *
  * One delegated click listener runs the action of the control or menu item clicked.
  */
 
@@ -95,6 +115,7 @@ import {
   type ToolbarIcon,
   type ToolbarItem,
   type ToolbarLayout,
+  type ToolbarLayoutInput,
   type ToolbarMenuEvent,
   type ToolbarMenuItem,
   type ToolbarMenuSection,
@@ -128,12 +149,23 @@ interface ToolbarModel {
   readonly label: string;
   /** `aria-label` of the More menu */
   readonly more: string;
+  /** `aria-label` of the Export menu */
+  readonly exportMenu: string;
   /** The legend sits in the toolbar (`legend.position: 'toolbar'`): its width is observed */
   readonly legend: boolean;
   readonly layout: ToolbarLayout;
 }
 
-/** `id` of the More menu (`aria-controls` of More); unique in the element's shadow root. */
+/**
+ * Which menu: More's (`ToolbarLayout.menu`) or Export's (`ToolbarLayout.exportMenu`). Also the
+ * `data-focus-key` of the button that opens it.
+ */
+type MenuKind = 'more' | 'export';
+
+/**
+ * `id` of the toolbar's menu: More's or Export's, one at a time (`aria-controls` of the button
+ * that opened it); unique in the element's shadow root.
+ */
 const MENU_ID = 'gantt-tb-menu';
 
 /** The toolbar's column gap (`.gantt-toolbar { gap: 6px 10px }`): between the last group and the legend. */
@@ -141,7 +173,7 @@ const LEGEND_GAP = 10;
 
 /** Each chart's toolbar element, by its skeleton (read by the legend region). */
 const toolbars = new WeakMap<Skeleton, HTMLElement>();
-/** Each chart's "close the More menu" (on a width change, and when the toolbar is hidden). */
+/** Each chart's "close the toolbar's menu" (on a width change, and when the toolbar is hidden). */
 const menuClosers = new WeakMap<Skeleton, () => void>();
 
 /**
@@ -154,9 +186,10 @@ export function toolbarElement(dom: Skeleton): HTMLElement | undefined {
 }
 
 /**
- * Closes the More menu of the chart built on `dom`, if open (the chart's width changed: the
- * controls may move; the toolbar is hidden: its open state and its document listener go). Focus
- * is left alone; a focused item the next paint removes hands focus to the toolbar's tab stop.
+ * Closes the toolbar's open menu (More or Export) of the chart built on `dom`, if any (the
+ * chart's width changed: the controls may move; the toolbar is hidden: its open state and its
+ * document listener go). Focus is left alone; a focused item the next paint removes hands focus
+ * to the toolbar's tab stop.
  */
 export function closeToolbarMenu(dom: Skeleton): void {
   menuClosers.get(dom)?.();
@@ -177,9 +210,9 @@ function fitToolbar(
   labels: Pick<GanttLabels, 'more'>,
   main: number,
   legendW: number,
-  menuOpen: boolean,
+  open: Pick<ToolbarLayoutInput, 'menuOpen' | 'exportMenuOpen'>,
 ): ToolbarLayout {
-  const input = { groups, controlSize: cfg.controlSize, overflow: toolbar.overflow, labels, menuOpen };
+  const input = { groups, controlSize: cfg.controlSize, overflow: toolbar.overflow, labels, ...open };
   const legend = legendW > 0 ? legendW + LEGEND_GAP : 0;
   const layout = layoutToolbar({ ...input, width: main - legend });
   if (legend > 0 && main > 0 && estimateToolbarWidth(layout.groups, input) > main - legend) {
@@ -203,9 +236,16 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
   /** The controls painted last, in roving order (keyboard handler) */
   let items: readonly ToolbarItem[] = [];
   /** The More menu's items of the last paint, in display order (`reduceMenu`'s count and indexes) */
-  let menuItems: readonly ToolbarMenuItem[] = [];
-  /** Index of the menu's active item (`reduceMenu`); the open state is `inputs.menuOpen` */
+  let moreItems: readonly ToolbarMenuItem[] = [];
+  /** The Export menu's items of the last paint, in display order */
+  let exportItems: readonly ToolbarMenuItem[] = [];
+  /**
+   * Index of the open menu's active item (`reduceMenu`); the open states are `inputs.menuOpen`
+   * (More) and `inputs.exportMenuOpen` (Export), never both
+   */
   let active = -1;
+  /** The menu the last paint showed, `null` for none */
+  let shown: MenuKind | null = null;
   // Nodes by key, kept while a group or control is turned off: it comes back as the same node
   const groupNodes = new Map<string, HTMLElement>();
   const buttonNodes = new Map<string, HTMLButtonElement>();
@@ -226,10 +266,15 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         view: I.viewOverride(),
         // Undo / Redo while the chart keeps history (the state is read only then)
         history: cfg.editing.history ? I.historyState() : null,
+        // The Export menu button and its formats (`toolbar.export`)
+        export: toolbar.export ? { formats: cfg.export.formats } : null,
       });
       const legend = cfg.legend.position === 'toolbar';
-      const layout = fitToolbar(groups, cfg, toolbar, labels, I.mainW(), legend ? legendW() : 0, I.menuOpen());
-      return { label: labels.ariaToolbar, more: labels.more, legend, layout };
+      const layout = fitToolbar(groups, cfg, toolbar, labels, I.mainW(), legend ? legendW() : 0, {
+        menuOpen: I.menuOpen(),
+        exportMenuOpen: I.exportMenuOpen(),
+      });
+      return { label: labels.ariaToolbar, more: labels.more, exportMenu: labels.exportMenu, legend, layout };
     },
     { equals: structuralEqual },
   );
@@ -251,7 +296,8 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
       case 'togglePanel':
         return host.togglePanel();
       case 'menu':
-        // The More button: its menu (see `dispatch`)
+      case 'exportMenu':
+        // The More and Export buttons: their menus (see `dispatch`)
         return;
       case 'undo':
         // The element's undo() / redo(): through the pipeline, which announces the result (a
@@ -261,8 +307,21 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
       case 'redo':
         ctx.edit.redo();
         return;
+      case 'export':
+        // A format of the Export menu (or its section in More): `download()` / `print()` from the
+        // toolbar. It never rejects: a failure is announced in the alert region
+        void ctx.runExport(action.format, 'toolbar');
+        return;
     }
   };
+
+  /** The menu a menu button's action opens, or `null`. */
+  const menuOf = (action: ToolbarAction): MenuKind | null =>
+    action.type === 'menu' ? 'more' : action.type === 'exportMenu' ? 'export' : null;
+  /** The items of `kind`'s menu in the last paint. */
+  const itemsOf = (kind: MenuKind): readonly ToolbarMenuItem[] => (kind === 'more' ? moreItems : exportItems);
+  /** The open menu (one at a time), or `null`. */
+  const openMenu = (): MenuKind | null => (I.menuOpen.peek() ? 'more' : I.exportMenuOpen.peek() ? 'export' : null);
 
   /** The built-in control `target` is in (the legend in the toolbar and the menu hold none). */
   const controlOf = (target: EventTarget | null): HTMLButtonElement | null => {
@@ -278,46 +337,83 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
   const end = document.createComment('legend');
   const menu = h('div', { class: 'gantt-tb-menu', attrs: { role: 'menu', id: MENU_ID } });
 
-  // ── The More menu's state ────────────────────────────────
-  /** Document the outside-press listener is registered on, while the menu is open */
+  // ── The menus' state (More and Export, one open at a time) ─
+  /** Document the outside-press listener is registered on, while a menu is open */
   let outsideDoc: Document | null = null;
   const onOutside = (e: Event): void => {
+    const kind = openMenu();
+    if (kind === null) return;
     const path = e.composedPath();
-    const more = buttonNodes.get('more');
-    if (path.includes(menu) || (more !== undefined && path.includes(more))) return;
-    dispatch({ type: 'close', reason: 'outside' });
+    const button = buttonNodes.get(kind);
+    if (path.includes(menu) || (button !== undefined && path.includes(button))) return;
+    dispatch(kind, { type: 'close', reason: 'outside' });
   };
-  const setOpen = (open: boolean): void => {
-    I.menuOpen.set(open);
-    if (open && !outsideDoc) {
+  /** Opens the menu of `kind` (closing the other one), or closes both (`null`). */
+  const setOpen = (kind: MenuKind | null): void => {
+    I.menuOpen.set(kind === 'more');
+    I.exportMenuOpen.set(kind === 'export');
+    if (kind !== null && !outsideDoc) {
       outsideDoc = host.ownerDocument;
       outsideDoc.addEventListener('pointerdown', onOutside, { capture: true });
-    } else if (!open && outsideDoc) {
+    } else if (kind === null && outsideDoc) {
       outsideDoc.removeEventListener('pointerdown', onOutside, { capture: true });
       outsideDoc = null;
     }
   };
-  /** Runs `event` through core `reduceMenu` and moves focus where it says. */
-  const dispatch = (event: ToolbarMenuEvent): void => {
-    const { state, focus } = reduceMenu({ open: I.menuOpen.peek(), active }, event, menuItems.length);
-    active = state.active;
-    setOpen(state.open);
+  /**
+   * Runs `event` for the menu of `kind` through core `reduceMenu` and moves focus where it says.
+   * One menu at a time: opening one closes the other; an event that leaves a closed menu closed
+   * leaves the open one alone.
+   */
+  const dispatch = (kind: MenuKind, event: ToolbarMenuEvent): void => {
+    const own = openMenu() === kind;
+    const list = itemsOf(kind);
+    const { state, focus } = reduceMenu({ open: own, active: own ? active : -1 }, event, list.length);
+    if (state.open) {
+      active = state.active;
+      setOpen(kind);
+    } else if (own) {
+      active = -1;
+      setOpen(null);
+    }
     if (focus === 'item') {
-      const key = menuItems[state.active]?.focusKey;
+      const key = list[state.active]?.focusKey;
       if (key === undefined) return;
       const node = menuNodes.get(key);
       // Painted already (a move inside the open menu): focus it now; else once the flush mounts it
-      if (node?.isConnected && menu.isConnected) node.focus();
+      if (shown === kind && node?.isConnected && menu.isConnected) node.focus();
       else ctx.focus.request(key);
     } else if (focus === 'button') {
-      buttonNodes.get('more')?.focus();
+      buttonNodes.get(kind)?.focus();
     }
   };
   menuClosers.set(dom, () => {
-    if (!I.menuOpen.peek()) return;
+    if (openMenu() === null) return;
     active = -1;
-    setOpen(false);
+    setOpen(null);
   });
+  /**
+   * The Export menu while its button no longer shows (its group moved into More, or went): closed
+   * once the flush is over (a paint writes no signal), focus left alone.
+   */
+  let closing = false;
+  const closeExportLater = (): void => {
+    if (closing) return;
+    closing = true;
+    queueMicrotask(() => {
+      closing = false;
+      if (!I.exportMenuOpen.peek()) return;
+      let shows = false;
+      try {
+        shows = (model.peek()?.layout.exportMenu ?? null) !== null;
+      } catch {
+        // Options that don't resolve: no toolbar
+      }
+      if (shows) return;
+      active = -1;
+      setOpen(null);
+    });
+  };
 
   const bar = h(
     'div',
@@ -328,9 +424,19 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         click: e => {
           const item = menuItemOf(e.target);
           if (item) {
-            // Run the item's action, then close back to More
-            run(menuParts.get(item)!.action);
-            dispatch({ type: 'select' });
+            const kind = openMenu();
+            if (kind === null) return;
+            const { action } = menuParts.get(item)!;
+            if (action.type === 'export') {
+              // Back on the button that opened the menu first: the download or the print dialog
+              // starts from there (and the dialog gives focus back to it)
+              dispatch(kind, { type: 'select' });
+              run(action);
+            } else {
+              // Run the item's action, then close back to More
+              run(action);
+              dispatch(kind, { type: 'select' });
+            }
             return;
           }
           const b = controlOf(e.target);
@@ -338,7 +444,8 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
           const { action, disabled } = parts.get(b)!;
           // aria-disabled (Undo / Redo with nothing to do): focusable, but inert
           if (disabled) return;
-          if (action.type === 'menu') dispatch({ type: 'open', via: 'click', checked: toolbarMenuChecked(menuItems) });
+          const kind = menuOf(action);
+          if (kind !== null) dispatch(kind, { type: 'open', via: 'click', checked: toolbarMenuChecked(itemsOf(kind)) });
           else run(action);
         },
         keydown: e => {
@@ -346,26 +453,28 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
           // The menu's keys come first; each is handled here (prevented: the element's shortcuts,
           // Esc's clearSelection included, skip a prevented key), but Tab moves focus on
           if (menuItemOf(e.target)) {
+            const kind = openMenu();
             const event = toolbarMenuKey(e, 'menu');
-            if (!event) return;
+            if (!event || kind === null) return;
             if (event.type !== 'close' || event.reason !== 'tab') e.preventDefault();
-            dispatch(event);
+            dispatch(kind, event);
             return;
           }
           const b = controlOf(e.target);
           const key = b?.dataset['focusKey'];
           if (!key) return;
-          if (key === 'more') {
+          if (key === 'more' || key === 'export') {
             let event = toolbarMenuKey(e, 'button');
-            if (event?.type === 'open') event = { ...event, checked: toolbarMenuChecked(menuItems) };
-            else if (!event && I.menuOpen.peek()) {
-              // More itself holding focus with its menu open: Esc and Tab close it too
+            // Opens on the checked item (a zoom level, a view), else the first (Export: always)
+            if (event?.type === 'open') event = { ...event, checked: toolbarMenuChecked(itemsOf(key)) };
+            else if (!event && openMenu() === key) {
+              // The menu button itself holding focus with its menu open: Esc and Tab close it too
               const close = toolbarMenuKey(e, 'menu');
               if (close?.type === 'close') event = close;
             }
             if (event) {
               if (event.type !== 'close' || event.reason !== 'tab') e.preventDefault();
-              dispatch(event);
+              dispatch(key, event);
               return;
             }
           }
@@ -381,10 +490,13 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         focusin: e => {
           const item = menuItemOf(e.target);
           if (item) {
-            // The menu's items are not tab stops: More stands for them in the roving set
-            lastFocus.set('more');
+            const kind = openMenu();
+            if (kind === null) return;
+            // The menu's items are not tab stops: the button that opened it stands for them in
+            // the roving set
+            lastFocus.set(kind);
             const key = item.dataset['focusKey'];
-            dispatch({ type: 'focus', index: menuItems.findIndex(i => i.focusKey === key) });
+            dispatch(kind, { type: 'focus', index: itemsOf(kind).findIndex(i => i.focusKey === key) });
             return;
           }
           const key = controlOf(e.target)?.dataset['focusKey'];
@@ -523,49 +635,88 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
   return {
     paint() {
       const m = model();
-      const open = m !== null && I.menuOpen() && m.layout.menu !== null;
+      const moreOpen = I.menuOpen();
+      const exportOpen = I.exportMenuOpen();
+      // One menu at a time (`setOpen`), each shown only while its button is
+      const kind: MenuKind | null =
+        m === null
+          ? null
+          : moreOpen && m.layout.menu !== null
+            ? 'more'
+            : exportOpen && m.layout.exportMenu !== null
+              ? 'export'
+              : null;
       items = m ? toolbarItems(m.layout.groups) : [];
-      menuItems = m ? toolbarMenuItems(m.layout.menu) : [];
+      moreItems = m ? toolbarMenuItems(m.layout.menu) : [];
+      exportItems = m ? toolbarMenuItems(m.layout.exportMenu) : [];
+      const menuItems = kind === null ? [] : itemsOf(kind);
       const tabStop = toolbarTabStop(items, lastFocus());
 
-      // Controls that go away lose focus: the focus-restore region gives it back. A focused More
-      // or menu item going away (the menu closed by a resize, everything fits again) hands it to
-      // the toolbar's tab stop instead of the timeline
+      // Controls that go away lose focus: the focus-restore region gives it back. A focused menu
+      // button (More, Export) or menu item going away (the menu closed by a resize, everything
+      // fits again, Export moved into More) hands it to the toolbar's tab stop instead of the
+      // timeline
       const focused = focusKeyOf(shadow.activeElement);
       const gone =
         focused !== null &&
-        (focused === 'more' || focused.startsWith('menu:')) &&
+        (focused === 'more' || focused === 'export' || focused.startsWith('menu:')) &&
         !items.some(i => i.focusKey === focused) &&
-        !(open && menuItems.some(i => i.focusKey === focused));
+        !menuItems.some(i => i.focusKey === focused);
       if (gone && tabStop !== null) ctx.focus.request(tabStop);
       else ctx.focus.capture();
+      if (exportOpen && kind !== 'export') closeExportLater();
 
       showNode(dom.toolbarContainer, bar, m !== null);
       watchLegend(m?.legend === true);
+      shown = kind;
       if (!m) return;
 
       setAttr(bar, 'aria-label', m.label);
-      // The menu first (right after the groups), so the groups stay contiguous before their anchor
-      showNode(bar, menu, open, end);
+      // Back to front, each node before the one that follows it, so nodes already in place never
+      // move (a moved node would lose focus): the More menu (last, before the legend marker), the
+      // More group, the Export menu, then the other groups, contiguous before their anchor. The
+      // export group is the last of them (core order), so the Export menu sits right after it
+      const groups = m.layout.groups;
+      const more = groups.find(g => g.key === 'more');
+      let anchor: ChildNode = end;
+      if (kind === 'more') {
+        showNode(bar, menu, true, anchor);
+        anchor = menu;
+      }
+      const moreNode = more ? createGroup(more) : groupNodes.get('more');
+      if (more) {
+        updateGroup(moreNode!, more, tabStop);
+        showNode(bar, moreNode!, true, anchor);
+        anchor = moreNode!;
+      } else if (moreNode) {
+        showNode(bar, moreNode, false);
+      }
+      if (kind === 'export') {
+        showNode(bar, menu, true, anchor);
+        anchor = menu;
+      } else if (kind === null) {
+        showNode(bar, menu, false);
+      }
       reconcile(
         bar,
-        m.layout.groups,
+        more ? groups.filter(g => g !== more) : groups,
         group => group.key,
         createGroup,
         (el, group) => updateGroup(el, group, tabStop),
-        open ? menu : end,
+        anchor,
         detach,
       );
-      if (open) {
-        setAttr(menu, 'aria-label', m.more);
-        reconcile(menu, m.layout.menu!, section => section.key, createSection, updateSection, null, detach);
+      if (kind !== null) {
+        setAttr(menu, 'aria-label', kind === 'more' ? m.more : m.exportMenu);
+        const sections = kind === 'more' ? m.layout.menu : m.layout.exportMenu;
+        reconcile(menu, sections!, section => section.key, createSection, updateSection, null, detach);
       }
     },
     disconnect() {
-      // A reconnected chart starts with its menu closed and observes its legend again
-      if (I.menuOpen.peek()) {
+      // A reconnected chart starts with its menus closed and observes its legend again
+      if (openMenu() !== null) {
         active = -1;
-        setOpen(false);
+        setOpen(null);
       }
       watchLegend(false);
     },

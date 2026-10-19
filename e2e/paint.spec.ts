@@ -9,7 +9,8 @@
 // colours and segments, straight arrows, compact density) and `narrow` (a 600 × 600 box: the
 // responsive timeline-only view and the toolbar's More button). Phase 11 adds `editing`: the
 // toolbar's history group, a selected link, an invalid cell editor with its message and a hovered
-// bar's grips, progress grip and link connectors.
+// bar's grips, progress grip and link connectors. Phase 12 adds `export`: the toolbar's Export group
+// (`toolbar.export`) with its menu open (the open button and the four format items).
 import { test, expect, arrowPoint, collectPaints, type Chart, type PaintRecords } from './fixtures';
 import { SCENARIOS, paintFixture, renderFixture, type Scenario, type Target } from './paint-fixture';
 
@@ -55,6 +56,17 @@ async function editingState(chart: Chart): Promise<void> {
   await expect(field).toBeFocused();
 }
 
+/** The `export` scenario's state: the toolbar's Export menu opened by keyboard (↓ on its button). */
+async function exportMenuState(chart: Chart): Promise<void> {
+  const button = chart.get('.gantt-tb-export');
+  await expect(button).toHaveCount(1);
+  await button.focus();
+  await chart.page.keyboard.press('ArrowDown');
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+  await expect(chart.get('.gantt-tb-menu[role="menu"] [role="menuitem"]')).toHaveCount(4);
+  await expect.poll(() => chart.focusedKey()).toBe('menu:export:svg');
+}
+
 /** Render `scenario` on `target`, wait until it is stable and collect the computed colours. */
 async function paints(chart: Chart, target: Target, scenario: Scenario): Promise<PaintRecords> {
   const fx = paintFixture(scenario);
@@ -82,6 +94,7 @@ async function paints(chart: Chart, target: Target, scenario: Scenario): Promise
     await expect(chart.page.locator('.gantt-tooltip').filter({ visible: true })).toHaveCount(1);
   }
   if (scenario === 'editing') await editingState(chart);
+  if (scenario === 'export') await exportMenuState(chart);
   // Two frames: the Web Component batches renders on requestAnimationFrame
   await chart.page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
   return collectPaints(chart);
@@ -132,7 +145,8 @@ const paritySide = (records: PaintRecords): PaintRecords =>
  * colours of both bindings' forced-colors rules (Phase 9 wave 5). `styled` and `narrow` (phase 10)
  * compare the canvas and the chrome like the light week; `editing` (phase 11) adds the bar overlay
  * and the link preview (`EDIT_SHAPES`): the selected arrow, the history group and the open editor
- * are in the canvas and the chrome already.
+ * are in the canvas and the chrome already. `export` (phase 12) compares the toolbar: the Export
+ * group, its open button and the open menu (`tb-` keys).
  */
 const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'light-week', keys: COMPARED },
@@ -145,6 +159,7 @@ const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'styled', keys: COMPARED },
   { scenario: 'narrow', keys: COMPARED },
   { scenario: 'editing', keys: new RegExp(`${COMPARED.source}|${EDIT_SHAPES.source}`) },
+  { scenario: 'export', keys: /tb-/ },
 ];
 
 /**

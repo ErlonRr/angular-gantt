@@ -30,6 +30,8 @@ const TASKS: GanttTask[] = [
   { id: 'c', name: 'C', start: new Date(2026, 2, 2), end: new Date(2026, 2, 12) },
 ];
 const WIDTH = 800;
+/** One week of tasks: the Hour level over the 15 months of TASKS mounts ~11 000 header cells (slow, timed out) */
+const SHORT_TASKS: GanttTask[] = [{ id: 's', name: 'S', start: new Date(2026, 2, 2), end: new Date(2026, 2, 6) }];
 
 @Component({
   imports: [GantryComponent],
@@ -41,7 +43,7 @@ const WIDTH = 800;
   />`,
 })
 class Host {
-  readonly tasks = TASKS;
+  tasks = TASKS;
   readonly options = signal<GanttOptions>({ viewMode: ViewMode.Week, initialScroll: false });
   readonly modes: (string | undefined)[] = [];
   readonly gantt = viewChild.required(GantryComponent);
@@ -56,9 +58,10 @@ interface Chart {
   scroll: GanttScrollService;
 }
 
-async function mount(viewMode: string = ViewMode.Week): Promise<Chart> {
+async function mount(viewMode: string = ViewMode.Week, tasks: GanttTask[] = TASKS): Promise<Chart> {
   TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
   const f = TestBed.createComponent(Host);
+  f.componentInstance.tasks = tasks;
   f.componentInstance.options.set({ viewMode, initialScroll: false });
   await f.whenStable();
   const chart = f.debugElement.query(By.directive(GantryComponent));
@@ -185,7 +188,7 @@ describe('Ctrl/⌘ + wheel', () => {
   });
 
   it('at the finest level nothing changes and no anchor is left behind', async () => {
-    const c = await mount(ViewMode.Hour);
+    const c = await mount(ViewMode.Hour, SHORT_TASKS);
     const e = wheel(c, -500);
     expect(e.defaultPrevented).toBe(true);
     expect(level(c)).toBe(ViewMode.Hour);

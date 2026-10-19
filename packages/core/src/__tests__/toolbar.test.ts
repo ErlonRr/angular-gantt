@@ -35,6 +35,7 @@ const ALL: ResolvedToolbar = {
   panelToggle: false,
   overflow: 'menu',
   undo: true,
+  export: false,
 };
 
 const LEVELS: GanttZoomLevel[] = ['Hour', 'Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
@@ -449,6 +450,7 @@ describe('toolbar icons', () => {
     'more',
     'undo',
     'redo',
+    'export',
   ];
 
   it('defines every icon on a 16 px grid, stroked with currentColor at 1.5 px', () => {

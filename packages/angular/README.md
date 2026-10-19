@@ -79,6 +79,9 @@ bootstrapApplication(AppComponent, {
   (`keyboard.characterShortcuts`)
 - Editing (`options.editing`): cell editors (`<ng-template ganttCellEditor>` for your own), a progress grip, links drawn
   from a bar's connector, undo / redo, a cancelable `(beforeChange)` and `[(series)]`
+- Export and print: `exportSvg()`, `exportPng()`, `exportCsv()`, `download(format)` and `print()` (every row, the
+  header and task list on every printed page), a toolbar Export menu (`toolbar.export`) and a cancelable
+  `(beforeExport)` — see below
 - Zoom with the toolbar, the keys, Ctrl/⌘ + wheel or a pinch (anchored at the pointer), and
   `fitToScreen()` / the Fit button
 - Chart states: `[loading]` skeleton, `[errorMessage]` with Retry (`(retry)`), `[ganttEmpty]`
@@ -96,6 +99,50 @@ bootstrapApplication(AppComponent, {
   `listbox` (custom bars too), debounced live regions, forced-colors support, WCAG 2.2 AA palette
 - SSR-safe: no browser globals, browser work starts after the first render
 - **i18n** — localisable UI strings + any BCP 47 `locale` (via `Intl`) + custom date/header formats
+
+## Export and print
+
+```ts
+import { Component, viewChild } from '@angular/core';
+import { GantryComponent, type GanttDownloadOptions, type GanttExportEvent } from '@gantryjs/angular';
+
+@Component({
+  selector: 'app-plan',
+  imports: [GantryComponent],
+  template: `
+    <button type="button" (click)="save()">Save PNG</button>
+    <button type="button" (click)="chart().print({ paper: 'letter' })">Print</button>
+    <gantry
+      [series]="tasks"
+      [options]="{ toolbar: { export: true }, export: { fileName: 'roadmap' } }"
+      (beforeExport)="$event.format === 'csv' && $event.preventDefault()"
+      (export)="saved($event)"
+    />
+  `,
+})
+export class PlanComponent {
+  readonly chart = viewChild.required(GantryComponent);
+  // …tasks
+
+  async save(): Promise<void> {
+    const options: GanttDownloadOptions = { theme: 'light', fileName: 'plan' };
+    await this.chart().download('png', options); // false when (beforeExport) vetoed it
+  }
+
+  saved(e: GanttExportEvent): void {
+    console.log(e.fileName ?? `${e.pages} pages`, e.size);
+  }
+}
+```
+
+The methods are async: `exportSvg()` / `exportCsv()` resolve text, `exportPng()` a Blob, `download()` and `print()`
+whether they ran. Exports are drawn from the chart's model (every row, not only the mounted ones) and give the same
+SVG and CSV as `<gantry-element>`. `download()` and `print()`, from your code or the toolbar's Export menu, emit
+`(beforeExport)` first (call `$event.preventDefault()` synchronously to cancel), then `(export)`. Custom bar
+components are rendered off-screen once each and saved as drawn: only attributes and inline styles travel, not the
+component's `styles` (bind `[attr.fill]`, or pass `customBars: 'builtin'`). During server rendering `exportSvg()` and
+`exportCsv()` work (custom bars drawn as built-in); `exportPng()`, `download()` and `print()` need a browser. Options,
+defaults and limits: [Export and print](https://github.com/ErlonRr/gantryjs#export-and-print).
 
 ## i18n
 
@@ -115,6 +162,8 @@ The Angular API:
   [custom columns](https://github.com/ErlonRr/gantryjs#custom-columns-left-panel)
 - [Lazy loading](https://github.com/ErlonRr/gantryjs#lazy-load-with-ganttdatasource)
 - [Editing](https://github.com/ErlonRr/gantryjs#editing): events, controlled mode, cells, links and undo
+- [Export and print](https://github.com/ErlonRr/gantryjs#export-and-print): SVG, PNG, CSV, paginated print, the
+  toolbar's Export menu, `(beforeExport)` / `(export)` and server-side exports
 - [Inputs & Outputs](https://github.com/ErlonRr/gantryjs#inputs--outputs), the
   [public API](https://github.com/ErlonRr/gantryjs#public-api) and the
   [content slots](https://github.com/ErlonRr/gantryjs#ng-content-slots)
