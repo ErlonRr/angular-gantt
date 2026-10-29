@@ -1,6 +1,6 @@
 {
   "name": "@gantryjs/react",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gantry Gantt chart for React \u2014 a free, full-featured interactive Gantt component.",
   "keywords": [
     "react",

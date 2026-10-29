@@ -195,6 +195,15 @@ Demos and issues: **https://github.com/ErlonRr/gantryjs**
 <summary><b>Recent Releases (Click to expand)</b></summary>
 <br/>
 
+### [2.0.0] — 2026-10-29
+
+- **One chart for every framework**: a new `<gantry-element>` Web Component engine, wrappers for React, Vue and Svelte, and a native Angular 22 package, now `@gantryjs/angular` (formerly `ngx-gantry`), all driven by the same `@gantryjs/core` model.
+- **Editing**: drag, resize, progress, links, editable cells, undo/redo and a cancelable `before-change`, in every binding.
+- **Working calendar**: durations, snaps, critical path and rollups in working days or hours.
+- **Resource view**: daily load per person and team against its capacity, with over-allocation highlighted.
+- **Export and print**: SVG, PNG, CSV and paginated print, re-rendered from the model.
+- **Accessible by default**: WCAG 2.2 AA palette, keyboard and touch paths, forced colors; 35 examples in all five frameworks.
+
 ### [1.0.1] — 2026-08-08
 
 - **Scroll Tearing & Ping-Pong**: Resolved visual bar duplication during vertical scrolling by replacing fragile microtask lock with a robust scroll-source timeout lock.

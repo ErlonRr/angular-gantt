@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-29
+
 ### Added
 - **Multi-framework packages**: `@gantryjs/core` (framework-free logic), `@gantryjs/vanilla` (`<gantry-element>` Web Component), and `@gantryjs/react`, `@gantryjs/vue`, `@gantryjs/svelte` bindings, each with a demo app under `apps/`.
 - **Column sorting** (`@gantryjs/angular` and the Web Component): built-in columns are sortable; clicking a header cycles ascending → descending → original order.

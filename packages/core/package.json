@@ -1,6 +1,6 @@
 {
   "name": "@gantryjs/core",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Framework-free core of Gantry: Gantt chart types, timeline math, tree data helpers and critical-path computation.",
   "keywords": [
     "gantt",

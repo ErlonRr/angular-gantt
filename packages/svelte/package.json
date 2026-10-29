@@ -1,6 +1,6 @@
 {
   "name": "@gantryjs/svelte",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gantry Gantt chart for Svelte 5 \u2014 a free, full-featured interactive Gantt component.",
   "keywords": [
     "svelte",

@@ -1,6 +1,6 @@
 {
   "name": "@gantryjs/angular",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "type": "module",
   "description": "Gantry — a free, zoneless, signal-based Gantt chart for Angular (no @angular/animations, no CDK, no zone.js).",
   "keywords": [

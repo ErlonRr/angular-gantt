@@ -1,6 +1,6 @@
 {
   "name": "@gantryjs/vanilla",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Gantry Gantt chart as a framework-agnostic Web Component (<gantry-element>). Works with plain JS or any framework.",
   "keywords": [
     "web-component",
