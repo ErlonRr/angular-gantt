@@ -181,7 +181,7 @@ describe('custom-elements.json', () => {
   };
 
   it('lists every themeToCss() token, then the read-only layout variables, as CSS properties with their defaults', () => {
-    expect(element.cssProperties).toHaveLength(46);
+    expect(element.cssProperties).toHaveLength(47);
     expect(element.cssProperties.map(p => [p.name, p.default])).toEqual(cssProps());
     for (const prop of element.cssProperties) expect(prop.description, prop.name).toBeTruthy();
   });

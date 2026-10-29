@@ -38,6 +38,17 @@ export interface FixtureTask {
   collapsed?: boolean;
   /** A custom bar type (`'e2e-custom'`: the harness's custom bar, see `GanttSetup.customBars`) */
   barType?: string;
+  /** The resources the task is assigned to (Phase 14): an id, or an id with the percent of a full-time person */
+  resources?: (string | { resourceId: string; units?: number })[];
+}
+
+/** A resource of the `resources` property (Phase 14); `capacity` in percent of one person, default 100. */
+export interface FixtureResource {
+  id: string;
+  name: string;
+  capacity?: number;
+  group?: string;
+  color?: string;
 }
 
 /** A day shaded through `options.highlightTime` (functions don't cross into the page, so it travels as data). */
@@ -54,6 +65,8 @@ export interface FixtureHighlight {
  */
 export interface PaintFixture {
   tasks: FixtureTask[];
+  /** The `resources` property (Phase 14) */
+  resources?: FixtureResource[];
   options: Record<string, unknown>;
   annotations: Record<string, unknown>[];
   highlight: FixtureHighlight[];
@@ -161,6 +174,31 @@ export const PAINT_TASKS: FixtureTask[] = [
   },
   { id: 'retro', name: 'Retro', start: day(-5), end: day(-3), progress: 100, status: 'done' },
 ];
+
+/** The `resources` scenario's people: Bo works half time, Cy and Di are the Eng team. */
+export const PAINT_RESOURCES: FixtureResource[] = [
+  { id: 'ana', name: 'Ana' },
+  { id: 'bo', name: 'Bo', capacity: 50 },
+  { id: 'cy', name: 'Cy', group: 'Eng' },
+  { id: 'di', name: 'Di', group: 'Eng' },
+];
+
+/**
+ * Who does what in the `resources` scenario: Ana's Research and Wireframes meet API (200 % for two days),
+ * Bo is over his 50 % on Docs, the Eng team builds Frontend, Visual design and QA have nobody.
+ */
+const PAINT_ASSIGNMENTS: Record<string, FixtureTask['resources']> = {
+  research: ['ana'],
+  wireframes: ['ana'],
+  api: [{ resourceId: 'ana', units: 100 }, 'cy'],
+  docs: [{ resourceId: 'bo', units: 100 }],
+  retro: ['bo'],
+  frontend: ['cy', 'di'],
+};
+
+export const PAINT_RESOURCE_TASKS: FixtureTask[] = PAINT_TASKS.map(t =>
+  PAINT_ASSIGNMENTS[t.id] ? { ...t, resources: PAINT_ASSIGNMENTS[t.id] } : t,
+);
 
 /** A short plan for the Hour view (one band per off-hours / intensive range stays readable). */
 export const PAINT_HOUR_TASKS: FixtureTask[] = [
@@ -294,6 +332,10 @@ export const STYLED_OPTIONS: Record<string, unknown> = {
  * band is painted) and a Duration column. Its records hold no weekend, holiday or off-hours band:
  * the only `gantt-band` / `g-band` keys left are the two `highlightTime` days of the shared fixture,
  * which `style: 'none'` keeps painting.
+ * `resources` (phase 14) is the light week in the resource view (`rows: 'resources'`, the toolbar's
+ * Rows toggle, the Capacity and Peak load columns): the task list of resource rows and the
+ * `load` layer (bars, the part over capacity, its hatch and the dashed capacity line) with a person
+ * over capacity, a team and the Unassigned row. The canvas has no bars, arrows or critical path.
  */
 export type Scenario =
   | 'light-week'
@@ -308,7 +350,8 @@ export type Scenario =
   | 'narrow'
   | 'editing'
   | 'export'
-  | 'calendar';
+  | 'calendar'
+  | 'resources';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -324,6 +367,7 @@ export const SCENARIOS: readonly Scenario[] = [
   'editing',
   'export',
   'calendar',
+  'resources',
 ];
 
 /** The `narrow` scenario's box */
@@ -370,6 +414,18 @@ export function paintFixture(scenario: Scenario): PaintFixture {
           panel: { columns: ['name', 'duration'] },
         },
       };
+    case 'resources':
+      return {
+        ...base,
+        tasks: PAINT_RESOURCE_TASKS,
+        resources: PAINT_RESOURCES,
+        options: {
+          ...PAINT_OPTIONS,
+          rows: 'resources',
+          toolbar: { rowsToggle: true },
+          panel: { columns: ['name', 'capacity', 'load'] },
+        },
+      };
     default:
       return base;
   }
@@ -414,6 +470,7 @@ async function renderVanilla(chart: Chart, fx: PaintFixture): Promise<void> {
     el['tooltipEnabled'] = true;
     el['showLegend'] = true;
     el['tasks'] = revive(f.tasks);
+    if (f.resources) el['resources'] = f.resources;
     el['annotations'] = revive(f.annotations);
     el['options'] = {
       ...(revive(f.options) as object),

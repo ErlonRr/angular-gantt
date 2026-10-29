@@ -26,9 +26,15 @@ export interface ConfigGraph {
 export function configGraph(I: Inputs, chrome: ChromeGraph, node: NodeFactory): ConfigGraph {
   // Only the radius of the theme metrics enters the config
   const barRadius = node('barRadius', () => chrome.metrics().barRadius);
-  const config = node('config', () =>
-    resolveConfig({ ...I.optionsIn(), viewMode: I.viewModeOverride() }, chrome.i18n(), { barRadius: barRadius() }),
-  );
+  const config = node('config', () => {
+    const options = I.optionsIn();
+    // `rows`: the toolbar's toggle or a restored state over `options.rows` (`null` = the options' own)
+    return resolveConfig(
+      { ...options, viewMode: I.viewModeOverride(), rows: I.rowsOverride() ?? options.rows },
+      chrome.i18n(),
+      { barRadius: barRadius() },
+    );
+  });
   const viewMode = node('viewMode', () => config().level.name);
   const unit = node('scaleUnit', () => bottomScale(config().scales).unit);
   const nowDay = node('nowDay', () => quantizeNow(I.nowTick(), unit()), {

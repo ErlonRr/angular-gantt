@@ -28,7 +28,7 @@
    * The data props, copied one level (`shallow`); the others (`dataSource`, `renderBar`,
    * `syncGroup`, …) pass as they are: a sync group is shared by identity between the charts.
    */
-  const COPIED: ReadonlySet<string> = new Set(['tasks', 'columns', 'annotations', 'options']);
+  const COPIED: ReadonlySet<string> = new Set(['tasks', 'columns', 'annotations', 'resources', 'options']);
 
   /**
    * One level, never a deep clone: an array becomes a new array of the same items and a plain
@@ -66,6 +66,7 @@
     columns,
     options,
     annotations,
+    resources,
     darkMode,
     showToolbar,
     enableDrag,
@@ -108,6 +109,7 @@
     columns: () => columns,
     options: () => options,
     annotations: () => annotations,
+    resources: () => resources,
     darkMode: () => darkMode,
     showToolbar: () => showToolbar,
     enableDrag: () => enableDrag,

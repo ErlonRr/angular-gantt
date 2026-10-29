@@ -52,7 +52,7 @@ field — see [Configuration](https://github.com/ErlonRr/gantryjs#configuration)
 ## API
 
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties):
-  `tasks`, `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`,
+  `tasks`, `columns`, `options`, `annotations`, `resources`, `darkMode`, `showToolbar`, `enableDrag`,
   `enableResize`, `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`,
   `errorMessage`, `syncGroup`. Each is set as an element property, and only when it changes.
 - **Callback props** receive the [event](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#events)
@@ -189,7 +189,7 @@ which restores the element's default (`showToolbar` → `true`, `options` → `{
 
 ### Data props and reactivity
 
-`tasks`, `columns`, `annotations` and `options` are copied **one level** whenever they change:
+`tasks`, `columns`, `annotations`, `resources` and `options` are copied **one level** whenever they change:
 the element gets a plain array (or object) holding your own items — never a `$state` proxy at the
 top, never a deep clone. So:
 

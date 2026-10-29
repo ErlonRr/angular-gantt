@@ -92,7 +92,8 @@ export function createLegendLayer(ctx: LayerContext): Layer {
         todayVisible: todayVisible(),
         annotations: I.annotationsIn(),
         labels,
-        criticalPath: cfg.criticalPath,
+        // No critical path in the resource view (its rows have no links)
+        criticalPath: cfg.criticalPath && cfg.rows !== 'resources',
         baseline: cfg.baseline,
       });
       const toolbar = toolbarElement(dom);

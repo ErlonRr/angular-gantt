@@ -22,6 +22,8 @@ import { toLocalDay } from '../gantt-math';
 import { measureVariance, measuresWorkingTime, taskDuration } from '../calendar/durations';
 import { computeCellVisual, findColumn, taskStatus, valueToText } from '../render/columns';
 import { formatDurationInput, formatPredecessors, parseDuration } from '../editing/parse';
+import { DEFAULT_ASSIGNMENT_UNITS, taskAssignments, type ResourceIndex } from '../resources/model';
+import { resourceInfoOf } from '../resources/rows';
 import { resolveExportCall } from './files';
 import type { ChartExportSource } from './source';
 
@@ -102,7 +104,7 @@ function rawFieldColumn(key: string): ColumnDef {
  */
 function csvColumns(source: ChartExportSource, columns: GanttCsvExportOptions['columns']): readonly ColumnDef[] {
   const { split, table, all } = source.columns;
-  if (columns === 'all') return all;
+  if (columns === 'all') return all.filter(c => !(c.builtin && resourceColumnUnused(c.key, source)));
   if (!Array.isArray(columns)) return source.view === 'table' ? table : split;
   const out: ColumnDef[] = [];
   const seen = new Set<string>();
@@ -113,6 +115,18 @@ function csvColumns(source: ChartExportSource, columns: GanttCsvExportOptions['c
     if (col) out.push(col);
   }
   return out;
+}
+
+/**
+ * A resource-view built-in column the chart has no use for, left out of `columns: 'all'` so a chart
+ * without resources exports as before (Phase 14 D18): `capacity` and `load` outside the resource view,
+ * `resources` inside it (its rows are resources) and in a chart without any resource. Asked for by key,
+ * they are always there.
+ */
+function resourceColumnUnused(key: string, source: ChartExportSource): boolean {
+  const resourceView = source.config.rows === 'resources';
+  if (key === 'capacity' || key === 'load') return !resourceView;
+  return key === 'resources' && (resourceView || !source.columnCtx.resources?.list.length);
 }
 
 /**
@@ -146,7 +160,8 @@ export function isPlainNumber(text: string): boolean {
  *   midnight, else `YYYY-MM-DDTHH:mm`, `:ss` when not zero) of the date the cell shows;
  *   `duration` the days of the drawn span and `variance` the signed days (numbers, `.` decimal,
  *   at most 2 decimals; working days with a working calendar); `progress` the number; `predecessors` by id (`a FS+2d; b SS`); `status`
- *   and `type` their keys.
+ *   and `type` their keys; the resource view's `capacity` and `load` (peak) as percent numbers on a
+ *   resource row, `resources` the assignments by id (`ana, bo 50%`) on a task row.
  * - `'data'`, another column: its `render` text, else the task's field (`task[key]`, else
  *   `task.data[key]`): a date as local ISO, a number as is, an object as JSON.
  */
@@ -178,6 +193,9 @@ const BUILTIN_KEYS: ReadonlySet<string> = new Set<BuiltinColumnKey>([
   'baselineStart',
   'baselineEnd',
   'variance',
+  'resources',
+  'capacity',
+  'load',
 ]);
 
 const isBuiltinKey = (key: string): key is BuiltinColumnKey => BUILTIN_KEYS.has(key);
@@ -213,7 +231,29 @@ function builtinData(key: BuiltinColumnKey, row: GanttFlatRow, ctx: ColumnContex
       const days = measureVariance(task, ctx);
       return days === null ? '' : numberText(days);
     }
+    // The resource view's columns (Phase 14 D13): numbers on a resource row, the assignments on a task
+    case 'capacity': {
+      const capacity = resourceInfoOf(task)?.capacity;
+      return capacity == null ? '' : numberText(capacity);
+    }
+    case 'load': {
+      const info = resourceInfoOf(task);
+      return info ? numberText(info.peak) : '';
+    }
+    case 'resources':
+      return assignmentIds(task, ctx.resources);
   }
+}
+
+/**
+ * A task's assignments by resource id (`ana, bo 50%`: units are left out at 100), what the Resources cell
+ * reads back; `''` for a resource row, an unassigned task or a chart without resources.
+ */
+function assignmentIds(task: GanttTask, index: ResourceIndex | undefined): string {
+  if (!index || resourceInfoOf(task)) return '';
+  return taskAssignments(task, index)
+    .map(a => (a.units === DEFAULT_ASSIGNMENT_UNITS ? a.resourceId : `${a.resourceId} ${numberText(a.units)}%`))
+    .join(', ');
 }
 
 /**

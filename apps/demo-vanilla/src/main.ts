@@ -21,6 +21,8 @@ import {
   exportEventText,
   playgroundCommand,
   playgroundOptions,
+  playgroundResources,
+  withPlaygroundResources,
   withValue,
   type PlaygroundEditEvent,
   type PlaygroundEditEvents,
@@ -72,7 +74,8 @@ initTheme();
 
 // The demo plan, moved so today sits about 40% into it
 const demo = createDemoData();
-gantt.tasks = demo.tasks;
+gantt.tasks = withPlaygroundResources(demo.tasks);
+gantt.resources = playgroundResources();
 gantt.annotations = demo.annotations;
 gantt.showLegend = true;
 

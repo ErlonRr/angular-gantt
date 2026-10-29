@@ -25,7 +25,9 @@ export function captureExport(engine: Engine) {
       theme: G.theme(),
       dark: G.isDark(),
       themeOverrides: { ...I.optionsIn().theme, ...I.apiTheme() },
-      tasks: G.tasks(),
+      // The resource view exports its projected rows (`viewTasks`) and the load they were made from
+      tasks: G.viewTasks(),
+      utilization: G.utilization(),
       rows: G.visibleRows(),
       allRows: G.allRows(),
       rowStyle: G.rowStyle(),

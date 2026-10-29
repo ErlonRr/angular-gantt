@@ -36,15 +36,15 @@ const PALETTES: [string, Required<GanttTheme>][] = [
 ];
 
 describe('themeToCss', () => {
-  it.each(PALETTES)('%s: the 40 theme tokens then the 4 contrast tokens, 44 unique vars', (_, theme) => {
+  it.each(PALETTES)('%s: the 41 theme tokens then the 4 contrast tokens, 45 unique vars', (_, theme) => {
     const css = themeToCss(theme);
-    expect(css).toHaveLength(44);
-    expect(THEME_CSS_VARS).toHaveLength(40);
-    expect(new Set(css.map(([name]) => name)).size).toBe(44);
+    expect(css).toHaveLength(45);
+    expect(THEME_CSS_VARS).toHaveLength(41);
+    expect(new Set(css.map(([name]) => name)).size).toBe(45);
     THEME_CSS_VARS.forEach(([key, cssVar], i) => {
       expect(css[i]).toEqual([cssVar, theme[key]]);
     });
-    expect(css.slice(40).map(([name]) => name)).toEqual([
+    expect(css.slice(41).map(([name]) => name)).toEqual([
       CONTRAST_CSS_VARS.bar,
       CONTRAST_CSS_VARS.milestone,
       CONTRAST_CSS_VARS.critical,

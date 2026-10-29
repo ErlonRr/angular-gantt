@@ -1,5 +1,5 @@
 import { test as base, expect, type CDPSession, type Page, type Locator } from '@playwright/test';
-import { day, type FixtureTask } from './paint-fixture';
+import { day, type FixtureResource, type FixtureTask } from './paint-fixture';
 import { TARGETS } from '../playwright.config';
 
 /** Fixed "now" for every page: dates, the today marker and screenshots stay stable. */
@@ -137,6 +137,7 @@ export function collectPaints(chart: Chart): Promise<PaintRecords> {
       'gantt-today': 'today',
       'gantt-arrows': 'arrows',
       'gantt-bars-layer': 'bars',
+      'gantt-load': 'load',
       'gantt-tooltip': 'tooltip',
     };
     const SKIP = new Set(['STYLE', 'SCRIPT', 'TEMPLATE', 'LINK']);
@@ -159,14 +160,17 @@ export function collectPaints(chart: Chart): Promise<PaintRecords> {
       for (let s = el.previousElementSibling; s; s = s.previousElementSibling) if (token(s) === t) i++;
       return i ? `${t}:${String(i).padStart(3, '0')}` : t;
     };
+    // A pattern's id is made per chart (`gantt-over-hatch-2` in the Web Component, `gantry-1-over-hatch` in
+    // Angular): what a paint says is that it is a pattern
+    const pattern = (value: string) => value.replace(/url\("#[^"]*"\)/g, 'url(#pattern)');
     const record = (el: Element, key: string) => {
       const cs = getComputedStyle(el);
       const svg = el instanceof SVGElement;
       const parts: string[] = [];
       if (svg) {
         parts.push(
-          `fill=${cs.fill}`,
-          `stroke=${cs.stroke}`,
+          `fill=${pattern(cs.fill)}`,
+          `stroke=${pattern(cs.stroke)}`,
           `fill-opacity=${cs.fillOpacity}`,
           `stroke-opacity=${cs.strokeOpacity}`,
         );
@@ -244,7 +248,12 @@ const RECORDED_EVENTS = [
   'before-export',
   'export',
 ] as const;
-export type RecordedEvent = (typeof RECORDED_EVENTS)[number];
+/**
+ * Recorded only when the setup asks (`stateEvents`): the UI state (panel, zoom, rows mode…) changes
+ * on its own schedule, and the specs that compare whole event sequences must not see it.
+ */
+const OPT_IN_EVENTS = ['state-change'] as const;
+export type RecordedEvent = (typeof RECORDED_EVENTS)[number] | (typeof OPT_IN_EVENTS)[number];
 
 /** What `download()` / `print()` export (core `GanttExportFormat`). */
 export type ExportFormat = 'svg' | 'png' | 'csv' | 'print';
@@ -293,6 +302,10 @@ export function extraTasks(count: number): FixtureTask[] {
 export interface GanttSetup {
   /** Default: `PLAN` */
   tasks?: FixtureTask[];
+  /** The `resources` property (Phase 14); default none */
+  resources?: FixtureResource[];
+  /** Record `state-change` too (Phase 14); off by default so the other specs' event sequences stay the same */
+  stateEvents?: boolean;
   /** Default: `{ viewMode: 'Day', initialScroll: false }` (the timeline starts at its left edge) */
   options?: Record<string, unknown>;
   darkMode?: boolean;
@@ -326,6 +339,7 @@ export interface GanttSetup {
 /** What `Gantt.set` changes after the chart is open. */
 export interface GanttPatch {
   tasks?: FixtureTask[];
+  resources?: FixtureResource[];
   options?: Record<string, unknown>;
   darkMode?: boolean;
   loading?: boolean;
@@ -509,6 +523,7 @@ export class Gantt {
             };
           }
           el['options'] = options;
+          if (f.resources) el['resources'] = f.resources;
           const tasks = revive(f.tasks) as unknown[];
           if (f.dataSource) {
             const failures = f.dataSource.failures;
@@ -569,7 +584,7 @@ export class Gantt {
           }
           old.replaceWith(el);
         },
-        [fx, RECORDED_EVENTS, reviveSource()] as const,
+        [fx, [...RECORDED_EVENTS, ...(setup.stateEvents ? OPT_IN_EVENTS : [])], reviveSource()] as const,
       );
     } else {
       await this.page.addInitScript(f => {
@@ -593,6 +608,7 @@ export class Gantt {
           const revive = new Function(`return ${src}`)() as (v: unknown) => unknown;
           const g = el as HTMLElement & Record<string, unknown>;
           if (p.tasks !== undefined) g['tasks'] = revive(p.tasks);
+          if (p.resources !== undefined) g['resources'] = p.resources;
           if (p.options !== undefined) {
             const options = revive(p.options) as Record<string, unknown>;
             if (tooltipRender) {

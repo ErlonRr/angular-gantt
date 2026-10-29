@@ -45,21 +45,27 @@
  *   g.gantt-annotations
  *   line.gantt-today          attached while the today line is shown
  *   g.gantt-arrows
+ *   g.gantt-load              the resource view's load (Phase 14) — attached before `bars` only while `rows` is 'resources'
  *   g.gantt-bars-layer        the bars: `role=option` children of the svg's `role=listbox`
  *   g.gantt-bar-overlay       attached while it shows a focus ring or grips (D4)
  *   g.gantt-annotation-labels
  *   rect.gantt-drag-preview   attached while a bar is dragged
  *   path.gantt-link-preview   attached last while a link session shows a preview (Phase 11)
  *
- * The today line, the row hover, the bar overlay, the drag ghost and the link preview are single
- * persistent nodes and stay detached while hidden: the paint snapshots and `.gantt-drag-preview`
+ * The today line, the row hover, the bar overlay, the drag ghost, the link preview and the load group are
+ * single persistent nodes and stay detached while hidden: the paint snapshots and `.gantt-drag-preview`
  * (count 0 after a drop) rely on it.
+ *
+ *   g.gantt-load[aria-hidden]
+ *     defs > pattern#gantt-over-hatch-<uid>            attached while a row has load above its capacity
+ *     g.gantt-load-row[data-row-id]                    one per mounted resource row (`layers/load.ts`)
+ *       path.gantt-load-bars · path.gantt-load-over · path.gantt-load-hatch · path.gantt-load-cap
  *
  * The svg is the bars' listbox (D3): `aria-orientation=vertical` here, its name
  * (`labels.ariaBars`) and `aria-multiselectable` from the bars region.
  */
 
-import { HATCH_PATTERN, PAINTS } from '@gantryjs/core';
+import { HATCH_PATTERN, LOAD_STYLE, PAINTS, themeVar } from '@gantryjs/core';
 import { h, s } from '../dom/h';
 import { setStyleProp } from '../dom/patch';
 import { applySheet } from '../dom/sheet';
@@ -119,6 +125,15 @@ export interface Skeleton {
   /** The today line (attached before `arrows` while shown) */
   readonly today: SVGLineElement;
   readonly arrows: SVGGElement;
+  /**
+   * The resource view's load (`g.gantt-load`, Phase 14): detached; the static region (`layers/load.ts`)
+   * attaches it right before `bars` while `rows` is `'resources'`
+   */
+  readonly load: SVGGElement;
+  /** Holds the over-capacity hatch pattern; the first child of `load` while a row has load above its capacity */
+  readonly loadDefs: SVGDefsElement;
+  /** Id of the over-capacity hatch pattern (unique per element) */
+  readonly overHatchId: string;
   readonly bars: SVGGElement;
   /** Focus ring and grips of one bar (`g.gantt-bar-overlay`): detached; attached between `bars` and `annotationLabels` while it shows */
   readonly barOverlay: SVGGElement;
@@ -169,6 +184,33 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
     ),
   );
 
+  // The over-capacity hatch of the resource view: the same geometry in the over-allocation colour (heavier)
+  const overHatchId = `gantt-over-hatch-${uid}`;
+  const overHatchLine = s('line', {
+    x1: 0,
+    y1: 0,
+    x2: 0,
+    y2: hatch.size,
+    'stroke-width': hatch.strokeWidth,
+    'stroke-opacity': LOAD_STYLE.hatchOpacity,
+  });
+  setStyleProp(overHatchLine, 'stroke', themeVar('overallocatedColor'));
+  const loadDefs = s(
+    'defs',
+    null,
+    s(
+      'pattern',
+      {
+        id: overHatchId,
+        width: hatch.size,
+        height: hatch.size,
+        patternUnits: 'userSpaceOnUse',
+        patternTransform: `rotate(${hatch.rotate})`,
+      },
+      overHatchLine,
+    ),
+  );
+
   const decorative = { 'aria-hidden': 'true', 'pointer-events': 'none' } as const;
   const rows = s('g', { class: 'gantt-rows', 'aria-hidden': 'true' });
   // Geometry from the hover region; the fill is the stylesheet's `var(--gantt-row-hover-bg)`
@@ -181,6 +223,7 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
   const today = s('line', { class: 'gantt-today', 'stroke-width': 2, 'pointer-events': 'none' });
   setStyleProp(today, 'stroke', PAINTS.today);
   const arrows = s('g', { class: 'gantt-arrows', ...decorative });
+  const load = s('g', { class: 'gantt-load', ...decorative });
   const bars = s('g', { class: 'gantt-bars-layer' });
   const barOverlay = s('g', { class: 'gantt-bar-overlay', ...decorative });
   const annotationLabels = s('g', { class: 'gantt-annotation-labels', ...decorative });
@@ -266,6 +309,9 @@ export function buildSkeleton(shadow: ShadowRoot): Skeleton {
     annotations,
     today,
     arrows,
+    load,
+    loadDefs,
+    overHatchId,
     bars,
     barOverlay,
     annotationLabels,

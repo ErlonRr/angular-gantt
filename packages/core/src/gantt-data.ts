@@ -73,6 +73,15 @@ function buildChildMap(tasks: GanttTask[]): Map<string | undefined, GanttTask[]>
 
 // ─── flattenTree ─────────────────────────────────────────────
 
+/** `flattenTree` options. */
+export interface FlattenTreeOptions {
+  /**
+   * The order of the roots and of each task's children: `'start'` = by start date (default),
+   * `'input'` = as in the `tasks` array (the resource view keeps the app's order of resources)
+   */
+  order?: 'start' | 'input' | undefined;
+}
+
 /**
  * Convert a flat task array (with parentId references) into a
  * depth-first ordered flat list of GanttFlatRow.
@@ -82,8 +91,17 @@ function buildChildMap(tasks: GanttTask[]): Map<string | undefined, GanttTask[]>
  *
  * @param tasks         Raw task array (order is not significant)
  * @param collapsedIds  Set of task IDs whose children should be hidden
+ * @param options       `order`: `'start'` (default) sorts the roots and the children of each task by
+ *                      start date; `'input'` keeps the order of `tasks` (the resource view's rows)
  */
-export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new Set()): GanttFlatRow[] {
+export function flattenTree(
+  tasks: GanttTask[],
+  collapsedIds: Set<string> = new Set(),
+  options: FlattenTreeOptions = {},
+): GanttFlatRow[] {
+  const byStart = options.order !== 'input';
+  const ordered = (list: GanttTask[] | undefined): GanttTask[] =>
+    byStart ? (list ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime()) : (list ?? []).slice();
   const childMap = buildChildMap(normalizeTasks(tasks));
   const result: GanttFlatRow[] = [];
 
@@ -91,8 +109,8 @@ export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new 
   type StackEntry = { task: GanttTask; level: number; parentHidden: boolean };
   const stack: StackEntry[] = [];
 
-  // Seed with root tasks (no parentId), sorted by start date
-  const roots = (childMap.get(undefined) ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime());
+  // Seed with root tasks (no parentId), sorted by start date (or in input order)
+  const roots = ordered(childMap.get(undefined));
 
   // Push in reverse order so first task ends up on top
   for (const task of [...roots].reverse()) stack.push({ task, level: 0, parentHidden: false });
@@ -102,7 +120,7 @@ export function flattenTree(tasks: GanttTask[], collapsedIds: Set<string> = new 
   while (stack.length) {
     const { task, level, parentHidden } = stack.pop()!;
 
-    const children = (childMap.get(task.id) ?? []).slice().sort((a, b) => a.start.getTime() - b.start.getTime());
+    const children = ordered(childMap.get(task.id));
 
     const hasChildren = children.length > 0;
     const isCollapsed = collapsedIds.has(task.id);

@@ -12,6 +12,7 @@ function chart(c: GalleryChart, group: ReturnType<typeof createGanttSyncGroup> |
   else el.tasks = c.tasks;
   el.options = c.options;
   if (c.annotations) el.annotations = c.annotations;
+  if (c.resources) el.resources = c.resources;
   el.showToolbar = c.showToolbar ?? true;
   el.showLegend = c.showLegend ?? false;
   el.loading = c.loading ?? false;

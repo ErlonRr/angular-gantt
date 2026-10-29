@@ -14,6 +14,8 @@ import type {
   GanttExportOptions,
   GanttOptions,
   GanttPaperSize,
+  GanttResourceViewOptions,
+  GanttRowsMode,
   GanttScale,
   GanttZoomLevel,
   GanttLength,
@@ -134,7 +136,22 @@ export interface ResolvedToolbar {
   undo: boolean;
   /** The Export menu button (`toolbar.export`, default false) */
   export: boolean;
+  /** The rows toggle (`toolbar.rowsToggle`, default false; shown only while there are resources) */
+  rowsToggle: boolean;
 }
+
+/** `options.resourceView` with the defaults filled (`rowHeight` is the height of a resource row in px). */
+export interface ResolvedResourceView {
+  unassigned: boolean;
+  overallocation: boolean;
+  rowHeight: number;
+}
+
+/** The shortest resource row (px): the explicit `resourceView.rowHeight` must reach it. */
+export const MIN_RESOURCE_ROW_HEIGHT = 28;
+
+/** A resource row is this many times the row height of the density, by default. */
+export const RESOURCE_ROW_HEIGHT_FACTOR = 1.5;
 
 // ─── Export and print (`options.export`) ─────────────────────
 
@@ -307,7 +324,10 @@ export interface ResolvedGanttConfig {
   controlSize: number;
   /** [upper tiers, bottom tier] default heights (explicit heights, else the density's) */
   tierHeights: [number, number];
-  /** `rowHeight`, else the density's */
+  /**
+   * The height of every row in px: `rowHeight`, else the density's; with `rows: 'resources'` the
+   * resource rows' (`resourceView.rowHeight`)
+   */
   rowHeight: number;
   indentSize: number;
   gridLines: {
@@ -362,6 +382,10 @@ export interface ResolvedGanttConfig {
   /** Explicit table-view column keys; null = derive */
   table: { columns: string[] | null };
   view: GanttView;
+  /** `'tasks'` (default) or `'resources'`: one row per resource and team, drawing its daily load */
+  rows: GanttRowsMode;
+  /** The resource rows (`rows: 'resources'`), defaults filled */
+  resourceView: ResolvedResourceView;
   /** Narrow-width view switch, or `false` */
   responsive: ResolvedResponsive | false;
   toolbar: ResolvedToolbar | false;
@@ -799,6 +823,9 @@ export function resolveConfig(
   const toolbar = options.toolbar;
   const density = densityOf(options.density);
   const sizes = DENSITY_METRICS[density];
+  const rows: GanttRowsMode = options.rows === 'resources' ? 'resources' : 'tasks';
+  const taskRowHeight = options.rowHeight ?? sizes.rowHeight;
+  const resourceView = resolveResourceView(options.resourceView, taskRowHeight);
   const week = resolveWeek(options.weekNumbering, options.weekStart, i18n?.locale ?? options.locale);
   const responsive = options.responsive;
   const nonWorking = resolveNonWorking(
@@ -819,7 +846,7 @@ export function resolveConfig(
     density,
     controlSize: sizes.controlSize,
     tierHeights: [options.headerHeight ?? sizes.tierHeights[0], options.subHeaderHeight ?? sizes.tierHeights[1]],
-    rowHeight: options.rowHeight ?? sizes.rowHeight,
+    rowHeight: rows === 'resources' ? resourceView.rowHeight : taskRowHeight,
     indentSize: options.indentSize ?? 16,
     gridLines: {
       minor: line(options.gridLines?.minor, { paint: themeVar('gridLine'), width: 1 }),
@@ -876,6 +903,8 @@ export function resolveConfig(
     },
     table: { columns: options.table?.columns ?? null },
     view: options.view ?? 'split',
+    rows,
+    resourceView,
     responsive:
       responsive === false ? false : { breakpoint: responsive?.breakpoint ?? 640, view: responsive?.view ?? 'chart' },
     toolbar:
@@ -891,6 +920,7 @@ export function resolveConfig(
             overflow: toolbar?.overflow ?? 'menu',
             undo: toolbar?.undo ?? true,
             export: toolbar?.export ?? false,
+            rowsToggle: toolbar?.rowsToggle ?? false,
           },
     showToday: options.showToday ?? true,
     baseline: options.baseline ?? false,
@@ -907,6 +937,22 @@ export function resolveConfig(
     markers: { lane: options.markers?.lane ?? 'auto' },
     editing: resolveEditing(options.editing),
     export: resolveExport(options.export),
+  };
+}
+
+/**
+ * The resource rows' options: a `rowHeight` that is a finite number of at least `MIN_RESOURCE_ROW_HEIGHT`
+ * is kept, anything else gives 1.5 × the row height of the density (rounded, 28 px at least).
+ */
+function resolveResourceView(view: GanttResourceViewOptions | undefined, taskRowHeight: number): ResolvedResourceView {
+  const explicit = view?.rowHeight;
+  return {
+    unassigned: view?.unassigned ?? true,
+    overallocation: view?.overallocation ?? true,
+    rowHeight:
+      typeof explicit === 'number' && Number.isFinite(explicit) && explicit >= MIN_RESOURCE_ROW_HEIGHT
+        ? explicit
+        : Math.max(MIN_RESOURCE_ROW_HEIGHT, Math.round(RESOURCE_ROW_HEIGHT_FACTOR * taskRowHeight)),
   };
 }
 

@@ -4,7 +4,7 @@
  * idiomatic case file exists (and the e2e smoke test reads the same `ready` either way).
  */
 
-import type { GanttAnnotation, GanttOptions, GanttSyncOptions, GanttTask } from '@gantryjs/core';
+import type { GanttAnnotation, GanttOptions, GanttResource, GanttSyncOptions, GanttTask } from '@gantryjs/core';
 
 /** A paged source: each binding wraps it in its own `GanttDataSource`. */
 export interface GalleryDataSourceConfig {
@@ -19,6 +19,8 @@ export interface GalleryChart {
   tasks: GanttTask[];
   options: GanttOptions;
   annotations?: GanttAnnotation[];
+  /** The `resources` property of a resource case (what the tasks' `resources` assignments refer to) */
+  resources?: GanttResource[];
   /** Instead of `tasks` */
   dataSource?: GalleryDataSourceConfig;
   showToolbar?: boolean;

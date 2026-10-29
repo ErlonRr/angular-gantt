@@ -176,6 +176,7 @@ export const COLOR_FIELDS: readonly ColorField[] = [
   { key: 'milestoneColor', label: 'Milestone', hint: 'Milestone markers' },
   { key: 'baselineColor', label: 'Baseline', hint: 'Planned dates under the bars' },
   { key: 'arrowColor', label: 'Arrows', hint: 'Dependency arrows' },
+  { key: 'overallocatedColor', label: 'Over capacity', hint: 'The resource load above its capacity (rows: resources)' },
   { key: 'selectionBorder', label: 'Selection', hint: 'Outline of the selected bars and rows' },
   { key: 'focusRing', label: 'Focus ring', hint: 'Keyboard focus on rows, bars and the toolbar (Tab into the chart)' },
   {

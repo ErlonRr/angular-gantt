@@ -105,6 +105,7 @@ import {
   toolbarMenuItems,
   toolbarMenuKey,
   toolbarTabStop,
+  toggleRowsMode,
   type Command,
   type GanttLabels,
   type MoveCommand,
@@ -264,6 +265,9 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         labels,
         viewMode: G.viewMode(),
         view: I.viewOverride(),
+        // The rows toggle (`toolbar.rowsToggle`): shown only while there are resources to show
+        rows: cfg.rows,
+        hasResources: G.resourceIndex().list.length > 0,
         // Undo / Redo while the chart keeps history (the state is read only then)
         history: cfg.editing.history ? I.historyState() : null,
         // The Export menu button and its formats (`toolbar.export`)
@@ -295,6 +299,11 @@ export function createToolbarLayer(ctx: LayerContext): Layer {
         return host.setView(action.view);
       case 'togglePanel':
         return host.togglePanel();
+      case 'rows':
+        // Tasks ↔ resources: the config follows the override; the state is saved (`state-change`)
+        I.rowsOverride.set(toggleRowsMode(G.config.peek().rows));
+        ctx.saveState();
+        return;
       case 'menu':
       case 'exportMenu':
         // The More and Export buttons: their menus (see `dispatch`)

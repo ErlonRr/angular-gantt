@@ -42,6 +42,10 @@
  * (Undo / Redo with nothing to do) GrayText. The cell editor's rules come after the focus rings,
  * so an invalid editor keeps its dashed outline while it has focus.
  *
+ * Resource view (Phase 14): the load bars opaque CanvasText, the part over the capacity opaque Highlight with
+ * its hatch lines CanvasText, the capacity line GrayText (the hatch and the line, not the colour, carry the
+ * over-allocation).
+ *
  * Export (Phase 12): the Export button and its menu are the More button and menu again
  * (`.gantt-tb-btn`, `.gantt-tb-menu`, `.gantt-tb-menu-item`); either menu button, while its menu
  * is open (`aria-expanded="true"`), takes Highlight as the pressed panel toggle does.
@@ -58,6 +62,11 @@ export const FORCED_COLORS_CSS = `
       .gantt-grid line { stroke: GrayText !important; }
       .gantt-annotations rect { fill: GrayText !important; }
       .gantt-annotations line { stroke: GrayText !important; }
+      /* The resource view's load: CanvasText bars, the part over the capacity Highlight with its hatch, the capacity line GrayText */
+      .gantt-load-bars { fill: CanvasText !important; fill-opacity: 1; }
+      .gantt-load-over { fill: Highlight !important; fill-opacity: 1; }
+      .gantt-load pattern line { stroke: CanvasText !important; stroke-opacity: 1; }
+      .gantt-load-cap { stroke: GrayText !important; }
       .gantt-annotation-labels text { fill: CanvasText !important; }
       .gantt-today { stroke: Highlight !important; }
 

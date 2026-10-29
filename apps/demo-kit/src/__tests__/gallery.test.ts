@@ -16,9 +16,11 @@ import {
   calendarDays,
   commitCellValue,
   computeCriticalPath,
+  computeResourceUtilization,
   createBeforeChangeDetail,
   createExportSource,
   createWorkingCalendar,
+  dateReadingOf,
   editRules,
   exportChartCsv,
   exportChartPages,
@@ -26,14 +28,19 @@ import {
   exportFileName,
   flattenTree,
   formatDuration,
+  formatAssignments,
   formatFloat,
+  indexResources,
   invertChange,
   linkChange,
   linkError,
+  loadAt,
+  parseAssignments,
   parseDuration,
   prepareChange,
   resolveCellEditor,
   resolveConfig,
+  resourceRowId,
   taskChange,
   type ColumnDef,
   type GanttChange,
@@ -43,6 +50,9 @@ import {
   type GanttTasksChangeEvent,
 } from '@gantryjs/core';
 import {
+  CAPACITIES,
+  CAPACITY_HINT,
+  CAPACITY_INITIAL,
   CASE_DATA,
   CASE_IDS,
   CELL_EDITING_INITIAL,
@@ -79,12 +89,18 @@ import {
   GALLERY_CASES,
   GALLERY_CATEGORIES,
   GALLERY_FRAMEWORKS,
+  LOAD_SCALES,
+  PANEL_HINT,
+  PANEL_INITIAL,
   PRINT_FITS,
   PRINT_HINT,
   PRINT_INITIAL,
   PRINT_OPTIONS,
   PRINT_ORIENTATIONS,
   PRINT_PAPERS,
+  RESOURCE_LOAD_HINT,
+  RESOURCE_LOAD_INITIAL,
+  RESOURCE_ROWS,
   SHIFT_FRIDAYS,
   SHIFT_HINT,
   SHIFT_HOURS_PER_DAY,
@@ -94,6 +110,11 @@ import {
   WORKING_DAYS_INITIAL,
   WORKING_DURATIONS,
   WORKING_SHADINGS,
+  capacityHolidays,
+  capacityOptions,
+  capacityResources,
+  capacitySummary,
+  capacityTasks,
   caseNeighbours,
   casesByCategory,
   cellEditingOptions,
@@ -139,10 +160,19 @@ import {
   statesProps,
   statesTasks,
   lazyStatus,
+  loadOptions,
+  loadResources,
+  loadTasks,
+  overloadSummary,
+  panelBottomOptions,
+  panelResources,
+  panelTasks,
+  panelTopOptions,
   treeTasks,
   workWeekStart,
   workingDaysHolidays,
   workingDaysOptions,
+  withPlaygroundResources,
   workingDaysTasks,
   workingSummary,
   type GalleryRoute,
@@ -193,8 +223,8 @@ function expectSound(tasks: GanttTask[], timed = false): void {
 }
 
 describe('gallery catalog', () => {
-  it('has 32 unique kebab-case ids, in catalog order', () => {
-    expect(CASE_IDS).toHaveLength(32);
+  it('has 35 unique kebab-case ids, in catalog order', () => {
+    expect(CASE_IDS).toHaveLength(35);
     expect(new Set(CASE_IDS).size).toBe(CASE_IDS.length);
     for (const id of CASE_IDS) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     expect(GALLERY_CASES.map(c => c.id)).toEqual([...CASE_IDS]);
@@ -567,9 +597,9 @@ describe('editing cases', () => {
     return { row, config, editor, result: editor ? commitCellValue(editor, value, row, ctx) : null };
   }
 
-  it('sit in the Editing category, after Scheduling, as new one-chart cases', () => {
+  it('sit in the Editing category, after Resources, as new one-chart cases', () => {
     const order = GALLERY_CATEGORIES.map(c => c.id);
-    expect(order.indexOf('editing')).toBe(order.indexOf('scheduling') + 1);
+    expect(order.indexOf('editing')).toBe(order.indexOf('resources') + 1);
     const cases = GALLERY_CASES.filter(c => c.category === 'editing');
     expect(cases.map(c => c.id)).toEqual([
       'editing',
@@ -1371,3 +1401,340 @@ function depth(tasks: GanttTask[], task: GanttTask): number {
   const parent = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   return parent ? 1 + depth(tasks, parent) : 0;
 }
+
+describe('resource cases', () => {
+  /** Monday 12 October 2026: the week of `NOW` (a Wednesday) */
+  const MONDAY = new Date(2026, 9, 12);
+  const day = (offset: number) => new Date(2026, 9, 12 + offset);
+  const epoch = (offset: number) => calendarDays(day(offset), false);
+  const caseOf = (id: string) => GALLERY_CASES.find(c => c.id === id)!;
+  const utilization = (
+    tasks: readonly GanttTask[],
+    resources: Parameters<typeof indexResources>[0],
+    options: GanttOptions,
+    unassigned = true,
+  ) =>
+    computeResourceUtilization(tasks, indexResources(resources), dateReadingOf(resolveConfig(options)), { unassigned });
+  const idsOf = (task: GanttTask) => (task.resources ?? []).map(a => (typeof a === 'string' ? a : a.resourceId));
+
+  it('sit in the Resources category, after Scheduling and before Editing', () => {
+    const order = GALLERY_CATEGORIES.map(c => c.id);
+    expect(order.indexOf('resources')).toBe(order.indexOf('scheduling') + 1);
+    expect(order.indexOf('editing')).toBe(order.indexOf('resources') + 1);
+    expect(GALLERY_CATEGORIES.find(c => c.id === 'resources')).toEqual({
+      id: 'resources',
+      label: 'Resources',
+      summary:
+        'Who is busy when: daily load per person or team against its capacity, over-allocation, and assignments you edit in the chart.',
+    });
+    const ids = ['resource-load', 'resource-panel', 'resource-capacity'];
+    expect(CASE_IDS.indexOf('resource-load')).toBe(CASE_IDS.indexOf('critical-float') + 1);
+    expect(GALLERY_CASES.filter(c => c.category === 'resources').map(c => c.id)).toEqual(ids);
+    for (const id of ids) expect(caseOf(id).isNew, id).toBe(true);
+    expect(caseOf('resource-load').ready).toEqual({ charts: 1, load: [0] });
+    expect(caseOf('resource-panel').ready).toEqual({ charts: 2, load: [1] });
+    expect(caseOf('resource-capacity').ready).toEqual({ charts: 1, load: [0] });
+    expect(caseOf('resource-load').notes).toEqual([]);
+    expect(caseOf('resource-panel').notes).toEqual(['series-model']);
+    expect(caseOf('resource-capacity').notes).toEqual([]);
+  });
+
+  it('build the same sound tasks for the same now, from the Monday of the week', () => {
+    expect(loadTasks(NOW)).toEqual(loadTasks(NOW));
+    expect(capacityTasks(NOW)).toEqual(capacityTasks(NOW));
+    expect(panelTasks(NOW)).toEqual(loadTasks(NOW));
+    expectSound(loadTasks(NOW));
+    expectSound(capacityTasks(NOW));
+    expect(loadTasks(NOW)[0].start).toEqual(MONDAY);
+    expect(loadTasks(new Date(2026, 9, 18, 9))[0].start).toEqual(MONDAY);
+    expect(loadTasks(new Date(2026, 9, 19, 9))[0].start).toEqual(day(7));
+    expect(capacityTasks(NOW)[0].start).toEqual(MONDAY);
+    // Fresh arrays: a case mutates none of them
+    expect(loadResources()).not.toBe(loadResources());
+    expect(panelResources()).toEqual(loadResources());
+    // Every assignment names a resource the case defines
+    const known = new Set(loadResources().map(r => r.id));
+    for (const t of loadTasks(NOW)) for (const id of idsOf(t)) expect(known.has(id), `${t.id} → ${id}`).toBe(true);
+    const knownCapacity = new Set(capacityResources(CAPACITY_INITIAL).map(r => r.id));
+    for (const t of capacityTasks(NOW)) for (const id of idsOf(t)) expect(knownCapacity.has(id), t.id).toBe(true);
+  });
+
+  it('give every chart its resources, in the generic data too', () => {
+    expect(CASE_DATA['resource-load'].charts(NOW)[0].resources).toEqual(loadResources());
+    expect(CASE_DATA['resource-capacity'].charts(NOW)[0].resources).toEqual(capacityResources(CAPACITY_INITIAL));
+    const panel = CASE_DATA['resource-panel'].charts(NOW);
+    expect(panel.map(c => c.caption)).toEqual(['Plan', 'Workload']);
+    expect(panel.map(c => c.resources)).toEqual([panelResources(), panelResources()]);
+    expect(panel.map(c => c.showToolbar)).toEqual([undefined, false]);
+    expect(CASE_DATA['resource-panel'].sync).toBe(true);
+    expect(CASE_DATA['resource-load'].sync).toBeUndefined();
+  });
+
+  describe('resource-load', () => {
+    const resources = loadResources();
+    const tasks = loadTasks(NOW);
+    const options = loadOptions(RESOURCE_LOAD_INITIAL, NOW);
+
+    it('offers the Rows and Scale choices and starts on the resource rows by day', () => {
+      expect(RESOURCE_ROWS.map(c => c.value)).toEqual(['tasks', 'resources']);
+      expect(RESOURCE_ROWS.map(c => c.label)).toEqual(['Tasks', 'Resources']);
+      expect(LOAD_SCALES.map(c => c.value)).toEqual(['Day', 'Week']);
+      expect(RESOURCE_LOAD_INITIAL).toEqual({
+        rows: 'resources',
+        unassigned: true,
+        overallocation: true,
+        viewMode: 'Day',
+      });
+      expect(RESOURCE_LOAD_HINT).toMatch(/^Switch Rows to Resources/);
+    });
+
+    it('has five resources: two teams and Ed, who has none', () => {
+      expect(resources.map(r => [r.id, r.group ?? null, r.capacity])).toEqual([
+        ['ana', 'Design', 100],
+        ['bo', 'Design', 50],
+        ['cy', 'Engineering', 100],
+        ['di', 'Engineering', 100],
+        ['ed', null, 200],
+      ]);
+    });
+
+    it('has nine tasks: one with two resources, one at half units, one unassigned', () => {
+      expect(tasks).toHaveLength(9);
+      expect(tasks.filter(t => idsOf(t).length === 2).map(t => t.id)).toEqual(['architecture']);
+      expect(tasks.flatMap(t => t.resources ?? []).filter(a => typeof a !== 'string' && a.units === 50)).toEqual([
+        { resourceId: 'ana', units: 50 },
+      ]);
+      expect(tasks.filter(t => idsOf(t).length === 0).map(t => t.id)).toEqual(['launch-prep']);
+    });
+
+    it('loads Bo above his capacity all of week 1 and Ana to 150 % on Wednesday of week 2', () => {
+      const u = utilization(tasks, resources, options);
+      const row = (id: string) => u.rows.get(resourceRowId(id))!;
+      expect(row('ana')).toMatchObject({ peak: 150, peakDay: epoch(9), overDays: 3, capacity: 100 });
+      expect(row('bo')).toMatchObject({ peak: 100, peakDay: epoch(0), overDays: 5, capacity: 50 });
+      expect(row('cy').overDays).toBe(0);
+      expect(row('di').overDays).toBe(0);
+      expect(row('ed')).toMatchObject({ peak: 150, overDays: 0, capacity: 200 });
+      expect(loadAt(row('bo'), epoch(4))).toBe(100);
+      expect(loadAt(row('bo'), epoch(5))).toBe(0);
+      expect([...u.rows.keys()]).toEqual(expect.arrayContaining(['team:Design', 'team:Engineering', 'unassigned']));
+      expect(u.rows.get('unassigned')).toMatchObject({ tasks: 1, peak: 100 });
+    });
+
+    it('maps the controls to options, and the rows to the panel columns', () => {
+      expect(options).toMatchObject({
+        rows: 'resources',
+        resourceView: { unassigned: true, overallocation: true },
+        viewMode: 'Day',
+        toolbar: { rowsToggle: true },
+        panel: { columns: ['name', 'capacity', 'load'], width: 400 },
+        initialScroll: 'start',
+        labels: { ariaChart: 'Team workload' },
+      });
+      const asTasks = loadOptions({
+        ...RESOURCE_LOAD_INITIAL,
+        rows: 'tasks',
+        unassigned: false,
+        overallocation: false,
+        viewMode: 'Week',
+      });
+      expect(asTasks).toMatchObject({
+        rows: 'tasks',
+        resourceView: { unassigned: false, overallocation: false },
+        viewMode: 'Week',
+        panel: { columns: ['name', 'start', 'duration', 'resources'] },
+      });
+      const config = resolveConfig(options);
+      expect(config.rows).toBe('resources');
+      expect(config.toolbar === false ? null : config.toolbar.rowsToggle).toBe(true);
+      expect(resolveConfig(asTasks)).toMatchObject({
+        rows: 'tasks',
+        resourceView: { unassigned: false, overallocation: false },
+      });
+    });
+
+    it('words who is over capacity, with the peak and its first day', () => {
+      expect(overloadSummary(tasks, resources, options)).toBe(
+        '2 resources over capacity: Ana (150 % on Wed 21 Oct), Bo (100 % on Mon 12 Oct)',
+      );
+      const withoutAna = tasks.filter(t => !idsOf(t).includes('ana'));
+      expect(overloadSummary(withoutAna, resources, options)).toBe(
+        '1 resource over capacity: Bo (100 % on Mon 12 Oct)',
+      );
+      expect(
+        overloadSummary(
+          withoutAna.filter(t => !idsOf(t).includes('bo')),
+          resources,
+          options,
+        ),
+      ).toBe('No resource is over capacity');
+      expect(overloadSummary([], resources, options)).toBe('No resource is over capacity');
+      // The text names people, not teams, and does not depend on the highlight switch
+      expect(overloadSummary(tasks, resources, loadOptions({ ...RESOURCE_LOAD_INITIAL, overallocation: false }))).toBe(
+        overloadSummary(tasks, resources, options),
+      );
+    });
+  });
+
+  describe('resource-panel', () => {
+    const resources = panelResources();
+    const tasks = panelTasks(NOW);
+
+    it('starts with the Unassigned row on, and two charts with their own names', () => {
+      expect(PANEL_INITIAL).toEqual({ unassigned: true });
+      expect(PANEL_HINT).toContain('Ana, Bo 50%');
+      const top = panelTopOptions(NOW);
+      const bottom = panelBottomOptions(PANEL_INITIAL, NOW);
+      expect(top.labels?.ariaChart).toBe('Plan');
+      expect(bottom.labels?.ariaChart).toBe('Workload');
+      expect(top.panel?.columns).toEqual(['name', 'start', 'duration', 'resources']);
+      expect(bottom).toMatchObject({
+        rows: 'resources',
+        resourceView: { unassigned: true },
+        panel: { columns: ['name', 'load'], width: 440 },
+      });
+      expect(panelBottomOptions({ unassigned: false }).resourceView).toEqual({ unassigned: false });
+    });
+
+    it('lets the Resources cell edit and nothing else', () => {
+      const editing = resolveConfig(panelTopOptions(NOW)).editing;
+      expect(editing).toMatchObject({
+        enabled: true,
+        cells: true,
+        progress: false,
+        dependencies: { create: false, delete: false },
+      });
+      expect(resolveConfig(panelBottomOptions(PANEL_INITIAL, NOW)).rows).toBe('resources');
+    });
+
+    it('follows an assignment typed in the Resources cell: the status line changes with the tasks', () => {
+      const bottom = panelBottomOptions(PANEL_INITIAL, NOW);
+      expect(overloadSummary(tasks, resources, bottom)).toBe(
+        '2 resources over capacity: Ana (150 % on Wed 21 Oct), Bo (100 % on Mon 12 Oct)',
+      );
+      const index = indexResources(resources);
+      const assigned = parseAssignments('Ana, Bo 50%', index);
+      expect(assigned).toEqual(['ana', { resourceId: 'bo', units: 50 }]);
+      expect(formatAssignments({ resources: assigned }, index)).toBe('Ana, Bo 50%');
+      const edited = tasks.map(t => (t.id === 'wireframes' ? { ...t, resources: assigned } : t));
+      // Bo is at his capacity now (50 %), Ana carries two tasks in week 1
+      expect(overloadSummary(edited, resources, bottom)).toBe('1 resource over capacity: Ana (200 % on Mon 12 Oct)');
+      // The Unassigned row follows the tasks too
+      expect(utilization(edited, resources, bottom, true).rows.has('unassigned')).toBe(true);
+      expect(utilization(edited, resources, bottom, false).rows.has('unassigned')).toBe(false);
+      expect(
+        utilization(
+          edited.filter(t => t.id !== 'launch-prep'),
+          resources,
+          bottom,
+        ).rows.has('unassigned'),
+      ).toBe(false);
+    });
+  });
+
+  describe('resource-capacity', () => {
+    const tasks = capacityTasks(NOW);
+    const resourcesAt = (anaCapacity: number, calendar = true) => ({
+      resources: capacityResources({ anaCapacity, calendar }),
+      options: capacityOptions({ anaCapacity, calendar }, NOW),
+    });
+
+    it('offers 50, 100 and 150 % for Ana and starts at 50 % with the calendar on', () => {
+      expect(CAPACITIES).toEqual([
+        { value: 50, label: '50 %' },
+        { value: 100, label: '100 %' },
+        { value: 150, label: '150 %' },
+      ]);
+      expect(CAPACITY_INITIAL).toEqual({ anaCapacity: 50, calendar: true });
+      expect(CAPACITY_HINT).toMatch(/working calendar/);
+    });
+
+    it('puts the holiday on Wednesday of week 2 and turns the calendar on or off', () => {
+      expect(capacityHolidays(NOW)).toEqual([{ start: day(9), label: 'Public holiday' }]);
+      const on = capacityOptions(CAPACITY_INITIAL, NOW);
+      expect(on).toMatchObject({
+        rows: 'resources',
+        calendar: true,
+        resourceView: {},
+        panel: { columns: ['name', 'capacity', 'load'], width: 380 },
+        labels: { ariaChart: 'Capacity plan' },
+      });
+      expect(resolveConfig(on).calendar).not.toBeNull();
+      const off = capacityOptions({ ...CAPACITY_INITIAL, calendar: false }, NOW);
+      expect(off.calendar).toBeUndefined();
+      expect(resolveConfig(off).calendar).toBeNull();
+      expect(
+        capacityResources({ anaCapacity: 150, calendar: true }).map(r => [r.id, r.group ?? null, r.capacity]),
+      ).toEqual([
+        ['ana', null, 150],
+        ['cy', 'Engineering', 100],
+        ['di', 'Engineering', 100],
+      ]);
+    });
+
+    it('moves the over-allocation with Ana’s capacity', () => {
+      const days = (anaCapacity: number, calendar = true) => {
+        const { resources, options } = resourcesAt(anaCapacity, calendar);
+        return utilization(tasks, resources, options).rows.get(resourceRowId('ana'))!.overDays;
+      };
+      expect(days(50)).toBe(7);
+      expect(days(100)).toBe(0);
+      expect(days(150)).toBe(0);
+    });
+
+    it('keeps the weekend and the holiday empty with the calendar on, and loads them without it', () => {
+      const ana = (calendar: boolean) => {
+        const { resources, options } = resourcesAt(50, calendar);
+        return utilization(tasks, resources, options).rows.get(resourceRowId('ana'))!;
+      };
+      const on = ana(true);
+      const off = ana(false);
+      for (const offset of [5, 6, 9]) {
+        expect(loadAt(on, epoch(offset)), `day ${offset} on`).toBe(0);
+        expect(loadAt(off, epoch(offset)), `day ${offset} off`).toBe(100);
+      }
+      expect(loadAt(on, epoch(4))).toBe(100);
+      expect(off.overDays).toBe(10);
+    });
+
+    it('lets Cy go over capacity while the Engineering team stays under its own', () => {
+      const { resources, options } = resourcesAt(50);
+      const u = utilization(tasks, resources, options);
+      expect(u.rows.get(resourceRowId('cy'))).toMatchObject({ peak: 150, overDays: 3, capacity: 100 });
+      expect(u.rows.get('team:Engineering')).toMatchObject({ capacity: 200, overDays: 0 });
+    });
+
+    it('words Ana’s peak, capacity and days over', () => {
+      const text = (anaCapacity: number, calendar = true, list: readonly GanttTask[] = tasks) => {
+        const { resources, options } = resourcesAt(anaCapacity, calendar);
+        return capacitySummary(list, resources, options);
+      };
+      expect(text(50)).toBe('Ana: peak 100 % of 50 % capacity, 7 days over');
+      expect(text(50, false)).toBe('Ana: peak 100 % of 50 % capacity, 10 days over');
+      expect(text(100)).toBe('Ana: peak 100 % of 100 % capacity, 0 days over');
+      expect(
+        text(
+          50,
+          true,
+          tasks.filter(t => t.id === 'brief').map(t => ({ ...t, end: day(1) })),
+        ),
+      ).toBe('Ana: peak 100 % of 50 % capacity, 1 day over');
+      expect(text(50, true, [])).toBe('Ana: peak 0 % of 50 % capacity, 0 days over');
+      expect(capacitySummary(tasks, [], capacityOptions(CAPACITY_INITIAL, NOW))).toBe('Ana has no load');
+    });
+  });
+
+  it('give the playgrounds sample assignments on the demo plan, without touching its tasks', () => {
+    const plan = [
+      { id: 'p1', name: 'Alpha', start: day(0), end: day(30) },
+      { id: 'p1-b1', name: 'Backend', start: day(0), end: day(5) },
+      { id: 'ms-p1', name: 'Release', start: day(5), end: day(5) },
+    ] satisfies GanttTask[];
+    const assigned = withPlaygroundResources(plan);
+    expect(assigned).not.toBe(plan);
+    expect(assigned.map(t => t.id)).toEqual(['p1', 'p1-b1', 'ms-p1']);
+    expect(assigned[0].resources).toBeUndefined();
+    expect(assigned[1].resources).toEqual(['cy', 'di']);
+    expect('resources' in plan[1]).toBe(false);
+  });
+});

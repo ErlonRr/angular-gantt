@@ -43,7 +43,9 @@ import { GanttLabels } from '@gantryjs/core';
 import { GanttOptions } from '@gantryjs/core';
 import { GanttPngExportOptions } from '@gantryjs/core';
 import { GanttPrintOptions } from '@gantryjs/core';
+import { GanttResource } from '@gantryjs/core';
 import { GanttRollupInfo } from '@gantryjs/core';
+import { GanttRowsMode } from '@gantryjs/core';
 import { GanttState } from '@gantryjs/core';
 import { GanttSvgExportOptions } from '@gantryjs/core';
 import { GanttSyncGroup } from '@gantryjs/core';
@@ -63,6 +65,7 @@ import { LinkMode } from '@gantryjs/core';
 import { LinkPreview } from '@gantryjs/core';
 import { LinkSide } from '@gantryjs/core';
 import { LoadStateSnapshot } from '@gantryjs/core';
+import { LoadVisual } from '@gantryjs/core';
 import { MarkerLane } from '@gantryjs/core';
 import { ModelSignal } from '@angular/core';
 import { NaturalTimelineRange } from '@gantryjs/core';
@@ -71,6 +74,8 @@ import { OverlayShape } from '@gantryjs/core';
 import { PAINTS } from '@gantryjs/core';
 import { Provider } from '@angular/core';
 import { ResolvedGanttConfig } from '@gantryjs/core';
+import { ResourceIndex } from '@gantryjs/core';
+import { ResourceUtilization } from '@gantryjs/core';
 import { ResponsiveState } from '@gantryjs/core';
 import { RetryEvent } from '@gantryjs/core';
 import { RowGeometry } from '@gantryjs/core';
@@ -238,6 +243,7 @@ export class GantryComponent {
     resetTheme(): void;
     // (undocumented)
     protected readonly resizeEnabled: Signal<boolean>;
+    readonly resources: InputSignal<GanttResource[]>;
     // Warning: (ae-forgotten-export) The symbol "GanttResponsive" needs to be exported by the entry point gantryjs-angular.d.ts
     protected readonly responsive: GanttResponsive;
     readonly retry: OutputEmitterRef<RetryEvent>;
@@ -327,6 +333,11 @@ export class GantryComponent {
         };
         "annotations": {
             "alias": "annotations";
+            "required": false;
+            "isSignal": true;
+        };
+        "resources": {
+            "alias": "resources";
             "required": false;
             "isSignal": true;
         };

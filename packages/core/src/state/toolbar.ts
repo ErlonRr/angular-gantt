@@ -34,7 +34,14 @@
 //  format items become a section: a menu is never nested in another.
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttExportFormat, GanttHistoryState, GanttLabels, GanttView, GanttZoomLevel } from '../types';
+import type {
+  GanttExportFormat,
+  GanttHistoryState,
+  GanttLabels,
+  GanttRowsMode,
+  GanttView,
+  GanttZoomLevel,
+} from '../types';
 import type { ResolvedToolbar } from '../render/config';
 import type { MoveCommand } from '../interaction/keymap';
 
@@ -53,7 +60,8 @@ export type ToolbarIcon =
   | 'more'
   | 'undo'
   | 'redo'
-  | 'export';
+  | 'export'
+  | 'resources';
 
 /** `viewBox` of every toolbar icon (a 16 px grid). */
 export const TOOLBAR_ICON_VIEWBOX = '0 0 16 16';
@@ -123,6 +131,13 @@ export const TOOLBAR_ICONS: Readonly<Record<ToolbarIcon, readonly string[]>> = {
   redo: ['M10.5 3l3 3-3 3', 'M13.5 6H6a3.5 3.5 0 0 0 0 7h4.5'],
   // An arrow pointing down into an open tray: "save a copy"
   export: ['M8 2.5v7', 'M5 6.5l3 3 3-3', 'M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2'],
+  // Two people, one behind the other: "rows per resource"
+  resources: [
+    'M3.75 5.5a2.25 2.25 0 1 0 4.5 0a2.25 2.25 0 1 0-4.5 0',
+    'M1.75 13.5a4.25 4.25 0 0 1 8.5 0',
+    'M9.5 3.5a1.75 1.75 0 1 1 1.4 3.4',
+    'M11.75 8.9a3.75 3.75 0 0 1 2.5 4.6',
+  ],
 };
 
 // ─── Model ────────────────────────────────────────────────────
@@ -143,6 +158,8 @@ export type ToolbarLabels = Pick<
   | 'ariaTaskList'
   | 'showPanel'
   | 'hidePanel'
+  | 'showResources'
+  | 'showTasks'
   | 'more'
   | 'undo'
   | 'redo'
@@ -163,6 +180,8 @@ export type ToolbarAction =
   | { type: 'view'; view: GanttView }
   /** The task list toggle (`toolbar.panelToggle`): the binding runs `togglePanel()` (`togglePanelView`) */
   | { type: 'togglePanel' }
+  /** The rows toggle (`toolbar.rowsToggle`): the binding switches `rows` (`toggleRowsMode`) */
+  | { type: 'rows' }
   /** The More button: the binding opens / closes its menu (`reduceMenu`) */
   | { type: 'menu' }
   /** Undo / Redo (`toolbar.undo`): the binding runs `undo()` / `redo()` */
@@ -180,14 +199,14 @@ export type ToolbarAction =
 export interface ToolbarItem {
   /**
    * `data-focus-key` of the button, unique in the toolbar and stable across paints (also the
-   * key for keyed lists): `panel`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`,
+   * key for keyed lists): `panel`, `rows`, `undo`, `redo`, `zoom-out`, `zoom-in`, `fit`,
    * `zoom:<level name>`, `today`, `view:<view>`, `export`, `more`; an Export menu item
    * (`ToolbarGroup.menu`) `export:<format>`.
    */
   focusKey: string;
   /**
    * `class` of the button: `gantt-tb-btn`, `gantt-tb-btn gantt-tb-today`, `gantt-tb-pill`,
-   * `gantt-tb-btn gantt-tb-panel`, `gantt-tb-btn gantt-tb-undo`, `gantt-tb-btn gantt-tb-redo`,
+   * `gantt-tb-btn gantt-tb-panel`, `gantt-tb-btn gantt-tb-rows`, `gantt-tb-btn gantt-tb-undo`, `gantt-tb-btn gantt-tb-redo`,
    * `gantt-tb-btn gantt-tb-export` or `gantt-tb-btn gantt-tb-more`; an Export menu item
    * `gantt-tb-menu-item` (painted as its `ToolbarMenuItem`)
    */
@@ -207,7 +226,10 @@ export interface ToolbarItem {
   ariaLabel: string | null;
   /** `title` tooltip (icon-only controls), or `null` for no attribute */
   title: string | null;
-  /** `aria-pressed` of a toggle button (the panel toggle: the task list shows), `null` for no attribute */
+  /**
+   * `aria-pressed` of a toggle button (the panel toggle: the task list shows; the rows toggle: the resource
+   * rows show), `null` for no attribute
+   */
   pressed: boolean | null;
   /** `aria-haspopup` (`'menu'` on the More and Export buttons), `null` for no attribute */
   haspopup: 'menu' | null;
@@ -223,11 +245,11 @@ export interface ToolbarItem {
 }
 
 /**
- * Which built-in group: `panel` (the task list toggle), `history` (undo · redo), `zoom` (out · in ·
- * fit), `levels`, `today`, `views`, `export` (the Export menu button, `toolbar.export`), `more`
+ * Which built-in group: `panel` (the task list toggle), `rows` (the rows toggle), `history` (undo · redo),
+ * `zoom` (out · in · fit), `levels`, `today`, `views`, `export` (the Export menu button, `toolbar.export`), `more`
  * (the More menu button, added by `layoutToolbar`).
  */
-export type ToolbarGroupKey = 'panel' | 'history' | 'zoom' | 'levels' | 'today' | 'views' | 'export' | 'more';
+export type ToolbarGroupKey = 'panel' | 'rows' | 'history' | 'zoom' | 'levels' | 'today' | 'views' | 'export' | 'more';
 
 /** One `div` of the toolbar, holding its controls in order. */
 export interface ToolbarGroup {
@@ -268,6 +290,10 @@ export interface ToolbarInput {
    * omitted: no export group. Read by the `export` group (Phase 12 step 2.6).
    */
   export?: { formats: readonly GanttExportFormat[] } | null | undefined;
+  /** The rows shown (`'tasks'` when omitted): the rows toggle is pressed in `'resources'` */
+  rows?: GanttRowsMode | undefined;
+  /** Whether the chart has resources (`resources` not empty): the rows toggle shows only then. Default false */
+  hasResources?: boolean | undefined;
 }
 
 const VIEWS: readonly { view: GanttView; icon: ToolbarIcon; label: 'viewSplit' | 'viewTable' | 'viewChart' }[] = [
@@ -310,6 +336,14 @@ const historyButton = (kind: 'undo' | 'redo', label: string, available: boolean)
  */
 export function taskListShown(view: GanttView): boolean {
   return view !== 'chart';
+}
+
+/**
+ * The rows the rows toggle (`toolbar.rowsToggle`, the `rows` toolbar action) switches to: from one row per
+ * task to one per resource, and back. The toggle's pressed state and title say what a press does.
+ */
+export function toggleRowsMode(rows: GanttRowsMode): GanttRowsMode {
+  return rows === 'resources' ? 'tasks' : 'resources';
 }
 
 /**
@@ -359,6 +393,11 @@ export function zoomLevelLabel(
  * to `togglePanelView(view)` (shown → `'chart'`, hidden → `'split'`). Pass the groups to
  * `layoutToolbar` to fit them to the toolbar's width.
  *
+ * With `toolbar.rowsToggle` and `hasResources` the `rows` group follows the panel group: one `aria-pressed`
+ * icon button (`gantt-tb-btn gantt-tb-rows`, focus key `rows`, icon `resources`) named `labels.showResources`,
+ * pressed while `rows` is `'resources'`; its name and title stay `labels.showResources` (the state is `aria-pressed`'s);
+ * pressing it switches to `toggleRowsMode(rows)`. It never moves into the More menu.
+ *
  * With `toolbar.undo` and a `history` state (the chart keeps history: `editing.history`, not
  * controlled) the `history` group follows: Undo and Redo icon buttons (`gantt-tb-undo` /
  * `gantt-tb-redo`, focus keys `undo` / `redo`, named by `labels.undo` / `labels.redo`), each
@@ -398,6 +437,27 @@ export function buildToolbar(input: ToolbarInput): ToolbarGroup[] {
         expanded: null,
         disabled: null,
         action: { type: 'togglePanel' },
+      },
+    ]);
+  }
+
+  if (toolbar.rowsToggle && input.hasResources) {
+    const pressed = input.rows === 'resources';
+    push({ key: 'rows', className: 'gantt-tb-group gantt-tb-rows-group', role: null, ariaLabel: null }, [
+      {
+        focusKey: 'rows',
+        className: 'gantt-tb-btn gantt-tb-rows',
+        role: null,
+        checked: null,
+        icon: 'resources',
+        text: null,
+        ariaLabel: labels.showResources,
+        title: labels.showResources,
+        pressed,
+        haspopup: null,
+        expanded: null,
+        disabled: null,
+        action: { type: 'rows' },
       },
     ]);
   }

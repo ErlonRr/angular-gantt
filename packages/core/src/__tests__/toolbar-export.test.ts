@@ -48,6 +48,7 @@ const ALL: ResolvedToolbar = {
   overflow: 'menu',
   undo: true,
   export: true,
+  rowsToggle: false,
 };
 const LEVELS: GanttZoomLevel[] = ['Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
 const FORMATS: readonly GanttExportFormat[] = ['svg', 'png', 'csv', 'print'];

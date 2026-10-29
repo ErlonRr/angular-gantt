@@ -43,7 +43,7 @@ export function Roadmap() {
 ```
 
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties): `tasks`, `columns`,
-  `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
+  `options`, `annotations`, `resources`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
   `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`,
   `syncGroup`, plus `className` / `style` / any HTML attribute.
 - **Callbacks** receive the event detail: `onTaskDragged`, `onTaskResized`,

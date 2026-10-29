@@ -48,13 +48,23 @@ export function timelineGraph(
   rows: RowsGraph,
   node: NodeFactory,
 ): TimelineGraph {
+  // The width `fitToWidth` fills: the viewport's border box (content width + the vertical scrollbar's thickness),
+  // never the content width alone. A classic scrollbar takes room from the content box when it appears, so
+  // filling that box made the fill and the scrollbar feed each other (a plan that overflows the box brings the
+  // scrollbar, the narrower box asks for a shorter plan, which fits the wide box again and takes it away: a
+  // flicker at the frame rate). The border box does not change when a scrollbar comes or goes; with overlay
+  // scrollbars (thickness 0) it is the content width, as before. Unmeasured (0) stays 0: no fill.
+  const fillWidth = node('fillWidth', () => {
+    const w = I.canvasW();
+    return w > 0 ? w + I.scrollbarY() : 0;
+  });
   const timeline = node('timeline', () => {
     const config = cfg.config();
     return buildTimeline({
       tasks: rows.tasks(),
       config,
       // Read only for `fitToWidth`: other timelines don't depend on the viewport
-      viewportWidth: config.fitToWidth ? I.canvasW() : undefined,
+      viewportWidth: config.fitToWidth ? fillWidth() : undefined,
       i18n: chrome.i18n(),
       now: cfg.nowDay(),
       // The sync group's range and extent (`null` outside a group)

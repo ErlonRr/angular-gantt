@@ -14,6 +14,7 @@ import {
   createGanttSyncGroup,
   type GantryElement,
   type GanttOptions,
+  type GanttResource,
   type GanttTask,
 } from '../index';
 import Bound from './Bound.svelte';
@@ -36,6 +37,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   columns: [{ key: 'name', label: 'Name', width: 200 }],
   options: { viewMode: ViewMode.Week },
   annotations: [{ x1: new Date(2026, 0, 9), label: { text: 'Review' } }],
+  resources: [{ id: 'ana', name: 'Ana' }],
   darkMode: true,
   showToolbar: false,
   enableDrag: false,
@@ -223,6 +225,7 @@ describe('<Gantry> (Svelte binding)', () => {
       expect(el.tasks).toEqual([]);
       expect(el.options).toEqual({});
       expect(el.annotations).toEqual([]);
+      expect(el.resources).toEqual([]);
       expect(el.columns.map(c => c.key)).not.toEqual(['name']); // the built-in columns
       expect(el.darkMode).toBe(false);
       expect(el.showToolbar).toBe(true);
@@ -334,6 +337,21 @@ describe('<Gantry> (Svelte binding)', () => {
       props.tasks[1]!.name = 'In place';
       flushSync();
       expect(writes.tasks).toHaveBeenCalledTimes(3);
+    });
+
+    it('$state resources: a plain array (not the proxy) of the consumer items, re-sent when one is added', () => {
+      const writes = spyWrites();
+      const props = $state<{ resources: GanttResource[] }>({ resources: [{ id: 'ana', name: 'Ana' }] });
+      const { el } = render(props);
+      const sent = writes.resources.mock.calls[0]![0] as GanttResource[];
+      expect(types.isProxy(props.resources)).toBe(true);
+      expect(types.isProxy(sent)).toBe(false);
+      sent.forEach((r, i) => expect(r).toBe(props.resources[i]));
+
+      props.resources.push({ id: 'bo', name: 'Bo', capacity: 50 });
+      flushSync();
+      expect(writes.resources).toHaveBeenCalledTimes(2);
+      expect(el.resources.map(r => r.id)).toEqual(['ana', 'bo']);
     });
 
     it('$state options: a plain object, re-sent when a field changes', () => {

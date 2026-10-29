@@ -23,6 +23,7 @@ const FIELD_LABELS: Readonly<Record<string, (l: GanttLabels) => string>> = {
   progress: l => l.ttProgress,
   predecessors: l => l.colPredecessors,
   dependency: l => l.colPredecessors,
+  resources: l => l.colResources,
   id: l => l.colId,
   type: l => l.colType,
   status: l => l.colStatus,
@@ -30,7 +31,7 @@ const FIELD_LABELS: Readonly<Record<string, (l: GanttLabels) => string>> = {
 
 /**
  * The label of a built-in column or task field in `labels` (`start` → `colStart`, `progress` →
- * `ttProgress`, `dependency` / `predecessors` → `colPredecessors`, …); any other key is returned
+ * `ttProgress`, `dependency` / `predecessors` → `colPredecessors`, `resources` → `colResources`, …); any other key is returned
  * as is. The default column label of `describeChange`.
  */
 export function fieldLabel(key: string, labels: GanttLabels): string {

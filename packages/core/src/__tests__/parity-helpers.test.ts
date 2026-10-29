@@ -306,10 +306,10 @@ describe('--gantt-today-label', () => {
     expect(todayLabelColor(LegacyDarkTheme)).toBe(DarkTheme.todayColor);
   });
 
-  it('themeToCss: 44 entries, the four contrast tokens last, the today label last of all', () => {
+  it('themeToCss: 45 entries, the four contrast tokens last, the today label last of all', () => {
     for (const [, theme] of PALETTES) {
       const css = themeToCss(theme);
-      expect(css).toHaveLength(44);
+      expect(css).toHaveLength(45);
       expect(css.slice(THEME_CSS_VARS.length).map(([name]) => name)).toEqual([
         '--gantt-bar-text-on-bar',
         '--gantt-bar-text-on-milestone',

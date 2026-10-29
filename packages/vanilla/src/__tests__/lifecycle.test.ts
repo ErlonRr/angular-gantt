@@ -94,6 +94,8 @@ describe('<gantry-element> properties and lifecycle', () => {
         'columns',
         'options',
         'annotations',
+        // Phase 14 (the resource view; no attribute)
+        'resources',
         'darkMode',
         'showToolbar',
         'enableDrag',
@@ -135,6 +137,7 @@ describe('<gantry-element> properties and lifecycle', () => {
         columns: [{ key: 'name', header: 'Name', width: 120 }],
         options: { rowHeight: 50 },
         annotations: [{ date: new Date(2026, 2, 3), label: 'Go' }],
+        resources: [{ id: 'ana', name: 'Ana' }],
         darkMode: true,
         showToolbar: false,
         enableDrag: false,

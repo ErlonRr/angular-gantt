@@ -105,6 +105,16 @@ import { PREVIEWS } from './previews';
     .gs-stage > .gs-chart.exs-mini {
       height: 184px;
     }
+    /*
+     * A preview is a picture: it never scrolls, so it never shows a scrollbar. The card hugs the plan
+     * (184 px for 178-182 px of rows), and a scrollbar that appears takes room from the viewport, which
+     * the chart's fill-the-width rule answers by re-filling it, which makes the scrollbar go away: with
+     * the right week alignment that repeats every frame and the four previews flicker. (The chart's own
+     * rule is as specific as a class and an attribute: this one names the stage too.)
+     */
+    .gs-stage > .gs-chart.exs-mini .gantry-canvas-viewport {
+      overflow: hidden;
+    }
     .exs-link {
       color: inherit;
       text-decoration: none;

@@ -10,7 +10,8 @@
 //  name (text, required), start and end (`date`, or `datetime-local` on
 //  hour scales or when the value has a time; start keeps the duration,
 //  end ≥ start), duration (text), progress (number 0–100, step = the
-//  progress step), predecessors (text, ids or unique names). With a
+//  progress step), predecessors (text, ids or unique names), resources
+//  (text, `Ana, Bo 50%`: resource ids or names, units in percent). With a
 //  working calendar (Phase 13) a start moves forward and an end back
 //  off non-working time, a start keeps the working length, and
 //  durations and lags are typed in working units. Other
@@ -28,11 +29,19 @@ import { taskDependencies, valueToText } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
 import { bottomScale } from '../render/scales';
 import {
+  formatAssignments,
+  indexResources,
+  parseAssignments,
+  taskAssignments,
+  type ResourceIndex,
+} from '../resources/model';
+import {
   DependencyType,
   type CellEditorKind,
   type CellEditorOptions,
   type ColumnContext,
   type ColumnDef,
+  type GanttAssignment,
   type GanttDependency,
   type GanttFlatRow,
   type GanttLabels,
@@ -104,6 +113,7 @@ const TASK_FIELDS: ReadonlySet<string> = new Set<keyof GanttTask>([
   'parentId',
   'collapsed',
   'dependency',
+  'resources',
   'barType',
   'style',
   'barColor',
@@ -119,7 +129,7 @@ const TASK_FIELDS: ReadonlySet<string> = new Set<keyof GanttTask>([
 ]);
 
 /** The keys with a built-in editor (`parse` on the column replaces it). */
-type BuiltinEditorKey = 'name' | 'start' | 'end' | 'duration' | 'progress' | 'predecessors';
+type BuiltinEditorKey = 'name' | 'start' | 'end' | 'duration' | 'progress' | 'predecessors' | 'resources';
 const BUILTIN_EDITORS: ReadonlySet<string> = new Set<BuiltinEditorKey>([
   'name',
   'start',
@@ -127,6 +137,7 @@ const BUILTIN_EDITORS: ReadonlySet<string> = new Set<BuiltinEditorKey>([
   'duration',
   'progress',
   'predecessors',
+  'resources',
 ]);
 
 /** The column's own editor: a built-in kind, `'custom'` (a framework editor), or `null` (unset). */
@@ -193,6 +204,28 @@ const linkList = (dependency: unknown): string =>
     taskDependencies({ dependency } as GanttTask).map(d => [d.taskId, d.type ?? DependencyType.FS, d.lag ?? 0]),
   );
 
+/** The resource ids of a `resources` field, whatever the shape of its entries. */
+const assignedIds = (resources: unknown): string[] =>
+  (Array.isArray(resources) ? resources : []).flatMap((a: unknown) => {
+    const id = typeof a === 'string' ? a : (a as { resourceId?: unknown } | null)?.resourceId;
+    return typeof id === 'string' ? [id] : [];
+  });
+
+/**
+ * Whether a `resources` edit changes nothing: the assignments are the same (a duplicate dropped, units
+ * 100 when left out, so `'ana'` and `{ resourceId: 'ana', units: 100 }` are equal), or the text — which
+ * can only name known resources — leaves the known ones as they are and the task keeps an id it could
+ * not show.
+ */
+const sameAssignments = (next: unknown, current: unknown, known: ResourceIndex): boolean => {
+  const list = (resources: unknown, index: ResourceIndex) =>
+    JSON.stringify(taskAssignments({ resources: resources as GanttAssignment[] | undefined }, index));
+  const named = [...new Set([...assignedIds(next), ...assignedIds(current)])];
+  const open = indexResources(named.map(id => ({ id, name: id })));
+  if (list(next, open) === list(current, open)) return true;
+  return assignedIds(next).every(id => known.byId.has(id)) && list(next, known) === list(current, known);
+};
+
 /** Whether a patched field keeps the task's value: dates by time, links by entries, objects by JSON. */
 const sameValue = (field: string, a: unknown, b: unknown): boolean => {
   if (field === 'dependency') return linkList(a) === linkList(b);
@@ -223,7 +256,7 @@ interface EditorSpec {
   check?: ((patch: Partial<GanttTask>) => string | null) | undefined;
 }
 
-/** The built-in editor of `key` (`name`, `start`, `end`, `duration`, `progress`, `predecessors`). */
+/** The built-in editor of `key` (`name`, `start`, `end`, `duration`, `progress`, `predecessors`, `resources`). */
 function builtinSpec(
   key: BuiltinEditorKey,
   own: CellEditorKind | 'custom' | null,
@@ -322,6 +355,28 @@ function builtinSpec(
           return null;
         },
       };
+    case 'resources': {
+      const index = ctx.resources ?? indexResources(undefined);
+      return {
+        kind,
+        input: input('text'),
+        value: formatAssignments(task, index),
+        parse: v => {
+          let list: GanttAssignment[];
+          try {
+            list = parseAssignments(v, index);
+          } catch (error) {
+            if (error instanceof ParseError && error.code === 'unknown') fail(labels.errorUnknownResource(error.ref));
+            if (error instanceof ParseError && error.code === 'ambiguous') {
+              fail(labels.errorAmbiguousResource(error.ref));
+            }
+            throw error;
+          }
+          // An empty text unassigns the task (`resources: undefined`), as an empty predecessors text removes its links
+          return { resources: list.length ? list : undefined };
+        },
+      };
+    }
   }
 }
 
@@ -507,7 +562,13 @@ export function commitCellValue(
   if (error) return { error };
   const current = (ctx.taskById.get(row.task.id) ?? row.task) as unknown as Record<string, unknown>;
   const changed: Record<string, unknown> = {};
-  for (const [field, v] of Object.entries(patch)) if (!sameValue(field, v, current[field])) changed[field] = v;
+  for (const [field, v] of Object.entries(patch)) {
+    const same =
+      field === 'resources'
+        ? sameAssignments(v, current[field], ctx.resources ?? indexResources(undefined))
+        : sameValue(field, v, current[field]);
+    if (!same) changed[field] = v;
+  }
   return { patch: changed };
 }
 

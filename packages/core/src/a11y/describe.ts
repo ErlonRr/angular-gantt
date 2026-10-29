@@ -10,9 +10,11 @@
 //  aria-roledescription: "task bar", "milestone", "summary bar").
 // ─────────────────────────────────────────────────────────────
 
+import { round1 } from '../calendar/time';
 import { formatDate, toLocalDay } from '../gantt-math';
-import { taskStatus } from '../render/columns';
+import { resourceRowInfo, taskStatus } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
+import type { ResourceRowInfo } from '../resources/rows';
 import { DEFAULT_LABELS, TaskType, type GanttLabels, type GanttTask } from '../types';
 
 /** Strings `taskAccessibleName` reads (part of `GanttLabels`). */
@@ -114,12 +116,33 @@ export function taskDateRange(
 }
 
 /**
+ * Accessible name of a row of the resource view (`rows: 'resources'`; a team's capacity is its members'
+ * together): `labels.describeResource` — name, capacity, peak load and the days over capacity. The Unassigned
+ * row has no capacity: its name and the load it holds ("Unassigned, Load 100%").
+ */
+export function resourceAccessibleName(
+  info: Pick<ResourceRowInfo, 'name' | 'capacity' | 'peak' | 'overDays'>,
+  labels: Partial<Pick<GanttLabels, 'describeResource' | 'ttResLoad' | 'ariaListSeparator'>> = {},
+): string {
+  const describe = labels.describeResource ?? DEFAULT_LABELS.describeResource;
+  const peak = round1(info.peak);
+  if (info.capacity === null) {
+    const separator = labels.ariaListSeparator ?? DEFAULT_LABELS.ariaListSeparator;
+    return `${info.name}${separator}${labels.ttResLoad ?? DEFAULT_LABELS.ttResLoad} ${peak}%`;
+  }
+  return describe(info.name, round1(info.capacity), peak, info.overDays);
+}
+
+/**
  * Accessible name of a task: name, type, dates, progress, status (when `now` is given or the task
- * has an explicit status), "critical" and "planned baseline shown".
+ * has an explicit status), "critical" and "planned baseline shown". A row of the resource view is named
+ * by `resourceAccessibleName` instead.
  */
 export function taskAccessibleName(row: DescribeRow, options: TaskAccessibleNameOptions = {}): string {
   const labels: GanttLabels & DescribeLabels = { ...DEFAULT_LABELS, ...DEFAULT_DESCRIBE_LABELS, ...options.labels };
   const task = row.task;
+  const resource = resourceRowInfo(task);
+  if (resource) return resourceAccessibleName(resource, labels);
   const type = rowType(row);
   const parts: string[] = [];
 

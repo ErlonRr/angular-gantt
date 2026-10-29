@@ -10,13 +10,15 @@
 //
 //    svg.gantry-export
 //      title · desc · defs (clipPath -timeline, clipPath -body on a
-//        slice, pattern -hatch while a band is hatched)
+//        slice, pattern -hatch while a band is hatched, pattern
+//        -over-hatch while a resource row is over capacity)
 //      rect.gantry-export-bg                      unless transparent
 //      g.gantry-export-table                      column headers, rows, column lines
 //      g.gantry-export-timeline[clip-path]        translated to the timeline's left edge
 //        g[translate(−x0)] > g.g-header (tiers, marker lane, today pointer)
 //                          + g.gantt-body (rows, bands, grid, annotations,
-//                            today line, arrows, bars, annotation labels)
+//                            today line, resource load, arrows, bars,
+//                            annotation labels)
 //      g.gantt-legend                             the strip at the bottom
 //      text.gantry-export-empty                   no row to draw
 //
@@ -25,6 +27,7 @@
 //  plain `y` attributes every SVG reader understands.
 // ─────────────────────────────────────────────────────────────
 
+import { LOAD_STYLE } from '../resources/visual';
 import type { GanttSvgExportOptions, GanttTheme } from '../types';
 import { fitText, type BarKind, type BarVisual } from '../render/bars';
 import type { ArrowVisual } from '../render/arrows';
@@ -33,7 +36,15 @@ import { cssPx, todayLabelColor } from '../render/theme';
 import { LEGEND_SWATCH_SIZE } from '../state/legend';
 import type { ChartExportSource } from './source';
 import { buildExportModel, type ExportModel, type ExportRow } from './model';
-import type { ExportBar, ExportLabel, ExportTimeline, ExportTierCell, ExportTierLabel, Stroke } from './timeline';
+import type {
+  ExportBar,
+  ExportLabel,
+  ExportLoad,
+  ExportTimeline,
+  ExportTierCell,
+  ExportTierLabel,
+  Stroke,
+} from './timeline';
 import { EXPORT_TABLE, type ExportCell, type ExportTable } from './table';
 import { EXPORT_LEGEND, legendAtWidth, type ExportLegend } from './legend';
 import { resolveExportCall } from './files';
@@ -66,7 +77,7 @@ export interface ExportSlice {
 /** How `renderExportSvg` writes the document. */
 export interface RenderSvgOptions {
   /**
-   * Prefix of every id (`<p>-title`, `<p>-desc`, `<p>-timeline`, `<p>-body`, `<p>-hatch`).
+   * Prefix of every id (`<p>-title`, `<p>-desc`, `<p>-timeline`, `<p>-body`, `<p>-hatch`, `<p>-over-hatch`).
    * Characters an XML id can't hold become `-`; an empty prefix is `gantry-export`.
    */
   idPrefix: string;
@@ -84,6 +95,14 @@ const BASELINE_EM = 0.35;
 
 /** The "current period" tint and the today chip of the marker lane: the today colour at this opacity (D4). */
 const TODAY_TINT_OPACITY = 0.14;
+
+/** The over-capacity part of a resource row: its fill at this opacity, the hatch lines over it in the full colour. */
+const OVER_FILL_OPACITY = LOAD_STYLE.overOpacity;
+const OVER_HATCH_OPACITY = LOAD_STYLE.hatchOpacity;
+
+/** The capacity line of a resource row (the painters' `LOAD_STYLE`). */
+const CAP_STROKE_WIDTH = LOAD_STYLE.capWidth;
+const CAP_DASH = LOAD_STYLE.capDash;
 
 /** Header label inset of a tier cell (the painters' 6 px label padding). */
 const HEADER_LABEL_INSET = 6;
@@ -307,6 +326,7 @@ export function renderExportSvg(model: ExportModel, slice: ExportSlice | null, o
   const w = createWriter();
   const ctx: Ctx = { w, model, theme, f, p, fontPx: model.fontPx, basePx: cssPx(theme.fontSize, model.fontPx + 1) };
   const hatched = !!f.timeline && f.timeline.bands.some(b => b.hatch && meets(b.x, b.x + b.width, f));
+  const overHatch = f.timeline ? overHatchFill(f.timeline, f) : null;
 
   w.block(
     'svg',
@@ -335,6 +355,7 @@ export function renderExportSvg(model: ExportModel, slice: ExportSlice | null, o
               w.leaf('rect', { x: f.x0, y: f.top, width: f.x1 - f.x0, height: f.bottom - f.top }),
             );
           if (hatched) writeHatch(ctx);
+          if (overHatch !== null) writeOverHatch(ctx, overHatch);
         });
       }
       if (model.background !== null)
@@ -406,6 +427,43 @@ function writeHatch({ w, theme, p }: Ctx): void {
         stroke: colour(PAINTS.hatch, theme),
         'stroke-width': h.strokeWidth,
         'stroke-opacity': h.strokeOpacity,
+      }),
+  );
+}
+
+/**
+ * The colour of the over-capacity hatch when a resource row of the frame is over capacity, else
+ * `null`: the pattern is written only then.
+ */
+function overHatchFill(tl: ExportTimeline, f: Frame): string | null {
+  for (let i = f.rowStart; i < f.rowEnd; i++) {
+    const l = tl.load?.[i];
+    if (l && l.hatch) return l.overFill;
+  }
+  return null;
+}
+
+/** The over-capacity hatch: the non-working one's geometry, in the over colour and heavier. */
+function writeOverHatch({ w, theme, p }: Ctx, stroke: string): void {
+  const h = HATCH_PATTERN;
+  w.block(
+    'pattern',
+    {
+      id: `${p}-over-hatch`,
+      width: h.size,
+      height: h.size,
+      patternUnits: 'userSpaceOnUse',
+      patternTransform: `rotate(${num(h.rotate)})`,
+    },
+    () =>
+      w.leaf('line', {
+        x1: 0,
+        y1: 0,
+        x2: 0,
+        y2: h.size,
+        stroke: colour(stroke, theme),
+        'stroke-width': h.strokeWidth,
+        'stroke-opacity': OVER_HATCH_OPACITY,
       }),
   );
 }
@@ -835,6 +893,9 @@ function writeBody(ctx: Ctx, tl: ExportTimeline): void {
           'stroke-width': 2,
         });
 
+      // The resource view: each row's load histogram, capacity line and over-capacity part
+      if (tl.load && tl.load.length > 0) writeLoad(ctx, tl, tl.load);
+
       w.block('g', { class: 'gantt-arrows' }, () => {
         for (const a of tl.arrows) if (!f.sliced || arrowOnPage(a, f)) writeArrow(ctx, a);
       });
@@ -863,6 +924,33 @@ function writeBody(ctx: Ctx, tl: ExportTimeline): void {
       });
     },
   );
+}
+
+/** The resource rows' load, one group per row of the frame (a row without load has none). */
+function writeLoad({ w, f, p, model, theme }: Ctx, tl: ExportTimeline, loads: readonly (ExportLoad | null)[]): void {
+  w.block('g', { class: 'gantt-load' }, () => {
+    for (let i = f.rowStart; i < f.rowEnd; i++) {
+      const l = loads[i];
+      if (!l) continue;
+      w.block('g', { class: 'gantt-load-row', 'data-task-id': model.rows[i]!.id }, () => {
+        if (l.bars) w.leaf('path', { class: 'gantt-load-bars', d: l.bars, fill: colour(l.barsFill, theme) });
+        if (l.over) {
+          const over = colour(l.overFill, theme);
+          w.leaf('path', { class: 'gantt-load-over', d: l.over, fill: over, 'fill-opacity': OVER_FILL_OPACITY });
+          if (l.hatch) w.leaf('path', { class: 'gantt-load-hatch', d: l.over, fill: `url(#${p}-over-hatch)` });
+        }
+        if (l.cap)
+          w.leaf('path', {
+            class: 'gantt-load-cap',
+            d: l.cap,
+            fill: 'none',
+            stroke: colour(l.capStroke, theme),
+            'stroke-width': CAP_STROKE_WIDTH,
+            'stroke-dasharray': CAP_DASH,
+          });
+      });
+    }
+  });
 }
 
 /**

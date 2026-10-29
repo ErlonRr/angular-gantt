@@ -24,6 +24,7 @@ describe('<Gantry> on the server', () => {
         tasks: TASKS,
         options: { viewMode: ViewMode.Week },
         annotations: [],
+        resources: [{ id: 'ana', name: 'Ana' }],
         darkMode: true,
         showToolbar: false,
         enableDrag: false,

@@ -12,7 +12,7 @@
 // bar's grips, progress grip and link connectors. Phase 12 adds `export`: the toolbar's Export group
 // (`toolbar.export`) with its menu open (the open button and the four format items). Phase 13 adds
 // `calendar`: a working calendar with `nonWorkingTime.style: 'none'` (no band records) and a Duration
-// column that reads working days.
+// column that reads working days. Phase 14 adds `resources`: the resource view, with its load layer.
 import { test, expect, arrowPoint, collectPaints, type Chart, type PaintRecords } from './fixtures';
 import { SCENARIOS, paintFixture, renderFixture, type Scenario, type Target } from './paint-fixture';
 
@@ -79,6 +79,9 @@ async function paints(chart: Chart, target: Target, scenario: Scenario): Promise
   await renderFixture(chart, target, fx);
 
   if (scenario === 'table') await expect(chart.get('.gantt-tl-cell').first()).toBeVisible();
+  // The resource view has no bars: its rows paint the load
+  else if (scenario === 'resources')
+    await expect(chart.get('g.gantt-load path.gantt-load-bars').first()).toBeAttached();
   else await expect(chart.get('.gantt-bars-layer [data-task-id]').first()).toBeVisible();
   if (scenario === 'styled') {
     // The collapsed parent's children are drawn as segments
@@ -118,6 +121,8 @@ for (const target of TARGET_LIST) {
 const CHROME = /^(tl-head|tl-rows|toolbar|legend)/;
 /** The timeline: canvas layers and the header (both bindings window the header, bands and grid alike). */
 const TIMELINE = /^(bars\[|arrows|rows|bands|grid|today|annotations|annotation-labels|header)/;
+/** The resource view's load layer (Phase 14): bars, the part over capacity, its hatch and the capacity line. */
+const LOAD = /^load(\/|$)/;
 /** The timeline and the chrome compared between the bindings. */
 const COMPARED = new RegExp(`${TIMELINE.source}|${CHROME.source}`);
 /** The open tooltip (one popover inside the chart, same markup in both bindings since Phase 7 step 4.1) */
@@ -150,6 +155,7 @@ const paritySide = (records: PaintRecords): PaintRecords =>
  * are in the canvas and the chrome already. `export` (phase 12) compares the toolbar: the Export
  * group, its open button and the open menu (`tb-` keys). `calendar` (phase 13) compares the canvas
  * and the chrome like the light week: no band records, a Duration column in working days.
+ * `resources` (phase 14) adds the load layer (`LOAD`) to that: the paths' fills, strokes and opacities.
  */
 const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'light-week', keys: COMPARED },
@@ -164,6 +170,7 @@ const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'editing', keys: new RegExp(`${COMPARED.source}|${EDIT_SHAPES.source}`) },
   { scenario: 'export', keys: /tb-/ },
   { scenario: 'calendar', keys: COMPARED },
+  { scenario: 'resources', keys: new RegExp(`${COMPARED.source}|${LOAD.source}`) },
 ];
 
 /**

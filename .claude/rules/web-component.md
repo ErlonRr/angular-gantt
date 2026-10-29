@@ -35,6 +35,15 @@ paths:
     object) and `barSegments`; rows, task list, bars and tooltip read the row's resolved style
     from it, never `task.style` or the flat colour fields. Rollups (`applyRollups`) run in
     `graph/rows.ts` before `sortTree`; events carry the consumer's task (`rollupSource`).
+  - Resource view: `graph/rows.ts` nodes `resourceMode`, `resourceIndex` (equal on `sameResources`), `utilization` (null
+    unless resource mode; depends only on tasks, index, `dateReading`, `resourceView.unassigned`), `viewTasks` (`tasks`
+    itself in tasks mode); `critical` null and rollups off in resource mode; `columnCtx` gets `tasks: viewTasks`,
+    `resources` and (resource mode) `rows`; `graph/resources.ts` `loadVisuals` (mounted rows × horizontal window,
+    `dayOfX = calendarDays(timeline.toDate(x), false)`); `layers/bars.ts` reads `G.barGeometries()` (empty in resource
+    mode); `layers/load.ts` is painted from the static region and builds `g.gantt-load[aria-hidden]` detached, attached
+    before `g.gantt-bars-layer` only in resource mode (hatch pattern `gantt-over-hatch-<uid>`); `I.rowsOverride`
+    mirrors `viewOverride` (toolbar `{ type: 'rows' }` → core `toggleRowsMode`, `state-change`; `getState()` always has
+    `rows`); the tooltip trigger uses `hitTestLoad` and the open tooltip's refresh key includes the utilization identity.
   - `layers/*.ts`: the painters. A layer is `{ paint(), disconnect?() }` built once per element
     from a `LayerContext` (`layers/context.ts`); its closure holds its persistent nodes and caches.
     Besides inputs and graph nodes the context gives `ctx.announce` (core `createAnnouncer` on

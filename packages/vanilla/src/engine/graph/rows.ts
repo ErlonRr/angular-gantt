@@ -9,6 +9,13 @@
  * columns, the bars, the tooltip and the accessible names agree. The copies live in the rows only:
  * `tasks`, the events and `getSelectedTasks()` stay raw (core `rollupSource` maps a copy back).
  * The rollups are evaluated at `nowDay` (statuses), never at the ticking clock.
+ *
+ * Resource view (Phase 14, `options.rows: 'resources'`): `utilization` (core `computeResourceUtilization`)
+ * and `viewTasks` (the synthetic resource / team / Unassigned rows, core `projectResourceRows`) replace the
+ * tasks as what `flattenTree` gets, in input order; the critical path and the rollups are off. The nodes
+ * depend on the tasks, the resources, the date reading, `resourceView.unassigned` and the `Unassigned` label
+ * only (a zoom, a theme or any other label change recomputes none of them); in tasks mode `utilization` is
+ * `null` and `viewTasks` is `tasks`. `tasks` stays the real tasks (the timeline's extent, the events).
  */
 
 import {
@@ -16,12 +23,15 @@ import {
   buildColumnContext,
   columnComparator,
   computeCriticalPath,
+  computeResourceUtilization,
   computeRollups,
   dateReadingOf,
   filterVisible,
   findColumn,
   flattenTree,
+  indexResources,
   normalizeTasks,
+  projectResourceRows,
   reindexVisible,
   sameDateReading,
   sortTree,
@@ -32,6 +42,8 @@ import {
   type GanttRollupInfo,
   type GanttTask,
   type ResolvedRollupOptions,
+  type ResourceIndex,
+  type ResourceUtilization,
 } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
 import type { Columns } from '../../interaction/columns';
@@ -46,6 +58,12 @@ export type Rollups = ReadonlyMap<string, GanttRollupInfo>;
 export interface RowsGraph {
   /** `tasks` repaired by `normalizeTasks` (same array when nothing needed fixing) */
   readonly tasks: ReadonlySignal<GanttTask[]>;
+  /** `resources` indexed (core `indexResources`; also in tasks mode: the Resources cell reads it) */
+  readonly resourceIndex: ReadonlySignal<ResourceIndex>;
+  /** The daily load of every resource (`rows: 'resources'`), `null` in tasks mode */
+  readonly utilization: ReadonlySignal<ResourceUtilization | null>;
+  /** What the rows are made of: the synthetic resource rows in resource mode, else `tasks` (the same array) */
+  readonly viewTasks: ReadonlySignal<GanttTask[]>;
   readonly dateReading: ReadonlySignal<DateReading>;
   /** CPM result, or `null` without `options.criticalPath` */
   readonly critical: ReadonlySignal<CPMResult | null>;
@@ -75,9 +93,35 @@ export function rowsGraph(
   // The only part of the config CPM, the rollups and the cell context depend on (end mode, date-only
   // values, working calendar); compared by value, so a zoom, a label or a theme change cuts them off
   const dateReading = node('dateReading', () => dateReadingOf(cfg.config()), { equals: sameDateReading });
-  const criticalOn = node('criticalOn', () => cfg.config().criticalPath);
+  const resourceMode = node('resourceMode', () => cfg.config().rows === 'resources');
+  const resourceIndex = node('resourceIndex', () => indexResources(I.resourcesIn()));
+  const unassignedOn = node('unassignedOn', () => cfg.config().resourceView.unassigned);
+  const unassignedLabel = node('unassignedLabel', () => chrome.i18n().labels.resUnassigned);
+  const utilization = node('utilization', (): ResourceUtilization | null =>
+    resourceMode()
+      ? computeResourceUtilization(tasks(), resourceIndex(), dateReading(), { unassigned: unassignedOn() })
+      : null,
+  );
+  const viewTasks = node('viewTasks', (): GanttTask[] => {
+    const load = utilization();
+    return load
+      ? projectResourceRows({
+          tasks: tasks(),
+          index: resourceIndex(),
+          utilization: load,
+          view: { unassigned: unassignedOn() },
+          labels: { resUnassigned: unassignedLabel() },
+          dates: dateReading(),
+        })
+      : tasks();
+  });
+  // No critical path in the resource view (its rows have no links)
+  const criticalOn = node('criticalOn', () => cfg.config().criticalPath && !resourceMode());
   const critical = node('critical', () => (criticalOn() ? computeCriticalPath(tasks(), dateReading()) : null));
-  const rollupConfig = node('rollupConfig', () => cfg.config().rollup, { equals: structuralEqual });
+  // Off in the resource view: a team row would get dates and a progress rolled up from its members
+  const rollupConfig = node('rollupConfig', () => (resourceMode() ? false : cfg.config().rollup), {
+    equals: structuralEqual,
+  });
   const rollups = node('rollups', (): Rollups => {
     const rollup = rollupConfig();
     // Without rollup neither the tasks nor the day are read: nothing to recompute
@@ -86,11 +130,22 @@ export function rowsGraph(
     return computeRollups(tasks(), rollup, { now: cfg.nowDay(), dates: dateReading() });
   });
   const columnCtx = node('columnCtx', () =>
-    buildColumnContext({ tasks: tasks(), config: dateReading(), now: I.nowTick(), locale: chrome.i18n().locale }),
+    buildColumnContext({
+      tasks: viewTasks(),
+      config: dateReading(),
+      now: I.nowTick(),
+      locale: chrome.i18n().locale,
+      // The Resources cell reads the index in tasks mode too; `rows` tells the cells which mode they are in
+      resources: resourceIndex(),
+      ...(resourceMode() ? { rows: 'resources' as const } : {}),
+    }),
   );
   const allRows = node('allRows', () => {
     // Rolled up before the sort: a parent sorts by its rolled-up values
-    const rows = applyRollups(flattenTree(tasks(), I.collapsedIds()), rollups(), rollupConfig());
+    const flat = resourceMode()
+      ? flattenTree(viewTasks(), I.collapsedIds(), { order: 'input' })
+      : flattenTree(viewTasks(), I.collapsedIds());
+    const rows = applyRollups(flat, rollups(), rollupConfig());
     const sort = I.sort();
     if (!sort) return rows;
     const { columns: defs, builtins } = columns.catalogue();
@@ -99,5 +154,17 @@ export function rowsGraph(
     return sortTree(rows, columnComparator(sort.key, sort.dir, { column, ctx: columnCtx() }));
   });
   const visibleRows = node('visibleRows', () => reindexVisible(filterVisible(allRows())));
-  return { tasks, dateReading, critical, rollupConfig, rollups, columnCtx, allRows, visibleRows };
+  return {
+    tasks,
+    resourceIndex,
+    utilization,
+    viewTasks,
+    dateReading,
+    critical,
+    rollupConfig,
+    rollups,
+    columnCtx,
+    allRows,
+    visibleRows,
+  };
 }

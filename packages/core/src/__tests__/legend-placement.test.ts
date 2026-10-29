@@ -84,8 +84,8 @@ describe('step 2.6 public API', () => {
       expect(typeof fn).toBe('function');
     }
     expect(core.TOOLBAR_ICON_VIEWBOX).toBe('0 0 16 16');
-    // + undo / redo (Phase 11), export (Phase 12)
-    expect(Object.keys(core.TOOLBAR_ICONS)).toHaveLength(12);
+    // + undo / redo (Phase 11), export (Phase 12), resources (Phase 14)
+    expect(Object.keys(core.TOOLBAR_ICONS)).toHaveLength(13);
     expect(core.SKELETON_MAX_ROWS).toBeGreaterThan(0);
   });
 });

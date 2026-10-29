@@ -155,6 +155,7 @@ import {
   linkChange,
   fieldLabel,
   findColumn,
+  showsResourceColumns,
   type BarSegment,
   type BarVisual,
   type CPMResult,
@@ -169,6 +170,7 @@ import {
   type GanttPrintOptions,
   type GanttSvgExportOptions,
   type GanttHistoryState,
+  type GanttResource,
   type GanttTasksChangeEvent,
   type ResolvedTaskStyle,
   type TaskProgressEvent,
@@ -347,6 +349,7 @@ function barVisualOf(inputs: BarInputs, geo: RowGeometry, progress?: number): Ba
         (scrollToToday)="scrollToToday()"
         (viewChange)="setView($event)"
         (togglePanel)="togglePanel()"
+        (rowsChange)="layout.rows.set($event); saveState()"
       >
         <ng-content select="[ganttToolbar]" />
       </gantt-toolbar>
@@ -449,7 +452,7 @@ function barVisualOf(inputs: BarInputs, geo: RowGeometry, progress?: number): Ba
         #canvasEl
         class="gantry-canvas-viewport"
         role="group"
-        [attr.tabindex]="barFocus.viewportTabIndex()"
+        [attr.tabindex]="layout.resourceMode() ? 0 : barFocus.viewportTabIndex()"
         [attr.aria-label]="i18n.labels().ariaChart"
         [attr.inert]="layout.view() === 'table' || covered() ? '' : null"
         [style.scroll-padding-top.px]="scrollPadding().top"
@@ -762,6 +765,12 @@ export class GantryComponent {
   readonly dataSource = input<GanttDataSource | null>(null);
   readonly options = input<GanttOptions>({});
   readonly annotations = input<GanttAnnotation[]>([]);
+  /**
+   * The people and teams of the resource view (`options.rows: 'resources'`, or the toolbar's rows toggle with
+   * `toolbar.rowsToggle`): a task's `resources` assign them, and each shows its daily load against its
+   * capacity. Default: none.
+   */
+  readonly resources = input<GanttResource[]>([]);
   readonly columns = input<ColumnDef[]>([]);
   /** `true`, `false` or `'auto'` (follows `prefers-color-scheme`); unset: `provideGantt({ darkMode })`, else light. `options.darkMode` wins. */
   readonly darkMode = input<boolean | 'auto' | undefined>(undefined);
@@ -870,7 +879,11 @@ export class GantryComponent {
   /** The theme values geometry depends on; a colour-only theme change keeps them (and the config) */
   private readonly themeMetrics = computed(() => themeMetrics(this.theme()), { equal: sameThemeMetrics });
   protected readonly cfg = computed<ResolvedGanttConfig>(() =>
-    resolveConfig({ ...this.options(), viewMode: this.layout.level() }, this.i18n.bundle(), this.themeMetrics()),
+    resolveConfig(
+      { ...this.options(), viewMode: this.layout.level(), rows: this.layout.rows() },
+      this.i18n.bundle(),
+      this.themeMetrics(),
+    ),
   );
   /** Consumer columns: `options.columns` wins over the `columns` input (compared by reference) */
   private readonly columnSource = computed<ColumnDef[]>(() => {
@@ -1097,9 +1110,12 @@ export class GantryComponent {
     // Bind the inputs into the services once: everything downstream is computed / linkedSignal
     this.themeSvc.bind({ options: this.options, darkMode: this.darkMode });
     this.i18n.bind(this.options);
-    this.colSvc.bind(this.columnSource, this.directiveColumns);
+    this.colSvc.bind(this.columnSource, this.directiveColumns, () =>
+      showsResourceColumns({ resources: this.layout.resourceIndex().list, rows: this.layout.rows() }),
+    );
     this.layout.bindTasks(() => this.dataSource()?.items() ?? this.series());
     this.layout.bindState(this.options, this.viewMode);
+    this.layout.bindResources(this.resources);
     this.layout.bindConfig(
       () => this.cfg(),
       () => this.i18n.bundle(),
@@ -1294,6 +1310,12 @@ export class GantryComponent {
       if (canvas) {
         this.layout.viewportHeight.set(canvas.clientHeight);
         this.layout.viewportWidth.set(canvas.clientWidth);
+        // The box with or without its vertical scrollbar (borders excluded): the width `fitToWidth` fills
+        const style = this.doc.defaultView?.getComputedStyle(canvas);
+        const borders = style
+          ? (Number.parseFloat(style.borderLeftWidth) || 0) + (Number.parseFloat(style.borderRightWidth) || 0)
+          : 0;
+        this.layout.fitWidth.set(Math.max(0, canvas.offsetWidth - borders));
         this.canvasSB.set(canvas.offsetHeight - canvas.clientHeight);
       }
       if (panel) this.panelSB.set(panel.offsetHeight - panel.clientHeight);
@@ -1720,7 +1742,8 @@ export class GantryComponent {
 
   getSelectedTasks(): GanttTask[] {
     const ids = this.selSvc.selectedIds();
-    return this.layout.tasks().filter(t => ids.has(t.id));
+    // The resource view's rows are the projected ones (a resource, a team, Unassigned)
+    return (this.layout.viewTasks() ?? this.layout.tasks()).filter(t => ids.has(t.id));
   }
 
   setSelectedTasks(ids: string[]): void {
@@ -1860,7 +1883,8 @@ export class GantryComponent {
    */
   focusTask(id: string, options: { area?: 'bar' | 'row' | undefined } = {}): boolean {
     const byId = new Map<string, GanttTask>();
-    for (const t of this.layout.tasks()) if (!byId.has(t.id)) byId.set(t.id, t);
+    // The resource view's rows are the projected ones (a resource, a team, Unassigned)
+    for (const t of this.layout.viewTasks() ?? this.layout.tasks()) if (!byId.has(t.id)) byId.set(t.id, t);
     if (!byId.has(id)) return false;
     // Expand the collapsed ancestors (a loop in the data ends at the first repeated id)
     const collapsed = this.layout.collapsedIds();
@@ -1875,7 +1899,15 @@ export class GantryComponent {
       this.saveState();
     }
     const view = this.layout.view();
-    const area = view === 'table' ? 'row' : view === 'chart' ? 'bar' : (options.area ?? 'bar');
+    // The resource view has no bars: its rows are the task list's
+    const area =
+      view === 'table'
+        ? 'row'
+        : view === 'chart'
+          ? 'bar'
+          : this.layout.resourceMode()
+            ? 'row'
+            : (options.area ?? 'bar');
     // Pinned in the virtual window until focus moves on; focused once mounted (`restoreFocus`), with
     // its focus ring as from the keyboard (a bar already focused by a pointer shows it now)
     this.layout.focusedRowId.set(id);
@@ -1920,12 +1952,13 @@ export class GantryComponent {
   }
 
   /**
-   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). While the
+   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort, rows shown). While the
    * chart is narrow (`options.responsive`) the view is the wide one, not the forced one.
    */
   getState(): GanttState {
     const shown = this.layout.view();
     const view = this.responsive.persistedView(shown);
+    const rows = this.cfg().rows;
     return {
       panelWidth: this.layout.panelWidthPx() ?? (shown === 'split' ? this.panelPx() : undefined),
       panelCollapsed: view === 'chart',
@@ -1934,6 +1967,8 @@ export class GantryComponent {
       columnWidths: this.colSvc.widths(),
       collapsedIds: [...this.layout.collapsedIds()],
       sort: this.layout.sort(),
+      // The rows shown are state only where there is a choice: a chart without resources saves what it always did
+      ...(rows !== 'tasks' || this.layout.hasResources() ? { rows } : {}),
     };
   }
 
@@ -1953,6 +1988,7 @@ export class GantryComponent {
     if (state.columnWidths) this.colSvc.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) this.layout.collapsedIds.set(new Set(state.collapsedIds));
     if (state.sort !== undefined) this.layout.sort.set(state.sort);
+    if (state.rows) this.layout.rows.set(state.rows);
     if (emit) this.saveState();
   }
 

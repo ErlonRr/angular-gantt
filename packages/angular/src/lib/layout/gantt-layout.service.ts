@@ -16,7 +16,10 @@
 //                                     ──► timeline (buildTimeline) ──► naturalRange (own range + extent)
 //   timeline + now                    ──► todayX (the exact tick; null when hidden)
 //   tasks + config + nowDay           ──► critical (CPM), rollups (computeRollups, `options.rollup`)
-//   tasks + collapsed + rollups + sort ──► allRows (applyRollups before sortTree) ──► visibleRows
+//   options.rows / toolbar toggle ──► rows (linkedSignal, as `view`); `resources` input ──► resourceIndex
+//   tasks + resources + date reading (rows: 'resources') ──► utilization (daily load) ──► viewTasks (synthetic rows)
+//                                     ──► loadVisuals (the histogram paths of the mounted rows)
+//   tasks (viewTasks) + collapsed + rollups + sort ──► allRows (applyRollups before sortTree) ──► visibleRows
 //   config + critical + rollups + nowDay ──► rowStyle (createStyleResolver), barSegments (rollupSegments)
 //   visibleRows + timeline            ──► rowGeometries, geometryById (computeRowGeometries)
 //   scrollTop + viewport height + focused / dragged row ──► vWindow ──► mountedGeometries, windowSpan
@@ -125,19 +128,30 @@ import {
   editRules,
   selectedArrowVisual,
   buildArrowIndex,
+  calendarDays,
+  indexResources,
+  sameResources,
+  computeResourceUtilization,
+  projectResourceRows,
+  computeLoadVisuals,
   type ArrowIndex,
   type ArrowVisual,
   type BarSegment,
   type CellEditState,
   type EditRules,
   type GanttHistoryState,
+  type GanttResource,
+  type GanttRowsMode,
   type LinkMode,
   type LinkPreview,
   type LinkSide,
   type CPMResult,
   type DateReading,
   type GanttRollupInfo,
+  type LoadVisual,
   type NaturalTimelineRange,
+  type ResourceIndex,
+  type ResourceUtilization,
   type ResolvedRollupOptions,
   type ResolvedStyleOptions,
   type SharedTimelineRange,
@@ -271,6 +285,12 @@ const NO_CRITICAL: ReadonlySet<string> = new Set();
 const NO_ROLLUPS: ReadonlyMap<string, GanttRollupInfo> = new Map();
 /** Without `rollup.segments`: no bar has child segments */
 const NO_SEGMENTS = (): BarSegment[] | null => null;
+/** Outside the resource view: no load drawn */
+const NO_LOADS: readonly LoadVisual[] = [];
+
+/** `options.rows` when it names a mode (`undefined`: unset or unknown, the resolver's `'tasks'`) */
+const rowsFromOptions = (o: GanttOptions): GanttRowsMode | undefined =>
+  o.rows === 'tasks' || o.rows === 'resources' ? o.rows : undefined;
 
 /** Same dates (by time value), either may be null */
 const sameRange = (a: TimelineRange | null | undefined, b: TimelineRange | null | undefined): boolean =>
@@ -340,6 +360,13 @@ export class GanttLayoutService {
   /** The chart's `options` and its `viewMode` model: the sources of the UI state below */
   bindState(options: () => GanttOptions, viewMode: () => string | undefined): void {
     this.stateSources.set({ options, viewMode });
+  }
+
+  private readonly resourcesSource = signal<(() => readonly GanttResource[]) | null>(null);
+
+  /** The `resources` input: the people and teams the resource view (`rows: 'resources'`) shows */
+  bindResources(source: () => readonly GanttResource[]): void {
+    this.resourcesSource.set(source);
   }
 
   private readonly chartSources = signal<ChartSources | null>(null);
@@ -423,6 +450,16 @@ export class GanttLayoutService {
     computation: (fromOptions, prev) => fromOptions ?? prev?.value ?? 'split',
   });
 
+  /**
+   * One row per task, or one per resource (`rows`, orthogonal to `view` and the zoom level): the toolbar
+   * toggle, the API and a restored state write it; a changed `options.rows` resets it (as `view`).
+   */
+  readonly rows = linkedSignal<GanttRowsMode | undefined, GanttRowsMode>({
+    source: computed(() => rowsFromOptions(this.options())),
+    // A changed `options.rows` wins over the toggle (`undefined`: the default), as the Web Component's override
+    computation: fromOptions => fromOptions ?? 'tasks',
+  });
+
   /** Panel width in px once the user resized it (null = from `panel.width`; a changed width option resets it) */
   readonly panelWidthPx = linkedSignal<PanelWidthOptions, number | null>({
     source: computed(
@@ -450,6 +487,13 @@ export class GanttLayoutService {
    * whole timeline is mounted.
    */
   readonly viewportWidth = signal<number>(0);
+
+  /**
+   * Width the viewport's box has with or without a vertical scrollbar (px): what `fitToWidth` fills, so a
+   * scrollbar that appears (and takes room from `viewportWidth`) does not change the timeline that caused it.
+   * 0 = not measured: `viewportWidth`.
+   */
+  readonly fitWidth = signal<number>(0);
 
   /**
    * Visible height of the timeline viewport, header included (px), measured by GantryComponent.
@@ -571,21 +615,74 @@ export class GanttLayoutService {
     { equal: (a, b) => a === b || (!!a && !!b && sameDateReading(a, b)) },
   );
 
-  /** Values time- and data-dependent cells read (status, predecessors, durations, sort order) */
-  readonly columnContext = computed<ColumnContext>(() =>
-    buildColumnContext({
+  // ── Resource view (Phase 14): the Web Component's `resourceIndex`, `utilization` and `viewTasks` nodes ──
+
+  /** The `resources` input, indexed (a new list with the same content keeps the index) */
+  readonly resourceIndex = computed<ResourceIndex>(() => indexResources(this.resourcesSource()?.()), {
+    equal: (a, b) => a === b || sameResources(a.list, b.list),
+  });
+
+  /** The chart has resources: the rows toggle shows only then */
+  readonly hasResources = computed(() => this.resourceIndex().list.length > 0);
+
+  /**
+   * The settings the load depends on while `rows` is `'resources'`, `null` otherwise: a zoom, a theme or a
+   * labels change recomputes neither the utilization nor the projected rows.
+   */
+  private readonly resourceView = computed<{ readonly unassigned: boolean } | null>(
+    () => {
+      const c = this.boundConfig();
+      return c && c.rows === 'resources' ? { unassigned: c.resourceView.unassigned } : null;
+    },
+    { equal: (a, b) => a === b || (!!a && !!b && a.unassigned === b.unassigned) },
+  );
+
+  /** The label of the "Unassigned" row (the only label the projection reads) */
+  private readonly unassignedLabel = computed(() => this.labels().resUnassigned);
+
+  /** Daily load per resource, team and the unassigned work (core `computeResourceUtilization`), `null` in tasks mode */
+  readonly utilization = computed<ResourceUtilization | null>(() => {
+    const view = this.resourceView();
+    if (!view) return null;
+    return computeResourceUtilization(this.tasks(), this.resourceIndex(), this.dateReading() ?? NO_READING, view);
+  });
+
+  /** The synthetic rows of the resource view (core `projectResourceRows`), `null` in tasks mode */
+  readonly viewTasks = computed<GanttTask[] | null>(() => {
+    const view = this.resourceView();
+    const utilization = this.utilization();
+    if (!view || !utilization) return null;
+    return projectResourceRows({
       tasks: this.tasks(),
+      index: this.resourceIndex(),
+      utilization,
+      view,
+      labels: { resUnassigned: this.unassignedLabel() },
+      dates: this.dateReading() ?? NO_READING,
+    });
+  });
+
+  /** Values time- and data-dependent cells read (status, predecessors, durations, sort order) */
+  readonly columnContext = computed<ColumnContext>(() => {
+    // The resource view's rows are the projected ones; the Resources column reads the index (task rows too)
+    const viewTasks = this.viewTasks();
+    const index = this.resourceIndex();
+    return buildColumnContext({
+      tasks: viewTasks ?? this.tasks(),
       config: this.dateReading(),
       now: new Date(this.now()),
       locale: (this.i18nSource()?.() ?? this.i18n())?.locale,
-    }),
-  );
+      resources: index,
+      ...(viewTasks ? { rows: 'resources' as const } : {}),
+    });
+  });
 
   /** The config fields the rollups depend on (a zoom or a theme change keeps them) */
   private readonly rollupInput = computed<RollupInput>(
     () => {
       const c = this.boundConfig();
-      return { rollup: c?.rollup ?? false, ...(c ? dateReadingOf(c) : NO_READING) };
+      // The resource view's rows are synthetic: nothing rolls up into them
+      return { rollup: c && c.rows !== 'resources' ? c.rollup : false, ...(c ? dateReadingOf(c) : NO_READING) };
     },
     { equal: (a, b) => sameRollup(a.rollup, b.rollup) && sameDateReading(a, b) },
   );
@@ -607,8 +704,12 @@ export class GanttLayoutService {
    * reorders siblings at every level. Events and `getSelectedTasks()` stay raw (`rollupSource`).
    */
   readonly allRows = computed<GanttFlatRow[]>(() => {
+    // The resource view's rows keep the app's order (`order: 'input'`), not the start-date order of the roots
+    const viewTasks = this.viewTasks();
     const rows = applyRollups(
-      flattenTree(this.tasks(), this.collapsedIds()),
+      viewTasks
+        ? flattenTree(viewTasks, this.collapsedIds(), { order: 'input' })
+        : flattenTree(this.tasks(), this.collapsedIds()),
       this.rollups(),
       this.rollupInput().rollup,
     );
@@ -648,7 +749,7 @@ export class GanttLayoutService {
       tasks: this.tasks(),
       config,
       // Read only for `fitToWidth`: other timelines don't depend on the viewport
-      viewportWidth: config.fitToWidth ? this.viewportWidth() : undefined,
+      viewportWidth: config.fitToWidth ? this.fitWidth() || this.viewportWidth() : undefined,
       i18n: this.i18nSource()?.() ?? this.i18n(),
       now: this.nowDay(),
       // A sync group's union (null outside a group): same start and px per day, same x for a date
@@ -673,7 +774,8 @@ export class GanttLayoutService {
   private readonly cpmConfig = computed(
     () => {
       const cfg = this.cfg();
-      return { criticalPath: cfg.criticalPath, ...dateReadingOf(cfg) };
+      // No critical path in the resource view (its rows have no bars)
+      return { criticalPath: cfg.criticalPath && cfg.rows !== 'resources', ...dateReadingOf(cfg) };
     },
     { equal: (a, b) => a.criticalPath === b.criticalPath && sameDateReading(a, b) },
   );
@@ -818,6 +920,8 @@ export class GanttLayoutService {
   readonly showCriticalPath = computed(() => this.cfg().criticalPath);
   readonly showToday = computed(() => this.cfg().showToday);
   readonly panelVisible = computed(() => this.view() === 'split');
+  /** The resource view shows (`rows: 'resources'`): no bars, arrows or overlay, the load layer instead */
+  readonly resourceMode = computed(() => this.cfg().rows === 'resources');
 
   // ══════════════════════════════════════════════════════════
   //  Derived: chart inputs, marker lane, header height, state, legend
@@ -890,7 +994,8 @@ export class GanttLayoutService {
       todayVisible: this.todayShown(),
       annotations: this.annotations(),
       labels: this.labels(),
-      criticalPath: cfg.criticalPath,
+      // The resource view has no bars: no critical path to explain
+      criticalPath: cfg.criticalPath && cfg.rows !== 'resources',
       baseline: cfg.baseline,
     });
   });
@@ -1000,6 +1105,30 @@ export class GanttLayoutService {
     return linesInRange(this.timeline(), x0, x1);
   });
 
+  /** The fractional calendar day at a canvas x (core `calendarDays`, DST-safe): what the load hit test and layer read */
+  readonly dayOfX = computed<(x: number) => number>(() => {
+    const { toDate } = this.timeline();
+    return x => calendarDays(toDate(x), false);
+  });
+
+  /**
+   * The histogram paths of the mounted rows inside `hWindow` (core `computeLoadVisuals`): load up to the
+   * capacity, the part above it, the dashed capacity line. Empty outside the resource view.
+   */
+  readonly loadVisuals = computed<readonly LoadVisual[]>(() => {
+    const utilization = this.utilization();
+    if (!utilization) return NO_LOADS;
+    const { x0, x1 } = this.hWindow();
+    return computeLoadVisuals({
+      geos: this.mountedGeometries(),
+      utilization,
+      timeline: this.timeline(),
+      window: { x0, x1 },
+      cfg: this.cfg(),
+      dayOfX: this.dayOfX(),
+    });
+  });
+
   // ══════════════════════════════════════════════════════════
   //  Mutations
   // ══════════════════════════════════════════════════════════
@@ -1022,7 +1151,11 @@ export class GanttLayoutService {
   }
 
   collapseAll(): void {
-    const parentIds = flattenTree(this.tasks(), new Set())
+    // In the resource view the parents are the team rows
+    const viewTasks = this.viewTasks();
+    const parentIds = (
+      viewTasks ? flattenTree(viewTasks, new Set(), { order: 'input' }) : flattenTree(this.tasks(), new Set())
+    )
       .filter(r => r.hasChildren)
       .map(r => r.task.id);
     this.collapsedIds.set(new Set(parentIds));

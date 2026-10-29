@@ -21,7 +21,7 @@ import { taskDateLike } from '../calendar/edit';
 import { round2 } from '../calendar/time';
 import { addDays, calendarDays, isUtcDateOnly, toLocalDay } from '../gantt-math';
 import type { DateReading } from '../render/config';
-import { taskDependencies } from '../render/columns';
+import { taskDependencies } from '../render/task-dependencies';
 import { spanEndToTaskEnd, taskSpan } from '../render/timeline';
 import { DependencyType, type GanttDependency, type GanttTask } from '../types';
 

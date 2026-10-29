@@ -68,6 +68,7 @@ import {
   type GanttTask,
   type GanttOptions,
   type GanttAnnotation,
+  type GanttResource,
   type GanttThemeOverrides,
   type GanttState,
   type GanttSyncGroup,
@@ -299,6 +300,7 @@ function stateSetter(states: CustomStateSet | null): (name: string, on: boolean)
  * @cssprop [--gantt-progress-overlay=#000000] - Progress fill inside theme-coloured bars, drawn at `bar.progress.opacity` (`progressOverlay`).
  * @cssprop [--gantt-focus-ring=#2563EB] - Keyboard focus rings (`focusRing`).
  * @cssprop [--gantt-row-hover-bg=rgba(15, 23, 42, 0.04)] - Tint over the row under the mouse, in both panes (`rowHoverBg`; `transparent` turns the hover off).
+ * @cssprop [--gantt-overallocated=#C2410C] - Load above a resource's capacity in the resource view, hatched (`overallocatedColor`).
  * @cssprop [--gantt-bar-text-on-bar=#FFFFFF] - Label colour on `--gantt-bar` (derived: `readableOn(barColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-milestone=#FFFFFF] - Label colour on `--gantt-milestone` (derived: `readableOn(milestoneColor, barTextColor)`).
  * @cssprop [--gantt-bar-text-on-critical=#FFFFFF] - Label colour on `--gantt-critical` (derived: `readableOn(criticalColor, barTextColor)`).
@@ -489,6 +491,19 @@ export class GantryElement extends BaseElement {
   }
 
   /**
+   * The people and teams tasks are assigned to (`task.resources`). With `options.rows: 'resources'`
+   * (or the toolbar's rows toggle, `toolbar.rowsToggle`) the chart shows one row per resource: its
+   * daily load against its capacity, the part above it highlighted. Equal resources (field by field)
+   * change nothing; a property only (no attribute).
+   */
+  get resources(): GanttResource[] {
+    return this.#engine.inputs.resourcesIn.peek();
+  }
+  set resources(v: GanttResource[] | undefined) {
+    this.#set('resources', v);
+  }
+
+  /**
    * `true` / `false` / `'auto'` (follows `prefers-color-scheme`).
    * @attr dark-mode
    */
@@ -641,6 +656,9 @@ export class GantryElement extends BaseElement {
       case 'annotations':
         I.annotationsIn.set((v as GanttAnnotation[] | null) ?? []);
         return;
+      case 'resources':
+        I.resourcesIn.set((v as GanttResource[] | null) ?? []);
+        return;
       case 'tooltipEnabled':
         if (!v) engine.layers.tooltip.hide();
         break;
@@ -682,6 +700,8 @@ export class GantryElement extends BaseElement {
     if (opts.viewMode && opts.viewMode !== prev.viewMode) I.viewModeOverride.set(opts.viewMode);
     const view = viewFromOptions(opts);
     if (view && view !== viewFromOptions(prev)) I.viewOverride.set(view);
+    // `options.rows` changed: it wins over the toolbar's toggle (`null` = options as set); equal options change nothing
+    if (opts.rows !== prev.rows) I.rowsOverride.set(opts.rows ?? null);
     if (opts.panel?.width !== prev.panel?.width || opts.panelWidth !== prev.panelWidth) I.panelW.set(null);
     if (initialScrollChanged(opts.initialScroll, prev.initialScroll)) layers['scroll-commands'].resetInitialScroll();
     if (opts.stateKey && opts.stateKey !== this.#restoredStateKey) {
@@ -810,7 +830,8 @@ export class GantryElement extends BaseElement {
   getSelectedTasks(): GanttTask[] {
     const { inputs: I, graph: G } = this.#engine;
     const ids = I.selection.peek().selected;
-    return G.tasks.peek().filter(t => ids.has(t.id));
+    // The resource view's synthetic rows are what can be selected there
+    return G.viewTasks.peek().filter(t => ids.has(t.id));
   }
   /** Select exactly these task ids (fires `selection-change` when the selection changes). */
   setSelectedTasks(ids: string[]): void {
@@ -952,7 +973,7 @@ export class GantryElement extends BaseElement {
   focusTask(id: string, options: { area?: 'bar' | 'row' | undefined } = {}): boolean {
     const { inputs: I, graph: G, ctx } = this.#engine;
     const byId = new Map<string, GanttTask>();
-    for (const t of G.tasks.peek()) if (!byId.has(t.id)) byId.set(t.id, t);
+    for (const t of G.viewTasks.peek()) if (!byId.has(t.id)) byId.set(t.id, t);
     if (!byId.has(id)) return false;
     // Expand the collapsed ancestors (a loop in the data ends at the first repeated id)
     const collapsed = I.collapsedIds.peek();
@@ -967,7 +988,13 @@ export class GantryElement extends BaseElement {
       this.#saveState();
     }
     const view = I.viewOverride.peek();
-    const area = view === 'table' ? 'row' : view === 'chart' ? 'bar' : (options.area ?? 'bar');
+    // The resource view has no bars: its rows are the only target
+    const area =
+      view === 'table' || G.config.peek().rows === 'resources'
+        ? 'row'
+        : view === 'chart'
+          ? 'bar'
+          : (options.area ?? 'bar');
     // Pinned: mounted wherever it is, then focused and scrolled into view after the flush, with its
     // focus ring as from the keyboard (a bar already focused by a pointer shows it now)
     I.focusedRowId.set(id);
@@ -983,7 +1010,9 @@ export class GantryElement extends BaseElement {
   /** Collapse every group (task with children). */
   collapseAll(): void {
     const { inputs: I, graph: G } = this.#engine;
-    const parentIds = flattenTree(G.tasks.peek(), new Set())
+    // The rows' tasks: the resource view's teams in resource mode, the tasks otherwise
+    const resourceMode = G.config.peek().rows === 'resources';
+    const parentIds = flattenTree(G.viewTasks.peek(), new Set(), resourceMode ? { order: 'input' } : {})
       .filter(r => r.hasChildren)
       .map(r => r.task.id);
     I.collapsedIds.set(new Set(parentIds));
@@ -1032,7 +1061,7 @@ export class GantryElement extends BaseElement {
   }
 
   /**
-   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort). While the
+   * Snapshot of the UI state (panel, view, zoom, column widths, collapsed rows, sort, rows shown). While the
    * chart is narrow (`options.responsive`) the view is the one it shows when wide.
    */
   getState(): GanttState {
@@ -1047,6 +1076,10 @@ export class GantryElement extends BaseElement {
       columnWidths: columns.widths(),
       collapsedIds: [...I.collapsedIds.peek()],
       sort: I.sort.peek(),
+      // Reported once the chart has resources or shows them: before that the state is the one it always was
+      ...(G.config.peek().rows === 'resources' || G.resourceIndex.peek().list.length > 0
+        ? { rows: G.config.peek().rows }
+        : {}),
     };
   }
 
@@ -1069,6 +1102,7 @@ export class GantryElement extends BaseElement {
     if (state.columnWidths) columns.setColumnWidths(state.columnWidths);
     if (state.collapsedIds) I.collapsedIds.set(new Set(state.collapsedIds));
     if (state.sort !== undefined) I.sort.set(state.sort);
+    if (state.rows) I.rowsOverride.set(state.rows);
     if (emit) this.#saveState();
   }
 

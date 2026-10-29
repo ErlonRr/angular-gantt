@@ -9,6 +9,7 @@ import type { BarVisual } from './render/bars';
 import type { TooltipModel } from './state/tooltip';
 import type { ResolvedCalendar } from './render/config';
 import type { WorkingCalendar } from './calendar/working-calendar';
+import type { ResourceIndex } from './resources/model';
 
 // ─── Enums ───────────────────────────────────────────────────
 
@@ -157,12 +158,54 @@ export interface GanttTask {
    */
   status?: TaskStatus | (string & {}) | undefined;
 
+  /**
+   * The resources doing this task: a resource id, or `{ resourceId, units }` where `units` is the percent of a
+   * full-time person the task needs per working day (default 100). Unknown ids are ignored; a task without a
+   * known resource is *unassigned* in the resource view (`rows: 'resources'`).
+   */
+  resources?: GanttAssignment[] | undefined;
+
   /** Arbitrary extra data — passed through to bar components */
   data?: Record<string, unknown> | undefined;
 }
 
 /** Lifecycle status of a task (built-in `status` column). */
 export type TaskStatus = 'notStarted' | 'inProgress' | 'overdue' | 'done';
+
+// ─── Resources ───────────────────────────────────────────────
+
+/** A person or crew that tasks are assigned to (the `resources` property; shown by `rows: 'resources'`). */
+export interface GanttResource {
+  id: string;
+  name: string;
+  /**
+   * Percent of one person's time available per working day: 50 is half-time, 200 a team of two.
+   * Default 100 (a value that is not finite and above 0 is read as 100).
+   */
+  capacity?: number | undefined;
+  /** Team: resources with the same group sit under one collapsible team row in the resource view */
+  group?: string | undefined;
+  /** Colour of this resource's load bars (any CSS colour). Default: the theme's `barColor` */
+  color?: string | undefined;
+  /** Arbitrary extra data */
+  data?: Record<string, unknown> | undefined;
+}
+
+/** One assignment of a task: a resource id, or the id with the `units` the task takes (percent, default 100). */
+export type GanttAssignment = string | { resourceId: string; units?: number | undefined };
+
+/** What the rows are: one per task (default), or one per resource and team with its daily load. */
+export type GanttRowsMode = 'tasks' | 'resources';
+
+/** `GanttOptions.resourceView`: the resource rows (`rows: 'resources'`). */
+export interface GanttResourceViewOptions {
+  /** An "Unassigned" row for the tasks without a known resource. Default `true` */
+  unassigned?: boolean | undefined;
+  /** Highlight the load above capacity (`theme.overallocatedColor`, hatched). Default `true` */
+  overallocation?: boolean | undefined;
+  /** Height of a resource row, in px. Default: 1.5 × the row height of the density (28 px at least) */
+  rowHeight?: number | undefined;
+}
 
 // ─── Task styles and rollup ──────────────────────────────────
 
@@ -313,7 +356,10 @@ export type BuiltinColumnKey =
   | 'predecessors'
   | 'baselineStart'
   | 'baselineEnd'
-  | 'variance';
+  | 'variance'
+  | 'resources'
+  | 'capacity'
+  | 'load';
 
 /** Per-render values for time- and data-dependent cells (built by `buildColumnContext`). */
 export interface ColumnContext {
@@ -331,6 +377,10 @@ export interface ColumnContext {
    * one: a context is a `DateReading`, so `formatDuration(span, ctx)` measures like the chart
    */
   calendar?: ResolvedCalendar | null | undefined;
+  /** The `resources` property indexed (`indexResources`): the Resources column reads assignments through it */
+  resources?: ResourceIndex | undefined;
+  /** What the rows are (`ResolvedGanttConfig.rows`); unset reads as `'tasks'` */
+  rows?: GanttRowsMode | undefined;
 }
 
 /** Cell text. `ctx` carries "now", the date reading and the task index (always passed by the bindings). */
@@ -549,6 +599,11 @@ export interface GanttTheme {
    * Default `'rgba(15, 23, 42, 0.04)'` (light), `'rgba(148, 163, 184, 0.08)'` (dark)
    */
   rowHoverBg?: string;
+  /**
+   * Load above a resource's capacity in the resource view (`rows: 'resources'`), drawn hatched.
+   * Default `'#C2410C'` (light), `'#FB923C'` (dark)
+   */
+  overallocatedColor?: string;
 }
 
 // ─── i18n: UI labels ─────────────────────────────────────────
@@ -633,6 +688,17 @@ export interface GanttLabels {
   colBaselineStart: string;
   colBaselineEnd: string;
   colVariance: string;
+  // Resource view (`rows: 'resources'`) and the Resources column
+  colResources: string;
+  colCapacity: string;
+  /** Header of the peak-load column of the resource view */
+  colLoad: string;
+  /** Name of the row of the tasks that have no known resource */
+  resUnassigned: string;
+  /** Toolbar toggle (pressed in tasks mode → switches to the resource rows) */
+  showResources: string;
+  /** Toolbar toggle (pressed in resource mode → back to one row per task) */
+  showTasks: string;
   statusNotStarted: string;
   statusInProgress: string;
   statusOverdue: string;
@@ -741,6 +807,20 @@ export interface GanttLabels {
   ttFloatHours: (hours: number) => string;
   /** Label of the successors row */
   ttSuccessors: string;
+  // Resource tooltip (hover over a resource row's load)
+  /** Label of the load of the day, e.g. "150 %" */
+  ttResLoad: string;
+  /** Label of the capacity row */
+  ttResCapacity: string;
+  /** Label of the load above the capacity */
+  ttResOver: string;
+  /** Contributors that did not fit in the tooltip, e.g. "+3 more" */
+  ttResMore: (n: number) => string;
+  /**
+   * Accessible name of a resource row: capacity and peak load in percent, and the days over capacity
+   * (`overDays`). Default "Ana, capacity 100%, peak load 150%, 3 days over capacity"
+   */
+  describeResource: (name: string, capacity: number, peak: number, overDays: number) => string;
   // Legend
   legendCritical: string;
   legendBaseline: string;
@@ -763,6 +843,10 @@ export interface GanttLabels {
   errorUnknownTask: (ref: string) => string;
   /** A predecessor name matches more than one task */
   errorAmbiguousTask: (ref: string) => string;
+  /** A resource reference in the Resources cell matches no resource */
+  errorUnknownResource: (ref: string) => string;
+  /** A resource name in the Resources cell matches more than one resource */
+  errorAmbiguousResource: (ref: string) => string;
   /** A link from a task to itself */
   errorSelfLink: string;
   /** The link already exists */
@@ -871,6 +955,12 @@ export const DEFAULT_LABELS: GanttLabels = {
   colBaselineStart: 'Baseline start',
   colBaselineEnd: 'Baseline end',
   colVariance: 'Variance',
+  colResources: 'Resources',
+  colCapacity: 'Capacity',
+  colLoad: 'Peak load',
+  resUnassigned: 'Unassigned',
+  showResources: 'Show resources',
+  showTasks: 'Show tasks',
   statusNotStarted: 'Not started',
   statusInProgress: 'In progress',
   statusOverdue: 'Overdue',
@@ -935,6 +1025,14 @@ export const DEFAULT_LABELS: GanttLabels = {
   ttFloatDays: days => `${days}d`,
   ttFloatHours: hours => `${hours}h`,
   ttSuccessors: 'Successors',
+  ttResLoad: 'Load',
+  ttResCapacity: 'Capacity',
+  ttResOver: 'Over capacity',
+  ttResMore: n => `+${n} more`,
+  describeResource: (name, capacity, peak, overDays) =>
+    `${name}, capacity ${capacity}%, peak load ${peak}%, ${
+      overDays === 0 ? 'never over capacity' : overDays === 1 ? '1 day over capacity' : `${overDays} days over capacity`
+    }`,
   legendCritical: 'Critical path',
   legendBaseline: 'Baseline',
   describeEdit: (name, column) => `Edited ${column} of ${name}`,
@@ -946,6 +1044,8 @@ export const DEFAULT_LABELS: GanttLabels = {
   errorEndBeforeStart: 'The end can’t be before the start',
   errorUnknownTask: ref => `No task “${ref}”`,
   errorAmbiguousTask: ref => `More than one task is called “${ref}”: use its ID`,
+  errorUnknownResource: ref => `No resource “${ref}”`,
+  errorAmbiguousResource: ref => `More than one resource is called “${ref}”: use its ID`,
   errorSelfLink: 'A task can’t depend on itself',
   errorDuplicateLink: 'These tasks are already linked',
   errorCycle: 'This link would make a loop',
@@ -1282,6 +1382,12 @@ export interface GanttToolbarOptions {
    * Default false.
    */
   export?: boolean | undefined;
+  /**
+   * A button that switches between one row per task and one row per resource (`rows`), after the task
+   * list toggle. It shows only while the `resources` property is not empty and never moves into the
+   * More menu. Default false.
+   */
+  rowsToggle?: boolean | undefined;
 }
 
 /** Below `breakpoint` px of chart width, the chart shows `view`. */
@@ -1408,6 +1514,8 @@ export interface GanttState {
   columnWidths?: Record<string, number> | undefined;
   collapsedIds?: string[] | undefined;
   sort?: { key: string; dir: 'asc' | 'desc' } | null | undefined;
+  /** The rows shown (`options.rows`, switched by the toolbar's rows toggle) */
+  rows?: GanttRowsMode | undefined;
 }
 
 // ─── Export and print ────────────────────────────────────────
@@ -1691,6 +1799,16 @@ export interface GanttOptions {
   /** Columns of the full table view (`view: 'table'`) */
   table?: GanttTableOptions | undefined;
   view?: GanttView | undefined;
+  /**
+   * What the rows are: `'tasks'` = one row per task (default), `'resources'` = one row per resource (and
+   * team) with its daily load against its capacity (needs the `resources` property; tasks without a
+   * known resource go to the "Unassigned" row). Like `view`, it is the initial value: the toolbar's rows
+   * toggle (`toolbar.rowsToggle`) and `setState({ rows })` change it at run time and `stateKey` keeps it.
+   * A resource row is as high as `resourceView.rowHeight`, which replaces `rowHeight` in this mode.
+   */
+  rows?: GanttRowsMode | undefined;
+  /** The resource rows (`rows: 'resources'`) */
+  resourceView?: GanttResourceViewOptions | undefined;
   toolbar?: GanttToolbarOptions | false | undefined;
   /** Legend placement (`showLegend` turns it on) */
   legend?: GanttLegendOptions | undefined;

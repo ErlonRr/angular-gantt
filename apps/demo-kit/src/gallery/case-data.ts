@@ -28,6 +28,9 @@ import { nonWorkingCase } from './cases/non-working';
 import { onlyParentsCase } from './cases/only-parents';
 import { onlyParentsStyledCase } from './cases/only-parents-styled';
 import { printCase } from './cases/print';
+import { resourceCapacityCase } from './cases/resource-capacity';
+import { resourceLoadCase } from './cases/resource-load';
+import { resourcePanelCase } from './cases/resource-panel';
 import { responsiveCase } from './cases/responsive';
 import { shiftCalendarCase } from './cases/shift-calendar';
 import { statesCase } from './cases/states';
@@ -52,6 +55,9 @@ export const CASE_DATA: Readonly<Record<CaseId, GalleryCaseData>> = {
   'working-days': workingDaysCase,
   'shift-calendar': shiftCalendarCase,
   'critical-float': criticalFloatCase,
+  'resource-load': resourceLoadCase,
+  'resource-panel': resourcePanelCase,
+  'resource-capacity': resourceCapacityCase,
   editing: editingCase,
   'cell-editing': cellEditingCase,
   'custom-editors': customEditorsCase,

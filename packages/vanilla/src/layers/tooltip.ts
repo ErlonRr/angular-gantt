@@ -40,6 +40,12 @@
  * rule, date-only normalisation, working calendar) or the baseline switch differ from what it was
  * written from, then measures and places it again. `render` runs again only then: never on a clock tick.
  *
+ * The resource view (Phase 14) has no bars: a fine pointer over a resource row's timeline cell opens the
+ * same tooltip for that row and day (`hoverLoad`, found by `interaction/tooltip-triggers.ts` with core
+ * `hitTestLoad`; content from core `buildResourceTooltip`; no custom `render`). Its machine id is the
+ * row and the day, its anchor the day's cell in the canvas (a virtual box, read from the canvas on
+ * every placement); `refreshLoad()` writes it again when the utilization or the i18n bundle changed.
+ *
  *   div.gantt-tooltip[popover=manual][role=tooltip][id]
  *     div.gantt-tooltip-title            built-in content
  *     dl.gantt-tooltip-rows > div.gantt-tooltip-row > dt.gantt-tooltip-label + dd.gantt-tooltip-value (+ dd.gantt-tooltip-track > div.gantt-tooltip-fill)
@@ -49,8 +55,11 @@
 import {
   TOOLTIP_HIDE_DELAY,
   TOOLTIP_SHOW_DELAY,
+  buildResourceTooltip,
   buildTooltipModel,
+  contributorsAt,
   dateReadingOf,
+  fromCalendarDays,
   initialTooltipState,
   placeTooltip,
   reduceTooltip,
@@ -62,6 +71,7 @@ import {
   type GanttI18n,
   type GanttTask,
   type ResolvedTaskStyle,
+  type ResourceUtilization,
   type TooltipEvent,
   type TooltipMachineOptions,
   type TooltipModel,
@@ -81,6 +91,11 @@ export interface TooltipLayer {
   readonly element: HTMLElement;
   /** A fine pointer is over `row`'s bar `el` at `clientX`: opens after the show delay (at once when another bar's is open), anchored to `el`. */
   hover(row: GanttFlatRow, el: Element, clientX: number): void;
+  /**
+   * A fine pointer is over a resource row's timeline cell (the resource view): opens after the show delay (at
+   * once when another one's is open), anchored to that day's cell, centred on `clientX` while hovering.
+   */
+  hoverLoad(target: LoadTooltipTarget, clientX: number): void;
   /** The pointer left the bars: closes after the hide delay (unless it rests on the tooltip). */
   unhover(): void;
   /** `row`'s bar `el` got keyboard focus: opens at once, anchored to `el`. */
@@ -103,6 +118,14 @@ export interface TooltipLayer {
    * effect that reads it runs again when the tooltip opens, closes or moves to another bar.
    */
   visibleId(): string | null;
+  /** The resource row and day whose tooltip shows now, else `null`. Tracked, like `visibleId()`. */
+  visibleLoad(): LoadTooltipTarget | null;
+  /**
+   * The open resource tooltip as the chart has it now: writes the content again, measures and places it, when
+   * the utilization (tasks, resources, date reading) or the i18n bundle differ from what it was written from.
+   * No-op for a task tooltip or while closed.
+   */
+  refreshLoad(): void;
   /**
    * The open tooltip's row as the chart has it now: writes the content again (the custom `render`
    * included), measures and places it, when the task object, the critical flag, the float, the
@@ -130,6 +153,14 @@ interface RowParts {
   readonly fill: HTMLElement | null;
 }
 
+/** A resource row's day, the target of a resource tooltip (`hoverLoad`). */
+export interface LoadTooltipTarget {
+  /** The resource row's id (`res:<id>` | `team:<group>` | `unassigned`) */
+  readonly rowKey: string;
+  /** The epoch-day index (`calendarDays` units) */
+  readonly day: number;
+}
+
 /** What opened (or may open) the tooltip of a bar: its row, the bar element, the pointer x while hovering. */
 interface Target {
   readonly row: GanttFlatRow;
@@ -137,12 +168,33 @@ interface Target {
   readonly x?: number | undefined;
 }
 
-/** The open tooltip: its task, the bar it is anchored to and the pointer x it was placed for. */
+/** What opened (or may open) a resource tooltip: the row and day, the pointer x. */
+interface LoadTarget {
+  readonly load: LoadTooltipTarget;
+  readonly x?: number | undefined;
+}
+
+/** What a tooltip is anchored to: a bar element, or the day's cell of a resource row (a box measured on demand). */
+interface Anchor {
+  getBoundingClientRect(): DOMRect;
+  readonly isConnected: boolean;
+}
+
+/** The open tooltip: its id, what it is anchored to and the pointer x it was placed for. */
 interface Shown {
   readonly id: string;
-  anchor: Element;
+  anchor: Anchor;
   readonly pointerX: number | undefined;
 }
+
+/** The machine id of a resource tooltip (cannot be a task id). */
+const loadId = (t: LoadTooltipTarget): string => `load\u001f${t.rowKey}\u001f${t.day}`;
+const idOf = (t: Target | LoadTarget): string => ('load' in t ? loadId(t.load) : t.row.task.id);
+
+/** `aria-describedby` goes on a bar element only: a resource tooltip's anchor is a virtual box. */
+const describe = (anchor: Anchor, id: string | null): void => {
+  if ('setAttribute' in anchor) setAttr(anchor as Element, 'aria-describedby', id);
+};
 
 /** What the content was written from: a refresh writes it again only when one of these changed. */
 interface Painted {
@@ -201,11 +253,15 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
   let state: TooltipState = initialTooltipState();
   let timer = 0;
   /** The last bar each source pointed at (the machine says which source opened the tooltip) */
-  let targets: Partial<Record<TooltipSource, Target>> = {};
+  let targets: Partial<Record<TooltipSource, Target | LoadTarget>> = {};
   let shown: Shown | null = null;
   /** `shown?.id`, tracked (`visibleId()`) */
   const shownId = signal<string | null>(null);
+  /** The resource row and day shown, tracked (`visibleLoad()`) */
+  const shownLoad = signal<LoadTooltipTarget | null>(null);
   let painted: Painted | null = null;
+  /** What a resource tooltip's content was written from */
+  let paintedLoad: { utilization: ResourceUtilization | null; i18n: GanttI18n } | null = null;
   let destroyed = false;
   /** Border-box size, measured when the tooltip opens and when a refresh rewrites its content */
   let width = 0;
@@ -308,6 +364,60 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     paintModel(model);
   };
 
+  /** Writes the resource tooltip of `t`; `false` when its row is gone (the options changed under it). */
+  const paintLoadContent = (t: LoadTooltipTarget): boolean => {
+    const utilization = G.utilization.peek();
+    const load = utilization?.rows.get(t.rowKey);
+    if (!utilization || !load) return false;
+    const i18n = G.i18n.peek();
+    const model = buildResourceTooltip({
+      load,
+      day: t.day,
+      contributors: contributorsAt(G.tasks.peek(), G.resourceIndex.peek(), G.dateReading.peek(), t.rowKey, t.day),
+      labels: i18n.labels,
+      locale: i18n.locale,
+      dateFormat: i18n.formats.dateFormat,
+    });
+    paintedLoad = { utilization, i18n };
+    toggleClass(popover, 'gantt-tooltip--critical', false);
+    showNode(popover, custom, false);
+    showNode(popover, list, true);
+    showNode(popover, title, true, list);
+    paintModel(model);
+    return true;
+  };
+
+  /** The day's cell of a resource row in the canvas, measured on demand (`null` when the row is gone). */
+  const loadAnchor = (t: LoadTooltipTarget): Anchor | null => {
+    const geo = G.geoById.peek().get(t.rowKey);
+    if (!geo) return null;
+    const { toX } = G.timeline.peek();
+    const x0 = toX(fromCalendarDays(t.day));
+    const x1 = toX(fromCalendarDays(t.day + 1));
+    const { y, height } = geo;
+    return {
+      get isConnected() {
+        return dom.canvasContainer.isConnected;
+      },
+      getBoundingClientRect() {
+        const box = dom.canvasContainer.getBoundingClientRect();
+        const left = box.left + x0;
+        const top = box.top + y;
+        return {
+          x: left,
+          y: top,
+          left,
+          top,
+          width: x1 - x0,
+          height,
+          right: left + (x1 - x0),
+          bottom: top + height,
+          toJSON: () => ({}),
+        };
+      },
+    };
+  };
+
   /** The mounted bar element of `taskId` (`g[data-task-id]` in the bars layer), if any. */
   const findBar = (taskId: string): Element | null => {
     for (const bar of dom.bars.children) if (bar.getAttribute('data-task-id') === taskId) return bar;
@@ -336,9 +446,10 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
 
   const close = (): void => {
     if (!shown) return;
-    setAttr(shown.anchor, 'aria-describedby', null);
+    describe(shown.anchor, null);
     shown = null;
     shownId.set(null);
+    shownLoad.set(null);
     try {
       popover.hidePopover();
     } catch {
@@ -360,19 +471,26 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     close();
   };
 
-  /** Opens (or moves) the tooltip to `id`'s bar: content, popover, one measurement, placement. */
+  /** Opens (or moves) the tooltip to `id`'s bar (or resource day): content, popover, one measurement, placement. */
   const open = (id: string): void => {
     const source = state.source;
     const own = source ? targets[source] : undefined;
-    const target =
-      own?.row.task.id === id ? own : Object.values(targets).find(t => t !== undefined && t.row.task.id === id);
-    const anchor = target && (target.el.isConnected ? barOf(target.el) : findBar(id));
+    const target = own && idOf(own) === id ? own : Object.values(targets).find(t => t !== undefined && idOf(t) === id);
+    const anchor: Anchor | null | undefined =
+      target && ('load' in target ? loadAnchor(target.load) : target.el.isConnected ? barOf(target.el) : findBar(id));
     if (!target || !anchor || !I.tooltipEnabled.peek()) {
       // Nothing to anchor to (the bar went away) or the tooltip is off
       reset();
       return;
     }
-    paintContent(target.row);
+    if ('load' in target) {
+      if (!paintLoadContent(target.load)) {
+        reset();
+        return;
+      }
+    } else {
+      paintContent(target.row);
+    }
     if (!shown) {
       setAttr(popover, 'hidden', false);
       try {
@@ -381,15 +499,16 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
         // No Popover API (or not connected): the `hidden` attribute alone shows and hides it
       }
     } else if (shown.anchor !== anchor) {
-      setAttr(shown.anchor, 'aria-describedby', null);
+      describe(shown.anchor, null);
     }
     shown = { id, anchor, pointerX: source === 'hover' ? target.x : undefined };
-    setAttr(anchor, 'aria-describedby', tooltipId);
+    describe(anchor, tooltipId);
     // One layout read per opening; scrolls only re-read the bar's box
     measure();
     place();
     // Last: the triggers start following this row (its content is written already)
     shownId.set(id);
+    shownLoad.set('load' in target ? target.load : null);
   };
 
   /** Shows what the machine's state says: the tooltip of `tooltipVisibleId(state)`, or nothing. */
@@ -433,22 +552,25 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
         return;
       }
       shown.anchor = again;
-      setAttr(again, 'aria-describedby', tooltipId);
+      describe(again, tooltipId);
     }
     place();
   };
 
   /** Records what points at a bar and sends its event (nothing while the tooltip is off). */
-  const point = (source: TooltipSource, target: Target): void => {
+  const point = (source: TooltipSource, target: Target | LoadTarget): void => {
     if (destroyed || !I.tooltipEnabled.peek()) return;
     targets[source] = target;
-    send({ type: source, id: target.row.task.id });
+    send({ type: source, id: idOf(target) });
   };
 
   const layer: TooltipLayer = {
     element: popover,
     hover(row, el, clientX) {
       point('hover', { row, el, x: clientX });
+    },
+    hoverLoad(load, clientX) {
+      point('hover', { load, x: clientX });
     },
     unhover() {
       send({ type: 'unhover' });
@@ -474,6 +596,26 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
       send({ type: 'leaveTooltip' });
     },
     visibleId: () => shownId(),
+    visibleLoad: () => shownLoad(),
+    refreshLoad() {
+      const t = shownLoad.peek();
+      if (destroyed || !shown || !t) return;
+      let utilization: ResourceUtilization | null;
+      let i18n: GanttI18n;
+      try {
+        utilization = G.utilization.peek();
+        i18n = G.i18n.peek();
+      } catch {
+        return; // invalid options: nothing is rendered
+      }
+      if (paintedLoad && paintedLoad.utilization === utilization && paintedLoad.i18n === i18n) return;
+      // The row may be gone (a resource removed): the triggers dismiss it
+      const anchor = loadAnchor(t);
+      if (!anchor || !paintLoadContent(t)) return;
+      shown.anchor = anchor;
+      measure();
+      reposition();
+    },
     refresh(row) {
       const id = row.task.id;
       if (destroyed || shown?.id !== id) return;

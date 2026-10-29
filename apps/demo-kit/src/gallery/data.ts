@@ -6,7 +6,15 @@
  * every time zone.
  */
 
-import { DependencyType, TaskType, addDays, snapToDay, type GanttDependency, type GanttTask } from '@gantryjs/core';
+import {
+  DependencyType,
+  TaskType,
+  addDays,
+  snapToDay,
+  type GanttAssignment,
+  type GanttDependency,
+  type GanttTask,
+} from '@gantryjs/core';
 
 // ─── Helpers ─────────────────────────────────────────────────
 
@@ -435,4 +443,30 @@ export function dependenciesOf(task: GanttTask): GanttDependency[] {
   if (!dep) return [];
   if (typeof dep === 'string') return [{ taskId: dep }];
   return Array.isArray(dep) ? dep : [dep];
+}
+
+// ─── Resources ───────────────────────────────────────────────
+
+/**
+ * The playgrounds' sample assignments, by task id of the core demo plan (`createDemoData()`; the
+ * resources are `loadResources()` of the `resource-load` case). Backend and Frontend overlap on Di,
+ * Frontend and Research on Ana, and QA is Bo's alone (half-time), so the resource view has
+ * over-allocated rows; Prototype is left unassigned, so it has an Unassigned row. Groups and
+ * milestones carry no load.
+ */
+const PLAYGROUND_ASSIGNMENTS: Readonly<Record<string, readonly GanttAssignment[]>> = {
+  'p1-a': ['ana'],
+  'p1-b1': ['cy', 'di'],
+  'p1-b2': ['di', { resourceId: 'ana', units: 50 }],
+  'p1-c': ['bo'],
+  'p2-a': ['ana'],
+  'p2-c': ['ed'],
+};
+
+/** `tasks` with the sample assignments of the playgrounds on the demo plan's tasks (new objects, the input is untouched). */
+export function withPlaygroundResources(tasks: readonly GanttTask[]): GanttTask[] {
+  return tasks.map(task => {
+    const resources = PLAYGROUND_ASSIGNMENTS[task.id];
+    return resources ? { ...task, resources: [...resources] } : { ...task };
+  });
 }

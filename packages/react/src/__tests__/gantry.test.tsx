@@ -173,6 +173,14 @@ describe('<Gantry> (React wrapper)', () => {
     expect(el.tasks).toEqual([]);
   });
 
+  it('forwards `resources` as they are, and restores the default when the prop is dropped', async () => {
+    const resources = [{ id: 'ana', name: 'Ana', capacity: 50 }];
+    await render(<Gantry resources={resources} />);
+    expect(element().resources).toBe(resources);
+    await render(<Gantry />);
+    expect(element().resources).toEqual([]);
+  });
+
   it('leaves the element defaults (and attributes) alone for props never set', async () => {
     const proto = customElements.get('gantry-element')!.prototype as GantryElement;
     const setters = GANTRY_PROPERTIES.map(key => vi.spyOn(proto, key, 'set'));

@@ -47,7 +47,11 @@ export interface ArrowsGraph {
 }
 
 export function arrowsGraph(I: Inputs, g: CoreGraph & VisualsGraph, node: NodeFactory): ArrowsGraph {
-  const arrowIndex = node('arrowIndex', () => buildArrowIndex(g.tasks(), g.geoById()));
+  // The resource view draws no link (its rows have no bar): an empty index, built once
+  const noArrows = buildArrowIndex([], new Map());
+  const arrowIndex = node('arrowIndex', () =>
+    g.utilization() === null ? buildArrowIndex(g.tasks(), g.geoById()) : noArrows,
+  );
   const arrowVisualBase = node('arrowVisualBase', (): ArrowVisualOf => {
     // Every input of an arrow: the bar visuals of both ends (their memo restarts with the config,
     // the timeline, the critical path and the metrics), the rows, the critical path and the font size

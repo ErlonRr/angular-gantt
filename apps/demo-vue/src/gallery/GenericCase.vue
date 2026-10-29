@@ -22,6 +22,7 @@ const charts = data.charts(new Date()).map(c => ({
     dataSource: c.dataSource ? new GanttDataSource(c.dataSource) : undefined,
     options: c.options,
     annotations: c.annotations,
+    resources: c.resources,
     showToolbar: c.showToolbar ?? true,
     showLegend: c.showLegend ?? false,
     loading: c.loading ?? false,

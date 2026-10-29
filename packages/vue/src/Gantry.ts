@@ -52,7 +52,7 @@ import {
   type GanttDataSourceConfig,
   type VanillaColumnDef,
 } from '@gantryjs/vanilla';
-import type { GanttAnnotation, GanttOptions, GanttSyncGroup, GanttTask } from '@gantryjs/core';
+import type { GanttAnnotation, GanttOptions, GanttResource, GanttSyncGroup, GanttTask } from '@gantryjs/core';
 
 type PropertyName = (typeof GANTRY_PROPERTIES)[number];
 
@@ -83,6 +83,7 @@ const props = {
   columns: optional(Array as PropType<VanillaColumnDef[]>),
   options: optional(Object as PropType<GanttOptions>),
   annotations: optional(Array as PropType<GanttAnnotation[]>),
+  resources: optional(Array as PropType<GanttResource[]>),
   darkMode: optional([Boolean, String] as PropType<boolean | 'auto'>),
   showToolbar: optional(Boolean),
   enableDrag: optional(Boolean),
@@ -133,7 +134,7 @@ function unwrap(value: unknown): unknown {
  *
  * A thin binding over the `<gantry-element>` Web Component: props are set as element properties
  * (`undefined` restores the element's default), events are emitted with their `detail`. Array props
- * (`tasks`, `columns`, `annotations`) and `options` are watched one level deep, so `tasks.push(…)`
+ * (`tasks`, `columns`, `annotations`, `resources`) and `options` are watched one level deep, so `tasks.push(…)`
  * on a reactive array or `options.viewMode = …` on a reactive object re-renders the chart. Each
  * edit emits `beforeChange` first, synchronously: `detail.preventDefault()` in the handler vetoes
  * it. Then `tasksChange` carries the tasks after the change (`detail.tasks`; the proposed ones,

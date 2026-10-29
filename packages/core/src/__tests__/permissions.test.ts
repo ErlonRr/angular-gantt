@@ -134,7 +134,7 @@ describe('editRules', () => {
 });
 
 describe('cellEditable', () => {
-  const builtins = buildBuiltinColumns(DEFAULT_LABELS);
+  const builtins = buildBuiltinColumns(DEFAULT_LABELS, undefined, undefined, undefined, true);
   const col = (key: string): ColumnDef => {
     const c = builtins.find(b => b.key === key);
     if (!c) throw new Error(`no column ${key}`);
@@ -154,10 +154,10 @@ describe('cellEditable', () => {
     return cellEditable(c, row, rules ?? editRules(row, { config, enableDrag: true, enableResize: true }), config);
   };
 
-  it('the built-in name, start, end, duration, progress and predecessors cells are editable; the others are not', () => {
+  it('the built-in name, start, end, duration, progress, predecessors and resources cells are editable; the others are not', () => {
     const tasks = [task('a')];
     const editable = builtins.filter(c => can(c, tasks)).map(c => c.key);
-    expect(editable).toEqual(['name', 'start', 'end', 'duration', 'progress', 'predecessors']);
+    expect(editable).toEqual(['name', 'start', 'end', 'duration', 'progress', 'predecessors', 'resources']);
   });
 
   it('nothing is editable with editing.cells off, editing off, or on a read-only row', () => {
@@ -196,10 +196,10 @@ describe('cellEditable', () => {
     expect(can(col('progress'), tasks, { editing: { progress: false } })).toBe(false);
   });
 
-  it('a rolled-up parent keeps its name and links editable, not its derived fields', () => {
+  it('a rolled-up parent keeps its name, links and resources editable, not its derived fields', () => {
     const tasks = [task('p'), task('k', { parentId: 'p' })];
     const keys = builtins.filter(c => can(c, tasks, { editing: true, rollup: true })).map(c => c.key);
-    expect(keys).toEqual(['name', 'predecessors']);
+    expect(keys).toEqual(['name', 'predecessors', 'resources']);
   });
 
   it('custom columns are read-only unless editable says so; a function decides per row', () => {

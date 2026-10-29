@@ -41,6 +41,12 @@
 //  clock and the task index are read when it is built, never followed: a
 //  clock tick builds nothing.
 //
+//  The resource view (`rows: 'resources'`, Phase 14) has no bars: a pointer over a resource row's
+//  timeline cell opens the same popover for that row and day (`GanttTooltipState.hoverResource`, core
+//  `hitTestLoad`); its content is core's `buildResourceTooltip` (the day's load, the capacity, what is
+//  over it, the tasks that weigh on it), built again when the utilization (tasks, resources, date
+//  reading) or the i18n bundle change. It is placed by its row, centred on the pointer.
+//
 //  Where it goes is core's `placeTooltip`: below its bar (above it
 //  without room), centred on the pointer while hovering, on the visible
 //  part of the bar otherwise, kept 8 px from the viewport edges, written
@@ -81,7 +87,9 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import {
+  buildResourceTooltip,
   buildTooltipModel,
+  contributorsAt,
   dateReadingOf,
   hitTestBar,
   placeTooltip,
@@ -94,6 +102,7 @@ import {
   type Paint,
   type ResolvedGanttConfig,
   type ResolvedTaskStyle,
+  type ResourceUtilization,
   type TooltipModel,
 } from '@gantryjs/core';
 
@@ -101,7 +110,7 @@ import { GanttDragService } from '../drag/gantt-drag.service';
 import { GanttLayoutService } from '../layout/gantt-layout.service';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 import { type GanttTooltipTemplateContext } from './gantt-tooltip-template.directive';
-import { GanttTooltipState, type ShownTooltip } from './tooltip-state';
+import { GanttTooltipState, type ShownTooltip, type TooltipAnchor } from './tooltip-state';
 
 /**
  * What the tooltip reads besides the row: how dates are read, the clock, the critical path and the
@@ -149,12 +158,14 @@ interface TooltipSource {
   readonly dates: DateReading;
   /** Whether baseline rows show */
   readonly baseline: boolean;
+  /** The resource view's tooltip follows the utilization (`null` for a task): any change of tasks, resources or dates */
+  readonly utilization: ResourceUtilization | null;
 }
 
 /**
  * Same content: the same opening, task object, critical flag, float, style fields, i18n bundle,
- * date reading and baseline switch (a new row object alone is not a change, nor a new style
- * object with the same fields).
+ * date reading, baseline switch and (a resource row's day) utilization (a new row object alone is
+ * not a change, nor a new style object with the same fields).
  */
 const sameSource = (a: TooltipSource | null, b: TooltipSource | null): boolean =>
   a === b ||
@@ -167,7 +178,8 @@ const sameSource = (a: TooltipSource | null, b: TooltipSource | null): boolean =
     sameTaskStyle(a.style, b.style) &&
     a.i18n === b.i18n &&
     sameDateReading(a.dates, b.dates) &&
-    a.baseline === b.baseline);
+    a.baseline === b.baseline &&
+    a.utilization === b.utilization);
 
 /** The opening the popover shows, its row and its model */
 interface TooltipView {
@@ -371,17 +383,20 @@ export class GanttTooltipComponent {
     () => {
       const shown = this.state.shown();
       if (!shown) return null;
-      const row = this.layout.geometryById().get(shown.id)?.row ?? shown.row;
+      // A resource row's day is described by the row (its key is the synthetic task's id), not by a task
+      const resource = shown.resource;
+      const row = this.layout.geometryById().get(resource?.rowKey ?? shown.id)?.row ?? shown.row;
       const ctx = this.context();
       return {
         shown,
         row,
-        critical: ctx.criticalIds?.has(shown.id) ?? false,
-        float: ctx.floatDays?.get(shown.id),
+        critical: resource ? false : (ctx.criticalIds?.has(shown.id) ?? false),
+        float: resource ? undefined : ctx.floatDays?.get(shown.id),
         style: this.styleOf(row),
         i18n: this.i18n.bundle(),
         dates: dateReadingOf(ctx.config),
         baseline: ctx.config.baseline,
+        utilization: resource ? this.layout.utilization() : null,
       };
     },
     { equal: sameSource },
@@ -395,6 +410,22 @@ export class GanttTooltipComponent {
     // Read when the content is built, never followed: the clock, the task index and the rest of the config
     return untracked(() => {
       const ctx = this.context();
+      if (shown.resource) {
+        // The resource view: the row's load on that day and the tasks that weigh on it (core `buildResourceTooltip`)
+        const load = src.utilization?.rows.get(shown.resource.rowKey);
+        if (!load) return null;
+        const day = shown.resource.day;
+        const contributors = contributorsAt(this.layout.tasks(), this.layout.resourceIndex(), src.dates, load.key, day);
+        const resourceModel = buildResourceTooltip({
+          load,
+          day,
+          contributors,
+          labels: i18n.labels,
+          locale: i18n.locale,
+          dateFormat: i18n.formats.dateFormat,
+        });
+        return { shown, row, model: resourceModel };
+      }
       const model = buildTooltipModel({
         task: row.task,
         hasChildren: row.hasChildren,
@@ -535,7 +566,7 @@ export class GanttTooltipComponent {
   }
 
   /** Writes core's placement by `anchor`'s box as the popover's `translate`. */
-  private place(shown: ShownTooltip, anchor: Element): void {
+  private place(shown: ShownTooltip, anchor: TooltipAnchor): void {
     const view = this.doc.defaultView;
     const p = placeTooltip({
       anchor: anchor.getBoundingClientRect(),
@@ -579,6 +610,8 @@ export class GanttTooltipComponent {
 
   /** A bar under the pointer, by geometry (the canvas pointer handler's hit test, core `hitTestBar`). */
   private onBar(e: PointerEvent, svg: Element): boolean {
+    // The resource view has no bars: a press anywhere on the rows dismisses the tooltip
+    if (this.layout.resourceMode()) return false;
     const visualOf = this.state.barVisual();
     if (!visualOf) {
       // Bar visuals not bound: the bar elements themselves

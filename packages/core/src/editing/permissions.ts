@@ -89,6 +89,8 @@ const BUILTIN_EDITABLE: Readonly<
   duration: r => r.resize,
   progress: r => r.progress,
   predecessors: (r, config) => r.linkTo || config.editing.dependencies.delete,
+  // Who does a task is a field of its own: any editable row (the resource rows are not)
+  resources: () => true,
 };
 
 /** The column-level answer of `editable`: its value or its result for `row`, `undefined` when unset. */
@@ -102,8 +104,9 @@ function columnEditable(col: ColumnDef, row: GanttFlatRow): boolean | undefined 
  *
  * 1. `editing.cells` and `rules.cells` (a read-only row is never edited);
  * 2. the column's `editable` (`true`, `false`, or its result for the row). Unset: the columns keyed
- *    `name`, `start`, `end`, `duration`, `progress` and `predecessors` are editable (the built-in,
- *    or your column over it: the key says which field the cell edits), any other column is not;
+ *    `name`, `start`, `end`, `duration`, `progress`, `predecessors` and `resources` are editable (the built-in,
+ *    or your column over it: the key says which field the cell edits; `resources` only on the built-in column,
+ *    which the catalogue has once the chart has resources), any other column is not;
  * 3. the rule of the field those keys edit, even when `editable` is `true`: `start` needs
  *    `rules.move`, `end` and `duration` `rules.resize`, `progress` `rules.progress`,
  *    `predecessors` `rules.linkTo` or `editing.dependencies.delete` (a cell edit then adds links
@@ -118,9 +121,12 @@ export function cellEditable(
   config: ResolvedGanttConfig,
 ): boolean {
   if (!config.editing.cells || !rules.cells || col.key === 'id') return false;
-  const fieldRule = Object.hasOwn(BUILTIN_EDITABLE, col.key)
-    ? BUILTIN_EDITABLE[col.key as BuiltinColumnKey]
-    : undefined;
+  // `resources` is editable by its key only on the built-in column (the chart has resources, `showsResourceColumns`):
+  // an app's own `resources` column before that is a plain data column, editable only when it says so
+  const fieldRule =
+    Object.hasOwn(BUILTIN_EDITABLE, col.key) && (col.key !== 'resources' || col.builtin === true)
+      ? BUILTIN_EDITABLE[col.key as BuiltinColumnKey]
+      : undefined;
   const own = columnEditable(col, row);
   if (own === false || (own === undefined && !fieldRule)) return false;
   return fieldRule ? fieldRule(rules, config) : true;

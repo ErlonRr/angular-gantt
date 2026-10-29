@@ -385,7 +385,7 @@ export interface TooltipRow {
 export interface TooltipModel {
   /** Task name */
   title: string;
-  kind: 'task' | 'milestone' | 'group';
+  kind: 'task' | 'milestone' | 'group' | 'resource';
   /** Label / value rows, in display order */
   rows: TooltipRow[];
   /** Progress 0–100 for the progress bar; `null` for a milestone (no bar) */

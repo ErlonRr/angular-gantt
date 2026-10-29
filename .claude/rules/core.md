@@ -65,6 +65,20 @@ paths:
   `GANTRY_GOLDENS=1 npx vitest run --project core export-golden` (`-u` after a reviewed change). Core is built one
   file per module (`preserveModules`): keep `sideEffects: false`.
 - Working calendar (Phase 13): `src/calendar/` — `working-calendar.ts` (`buildWorkingCalendar` from the resolved `ResolvedNonWorking`; W = working units since 1970-01-01 local midnight; `fromWorkingEnd(w)` = the plateau's first instant, `fromWorkingStart(w)` = its last; `snapStart` / `snapEnd` return the same object when nothing moves; O(log H) through a sorted holiday table; hour calendars count wall-clock), `durations.ts` (`measureBetween` / `spanDuration` / `taskDuration` / `formatDuration` / `formatFloat` / `addDuration`; no calendar ⇒ byte-identical to `durationLabel`), `edit.ts` (`taskDateLike`, `snapTaskStart` / `snapTaskEnd` / `followTaskEnd`, `editCalendar` = the editing matrix `DragSession` / `KeyboardEditSession` use). Anything that measures takes a `DateReading` (`endDateMode`, `normalizeDateOnly`, `calendar`; a `ResolvedGanttConfig` or `ColumnContext` is one; `dateReadingOf` / `sameDateReading` for cut-offs); `calendar/*` imports `render/config` type-only. Op derivation gets the reading: `deriveOps(…, dates)`, `taskChange(…, { dates })`, `dragChange(…, dates)`; a builder called without it classifies a working move as move + resize.
+- Resource view (Phase 14): `src/resources/` — `model.ts` (`indexResources`, `taskAssignments`, `formatAssignments` /
+  `parseAssignments` → `ParseError`, `sameResources`; row ids `res:<id>` / `team:<group>` / `unassigned`),
+  `utilization.ts` (`computeResourceUtilization(tasks, index, dates: DateReading, { unassigned })`: a difference array
+  over local calendar days via `taskSpan` + `calendarDays` (never `ms / 86_400_000`), only `working.isWorkingDay` days
+  with a calendar, groups / milestones carry nothing, a team adds up its members, `scaleMax`; `loadAt`,
+  `contributorsAt`), `rows.ts` (`projectResourceRows` / `resourceViewTasks`: read-only synthetic tasks
+  `barType: 'resource'`, `data.resource` = `ResourceRowInfo`, unique ids, so keyed layers, selection, collapse, sort and
+  windowing work untouched), `visual.ts` (`computeLoadVisuals` → per-row `bars` / `over` / `cap` path strings in canvas
+  px, `hitTestLoad`, `LOAD_STYLE`), `tooltip.ts`. `rows: 'resources'` makes `resolveConfig().rowHeight` =
+  `resourceView.rowHeight` (uniform rows: no variable heights), so every row consumer is unchanged;
+  `flattenTree(…, { order: 'input' })` keeps the resources' order. Bindings project the rows, gate bars / arrows /
+  overlay / critical path / rollups on `cfg.rows` and paint `g.gantt-load`; they never compute a load.
+  `taskDependencies` lives in `render/task-dependencies.ts` so `render/columns` ↔ `resources/model` ↔ `editing/parse`
+  stays acyclic.
 - Export new public symbols from `src/index.ts`; sample data stays in the `@gantryjs/core/demo` subpath.
 - Tests live in `src/__tests__/`. Build expected dates with `new Date(y, m, d)` so assertions
   hold in any time zone, and run `pnpm test:tz` for date or scale changes.

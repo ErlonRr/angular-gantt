@@ -9,7 +9,8 @@
  *
  *   config, i18n, theme, dark   the graph's (zoom level shown; dark from `darkMode` / the scheme)
  *   themeOverrides              `{ ...options.theme, ...setTheme() }`, `null` when empty
- *   tasks, rows, allRows        normalised tasks, shown rows, every row (rows pipeline, `graph/rows.ts`)
+ *   tasks, rows, allRows        normalised tasks (the projected resource rows in the resource view), shown rows,
+ *                               every row (rows pipeline, `graph/rows.ts`); utilization: the resource view's load
  *   columns                     split panel's, table view's and the catalogue (current widths)
  *   rowStyle, segments          the style resolver; rollup segments on the export timeline
  *   view, panelWidth            the view shown; the split panel's width (also in the table view)
@@ -73,6 +74,8 @@ export function buildExportSource(
     showLegend: snap.showLegend,
     viewport: canvasW > 0 ? { x0: scrollLeft, x1: scrollLeft + canvasW } : null,
     customBar: renderBar ? customBarOf(renderBar, engine.ctx.shadow.ownerDocument.defaultView) : null,
+    // The resource view's load (`rows: 'resources'`), `null` in tasks mode
+    utilization: snap.utilization,
   };
 }
 

@@ -22,7 +22,9 @@ import {
   type GanttExportOptions,
   type GanttHistoryState,
   type GanttOptions,
+  type GanttResource,
   type GanttRollupOptions,
+  type GanttRowsMode,
   type GanttScale,
   type GanttStyleOptions,
   type GanttTasksChangeEvent,
@@ -33,6 +35,7 @@ import {
   type WeekStart,
 } from '@gantryjs/core';
 import type { FrameworkId } from './site';
+import { loadResources } from './gallery/cases/resource-load';
 import { formatBytes } from './gallery/export-log';
 
 export interface PlaygroundState {
@@ -53,6 +56,11 @@ export interface PlaygroundState {
   calendarDurations: string;
   skipNonWorking: boolean;
   hoursPerDay: number;
+  /** `'tasks'` or `'resources'` (`rows`); the Resources section's other controls apply while the resource view can be shown */
+  rows: string;
+  resUnassigned: boolean;
+  resOverallocation: boolean;
+  rowsToggle: boolean;
   majorDash: boolean;
   rowHeight: number;
   barHeight: number;
@@ -123,6 +131,11 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   calendarDurations: 'working',
   skipNonWorking: true,
   hoursPerDay: 8,
+  // `rows` and `resourceView` (resolveConfig): one row per task; the resource view shows its Unassigned row and the over-allocation
+  rows: 'tasks',
+  resUnassigned: true,
+  resOverallocation: true,
+  rowsToggle: false,
   majorDash: false,
   rowHeight: 36, // The rows of the default density: left out of the code at this value
   barHeight: 60,
@@ -261,6 +274,9 @@ const editingOn = (s: PlaygroundState): boolean => s.editing === 'on';
 /** The Working calendar controls apply while the calendar is on; the hours per day only in hours. */
 const calendarOn = (s: PlaygroundState): boolean => s.calendar !== 'off';
 const calendarInHours = (s: PlaygroundState): boolean => s.calendar === 'hours';
+
+/** The Resources controls apply while the resource view can be shown: it is the rows, or the toolbar toggle reaches it. */
+const resourcesReachable = (s: PlaygroundState): boolean => s.rows === 'resources' || s.rowsToggle;
 
 export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
   {
@@ -416,6 +432,45 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
         unit: 'h',
         hint: 'What 1d means in a Duration cell.',
         when: calendarInHours,
+      },
+    ],
+  },
+  {
+    title: 'Resources',
+    controls: [
+      {
+        kind: 'segmented',
+        key: 'rows',
+        label: 'Rows',
+        option: 'rows',
+        choices: [
+          ['tasks', 'Tasks'],
+          ['resources', 'Resources'],
+        ],
+        hint: 'One row per person or team with its daily load against the capacity line; sample assignments are on the demo plan.',
+      },
+      {
+        kind: 'check',
+        key: 'resUnassigned',
+        label: 'Unassigned row',
+        option: 'resourceView.unassigned',
+        hint: 'A row for the tasks nobody works on.',
+        when: resourcesReachable,
+      },
+      {
+        kind: 'check',
+        key: 'resOverallocation',
+        label: 'Highlight over-allocation',
+        option: 'resourceView.overallocation',
+        hint: 'Hatches the load above the capacity.',
+        when: resourcesReachable,
+      },
+      {
+        kind: 'check',
+        key: 'rowsToggle',
+        label: 'Rows toggle',
+        option: 'toolbar.rowsToggle',
+        hint: 'A toolbar button that flips between tasks and resources (it shows while there are resources).',
       },
     ],
   },
@@ -1035,6 +1090,11 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       style: s.nwStyle as 'shade' | 'hatch' | 'disabled' | 'none',
     },
     calendar: calendarOption(s),
+    rows: ifChanged(s, 'rows', s.rows as GanttRowsMode),
+    resourceView: {
+      unassigned: ifChanged(s, 'resUnassigned', s.resUnassigned),
+      overallocation: ifChanged(s, 'resOverallocation', s.resOverallocation),
+    },
     bar: {
       height: `${s.barHeight}%`,
       radius: s.radius,
@@ -1059,6 +1119,7 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
       // The buttons show only while the chart keeps history: the choice counts while editing is on
       undo: editingOn(s) ? ifChanged(s, 'toolbarUndo', s.toolbarUndo) : undefined,
       export: ifChanged(s, 'toolbarExport', s.toolbarExport),
+      rowsToggle: ifChanged(s, 'rowsToggle', s.rowsToggle),
     },
     legend: { position: ifChanged(s, 'legendPosition', s.legendPosition as 'bottom' | 'toolbar') },
     markers: { lane: ifChanged(s, 'markerLane', MARKER_LANE[s.markerLane] ?? 'auto') },
@@ -1084,6 +1145,16 @@ export function playgroundCommand(before: PlaygroundState, after: PlaygroundStat
   return after.groupsCollapsed ? 'collapseAll' : 'expandAll';
 }
 
+/**
+ * The `resources` the playground chart is given: the gallery's five (`loadResources()`), which the
+ * sample assignments of `withPlaygroundResources(tasks)` (demo-kit/gallery) refer to.
+ */
+export function playgroundResources(): GanttResource[] {
+  return loadResources();
+}
+
+export { withPlaygroundResources } from './gallery/data';
+
 /** A range value with its unit, as every playground shows it: `36 px`, `600 ms`, `9 h`, `60%`, `2×`. */
 export function valueText(value: number, unit: string | undefined): string {
   if (!unit) return String(value);
@@ -1093,7 +1164,8 @@ export function valueText(value: number, unit: string | undefined): string {
 /**
  * Whether `control` applies in `state`: the Editing controls only while editing is on (the
  * progress step also needs the progress grip), the Working calendar ones while the calendar is on
- * (the hours per day in Hours). Playgrounds show the others disabled; their values
+ * (the hours per day in Hours), the Resources ones while the resource view can be shown (`rows`
+ * is Resources, or the toolbar toggle is on). Playgrounds show the others disabled; their values
  * stay in the state and the link, and count again once the control applies.
  */
 export function controlEnabled(control: PlaygroundControl, state: PlaygroundState): boolean {
@@ -1283,6 +1355,8 @@ export function optionsSource(s: PlaygroundState, today: Date, indent = ''): { s
  * the playground's options. Dates print as `new Date(year, monthIndex, day)`.
  */
 export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today: Date): string {
+  // The resource view needs `resources` next to the tasks: printed only when the setup can show it
+  const withResources = s.rows === 'resources' || s.rowsToggle;
   switch (framework) {
     case 'html': {
       const { source, uses } = optionsSource(s, today, '  ');
@@ -1295,6 +1369,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
         ``,
         `  const chart = document.querySelector('#plan');`,
         `  chart.tasks = tasks; // GanttTask[]`,
+        ...(withResources ? [`  chart.resources = resources; // GanttResource[]`] : []),
         `  chart.options = ${source};`,
         `</script>`,
       ].join('\n');
@@ -1308,6 +1383,7 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
         `const chart = document.createElement('gantry-element');`,
         `chart.style.height = '480px';`,
         `chart.tasks = tasks; // GanttTask[]`,
+        ...(withResources ? [`chart.resources = resources; // GanttResource[]`] : []),
         `chart.options = ${source};`,
         `document.body.append(chart);`,
       ].join('\n');
@@ -1315,13 +1391,15 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
     case 'react': {
       const { source, uses } = optionsSource(s, today);
       return [
-        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/react';`,
+        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions${withResources ? ', type GanttResource' : ''}, type GanttTask } from '@gantryjs/react';`,
         ``,
         `// Outside the component: the same object on every render`,
         `const options: GanttOptions = ${source};`,
         ``,
-        `export function Plan({ tasks }: { tasks: GanttTask[] }) {`,
-        `  return <Gantry tasks={tasks} options={options} style={{ height: 480 }} />;`,
+        withResources
+          ? `export function Plan({ tasks, resources }: { tasks: GanttTask[]; resources: GanttResource[] }) {`
+          : `export function Plan({ tasks }: { tasks: GanttTask[] }) {`,
+        `  return <Gantry tasks={tasks}${withResources ? ' resources={resources}' : ''} options={options} style={{ height: 480 }} />;`,
         `}`,
       ].join('\n');
     }
@@ -1329,14 +1407,16 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today);
       return [
         `<script setup lang="ts">`,
-        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/vue';`,
+        `import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions${withResources ? ', type GanttResource' : ''}, type GanttTask } from '@gantryjs/vue';`,
         ``,
-        `defineProps<{ tasks: GanttTask[] }>();`,
+        withResources
+          ? `defineProps<{ tasks: GanttTask[]; resources: GanttResource[] }>();`
+          : `defineProps<{ tasks: GanttTask[] }>();`,
         `const options: GanttOptions = ${source};`,
         `</script>`,
         ``,
         `<template>`,
-        `  <Gantry :tasks="tasks" :options="options" style="height: 480px" />`,
+        `  <Gantry :tasks="tasks"${withResources ? ' :resources="resources"' : ''} :options="options" style="height: 480px" />`,
         `</template>`,
       ].join('\n');
     }
@@ -1344,15 +1424,16 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today, '  ');
       return [
         `import { Component, input } from '@angular/core';`,
-        `import { GantryComponent${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/angular';`,
+        `import { GantryComponent${uses.map(u => `, ${u}`).join('')}, type GanttOptions${withResources ? ', type GanttResource' : ''}, type GanttTask } from '@gantryjs/angular';`,
         ``,
         `@Component({`,
         `  selector: 'app-plan',`,
         `  imports: [GantryComponent],`,
-        `  template: \`<gantry [series]="tasks()" [options]="options" style="height: 480px" />\`,`,
+        `  template: \`<gantry [series]="tasks()"${withResources ? ' [resources]="resources()"' : ''} [options]="options" style="height: 480px" />\`,`,
         `})`,
         `export class Plan {`,
         `  readonly tasks = input.required<GanttTask[]>();`,
+        ...(withResources ? [`  readonly resources = input.required<GanttResource[]>();`] : []),
         `  readonly options: GanttOptions = ${source};`,
         `}`,
       ].join('\n');
@@ -1361,13 +1442,15 @@ export function playgroundCode(s: PlaygroundState, framework: FrameworkId, today
       const { source, uses } = optionsSource(s, today, '  ');
       return [
         `<script lang="ts">`,
-        `  import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions, type GanttTask } from '@gantryjs/svelte';`,
+        `  import { Gantry${uses.map(u => `, ${u}`).join('')}, type GanttOptions${withResources ? ', type GanttResource' : ''}, type GanttTask } from '@gantryjs/svelte';`,
         ``,
-        `  let { tasks }: { tasks: GanttTask[] } = $props();`,
+        withResources
+          ? `  let { tasks, resources }: { tasks: GanttTask[]; resources: GanttResource[] } = $props();`
+          : `  let { tasks }: { tasks: GanttTask[] } = $props();`,
         `  const options: GanttOptions = ${source};`,
         `</script>`,
         ``,
-        `<Gantry {tasks} {options} style="height: 480px" />`,
+        `<Gantry {tasks}${withResources ? ' {resources}' : ''} {options} style="height: 480px" />`,
       ].join('\n');
     }
   }

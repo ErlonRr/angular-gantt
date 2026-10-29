@@ -68,7 +68,7 @@ const VITE_APPS = GALLERY_FRAMEWORKS.filter(fw => fw !== 'angular');
 /** A data source answers late (`lazy`) and 10 000 rows take a moment (`large`) */
 const READY_TIMEOUT = 15_000;
 
-/** The case's charts are on screen: `ready.charts` of them in `.gs-case`, painted with bars or showing `ready.state`. */
+/** The case's charts are on screen: `ready.charts` of them in `.gs-case`, painted with bars (load rows for `ready.load`) or showing `ready.state`. */
 async function expectReady(page: Page, c: GalleryCase): Promise<void> {
   const charts = page.locator('.gs-case').locator(CHARTS);
   await expect(charts).toHaveCount(c.ready.charts, { timeout: READY_TIMEOUT });
@@ -77,6 +77,11 @@ async function expectReady(page: Page, c: GalleryCase): Promise<void> {
     return;
   }
   for (let i = 0; i < c.ready.charts; i++) {
+    // A chart that starts in the resource view paints load rows, not bars
+    if (c.ready.load?.includes(i)) {
+      await expect(charts.nth(i).locator('.gantt-load path').first()).toBeAttached({ timeout: READY_TIMEOUT });
+      continue;
+    }
     await expect(charts.nth(i).locator('.gantt-bars-layer > [data-task-id]').first()).toBeVisible({
       timeout: READY_TIMEOUT,
     });

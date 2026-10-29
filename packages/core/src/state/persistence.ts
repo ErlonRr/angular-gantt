@@ -5,7 +5,7 @@
 //  DOM-free: storage is passed in by the binding (e.g. `window.localStorage`).
 // ─────────────────────────────────────────────────────────────
 
-import type { GanttState, GanttView } from '../types';
+import type { GanttRowsMode, GanttState, GanttView } from '../types';
 import { viewFromState } from './view';
 
 /** Version written by `serializeState`. Unversioned snapshots are treated as version 1. */
@@ -35,6 +35,9 @@ export type GanttStateStorageSource =
 
 /** Every `GanttView`; a `Record` so adding a view to the type is a compile error here. */
 const VIEWS: Record<GanttView, true> = { split: true, table: true, chart: true };
+
+/** Every `GanttRowsMode`, like `VIEWS`. */
+const ROWS: Record<GanttRowsMode, true> = { tasks: true, resources: true };
 
 /** Storage key for a `stateKey` option: `'gantry:' + key`. */
 export function stateStorageKey(key: string): string {
@@ -74,6 +77,7 @@ const VALIDATORS: StateValidators = {
     const { key, dir } = value;
     return typeof key === 'string' && (dir === 'asc' || dir === 'desc') ? { key, dir } : undefined;
   },
+  rows: value => (typeof value === 'string' && Object.hasOwn(ROWS, value) ? (value as GanttRowsMode) : undefined),
 };
 
 const STATE_KEYS = Object.keys(VALIDATORS) as (keyof GanttState)[];
@@ -93,6 +97,7 @@ function assignValid<K extends keyof GanttState>(state: GanttState, key: K, raw:
  * - `columnWidths`: object; entries that are not finite numbers > 0 (and `__proto__`) are dropped
  * - `collapsedIds`: array; non-string entries are dropped
  * - `sort`: `{ key: string; dir: 'asc' | 'desc' }` or `null`
+ * - `rows`: `'tasks' | 'resources'`
  * Unknown keys (including the `v` version marker) are removed.
  */
 export function normalizeState(value: unknown): GanttState {

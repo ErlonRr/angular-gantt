@@ -14,6 +14,7 @@ import type {
   GanttTask,
   GanttOptions,
   GanttAnnotation,
+  GanttResource,
   GanttState,
   TaskDragEvent,
   TaskProgressEvent,
@@ -116,6 +117,8 @@ export interface GantryProperties {
   columns?: VanillaColumnDef[] | undefined;
   options?: GanttOptions | undefined;
   annotations?: GanttAnnotation[] | undefined;
+  /** The people and teams tasks are assigned to (`task.resources`); shown by `options.rows: 'resources'` */
+  resources?: GanttResource[] | undefined;
   darkMode?: boolean | 'auto' | undefined;
   showToolbar?: boolean | undefined;
   enableDrag?: boolean | undefined;

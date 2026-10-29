@@ -81,7 +81,7 @@ see [Keyboard and focus](#keyboard-and-focus), [Touch and pointer](#touch-and-po
 
 On this page: [Timeline](#timeline-header-tiers-and-zoom) · [Week numbering](#week-numbering) ·
 [Non-working time](#non-working-time-weekends-holidays-working--intensive-hours) ·
-[Working calendar](#working-calendar) · [Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
+[Working calendar](#working-calendar) · [Resources](#resources) · [Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
 [Panel and table](#task-list-panel-table-view-and-saved-state) · [Responsive and density](#responsive-layout-and-density) ·
 [Toolbar](#toolbar-legend-and-markers) · [Tooltip](#tooltip) · [States](#loading-error-and-empty-states) ·
 [Synchronised charts](#synchronised-charts) · [Editing](#editing) · [Export and print](#export-and-print) ·
@@ -305,6 +305,179 @@ take the same config; `DEFAULT_WORKING_HOURS` and `DEFAULT_HOURS_PER_DAY` are th
   required `durationHours` and `ttFloatHours` (only a full `GanttLabels` object must list them: `options.labels` is
   partial).
 
+### Resources
+
+Give the chart the people and teams your tasks are assigned to (the `resources` property, like `tasks` and
+`annotations`; the `resources` input in Angular) and it can answer _who is busy when_: `rows: 'resources'` swaps the
+one-row-per-task list for one row per resource, each drawing its **daily load** against its **capacity**, with the load
+above the capacity hatched.
+
+```ts
+resources = [
+  { id: 'ana', name: 'Ana' }, // capacity 100 %: one full-time person
+  { id: 'bo', name: 'Bo', capacity: 50 }, // half-time
+  { id: 'cy', name: 'Cy', group: 'Engineering' }, // the same group = one team row
+  { id: 'di', name: 'Di', group: 'Engineering', color: '#0E7490' }, // the colour of Di's load bars
+];
+tasks = [
+  { id: 'design', name: 'Design', start: new Date(2026, 9, 12), end: new Date(2026, 9, 16), resources: ['ana'] },
+  {
+    id: 'build',
+    name: 'Build',
+    start: new Date(2026, 9, 14),
+    end: new Date(2026, 9, 22),
+    resources: ['cy', { resourceId: 'ana', units: 100 }, { resourceId: 'bo', units: 50 }], // 50 %: half a person
+  },
+];
+options = {
+  rows: 'resources', // 'tasks' (default) | 'resources'
+  resourceView: { unassigned: true, overallocation: true },
+  toolbar: { rowsToggle: true }, // an icon button that flips the rows
+  calendar: true, // optional: only working days carry load
+};
+```
+
+| Field                    | Default | Meaning                                                                                                                                |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `GanttResource.id`       | —       | Unique (the first of a repeated id wins; a blank id is ignored)                                                                        |
+| `GanttResource.name`     | —       | What the row, the tooltip and the Resources cell call it                                                                               |
+| `GanttResource.capacity` | `100`   | Percent of one person's time available per working day: `50` half-time, `200` a team of two. Not finite or not above 0 reads as `100`  |
+| `GanttResource.group`    | —       | Resources with the same group sit under one collapsible **team** row                                                                   |
+| `GanttResource.color`    | theme   | Colour of its load bars (any CSS colour); default `theme.barColor`                                                                     |
+| `GanttTask.resources`    | —       | A resource id, or `{ resourceId, units }`; `units` is the percent of a full-time person the task needs per working day (default `100`) |
+
+An id that names no resource is ignored; a task whose assignments are all unknown (or empty) is **unassigned**; a
+repeated resource keeps its first entry.
+
+| Option                        | Default              | Effect                                                                                                                                                                                                         |
+| ----------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rows`                        | `'tasks'`            | `'resources'` shows one row per resource and team. Like `view` it is the initial value: the toggle and `setState({ rows })` change it at run time                                                              |
+| `resourceView.unassigned`     | `true`               | An "Unassigned" row (`labels.resUnassigned`) for the tasks without a known resource; it exists only while there is one                                                                                         |
+| `resourceView.overallocation` | `true`               | The load above the capacity in `theme.overallocatedColor`, hatched. `false` draws plain load                                                                                                                   |
+| `resourceView.rowHeight`      | 1.5 × the row height | Height in px of a resource row (54 at the normal density; 28 at least). It replaces `rowHeight` while the rows are resources                                                                                   |
+| `toolbar.rowsToggle`          | `false`              | An `aria-pressed` icon button (named `labels.showResources`, titled `labels.showTasks` while pressed) after the task list toggle, shown only while `resources` is not empty. It never moves into the More menu |
+
+`getState()` and `state-change` always carry `rows`, and `stateKey` saves it. Unset `rows` and no `resources` change
+nothing: the chart draws and exports exactly as before.
+
+#### What a resource row shows
+
+```text
+                  Mon   Tue   Wed   Thu   Fri
+Ana  100 %                   ▒▒▒▒▒ ▒▒▒▒▒         ▒ load above the capacity (hatched)
+┄┄┄┄┄┄┄┄┄┄┄┄┄┄   ┄┄┄┄┄ ┄┄┄┄┄ ┄┄┄┄┄ ┄┄┄┄┄ ┄┄┄┄┄   ┄ the capacity line
+                 █████ █████ █████ █████ █████   █ the load, up to the line
+```
+
+- **Load.** Per resource and local calendar day: the `units` of every task assigned to it that day. A task counts on
+  each day its bar touches, in full (a task ending at 14:00 counts that whole day; with the default
+  `endDateMode: 'exclusive'` a date-only end is the first day after the task). Parent tasks (a task with children, or
+  `type: 'group'`) and milestones carry nothing: a parent would double its children. With a
+  [working calendar](#working-calendar) only working days count (weekends and holidays carry zero); without one every
+  day does.
+- **Over-allocation.** A day is over when its load is above the capacity. The over part is drawn in
+  `theme.overallocatedColor` with a hatch, so colour is never the only cue, and the capacity line is dashed.
+- **Teams.** The resources of one `group` sit under a team row whose load and capacity add up its members' (a team can
+  be within its capacity while a member is over). Rows keep the order of `resources`, a team where its first member is
+  (not sorted by start date), and **Unassigned** comes last; it counts 100 % per unassigned task per day, has no
+  capacity line and is never over.
+- **Scale.** One vertical scale per chart, so every 100 % line is at the same height: at least 150 %, in steps of
+  25 %, fitting the highest load or capacity. Zoomed far out, days merge into buckets by their **highest** load: a
+  spike is never averaged away. On an hour scale a day's load spans the whole day.
+- **Columns.** The task list gets three built-in columns: `resources` (the assignments as text, `Ana, Bo 50%`),
+  `capacity` and `load` ("Peak load": the highest day; a team shows its members' capacity). In the resource view the
+  default columns are `name`, `capacity` and `load`, in the split panel and the table view alike (an explicit
+  `panel.columns`, `table.columns` or `columns` wins; Start and End then show the resource's extent); the tasks view's
+  defaults are unchanged, so add `'resources'` to its `panel.columns` / `table.columns` or call
+  `setColumnVisible('resources', true)`. Sorting uses the numbers. The three columns are built-ins only once the chart
+  has `resources` or shows the resource view; before that an app's own column keyed `resources`, `capacity` or `load` is
+  a plain data column. An explicit `columns` property with `rows: 'resources'` shows the app's columns on the resource
+  rows too (their durations and statuses come from the rows' extents), so list `capacity` and `load` in it.
+- **Tooltip.** Hovering a resource row's timeline opens the tooltip for that day: the date, `labels.ttResLoad`,
+  `ttResCapacity`, `ttResOver` (only when over) and the tasks with their units (eight, then `labels.ttResMore(n)`).
+  The mouse and pen open it; touch doesn't (the numbers are in the columns and the row names).
+- **Not drawn.** Resource rows have no bars, arrows, links, progress grip, baseline, critical path or rollup, and are
+  read-only (`editable: false`, `draggable: false`).
+
+#### Editing assignments
+
+Assignments are edited in the **tasks** view: with `editing.cells` the `resources` column is editable (the text
+`Ana, Bo 50%`: resources by id or by name, case-insensitive and exact; `,` or `;` between them; `N%` after a name for the
+units; empty text unassigns). A commit is one `'cell'` change through the [pipeline](#the-pipeline-and-its-events) (so
+`before-change` can veto it, Undo reverts it and `task-updated` lists `resources` in `fields`); `updateTask()` takes
+`resources` like any field. An unknown name gives `labels.errorUnknownResource(ref)`, a name shared by
+several resources `errorAmbiguousResource(ref)`. `capacity` and `load` are never editable.
+
+Show the plan and the workload together with two charts that share a [`syncGroup`](#synchronised-charts): the top one
+in the tasks view with a Resources column and `editing`, the bottom one with `rows: 'resources'`, both fed the same
+`tasks` and `resources` (keep the tasks you get back in `tasks-change`), so the load rows follow every edit. The
+gallery's _Resource panel under the plan_ case does exactly that.
+
+#### Keyboard, screen readers and selection
+
+The resource rows are ordinary task-list rows: the same arrows, Home / End and expand / collapse keys (team rows are
+`aria-expanded`), and the toggle is a toolbar button (Enter / Space). A resource row is named
+`labels.describeResource(name, capacity, peak, overDays)` — "Ana, capacity 100%, peak load 200%, 2 days over capacity",
+and Unassigned "Unassigned, Load 100%" —; the histogram itself is `aria-hidden`, so the numbers are in the row name and
+the Capacity / Peak load columns. There is no keyboard day-by-day breakdown: for one, show the tasks view with the
+Resources column. In forced-colors mode the load is `CanvasText`, the part over the capacity `Highlight` with the hatch,
+and the capacity line `GrayText`.
+
+Selection and `row-click` / `rowClick` in the resource view return the **synthetic row**: its `task.id` is
+`res:<id>`, `team:<group>` or `unassigned`, `task.barType` is `'resource'` and `task.data.resource` is
+`{ kind, id, name, capacity, peak, peakDay, overDays, tasks }` (read it with `resourceInfoOf(task)`). They are not
+your tasks.
+
+#### Resource view in exports
+
+SVG, PNG and print draw the resource view as shown (every row, the load, the hatch as a second `<pattern>`, the
+capacity line, no bars or arrows); the CSV writes `capacity` and `load` (the peak) as percent numbers on resource rows
+and `resources` (ids with units, `ana, bo 50%`) on task rows. `columns: 'all'` lists the three columns only when the
+chart has a use for them (`capacity` and `load` in the resource view, `resources` when there are resources), so a
+chart without resources exports exactly as before. Headless, `createExportSource` takes `resources` and `rows`.
+
+#### Resources in Node
+
+```ts
+import {
+  computeResourceUtilization,
+  createExportSource,
+  dateReadingOf,
+  exportChartSvg,
+  indexResources,
+  resolveConfig,
+} from '@gantryjs/core';
+
+const options = { calendar: true }; // optional: weekends carry no load
+const index = indexResources(resources);
+const utilization = computeResourceUtilization(tasks, index, dateReadingOf(resolveConfig(options)), {
+  unassigned: true,
+});
+const ana = utilization.rows.get('res:ana')!;
+ana.peak; // 200 (percent of a person)
+ana.overDays; // 2
+ana.loads; // a Float64Array: the percent of each day, from the epoch day `ana.firstDay`
+
+const svg = exportChartSvg(createExportSource({ tasks, resources, options: { ...options, rows: 'resources' } }));
+```
+
+`loadAt()` and `contributorsAt()` read one day; `projectResourceRows()` / `resourceViewTasks()` build the synthetic rows;
+`computeLoadVisuals()` and `hitTestLoad()` give the histogram paths and the row and day under a point;
+`buildResourceTooltip()` the tooltip; `parseAssignments()` / `formatAssignments()` the cell text; `resourceInfoOf()`,
+`toggleRowsMode()` and `LOAD_STYLE` (the opacities and dash of the drawing) complete the set.
+
+#### Resource view limits
+
+- **Day granularity.** A task counts fully on every day it touches, its first and last included: a one-hour task is a
+  whole unit on its day.
+- **No lanes.** Resource rows are one fixed height and hold no task bars; there is no vertical drag to reassign a task
+  (do it in the tasks view).
+- **No touch tooltip** and no keyboard day-by-day breakdown (see above).
+- **Synthetic rows.** Selection and row events in the resource view carry the synthetic row, not your tasks.
+- The `labels` gain required members (`colResources`, `colCapacity`, `colLoad`, `resUnassigned`, `showResources`,
+  `showTasks`, `ttResLoad`, `ttResCapacity`, `ttResOver`, `ttResMore`, `describeResource`, `errorUnknownResource`,
+  `errorAmbiguousResource`): only a full `GanttLabels` object must list them, `options.labels` is partial.
+
 ### Bars, milestones, arrows
 
 ```ts
@@ -432,7 +605,8 @@ columns = [
 - The split panel and the table view show different columns — see
   [Columns: split panel vs table view](#columns-split-panel-vs-table-view).
 - `state-change` / `(stateChange)` / `onStateChange` reports every layout change; `getState()` /
-  `setState()` save and restore it from your own backend.
+  `setState()` save and restore it from your own backend. The state always carries `rows` (`'tasks'` or `'resources'`,
+  see [Resources](#resources)).
 
 ### Responsive layout and density
 
@@ -470,6 +644,7 @@ options = {
     overflow: 'menu',
     undo: true,
     export: false,
+    rowsToggle: false,
   }, // `false` hides the toolbar
   legend: { position: 'bottom' }, // 'bottom' | 'toolbar' (`showLegend` turns the legend on)
   markers: { lane: 'auto' }, // 'auto' | true | false
@@ -504,6 +679,10 @@ annotations = [{ x1: new Date(2026, 2, 2), label: { text: 'Code freeze' }, color
   keeps an [editing history](#history) (`editing` on, not `controlled`): `labels.undo` / `labels.redo`,
   `aria-disabled` while there is nothing to undo or redo, in the toolbar's arrow-key set and never moved into the
   More menu.
+- **Rows toggle.** `toolbar.rowsToggle` (default `false`) adds an icon button after the panel toggle that flips the
+  rows between one per task and one per resource (`aria-pressed`, `labels.showResources`; its title reads
+  `labels.showTasks` while pressed). It exists only while the `resources` property is not empty, and never moves into
+  the More menu. See [Resources](#resources).
 - **Legend.** `showLegend` turns it on. It lists the today marker (with `showToday`), every
   annotation and, when those options are on, the critical path and the baseline; each entry
   has a shape as well as a colour. `legend.position: 'bottom'` (default) puts it in a strip
@@ -548,6 +727,9 @@ options = {
   (`title`, `rows` of `{ label, value }`, `progress`, `status`, `critical`, …). The React, Vue
   and Svelte wrappers pass it to the Web Component as is: return a string or a DOM node, not a
   React element, a VNode or a snippet.
+- In the [resource view](#resources) the tooltip belongs to a day of a resource row (mouse and pen, not touch): the
+  date, the load, the capacity, `Over capacity` when over, and the tasks that make it up. Neither `render(ctx)` nor an Angular
+  `ganttTooltip` template applies to it (there is no task to give them).
 - **Angular**: an `<ng-template ganttTooltip>` inside `<gantry>` (import
   `GanttTooltipTemplateDirective`) takes precedence over `render`. Its context is
   `GanttTooltipTemplateContext` (`$implicit` / `model`, `task`, `row`):
@@ -849,11 +1031,13 @@ shows under the cell and is read from the alert region. While cell editing is on
 | `duration`      | `5`, `5d`, `2w`, `4h`, `1.5d` (`1,5d` too): more than 0; sets the end. Whole local calendar days plus real hours; with a [working calendar](#working-calendar), working days, the working week and hours of the working day                                                    |
 | `progress`      | Number from 0 to 100 (`45` or `45%`), step `editing.progress.step`                                                                                                                                                                                                             |
 | `predecessors`  | Text, see below. The editor shows task **ids** (`research FS+2d; scope SS`); the cell shows names                                                                                                                                                                              |
+| `resources`     | Text, see below: resources by id or name with optional units (`Ana, Bo 50%`); empty text unassigns                                                                                                                                                                             |
 
-`name`, `start`, `end`, `duration`, `progress` and `predecessors` are editable by default (your own column over one
+`name`, `start`, `end`, `duration`, `progress`, `predecessors` and `resources` are editable by default (your own column over one
 of those keys too: the key says which field it edits); every other column isn't, and `id` never is. The
 field's rule applies on top: Start needs the bar to be movable, End and Duration resizable, Progress `editing.progress`,
-Predecessors `editing.dependencies.create`.
+Predecessors `editing.dependencies.create`. The Resources column isn't one of the default columns: list `'resources'` in
+`panel.columns` / `table.columns` (see [Resources](#editing-assignments)).
 
 **Predecessors.** Entries are separated by `;` or `,`. Each is `<task> [FS|SS|FF|SF] [±n[d|w|h]]`, case-insensitive: `research`,
 `research FS+2d`, `scope SS`, `a+2d`, `2FS-1w`. A task is an id, else a name that matches exactly one task (exact first,
@@ -861,6 +1045,11 @@ then ignoring case). The type defaults to FS, the lag to 0 and its unit to days 
 [working calendar](#working-calendar) the lag counts working days, `w` is the working week and `h` an hour of the working day). Empty text
 removes every link. An unknown task, a name shared by several tasks, a repeated link, a loop or a parent ↔ child link is
 an error with its message. Ids that contain `;` or `,` can't be referenced.
+
+**Resources.** Entries are separated by `;` or `,`; each is a resource id, else a name (exact, ignoring case) and
+optionally `N%` after it, the share of a full-time person the task needs per working day (`Ana, Bo 50%`; 100 when left
+out). Empty text clears the assignments. An unknown resource, a name shared by several resources or units that aren't
+above 0 are errors with a message (`labels.errorUnknownResource`, `errorAmbiguousResource`, `errorRejected`).
 
 **Custom columns.**
 
@@ -1149,6 +1338,9 @@ chart.addEventListener('export', e => console.log(e.detail.fileName, e.detail.si
   an open cell editor, the toolbar, the splitter or scrollbars. An empty chart draws the header and
   `labels.emptyState`. With a `range`, the bars it doesn't reach are left out (no custom bar is rendered for them);
   links to them are still drawn.
+- **The resource view** (`rows: 'resources'`) draws one row per resource with its load as a stepped histogram, the
+  capacity line and the part over it hatched (a second `<pattern>`, written only when a drawn row is over capacity),
+  and no bars or arrows; see [Resources](#resource-view-in-exports).
 - **Collapsed rows** are left out of images, as on screen: call `expandAll()` first, or (headless)
   `createExportSource({ …, collapsedIds: [] })`. A CSV has them by default (`rows: 'all'`).
 - **Theme.** Every colour is resolved for the export's palette: the file has presentation attributes (`fill`,
@@ -1198,8 +1390,13 @@ doubled. Values per column (`values`; a column's `exportValue(row, ctx)` wins in
 | `predecessors`                                 | ids: `research FS+2d; scope SS` (lags in working units with a calendar)                          | names, as shown |
 | `status`, `type`                               | the key (`inProgress`, `milestone`; a custom status as it is)                                    | the label       |
 | `variance`                                     | signed days, a number (working days with a calendar)                                             | the cell text   |
+| `capacity`, `load`                             | percent numbers on a resource row (`load` is the peak); empty on a task row                      | `100%`          |
+| `resources`                                    | the task's assignments by id: `ana, bo 50%` (units omitted at 100); empty on a resource row      | the cell text   |
 | your columns                                   | `render` text, else `task[key]` or `task.data[key]` (a date as local ISO, an object as JSON)     | the cell text   |
 | a raw task field (no column has the key)       | the field as the chart holds it, under the key (below)                                           | the same        |
+
+`columns: 'all'` lists `resources`, `capacity` and `load` only when the chart has a use for them (see
+[Resources](#resource-view-in-exports)), so a chart without resources exports as before.
 
 **Raw task fields.** A key of `columns` that no column has but that is a task field — `parentId`, `dependency`,
 `collapsed`, `barType`, `status`, `editable`, `draggable`, `barColor`, `rowColor`, `textColor`, `progressColor`,
@@ -1337,7 +1534,7 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
 | `--gantt-text` / `-sec` / `-muted` | text colours       |     | `--gantt-sel-bg` / `--gantt-sel-border` | selection                     |
 | `--gantt-progress-overlay`         | `progressOverlay`  |     | `--gantt-today-label`                   | derived: current-period label |
 | `--gantt-focus-ring`               | `focusRing`        |     | `--gantt-tooltip-bg` / `-bdr` / `-txt`  | tooltip                       |
-| `--gantt-row-hover-bg`             | `rowHoverBg`       |     |                                         |                               |
+| `--gantt-row-hover-bg`             | `rowHoverBg`       |     | `--gantt-overallocated`                 | `overallocatedColor`          |
 
 - **Focus rings.** Every keyboard focus ring — toolbar controls, task-list rows, cells and header
   cells, the splitter and its toggle, the timeline viewport and the focused bar — is drawn in
@@ -1377,6 +1574,9 @@ light/dark/auto). The theme reaches the pixels only through CSS custom propertie
 - **Row hover.** The row under a mouse or pen pointer is tinted in both panes with `--gantt-row-hover-bg`
   (theme key `rowHoverBg`: `rgba(15, 23, 42, 0.04)` light, `rgba(148, 163, 184, 0.08)` dark;
   `transparent` turns it off). It clears on leave, scroll and drag start, and is hidden in forced colours.
+- **Over-allocation.** `overallocatedColor` (`--gantt-overallocated`: `#C2410C` light, `#FB923C` dark, the legacy palettes
+  inherit them; at least 3:1 on the row backgrounds) paints the [resource load](#resources) above a resource's
+  capacity, hatched, so it never relies on colour alone.
 - **Progress overlay.** Bars without `task.progressColor` / `bar.progress.color` darken their
   progress part with `--gantt-progress-overlay` (theme key `progressOverlay`, `#000000`) at
   `bar.progress.opacity`.
@@ -1465,8 +1665,8 @@ React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component
 
 ### Examples gallery
 
-Thirty-two runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing, export
-and print, working calendars…),
+Thirty-five runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing, export
+and print, working calendars, resource load…),
 each in **all five** frameworks with the same controls and a code tab. A "Known differences"
 section on the Frameworks page lists what a framework does differently.
 
@@ -2052,30 +2252,31 @@ exported from `@gantryjs/core`. Focus rings use `--gantt-focus-ring` (`focusRing
 milestones `#7C3AED` (see [Theming](#theming)). The 1.x colours are available as
 `LegacyLightTheme` / `LegacyDarkTheme`. Full token map:
 
-| `GanttTheme` field | CSS variable              |     | `GanttTheme` field               | CSS variable                    |
-| ------------------ | ------------------------- | --- | -------------------------------- | ------------------------------- |
-| `backgroundColor`  | `--gantt-bg`              |     | `arrowColor`                     | `--gantt-arrow`                 |
-| `headerBackground` | `--gantt-header-bg`       |     | `tooltipBg`                      | `--gantt-tooltip-bg`            |
-| `rowBg`            | `--gantt-row-bg`          |     | `tooltipBorder`                  | `--gantt-tooltip-bdr`           |
-| `rowBgAlt`         | `--gantt-row-bg-alt`      |     | `tooltipText`                    | `--gantt-tooltip-txt`           |
-| `barColor`         | `--gantt-bar`             |     | `selectionBg`                    | `--gantt-sel-bg`                |
-| `barTextColor`     | `--gantt-bar-text`        |     | `selectionBorder`                | `--gantt-sel-border`            |
-| `barRadius`        | `--gantt-bar-radius`      |     | `scrollbarTrack`                 | `--gantt-scrollbar-track`       |
-| `milestoneColor`   | `--gantt-milestone`       |     | `scrollbarThumb`                 | `--gantt-scrollbar-thumb`       |
-| `baselineColor`    | `--gantt-baseline`        |     | `weekendBg`                      | `--gantt-weekend-bg`            |
-| `criticalColor`    | `--gantt-critical`        |     | `holidayBg`                      | `--gantt-holiday-bg`            |
-| `panelBg`          | `--gantt-panel-bg`        |     | `offHoursBg`                     | `--gantt-off-hours-bg`          |
-| `panelBorder`      | `--gantt-panel-border`    |     | `intensiveBg`                    | `--gantt-intensive-bg`          |
-| `borderColor`      | `--gantt-border`          |     | `statusNotStarted`               | `--gantt-status-not-started`    |
-| `gridLine`         | `--gantt-grid-line`       |     | `statusInProgress`               | `--gantt-status-in-progress`    |
-| `gridLineMajor`    | `--gantt-grid-line-major` |     | `statusOverdue`                  | `--gantt-status-overdue`        |
-| `todayColor`       | `--gantt-today`           |     | `statusDone`                     | `--gantt-status-done`           |
-| `textPrimary`      | `--gantt-text`            |     | `progressOverlay`                | `--gantt-progress-overlay`      |
-| `textSecondary`    | `--gantt-text-sec`        |     | derived: label on a bar          | `--gantt-bar-text-on-bar`       |
-| `textMuted`        | `--gantt-text-muted`      |     | derived: label on a milestone    | `--gantt-bar-text-on-milestone` |
-| `fontFamily`       | `--gantt-font`            |     | derived: label on a critical bar | `--gantt-bar-text-on-critical`  |
-| `fontSize`         | `--gantt-font-size`       |     | derived: current-period label    | `--gantt-today-label`           |
-| `focusRing`        | `--gantt-focus-ring`      |     | `rowHoverBg`                     | `--gantt-row-hover-bg`          |
+| `GanttTheme` field   | CSS variable              |     | `GanttTheme` field               | CSS variable                    |
+| -------------------- | ------------------------- | --- | -------------------------------- | ------------------------------- |
+| `backgroundColor`    | `--gantt-bg`              |     | `arrowColor`                     | `--gantt-arrow`                 |
+| `headerBackground`   | `--gantt-header-bg`       |     | `tooltipBg`                      | `--gantt-tooltip-bg`            |
+| `rowBg`              | `--gantt-row-bg`          |     | `tooltipBorder`                  | `--gantt-tooltip-bdr`           |
+| `rowBgAlt`           | `--gantt-row-bg-alt`      |     | `tooltipText`                    | `--gantt-tooltip-txt`           |
+| `barColor`           | `--gantt-bar`             |     | `selectionBg`                    | `--gantt-sel-bg`                |
+| `barTextColor`       | `--gantt-bar-text`        |     | `selectionBorder`                | `--gantt-sel-border`            |
+| `barRadius`          | `--gantt-bar-radius`      |     | `scrollbarTrack`                 | `--gantt-scrollbar-track`       |
+| `milestoneColor`     | `--gantt-milestone`       |     | `scrollbarThumb`                 | `--gantt-scrollbar-thumb`       |
+| `baselineColor`      | `--gantt-baseline`        |     | `weekendBg`                      | `--gantt-weekend-bg`            |
+| `criticalColor`      | `--gantt-critical`        |     | `holidayBg`                      | `--gantt-holiday-bg`            |
+| `panelBg`            | `--gantt-panel-bg`        |     | `offHoursBg`                     | `--gantt-off-hours-bg`          |
+| `panelBorder`        | `--gantt-panel-border`    |     | `intensiveBg`                    | `--gantt-intensive-bg`          |
+| `borderColor`        | `--gantt-border`          |     | `statusNotStarted`               | `--gantt-status-not-started`    |
+| `gridLine`           | `--gantt-grid-line`       |     | `statusInProgress`               | `--gantt-status-in-progress`    |
+| `gridLineMajor`      | `--gantt-grid-line-major` |     | `statusOverdue`                  | `--gantt-status-overdue`        |
+| `todayColor`         | `--gantt-today`           |     | `statusDone`                     | `--gantt-status-done`           |
+| `textPrimary`        | `--gantt-text`            |     | `progressOverlay`                | `--gantt-progress-overlay`      |
+| `textSecondary`      | `--gantt-text-sec`        |     | derived: label on a bar          | `--gantt-bar-text-on-bar`       |
+| `textMuted`          | `--gantt-text-muted`      |     | derived: label on a milestone    | `--gantt-bar-text-on-milestone` |
+| `fontFamily`         | `--gantt-font`            |     | derived: label on a critical bar | `--gantt-bar-text-on-critical`  |
+| `fontSize`           | `--gantt-font-size`       |     | derived: current-period label    | `--gantt-today-label`           |
+| `focusRing`          | `--gantt-focus-ring`      |     | `rowHoverBg`                     | `--gantt-row-hover-bg`          |
+| `overallocatedColor` | `--gantt-overallocated`   |     |                                  |                                 |
 
 ---
 
@@ -2153,6 +2354,7 @@ const routes: Routes = [
 | `dataSource`                  | `GanttDataSource \| null`         | `null`                                                                                |
 | `options`                     | `GanttOptions`                    | `{}`                                                                                  |
 | `annotations`                 | `GanttAnnotation[]`               | `[]`                                                                                  |
+| `resources`                   | `GanttResource[]`                 | `[]`: the people and teams of the [resource view](#resources)                         |
 | `columns`                     | `ColumnDef[]`                     | `[]` (`options.columns` wins)                                                         |
 | `viewMode` (model)            | `ViewMode \| string \| undefined` | `undefined`: `options.viewMode`, else `'Month'`                                       |
 | `darkMode`                    | `boolean \| 'auto' \| undefined`  | `undefined`: `provideGantt({ darkMode })`, else `false` (`options.darkMode` wins)     |

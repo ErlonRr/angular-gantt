@@ -38,7 +38,7 @@ export const FRAMEWORK_NOTES: readonly FrameworkNote[] = [
     text: 'After an edit, Angular writes the new tasks back to `[(series)]` (without a data source) and also emits `(tasksChange)`; the other bindings keep the edited tasks in the chart and report them in `tasks-change` (`onTasksChange` in React and Svelte, `@tasks-change` in Vue). With `editing.controlled` nothing is applied: set the tasks yourself from the event in every binding.',
     workaround:
       'Pass `detail.tasks` on as the new array. Svelte copies the `tasks` prop one level, so keep app-owned tasks in `$state.raw`.',
-    cases: ['controlled', 'working-days', 'critical-float'],
+    cases: ['controlled', 'working-days', 'critical-float', 'resource-panel'],
   },
   {
     id: 'view-mode-event',

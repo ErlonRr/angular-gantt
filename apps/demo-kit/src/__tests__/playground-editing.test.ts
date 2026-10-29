@@ -95,8 +95,9 @@ describe('playground: Editing section', () => {
     }
     expect(controlEnabled(control('editing'), PLAYGROUND_DEFAULTS)).toBe(true);
     expect(controlEnabled(control('progressStep'), { ...ON, editProgress: false })).toBe(false);
-    // Controls of the other sections always apply (the calendar's sub-controls wait for the calendar to be on)
-    for (const c of PLAYGROUND_SECTIONS.filter(s => s !== SECTION && s.title !== 'Working calendar').flatMap(
+    // Controls of the other sections always apply (the calendar's and the resource view's sub-controls wait for their feature)
+    const waiting = ['Working calendar', 'Resources'];
+    for (const c of PLAYGROUND_SECTIONS.filter(s => s !== SECTION && !waiting.includes(s.title)).flatMap(
       s => s.controls,
     )) {
       expect(controlEnabled(c, PLAYGROUND_DEFAULTS), c.key).toBe(true);

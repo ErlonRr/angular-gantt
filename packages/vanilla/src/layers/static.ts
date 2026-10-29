@@ -10,6 +10,10 @@
  * the patch cache, costs nothing. Bands and lines are re-synced only when their window, the grid
  * line styles, the hatch style or the content height changed.
  *
+ * The resource view's load (`layers/load.ts`, Phase 14) is painted at the end of this region: it spans the
+ * full width like the bands but depends on the mounted rows, so in resource mode (only) a vertical scroll
+ * re-runs this region too; the bands and the lines above then find their windows unchanged and cost nothing.
+ *
  * `g.gantt-bands` is the skeleton's persistent group (one keyed list). `g.gantt-grid` is shared
  * with the rows region, so it holds three runs: the minor lines before its `<!--rows-->` marker,
  * the row separators (rows region) between the markers, the major lines (period delimiters)
@@ -22,6 +26,7 @@ import { s } from '../dom/h';
 import { reconcile } from '../dom/keyed';
 import { setAttr, setStyleProp } from '../dom/patch';
 import type { Layer, LayerContext } from './context';
+import { createLoadLayer } from './load';
 import { showNode } from './skeleton';
 
 /**
@@ -78,6 +83,7 @@ interface BandItem {
 
 export function createStaticLayer(ctx: LayerContext): Layer {
   const { inputs: I, graph: G, dom } = ctx;
+  const load = createLoadLayer(ctx);
   let painted = false;
   /** What the bands were last synced for */
   let bandsFor: { bands: TimeBand[]; height: number; hatch: boolean } | undefined;
@@ -184,6 +190,8 @@ export function createStaticLayer(ctx: LayerContext): Layer {
           null,
         );
       }
+
+      load.paint();
     },
   };
 }

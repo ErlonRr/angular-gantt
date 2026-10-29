@@ -83,6 +83,8 @@ import {
   cellEditable,
   computeCellVisual,
   gridTabStop,
+  resourceAccessibleName,
+  resourceRowInfo,
   rowPaint,
   sameGridSpot,
   tabStopIndex,
@@ -587,6 +589,9 @@ export function createTasklistLayer(ctx: LayerContext): Layer {
     setAttr(el, 'aria-setsize', row.setSize);
     setAttr(el, 'aria-selected', String(isSelected));
     setAttr(el, 'aria-expanded', row.hasChildren ? String(!row.isCollapsed) : null);
+    // A resource row (Phase 14) is named by its numbers; every other row by its name cell, as before
+    const resource = resourceRowInfo(row.task);
+    setAttr(el, 'aria-label', resource ? resourceAccessibleName(resource, env.labels) : null);
     toggleClass(el, 'gantt-tl-row--selected', isSelected);
     toggleClass(el, 'gantt-tl-row--group', row.hasChildren);
     toggleClass(el, 'gantt-tl-row--pinned', pinnedTop !== null);

@@ -23,6 +23,7 @@ const SAMPLE: { [K in Name]-?: Exclude<GantryProperties[K], undefined> } = {
   columns: [{ key: 'name', label: 'Name', width: 200 }],
   options: { viewMode: ViewMode.Week },
   annotations: [{ x1: new Date(2026, 0, 9), label: { text: 'Review' } }],
+  resources: [{ id: 'ana', name: 'Ana' }],
   darkMode: true,
   showToolbar: false,
   enableDrag: false,

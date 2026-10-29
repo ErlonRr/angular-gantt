@@ -144,6 +144,12 @@ paths:
   equal on `sameDateReading`); `dragChange(…, untracked(layout.cfg))`; `taskChange(…, { dates })` in
   `drag/keyboard-edit.ts` and `editing/cell-edit.ts`; the tooltip's config `Pick` includes `'calendar'` and its
   refresh key the float and the date reading, like the WC's.
+- Resource view (Phase 14): `GanttLayoutService` mirrors the WC nodes (`resourceIndex`, `utilization`, `viewTasks`,
+  `loadVisuals`, `dayOfX`; `rows` is a linkedSignal like `view`); `g[ganttResourceLoad]`
+  (`layout/gantt-resource-load.component.ts`) is the WC's `g.gantt-load` DOM, attached with `@if (resourceMode)`, hatch
+  pattern id from the canvas `uid`; the tooltip's `hoverResource` → `buildResourceTooltip`; the task list sets
+  `aria-label` from `resourceAccessibleName` on resource rows only; `getState()` always carries `rows`; the export
+  source takes `layout.utilization()` and the projected tasks.
 - `e2e/paint.spec.ts` compares the colours both bindings paint. Its keys are the first non-`ng-` class plus the
   sibling index: adding a class to a class-less element, reordering children or adding a wrapper changes keys.
 - Accessibility follows the WC's model: the host is `role=region` with `aria-label` (`labels.ariaChart`),

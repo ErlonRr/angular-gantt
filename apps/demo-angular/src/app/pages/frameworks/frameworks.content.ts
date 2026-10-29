@@ -205,7 +205,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
     notes: [
       'Attributes: `dark-mode` (`"true"`, `"false"` or `"auto"`), `show-toolbar`, `enable-drag`, `enable-resize`, `tooltip-enabled` and `show-legend` (present = `true`, `"false"` = `false`), and `view-mode` (calls `setViewMode()`).',
       'Removing an attribute restores the property’s default. The element never writes attributes back.',
-      'Data goes in properties: `tasks`, `options`, `columns`, `annotations`, `dataSource` and `renderBar`.',
+      'Data goes in properties: `tasks`, `options`, `columns`, `annotations`, `resources`, `dataSource` and `renderBar`.',
       'Give the element a height: it fills its container (`display: block; height: 100%`).',
       'Events are `CustomEvent`s that bubble and cross the shadow boundary, with the payload in `event.detail`. `before-change` is cancelable: `event.preventDefault()` (or `event.detail.preventDefault()`) vetoes an edit; so is `before-export`, for a `download()` or `print()`.',
     ],
@@ -233,7 +233,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
       { title: 'main.ts', code: ANGULAR_MAIN },
     ],
     notes: [
-      'Inputs: `series` (the tasks; a model, `[(series)]` gets the edited tasks back), `options`, `columns`, `annotations`, `dataSource`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`, `tooltipEnabled` and `showLegend`. Boolean inputs take attribute values: `showLegend` is `true`, `showToolbar="false"` is `false`.',
+      'Inputs: `series` (the tasks; a model, `[(series)]` gets the edited tasks back), `options`, `columns`, `annotations`, `resources`, `dataSource`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`, `tooltipEnabled` and `showLegend`. Boolean inputs take attribute values: `showLegend` is `true`, `showToolbar="false"` is `false`.',
       '`viewMode` is a model: `[(viewMode)]="zoom"` stays in sync with the toolbar, the `+` / `-` keys and `setViewMode()`.',
       'Outputs: `(taskDragged)`, `(taskResized)`, `(selectionChange)`, `(rowClick)`, `(rowDblClick)`, `(viewModeChange)`, `(stateChange)`, `(loadError)` and `(retry)`, plus the editing outputs `(beforeChange)`, `(tasksChange)`, `(taskUpdated)`, `(taskProgressChanged)`, `(dependencyCreated)`, `(dependencyDeleted)` and `(historyChange)`, and the export outputs `(beforeExport)` and `(export)`.',
       'Editing (`options.editing`): `(beforeChange)` is vetoed with `$event.preventDefault()`; `undo()`, `redo()`, `editCell()`, `addDependency()` and the `canUndo()` / `canRedo()` signals are on the component. A custom cell editor is an `<ng-template ganttCellEditor let-edit>` (import `GanttCellEditorDirective`).',
@@ -281,7 +281,7 @@ export const PANELS: Record<FrameworkId, FrameworkPanel> = {
       'Callback props receive the event `detail`: `onTaskDragged`, `onSelectionChange`, `onViewModeChange`, `onTasksChange`, `onBeforeChange`, `onBeforeExport`, `onExport`, …. The listeners are attached before the first property is set, so events fired while the chart starts arrive too.',
       "`bind:element` gives the `GantryElement` with its methods (`zoomIn()`, `scrollToTask()`, `setState()`, …, and the async exports: `await gantt?.download('svg')`).",
       'A prop you never pass leaves the element alone; a prop that goes back to `undefined` restores the element’s default.',
-      '`tasks`, `columns`, `annotations` and `options` are copied one level: assigning a new array always updates the chart, and so do `push` / `splice` on `$state`. For large plans keep tasks in `$state.raw`.',
+      '`tasks`, `columns`, `annotations`, `resources` and `options` are copied one level: assigning a new array always updates the chart, and so do `push` / `splice` on `$state`. For large plans keep tasks in `$state.raw`.',
     ],
     readmeUrl: packageReadme('svelte'),
     npmUrl: PACKAGES.svelte.npmUrl,

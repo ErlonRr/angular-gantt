@@ -8,11 +8,14 @@
 
 import {
   emptySelection,
+  sameResources,
   type CellEditState,
   type DragPreview,
   type GanttAnnotation,
   type GanttHistoryState,
   type GanttOptions,
+  type GanttResource,
+  type GanttRowsMode,
   type GanttSyncGroup,
   type GanttTask,
   type GanttThemeOverrides,
@@ -98,6 +101,12 @@ export interface Inputs {
   /** `columns` property (`null` = none; `options.columns` wins over it) */
   readonly columnsIn: WritableSignal<VanillaColumnDef[] | null>;
   readonly annotationsIn: WritableSignal<GanttAnnotation[]>;
+  /**
+   * `resources` (Phase 14). Equal resources (field by field) do not notify, so a framework re-render
+   * passing a new array with the same contents recomputes nothing; the same array always does (it may
+   * have been mutated in place)
+   */
+  readonly resourcesIn: WritableSignal<GanttResource[]>;
   readonly darkModeIn: WritableSignal<boolean | 'auto'>;
   readonly enableDrag: WritableSignal<boolean>;
   readonly enableResize: WritableSignal<boolean>;
@@ -128,6 +137,11 @@ export interface Inputs {
   readonly viewModeOverride: WritableSignal<string>;
   /** View chosen through the API, the toolbar, the splitter or a restored state, or taken from the options when they change */
   readonly viewOverride: WritableSignal<GanttView>;
+  /**
+   * Rows chosen through the toolbar's rows toggle or a restored state, or taken from `options.rows` when
+   * that option changes; `null` = `options.rows` as set (the config reads `rowsOverride ?? options.rows`)
+   */
+  readonly rowsOverride: WritableSignal<GanttRowsMode | null>;
   readonly collapsedIds: WritableSignal<Set<string>>;
   readonly sort: WritableSignal<SortState | null>;
   readonly selection: WritableSignal<SelectionState>;
@@ -242,6 +256,9 @@ export function structuralEqual(a: unknown, b: unknown, depth = 0): boolean {
 /** `options` equality: structural, but the same object always counts as changed (mutated in place). */
 const sameOptions = (a: GanttOptions, b: GanttOptions) => a !== b && structuralEqual(a, b);
 
+/** `resources` equality: field by field, but the same array always counts as changed (mutated in place). */
+const sameResourceList = (a: GanttResource[], b: GanttResource[]) => a !== b && sameResources(a, b);
+
 const sameTime = (a: Date, b: Date) => a.getTime() === b.getTime();
 
 /** A fresh copy of a property's default (see `engine/props.ts`). */
@@ -256,6 +273,7 @@ export function createInputs(): Inputs {
     optionsIn: signal(fresh<GanttOptions>('options'), { equals: sameOptions }),
     columnsIn: signal(fresh<VanillaColumnDef[] | undefined>('columns') ?? null),
     annotationsIn: signal(fresh<GanttAnnotation[]>('annotations')),
+    resourcesIn: signal(fresh<GanttResource[]>('resources'), { equals: sameResourceList }),
     darkModeIn: signal(fresh<boolean | 'auto'>('darkMode')),
     enableDrag: flag(fresh<boolean>('enableDrag')),
     enableResize: flag(fresh<boolean>('enableResize')),
@@ -271,6 +289,7 @@ export function createInputs(): Inputs {
     apiTheme: signal<GanttThemeOverrides>({}),
     viewModeOverride: signal('Month'),
     viewOverride: signal<GanttView>('split'),
+    rowsOverride: signal<GanttRowsMode | null>(null),
     collapsedIds: signal(new Set<string>()),
     sort: signal<SortState | null>(null),
     selection: signal(emptySelection()),

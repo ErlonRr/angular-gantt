@@ -13,7 +13,8 @@
 //    config, i18n, theme, dark   the graph's (zoom level shown)
 //    themeOverrides              the theme service's overrides (`provideGantt({ theme })`,
 //                                `options.theme`, `setTheme()` / `patchTheme()`); `null` when empty
-//    tasks, rows, allRows        normalised tasks, shown rows, every row
+//    tasks, rows, allRows        normalised tasks, shown rows, every row (the resource view's
+//                                projected rows in `rows: 'resources'`, with their `utilization`)
 //    columns                     split panel's, table view's and the catalogue
 //                                (current widths)
 //    rowStyle, segments          the style resolver; rollup segments on the
@@ -81,7 +82,8 @@ function snapshot(graph: GanttExportGraph, customBar: ExportCustomBar | null): C
     dark,
     // The overrides as written (global config, `options.theme`, `setTheme()`): a light or dark export re-resolves them
     themeOverrides: nonEmpty(T.overrides()),
-    tasks: L.tasks(),
+    // In the resource view `tasks` and `rows` are the projected rows (the headless source's too)
+    tasks: L.viewTasks() ?? L.tasks(),
     rows: L.visibleRows(),
     allRows,
     columns: {
@@ -108,6 +110,7 @@ function snapshot(graph: GanttExportGraph, customBar: ExportCustomBar | null): C
     showLegend: graph.showLegend(),
     viewport: canvasW > 0 ? { x0: scrollLeft, x1: scrollLeft + canvasW } : null,
     customBar,
+    utilization: L.utilization(),
   };
 }
 

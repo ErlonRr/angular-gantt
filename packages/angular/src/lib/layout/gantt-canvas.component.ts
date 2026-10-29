@@ -169,6 +169,7 @@ import {
   HATCH_PATTERN,
   gestureKind,
   hitTestBar,
+  hitTestLoad,
   rowIndexAtY,
   type ArrowLink,
   type ArrowVisual,
@@ -197,6 +198,7 @@ import { GanttI18nService } from '../services/gantt-i18n.service';
 import { GanttThemeService } from '../services/gantt-theme.service';
 import { GanttLayoutService } from './gantt-layout.service';
 import { GanttAnnotationLabelsComponent, GanttAnnotationsComponent } from './gantt-annotations.component';
+import { GanttResourceLoadComponent } from './gantt-resource-load.component';
 import { GanttTooltipComponent, type TooltipContext } from '../tooltip/gantt-tooltip.component';
 import { GanttTooltipState } from '../tooltip/tooltip-state';
 import { type GanttTooltipTemplateContext } from '../tooltip/gantt-tooltip-template.directive';
@@ -258,6 +260,10 @@ const dragCursor = (part: BarHit): Cursor => (part === 'bar' ? 'grabbing' : link
 
 const noop = (): void => undefined;
 
+/** The resource view has no bars and no arrows */
+const NO_BARS: readonly GanttBarContext[] = [];
+const NO_ARROWS: MountedArrow[] = [];
+
 /** Angular's own marks on a rendered component (`ng-version`, the style scoping attributes) */
 const ANGULAR_ATTRIBUTE = /^(ng-version$|_nghost-|_ngcontent-)/;
 
@@ -282,6 +288,7 @@ const BUILTIN_BAR_TYPES: ReadonlySet<Type<GanttBarBase>> = new Set(BUILTIN_BARS.
     GanttBarOverlayComponent,
     GanttAnnotationsComponent,
     GanttAnnotationLabelsComponent,
+    GanttResourceLoadComponent,
   ],
   // One registry per chart (built-in bars, then `provideGanttBar` from the outermost to the nearest
   // level) and one tooltip
@@ -313,6 +320,7 @@ const BUILTIN_BAR_TYPES: ReadonlySet<Type<GanttBarBase>> = new Set(BUILTIN_BARS.
         aria-orientation="vertical"
         [attr.aria-label]="i18n.labels().ariaBars"
         [attr.aria-multiselectable]="multiselectable()"
+        [attr.aria-hidden]="layout.resourceMode() ? 'true' : null"
         (click)="onClick($event)"
         (dblclick)="onDblClick($event)"
       >
@@ -459,6 +467,11 @@ const BUILTIN_BAR_TYPES: ReadonlySet<Type<GanttBarBase>> = new Set(BUILTIN_BARS.
             <g ganttArrow [arrow]="a.visual"></g>
           }
         </g>
+
+        <!-- The resource view's histograms (rows: 'resources'), before the bars layer; attached only then -->
+        @if (layout.resourceMode() && layout.view() !== 'table') {
+          <g ganttResourceLoad [overHatchId]="uid + '-over-hatch'"></g>
+        }
 
         <!-- Bars: g.gantt-bars-layer > g[data-task-id][role=option] (each outlet inserts its bar before its anchor) -->
         <g class="gantt-bars-layer">
@@ -757,6 +770,7 @@ export class GanttCanvasComponent {
    * painted: the selected one (`layout.arrowSelection`) with the focus-ring paint
    */
   protected readonly arrows = computed<MountedArrow[]>(() => {
+    if (this.layout.resourceMode()) return NO_ARROWS;
     const { top, bottom } = this.layout.windowSpan();
     const arrowOf = this.arrowVisual();
     const shown = this.layout.arrowSelection();
@@ -867,7 +881,7 @@ export class GanttCanvasComponent {
   });
 
   /** The contexts as a list for the template (`@for` tracks the task id) */
-  protected readonly bars = computed(() => [...this.contexts().values()]);
+  protected readonly bars = computed(() => (this.layout.resourceMode() ? NO_BARS : [...this.contexts().values()]));
 
   constructor() {
     this.tooltip.bindEnabled(this.tooltipEnabled);
@@ -1268,11 +1282,39 @@ export class GanttCanvasComponent {
     }
     this.hoverAt(e.clientX, e.clientY);
     if (!this.tooltipEnabled()) return;
+    // The resource view has no bars: the tooltip follows the day of the load under the pointer
+    if (this.layout.resourceMode()) {
+      this.resourceTooltip(e.clientX, e.clientY);
+      return;
+    }
     // The tooltip follows the painted bar under the pointer (its host in the bars layer)
     const bar = barHostOf(e.target);
     const id = bar?.getAttribute('data-task-id');
     const row = id ? this.layout.geometryById().get(id)?.row : undefined;
     if (bar && row) this.tooltip.hover(row, bar, e.clientX);
+    else this.tooltip.unhover();
+  }
+
+  /**
+   * The resource view's tooltip (D12): the row and the day under the pointer (core `hitTestLoad`) open it
+   * with the load, the capacity and the tasks that weigh on that day; off a row it closes.
+   */
+  private resourceTooltip(clientX: number, clientY: number): void {
+    const utilization = this.layout.utilization();
+    const { x, y } = this.point(clientX, clientY);
+    const geo = this.geoAt(y);
+    const hit =
+      utilization && geo
+        ? hitTestLoad({
+            x,
+            y,
+            geos: [geo],
+            utilization,
+            dayOfX: this.layout.dayOfX(),
+            pxPerDay: this.layout.timeline().pxPerDay,
+          })
+        : null;
+    if (hit && geo) this.tooltip.hoverResource(geo.row, clientX, hit.day);
     else this.tooltip.unhover();
   }
 
@@ -1369,7 +1411,8 @@ export class GanttCanvasComponent {
    * (`GanttBarFocusService.hitTargets`, D11).
    */
   private hitOf(geo: RowGeometry | undefined, x: number, y: number): BarPointerHit | null {
-    if (!geo) return null;
+    // The resource view has no bars to press
+    if (!geo || this.layout.resourceMode()) return null;
     const part = hitTestBar(this.barFocus.hitTargets(geo.row.task.id, this.barVisual()(geo)), x, y);
     if (!part) return null;
     return { geo, part, draggable: !dragHandle(part) || this.layout.editRules()(geo.row).move };
@@ -1377,7 +1420,7 @@ export class GanttCanvasComponent {
 
   /** `editing.dependencies.delete`: a click selects a link, a link under the pointer shows `pointer` */
   private linksDeletable(): boolean {
-    return this.config().editing.dependencies.delete;
+    return this.config().rows === 'tasks' && this.config().editing.dependencies.delete;
   }
 
   /** Whether a dependency arrow passes within `ARROW_HIT_TOLERANCE` of canvas `x` / `y` (core `arrowAt`) */

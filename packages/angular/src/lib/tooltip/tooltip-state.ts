@@ -53,6 +53,7 @@ import {
   type TemplateRef,
 } from '@angular/core';
 import {
+  fromCalendarDays,
   initialTooltipState,
   reduceTooltip,
   tooltipVisibleId,
@@ -77,19 +78,43 @@ export interface TooltipDescription {
 
 /** The tooltip that shows: its task, its row, what opened it and the pointer x it was placed for. */
 export interface ShownTooltip {
+  /** What the machine opened: the task id, or `<row key>:<day>` for a resource row's day */
   readonly id: string;
   readonly row: GanttFlatRow;
   readonly source: TooltipSource;
   /** Pointer x (client px) while hovering: the tooltip centres on it; `undefined` for focus and tap */
   readonly pointerX: number | undefined;
+  /** The resource view's tooltip: the row (its key is the synthetic task's id) and the epoch day it describes */
+  readonly resource?: ResourceDay | undefined;
+}
+
+/** A day of a resource row: the resource view's tooltip is about it */
+export interface ResourceDay {
+  readonly rowKey: string;
+  /** The epoch-day index under the pointer */
+  readonly day: number;
+}
+
+/**
+ * What a tooltip is placed by: a bar element, or the day's cell of a resource row (a box measured on demand,
+ * which has no element). Only what the placement reads.
+ */
+export interface TooltipAnchor {
+  getBoundingClientRect(): DOMRect;
+  readonly isConnected: boolean;
 }
 
 /** What pointed at a bar last, per source: its row, the bar element, the pointer x while hovering. */
 interface Target {
   readonly row: GanttFlatRow;
-  readonly el: Element;
+  /** The bar element; a resource day's cell for the resource view */
+  readonly el: TooltipAnchor;
   readonly x?: number | undefined;
+  readonly resource?: ResourceDay | undefined;
 }
+
+/** The machine's id of a target: the task, or one day of a resource row (moving along a row follows the pointer day by day) */
+const keyOf = (t: Target): string => (t.resource ? `${t.resource.rowKey}:${t.resource.day}` : t.row.task.id);
 
 /** Bar visual of a row geometry (the chart's memoised `computeBarVisual`) */
 type BarVisualOf = (geo: RowGeometry) => BarVisual;
@@ -128,9 +153,9 @@ export class GanttTooltipState {
   readonly open = computed(() => this.shownSig() !== null);
   /** What opened the tooltip that shows (`null` while closed) */
   readonly source = computed<TooltipSource | null>(() => this.shownSig()?.source ?? null);
-  private readonly anchorEl = signal<Element | null>(null);
-  /** The bar element (its `g[data-task-id]` host) the tooltip is placed by, `null` while closed */
-  readonly anchor: Signal<Element | null> = this.anchorEl.asReadonly();
+  private readonly anchorEl = signal<TooltipAnchor | null>(null);
+  /** What the tooltip is placed by (a bar's `g[data-task-id]` host, or a resource day's cell), `null` while closed */
+  readonly anchor: Signal<TooltipAnchor | null> = this.anchorEl.asReadonly();
 
   /** A bar was hovered, focused or tapped at least once: the popover exists from then on */
   private readonly requestedFlag = signal(false);
@@ -212,7 +237,8 @@ export class GanttTooltipState {
     afterRenderEffect(() => {
       const rows = this.layout.geometryById();
       untracked(() => {
-        const id = this.shownSig()?.id;
+        const shown = this.shownSig();
+        const id = shown?.resource?.rowKey ?? shown?.id;
         if (id !== undefined && !rows.has(id)) this.dismiss();
       });
     });
@@ -247,6 +273,16 @@ export class GanttTooltipState {
   /** A fine pointer is over `row`'s bar `el` at `clientX`: opens after the show delay (at once when another bar's shows). */
   hover(row: GanttFlatRow, el: Element, clientX: number): void {
     this.point('hover', { row, el, x: clientX });
+  }
+
+  /**
+   * A fine pointer is over `day` (an epoch-day index) of the resource row `row` at `clientX`: opens after
+   * the show delay (at once when the tooltip of another day or row shows). The tooltip sits by the day's cell.
+   */
+  hoverResource(row: GanttFlatRow, clientX: number, day: number): void {
+    const resource = { rowKey: row.task.id, day };
+    const el = this.dayCell(resource);
+    if (el) this.point('hover', { row, el, x: clientX, resource });
   }
 
   /** The pointer left the bars: closes after the hide delay (unless it rests on the tooltip). */
@@ -298,12 +334,12 @@ export class GanttTooltipState {
    * The connected bar element of the tooltip that shows (scroll, resize): a bar rebuilt since it
    * opened is found again by its task id; without one the tooltip is dismissed (`null`).
    */
-  reanchor(): Element | null {
+  reanchor(): TooltipAnchor | null {
     const shown = untracked(this.shownSig);
     const anchor = untracked(this.anchorEl);
     if (!shown || !anchor) return null;
     if (anchor.isConnected) return anchor;
-    const again = this.findBar(shown.id);
+    const again = shown.resource ? this.dayCell(shown.resource) : this.findBar(shown.id);
     if (!again) {
       this.send({ type: 'dismiss' });
       return null;
@@ -336,7 +372,7 @@ export class GanttTooltipState {
     if (this.destroyed || !untracked(this.enabled)) return;
     this.requestedFlag.set(true);
     this.targets[source] = target;
-    this.send({ type: source, id: target.row.task.id });
+    this.send({ type: source, id: keyOf(target) });
   }
 
   /** Feeds the machine one event and follows its transition (state, timer, what shows). */
@@ -369,15 +405,29 @@ export class GanttTooltipState {
     const source = this.machine.source ?? 'hover';
     const own = this.targets[source];
     const target =
-      own?.row.task.id === id ? own : Object.values(this.targets).find(t => t !== undefined && t.row.task.id === id);
-    const anchor = target && (target.el.isConnected ? barOf(target.el) : this.findBar(id));
+      own && keyOf(own) === id ? own : Object.values(this.targets).find(t => t !== undefined && keyOf(t) === id);
+    const anchor =
+      target &&
+      (target.el.isConnected
+        ? 'closest' in target.el
+          ? barOf(target.el as Element)
+          : target.el
+        : target.resource
+          ? this.dayCell(target.resource)
+          : this.findBar(id));
     if (!target || !anchor || !untracked(this.enabled)) {
       // Nothing to anchor to (the bar went away) or the tooltip is off
       this.hide();
       return;
     }
     this.anchorEl.set(anchor);
-    this.shownSig.set({ id, row: target.row, source, pointerX: source === 'hover' ? target.x : undefined });
+    this.shownSig.set({
+      id,
+      row: target.row,
+      source,
+      pointerX: source === 'hover' ? target.x : undefined,
+      ...(target.resource ? { resource: target.resource } : {}),
+    });
   }
 
   private close(): void {
@@ -389,6 +439,44 @@ export class GanttTooltipState {
   private stopTimer(): void {
     if (this.timer !== undefined) this.win?.clearTimeout(this.timer);
     this.timer = undefined;
+  }
+
+  /**
+   * The cell of `day` in the resource row `rowKey` (the canvas' x range of that day, the row's y range), a box
+   * read from the canvas and the current timeline whenever it is placed — a zoom or a scroll moves it, as the
+   * Web Component's. `null` while the row is not in the chart.
+   */
+  private dayCell(t: ResourceDay): TooltipAnchor | null {
+    const layout = this.layout;
+    const canvas = this.canvas;
+    const geoOf = () => untracked(layout.geometryById).get(t.rowKey);
+    if (!geoOf()) return null;
+    return {
+      get isConnected() {
+        return canvas.isConnected && geoOf() !== undefined;
+      },
+      getBoundingClientRect() {
+        const geo = geoOf();
+        const { toX } = untracked(layout.timeline);
+        const x0 = toX(fromCalendarDays(t.day));
+        const x1 = toX(fromCalendarDays(t.day + 1));
+        const box = canvas.getBoundingClientRect();
+        const left = box.left + x0;
+        const top = box.top + (geo?.y ?? 0);
+        const height = geo?.height ?? 0;
+        return {
+          x: left,
+          y: top,
+          left,
+          top,
+          width: x1 - x0,
+          height,
+          right: left + (x1 - x0),
+          bottom: top + height,
+          toJSON: () => ({}),
+        };
+      },
+    };
   }
 
   /** The mounted bar element of `taskId` (`g[data-task-id]` in the canvas' bars layer), if any. */

@@ -36,5 +36,11 @@ paths:
   tables, a binding difference into `framework-notes.ts` (`export-methods`, `before-export`, `export-custom-bars`,
   `print-css`, `export-ssr`). The gallery's `export` category ("Export and print") holds `export-image`,
   `export-csv`, `print`, `export-toolbar`; shared log texts in `gallery/export-log.ts`.
+- Resources (Phase 14): the README "Resources" section is the reference (data, options, load rules and calendar
+  interplay, teams / Unassigned, tooltip, columns, the Resources cell, accessibility, synthetic rows in selection,
+  exports, Node, limits): a new resource option goes into its tables, a binding difference into `framework-notes.ts`
+  (`series-model` lists `resource-panel`); the gallery's `resources` category holds `resource-load`, `resource-panel`,
+  `resource-capacity`; a case whose chart starts in the resource view sets `ready.load` (its index) so the smoke test
+  looks for load paths instead of bars.
 - On release, keep the "Recent Releases" `<details>` accordion in `README.md` and
   `packages/angular/README.md` to the last 5 releases (see the `/gantry-release` skill).

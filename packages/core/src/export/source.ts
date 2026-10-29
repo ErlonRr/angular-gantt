@@ -21,7 +21,9 @@ import {
   type GanttFlatRow,
   type GanttI18n,
   type GanttOptions,
+  type GanttResource,
   type GanttRollupInfo,
+  type GanttRowsMode,
   type GanttTask,
   type GanttTheme,
   type GanttThemeOverrides,
@@ -42,12 +44,16 @@ import {
   findColumn,
   mergeColumnDefs,
   resolveViewColumns,
+  showsResourceColumns,
 } from '../render/columns';
 import { taskOwnStyle } from '../render/task-style';
 import { computeCriticalPath } from '../gantt-cpm';
 import { applyRollups, computeRollups, rollupSegments } from '../gantt-rollup';
 import { columnComparator, filterVisible, flattenTree, normalizeTasks, reindexVisible, sortTree } from '../gantt-data';
 import { toLocalDay, type TimelineRange } from '../gantt-math';
+import { indexResources } from '../resources/model';
+import { resourceViewTasks } from '../resources/rows';
+import type { ResourceUtilization } from '../resources/utilization';
 import { seedCollapsed } from '../state/collapse';
 import { viewFromOptions } from '../state/view';
 
@@ -119,6 +125,12 @@ export interface ChartExportSource {
   readonly viewport: { readonly x0: number; readonly x1: number } | null;
   /** Custom bars (`customBars: 'render'`, D5), `null` for built-in bars only */
   readonly customBar: ExportCustomBar | null;
+  /**
+   * The resource view's load per row (`rows: 'resources'`, Phase 14 D17): the utilization the shown
+   * rows were projected from (their ids are its keys), `null` or unset in tasks mode. In resource
+   * mode `tasks` and `rows` are the projected rows; the export draws their histograms, no bars.
+   */
+  readonly utilization?: ResourceUtilization | null | undefined;
 }
 
 /** What `createExportSource` builds a chart from, without a binding (Node, workers, SSR). */
@@ -145,6 +157,10 @@ export interface GanttHeadlessInput {
   showLegend?: boolean | undefined;
   /** Custom bar markup (D5). Default none: built-in bars */
   customBar?: ExportCustomBar | undefined;
+  /** The resources tasks are assigned to (the element's `resources`). Default none */
+  resources?: readonly GanttResource[] | undefined;
+  /** The rows drawn: tasks or one per resource. Default `options.rows` */
+  rows?: GanttRowsMode | undefined;
 }
 
 /**
@@ -231,19 +247,51 @@ export function createExportSource(input: GanttHeadlessInput): ChartExportSource
   const dark = input.dark ?? options.darkMode === true;
   const themeOverrides = options.theme ?? null;
   const theme = resolveTheme(dark, themeOverrides ?? undefined);
-  const config = resolveConfig(options, i18n, { barRadius: themeMetrics(theme).barRadius });
+  const config = resolveConfig(input.rows ? { ...options, rows: input.rows } : options, i18n, {
+    barRadius: themeMetrics(theme).barRadius,
+  });
   // Rollup statuses and style rules read the day (`quantizeNow`), the cells the exact tick
   const nowDay = quantizeNow(now, bottomScale(config.scales).unit);
   const dates = dateReadingOf(config);
 
   const tasks = normalizeTasks([...input.tasks]);
-  const critical = config.criticalPath ? computeCriticalPath(tasks, dates).criticalIds : null;
-  const rollup = config.rollup;
+  // The resource view (`rows: 'resources'`): the rows are the projected resources, with no critical
+  // path and no rollups (Phase 14 D5, D11); `null` in tasks mode, where nothing below changes
+  const resourceView = resourceViewTasks({
+    rows: config.rows,
+    tasks,
+    resources: input.resources,
+    dates,
+    view: config.resourceView,
+    labels: i18n.labels,
+  });
+  const shown = resourceView ? resourceView.tasks : tasks;
+  const critical = !resourceView && config.criticalPath ? computeCriticalPath(tasks, dates).criticalIds : null;
+  const rollup = resourceView ? false : config.rollup;
   const rollups = rollup ? computeRollups(tasks, rollup, { now: nowDay, dates }) : new Map<string, GanttRollupInfo>();
-  const columnCtx = buildColumnContext({ tasks, config: dates, now, locale: i18n.locale });
+  const resourceIndex = resourceView
+    ? resourceView.index
+    : input.resources?.length
+      ? indexResources(input.resources)
+      : null;
+  const columnCtx = buildColumnContext({
+    tasks: shown,
+    config: dates,
+    now,
+    locale: i18n.locale,
+    // The resources column reads the index (tasks mode too); `rows` tells the cells which mode they are in
+    ...(resourceIndex ? { resources: resourceIndex } : {}),
+    ...(resourceView ? { rows: config.rows } : {}),
+  });
 
   // Columns: the consumer's (`options.columns` wins) over the built-ins, each at its width
-  const builtinDefs = buildBuiltinColumns(i18n.labels, i18n.locale, i18n.formats.dateFormat);
+  const builtinDefs = buildBuiltinColumns(
+    i18n.labels,
+    i18n.locale,
+    i18n.formats.dateFormat,
+    undefined,
+    showsResourceColumns({ resources: resourceIndex?.list, rows: config.rows }),
+  );
   const customDefs = options.columns?.length ? options.columns : (input.columns ?? null);
   const apply = (c: ColumnDef): ColumnDef => ({
     ...c,
@@ -260,7 +308,11 @@ export function createExportSource(input: GanttHeadlessInput): ChartExportSource
   const collapsed = new Set(
     input.collapsedIds ?? seedCollapsed(input.tasks, undefined, config.groupBar.collapsed).collapse,
   );
-  let allRows = applyRollups(flattenTree(tasks, collapsed), rollups, rollup);
+  let allRows = applyRollups(
+    resourceView ? flattenTree(shown, collapsed, { order: 'input' }) : flattenTree(tasks, collapsed),
+    rollups,
+    rollup,
+  );
   if (input.sort) {
     const column = findColumn(catalogue, builtins, input.sort.key);
     allRows = sortTree(allRows, columnComparator(input.sort.key, input.sort.dir, { column, ctx: columnCtx }));
@@ -274,7 +326,7 @@ export function createExportSource(input: GanttHeadlessInput): ChartExportSource
     theme,
     dark,
     themeOverrides,
-    tasks,
+    tasks: shown,
     rows,
     allRows,
     columns: { split, table: viewColumns('table'), all: exportColumnCatalogue(catalogue, builtins) },
@@ -291,6 +343,7 @@ export function createExportSource(input: GanttHeadlessInput): ChartExportSource
     showLegend: input.showLegend ?? false,
     viewport: null,
     customBar: input.customBar ?? null,
+    utilization: resourceView ? resourceView.utilization : null,
   };
 }
 

@@ -20,7 +20,9 @@
 //  `before-change` (`detail.preventDefault()`). Phase 12 records
 //  `before-export` / `export`, `vetoExport` prevents the listed
 //  formats, and tasks with `barType: 'e2e-custom'` are drawn by a
-//  custom bar component (`E2eCustomBarComponent`).
+//  custom bar component (`E2eCustomBarComponent`). Phase 14 takes
+//  `resources` (also through `__GANTRY_API__.set`) and records
+//  `state-change` when the fixture sets `stateEvents`.
 // ─────────────────────────────────────────────────────────────
 
 import { afterNextRender, ChangeDetectionStrategy, Component, signal, viewChild } from '@angular/core';
@@ -35,6 +37,7 @@ import {
   type GanttBeforeExportEvent,
   type GanttExportFormat,
   type GanttOptions,
+  type GanttResource,
   type GanttTask,
   type GanttTimeHighlight,
 } from '@gantryjs/angular';
@@ -47,6 +50,10 @@ interface FixtureHighlight {
 
 interface GantryFixture {
   tasks?: unknown[];
+  /** The `resources` input (Phase 14) */
+  resources?: GanttResource[];
+  /** Record `stateChange` as `state-change` (it is not recorded otherwise: the other specs compare whole sequences) */
+  stateEvents?: boolean;
   options?: Record<string, unknown>;
   annotations?: unknown[];
   highlight?: FixtureHighlight[];
@@ -75,6 +82,7 @@ interface GantryFixture {
 /** What `window.__GANTRY_API__.set()` changes (dates as local ISO strings, like the fixture). */
 interface FixturePatch {
   tasks?: unknown[];
+  resources?: GanttResource[];
   options?: Record<string, unknown>;
   darkMode?: boolean | 'auto';
   loading?: boolean;
@@ -149,6 +157,7 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
     @if (emptyContent !== undefined) {
       <gantry
         [series]="tasks()"
+        [resources]="resources()"
         [dataSource]="dataSource"
         [options]="options()"
         [annotations]="annotations"
@@ -174,6 +183,7 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (dependencyCreated)="record('dependency-created', $event)"
         (dependencyDeleted)="record('dependency-deleted', $event)"
         (historyChange)="record('history-change', $event)"
+        (stateChange)="recordState($event)"
         (beforeExport)="beforeExport($event)"
         (export)="record('export', $event)"
       >
@@ -187,6 +197,7 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
     } @else {
       <gantry
         [series]="tasks()"
+        [resources]="resources()"
         [dataSource]="dataSource"
         [options]="options()"
         [annotations]="annotations"
@@ -212,6 +223,7 @@ function highlightTime(list: FixtureHighlight[]): GanttOptions['highlightTime'] 
         (dependencyCreated)="record('dependency-created', $event)"
         (dependencyDeleted)="record('dependency-deleted', $event)"
         (historyChange)="record('history-change', $event)"
+        (stateChange)="recordState($event)"
         (beforeExport)="beforeExport($event)"
         (export)="record('export', $event)"
       >
@@ -252,6 +264,7 @@ export class FixtureComponent {
   protected readonly dataSource = this.fixture.dataSource ? this.createDataSource(this.fixture.dataSource) : null;
 
   protected readonly tasks = signal(this.dataSource ? [] : (revive(this.fixture.tasks ?? []) as GanttTask[]));
+  protected readonly resources = signal<GanttResource[]>(this.fixture.resources ?? []);
   readonly annotations = revive(this.fixture.annotations ?? []) as GanttAnnotation[];
   protected readonly options = signal(this.toOptions(this.fixture.options ?? {}));
   protected readonly darkMode = signal(this.fixture.darkMode ?? false);
@@ -269,6 +282,7 @@ export class FixtureComponent {
     window.__GANTRY_API__ = {
       set: patch => {
         if (patch.tasks !== undefined) this.tasks.set(revive(patch.tasks) as GanttTask[]);
+        if (patch.resources !== undefined) this.resources.set(patch.resources);
         if (patch.options !== undefined) this.options.set(this.toOptions(patch.options));
         if (patch.darkMode !== undefined) this.darkMode.set(patch.darkMode);
         if (patch.loading !== undefined) this.loading.set(patch.loading);
@@ -285,6 +299,11 @@ export class FixtureComponent {
   /** Records an output under the Web Component's event name (dates become ISO strings). */
   protected record(type: string, detail: unknown): void {
     window.__GANTRY_EVENTS__?.push({ type, detail: JSON.parse(JSON.stringify(detail)) as unknown });
+  }
+
+  /** Records `stateChange` when the fixture asks for it. */
+  protected recordState(state: unknown): void {
+    if (this.fixture.stateEvents) this.record('state-change', state);
   }
 
   /** Records `before-change`, then vetoes it when the fixture says so (the Web Component driver does the same). */

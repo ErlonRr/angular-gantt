@@ -76,7 +76,7 @@ describe('Gantry.svelte props', () => {
     const match = /const COPIED[^=]*=\s*new Set\(\[([^\]]*)\]\)/.exec(source);
     if (!match) throw new Error('no `const COPIED = new Set([…])` in Gantry.svelte');
     const copied = match[1]!.split(',').map(entry => entry.trim().replace(/^'|'$/g, ''));
-    expect(copied).toEqual(['tasks', 'columns', 'annotations', 'options']);
+    expect(copied).toEqual(['tasks', 'columns', 'annotations', 'resources', 'options']);
     expect(copied).not.toContain('syncGroup');
   });
 

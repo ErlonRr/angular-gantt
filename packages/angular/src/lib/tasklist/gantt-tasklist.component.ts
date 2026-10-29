@@ -26,6 +26,10 @@
 //                               span.gantt-tl-indent · span.gantt-tl-icon · span.gantt-tl-ellipsis
 //    div.gantt-tl-cell (other)  span.gantt-tl-status-dot? · span.gantt-tl-ellipsis
 //
+//  In the resource view (`rows: 'resources'`) a row is a resource, a team or Unassigned: it carries
+//  `aria-label` = core `resourceAccessibleName` (`labels.describeResource`: capacity, peak load, days over
+//  capacity); a task's row has none (its name is the name cell), as before.
+//
 //  Chrome and text colours are stylesheet rules on the `--gantt-*` tokens
 //  (the same rules as `styles/tasklist.css.ts`); row backgrounds, status
 //  dots and the icon of a styled task are `Paint`s bound as CSS
@@ -137,6 +141,8 @@ import {
   columnsGridTemplate,
   computeCellVisual,
   gridTabStop,
+  resourceAccessibleName,
+  resourceRowInfo,
   rowPaint,
   sameGridSpot,
   virtualIndexes,
@@ -426,6 +432,7 @@ export class GanttCellEditorMountDirective {
           [attr.data-focus-key]="'row:' + row.task.id"
           [attr.tabindex]="rowId === rowStop() ? 0 : -1"
           [attr.aria-rowindex]="row.visibleIndex + 2"
+          [attr.aria-label]="rowName(row)"
           [attr.aria-level]="row.level + 1"
           [attr.aria-posinset]="row.posInSet ?? null"
           [attr.aria-setsize]="row.setSize ?? null"
@@ -973,6 +980,15 @@ export class GanttTaskListComponent {
   }
 
   // ── Collapse toggle ───────────────────────────────────────
+  /**
+   * The accessible name of a resource view's row (`describeResource`: the capacity, the peak load, the days over
+   * capacity); `null` for a task's row, whose name is its name cell.
+   */
+  protected rowName(row: GanttFlatRow): string | null {
+    const resource = resourceRowInfo(row.task);
+    return resource ? resourceAccessibleName(resource, this.i18n.labels()) : null;
+  }
+
   protected collapseAriaLabel(row: GanttFlatRow): string {
     const lbl = this.i18n.labels();
     return row.isCollapsed ? lbl.ariaExpand(row.task.name) : lbl.ariaCollapse(row.task.name);

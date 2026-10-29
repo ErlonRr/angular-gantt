@@ -49,10 +49,18 @@ export interface LayoutGraph {
   readonly totalHeight: ReadonlySignal<number>;
   /** Geometries mounted in the canvas: the pinned rows before the window, the window, the pinned rows after it */
   readonly mountedGeometries: ReadonlySignal<RowGeometry[]>;
+  /**
+   * The geometries the bars region mounts bars for: `mountedGeometries` in tasks mode, none in the resource
+   * view (its rows have no bar; the rows, the hover and the load layer read `mountedGeometries`)
+   */
+  readonly barGeometries: ReadonlySignal<readonly RowGeometry[]>;
   readonly windowSpan: ReadonlySignal<WindowSpan>;
   /** The host's read-only layout variables (`--gantt-row-height`, `--gantt-bar-height`); compares by value */
   readonly layoutCss: ReadonlySignal<ThemeCssEntries>;
 }
+
+/** No bar to mount (the resource view). */
+const NO_GEOMETRIES: readonly RowGeometry[] = [];
 
 export function layoutGraph(
   I: Inputs,
@@ -80,6 +88,9 @@ export function layoutGraph(
     }
     return out;
   });
+  const barGeometries = node('barGeometries', (): readonly RowGeometry[] =>
+    g.utilization() === null ? mountedGeometries() : NO_GEOMETRIES,
+  );
   const windowSpan = node(
     'windowSpan',
     (): WindowSpan => {
@@ -90,5 +101,5 @@ export function layoutGraph(
     { equals: (a, b) => a.top === b.top && a.bottom === b.bottom },
   );
   const layoutCss = node('layoutCss', () => layoutCssVars(g.config()), { equals: structuralEqual });
-  return { panelPx, splitter, headerHeight, totalHeight, mountedGeometries, windowSpan, layoutCss };
+  return { panelPx, splitter, headerHeight, totalHeight, mountedGeometries, barGeometries, windowSpan, layoutCss };
 }

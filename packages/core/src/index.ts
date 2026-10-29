@@ -98,6 +98,21 @@ export * from './export/raster';
 export { buildWorkingCalendar, type WorkingCalendar } from './calendar/working-calendar';
 export * from './calendar/durations';
 export * from './calendar/edit';
+// Resources (Phase 14): the model, the daily load, the synthetic rows of the resource view, what a row draws, its tooltip
+export * from './resources/model';
+export * from './resources/utilization';
+export {
+  RESOURCE_BAR_TYPE,
+  projectResourceRows,
+  resourceInfoOf,
+  resourceViewTasks,
+  type ProjectResourceRowsInput,
+  type ResourceRowInfo,
+  type ResourceView,
+  type ResourceViewInput,
+} from './resources/rows';
+export * from './resources/visual';
+export * from './resources/tooltip';
 // Engine helpers: arrow window index, drag ghost, quantised clock
 export { buildArrowIndex, type ArrowIndex, type ArrowLink } from './render/arrow-index';
 export { computeDragGhostVisual, DRAG_SOURCE_OPACITY, type GhostVisual, type GhostLabel } from './render/ghost';

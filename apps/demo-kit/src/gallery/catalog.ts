@@ -23,6 +23,9 @@ export const CASE_IDS = [
   'working-days',
   'shift-calendar',
   'critical-float',
+  'resource-load',
+  'resource-panel',
+  'resource-capacity',
   'editing',
   'cell-editing',
   'custom-editors',
@@ -47,7 +50,17 @@ export const CASE_IDS = [
 export type CaseId = (typeof CASE_IDS)[number];
 
 export type GalleryCategory =
-  'data' | 'structure' | 'scheduling' | 'editing' | 'export' | 'multiple' | 'custom' | 'locale' | 'layout' | 'scale';
+  | 'data'
+  | 'structure'
+  | 'scheduling'
+  | 'resources'
+  | 'editing'
+  | 'export'
+  | 'multiple'
+  | 'custom'
+  | 'locale'
+  | 'layout'
+  | 'scale';
 
 export interface GalleryCategoryInfo {
   id: GalleryCategory;
@@ -71,6 +84,12 @@ export const GALLERY_CATEGORIES: readonly GalleryCategoryInfo[] = [
     id: 'scheduling',
     label: 'Scheduling',
     summary: 'Dependencies, milestones, baselines, non-working time, week numbers and working calendars.',
+  },
+  {
+    id: 'resources',
+    label: 'Resources',
+    summary:
+      'Who is busy when: daily load per person or team against its capacity, over-allocation, and assignments you edit in the chart.',
   },
   {
     id: 'editing',
@@ -153,11 +172,13 @@ export type NoteId =
 
 /**
  * When a case page is ready (the e2e smoke test): `charts` charts inside `.gs-case`, each painted;
- * with `state`, the first chart shows that state instead of rows.
+ * with `state`, the first chart shows that state instead of rows. `load` lists the charts (by index) that start in
+ * the resource view: they paint load rows instead of bars.
  */
 export interface GalleryReady {
   charts: number;
   state?: 'empty' | 'loading' | 'error';
+  load?: number[];
 }
 
 export interface GalleryCase {
@@ -312,6 +333,41 @@ export const GALLERY_CASES: readonly GalleryCase[] = [
     tags: ['criticalPath', 'computeCriticalPath()', 'float', 'calendar.durations'],
     ready: { charts: 1 },
     notes: ['series-model'],
+    isNew: true,
+  },
+
+  // ── Resources ─────────────────────────────────────────────
+  {
+    id: 'resource-load',
+    title: 'Resource load and over-allocation',
+    summary:
+      'One chart, two row modes: tasks, or one row per person and team with the daily load against the capacity line; the load above capacity is hatched.',
+    category: 'resources',
+    tags: ['rows', 'resources', 'resourceView', 'toolbar.rowsToggle', 'overallocatedColor'],
+    ready: { charts: 1, load: [0] },
+    notes: [],
+    isNew: true,
+  },
+  {
+    id: 'resource-panel',
+    title: 'Resource panel under the plan',
+    summary:
+      'The task chart with an editable Resources column and, synchronised below it, the resource chart: reassign a task and watch the load move.',
+    category: 'resources',
+    tags: ['resources', 'syncGroup', 'editing.cells', 'rows'],
+    ready: { charts: 2, load: [1] },
+    notes: ['series-model'],
+    isNew: true,
+  },
+  {
+    id: 'resource-capacity',
+    title: 'Capacity and working time',
+    summary:
+      'Part-time people, a team of two and a working calendar: weekends carry no load, and changing a capacity moves the over-allocation.',
+    category: 'resources',
+    tags: ['capacity', 'calendar', 'nonWorkingTime', 'resourceView.overallocation'],
+    ready: { charts: 1, load: [0] },
+    notes: [],
     isNew: true,
   },
 

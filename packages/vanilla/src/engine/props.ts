@@ -44,6 +44,8 @@ export const PROPERTY_TABLE = table([
   { name: 'columns', default: undefined },
   { name: 'options', default: {} },
   { name: 'annotations', default: [] },
+  // Phase 14: the resources tasks are assigned to (`rows: 'resources'`); an array, so no attribute
+  { name: 'resources', default: [] },
   {
     name: 'darkMode',
     default: false,

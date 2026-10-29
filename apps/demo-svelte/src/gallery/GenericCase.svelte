@@ -32,6 +32,7 @@
     dataSource={c.source}
     options={c.options}
     annotations={c.annotations}
+    resources={c.resources}
     darkMode={siteTheme.dark}
     showToolbar={c.showToolbar ?? true}
     showLegend={c.showLegend ?? false}

@@ -211,7 +211,8 @@ export function bindCanvasPointer(ctx: LayerContext, opts: CanvasPointerOptions)
 
   /** The bar of `geo` at canvas `x` / `y` and the part hit (core `hitTestBar`), `null` off it. */
   const hitOf = (geo: RowGeometry | undefined, x: number, y: number): BarPointerHit | null => {
-    if (!geo) return null;
+    // The resource view has no bars: a synthetic row's extent is not a target
+    if (!geo || G.utilization.peek() !== null) return null;
     const part = hitTestBar(shownTargets(geo, G.barVisual.peek()(geo)), x, y);
     if (!part) return null;
     return { geo, part, draggable: !dragHandle(part) || G.editRules.peek()(geo.row).move };

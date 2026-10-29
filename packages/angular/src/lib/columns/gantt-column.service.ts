@@ -29,7 +29,10 @@ import { type ColumnDef } from '../types';
 import { GanttI18nService } from '../services/gantt-i18n.service';
 
 type ViewKey = 'split' | 'table';
-type ColumnConfig = Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>;
+/** The config a view's columns follow; the resolved `rows` picks the resource view's default columns */
+type ColumnConfig = Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'> & {
+  readonly rows?: ResolvedGanttConfig['rows'] | undefined;
+};
 
 /** Runtime edits (`addColumn`, `removeColumn`, `reorderByKeys`, `moveColumn`) */
 interface ColumnEdits {
@@ -48,6 +51,8 @@ interface ColumnVisibility {
 interface ColumnSources {
   readonly columns: () => readonly ColumnDef[];
   readonly directives: () => readonly ColumnDef[];
+  /** Whether the chart has resources or shows the resource view (core `showsResourceColumns`) */
+  readonly resourceColumns: () => boolean;
 }
 
 const NONE: readonly ColumnDef[] = [];
@@ -84,7 +89,14 @@ export class GanttColumnService {
 
   /** Localised built-in columns for the current i18n config. */
   private readonly builtinDefs = computed(
-    () => buildBuiltinColumns(this.i18n.labels(), this.i18n.locale(), this.i18n.formats().dateFormat) as ColumnDef[],
+    () =>
+      buildBuiltinColumns(
+        this.i18n.labels(),
+        this.i18n.locale(),
+        this.i18n.formats().dateFormat,
+        undefined,
+        this.sources()?.resourceColumns() ?? false,
+      ) as ColumnDef[],
   );
 
   /** Width overrides (clamped) and the all-views visibility, applied to a definition */
@@ -141,8 +153,12 @@ export class GanttColumnService {
   );
 
   /** Bind the consumer columns and the `ganttColumn` definitions (once, from GantryComponent's constructor). */
-  bind(columns: () => readonly ColumnDef[], directives: () => readonly ColumnDef[] = () => NONE): void {
-    this.sources.set({ columns, directives });
+  bind(
+    columns: () => readonly ColumnDef[],
+    directives: () => readonly ColumnDef[] = () => NONE,
+    resourceColumns: () => boolean = () => false,
+  ): void {
+    this.sources.set({ columns, directives, resourceColumns });
   }
 
   /** Columns shown by `view` (split panel, table view; none for the chart-only view) */

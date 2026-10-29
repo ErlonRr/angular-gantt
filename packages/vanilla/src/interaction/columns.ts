@@ -11,8 +11,10 @@ import {
   clampColumnWidth,
   mergeColumnDefs,
   resolveViewColumns,
+  showsResourceColumns,
   type GanttI18n,
   type GanttOptions,
+  type GanttRowsMode,
   type GanttView,
   type ResolvedGanttConfig,
 } from '@gantryjs/core';
@@ -20,7 +22,10 @@ import { computed, signal, type ReadonlySignal } from '../reactive';
 import type { VanillaColumnDef as ColumnDef } from '../types';
 
 type ViewKey = 'split' | 'table';
-type ColumnConfig = Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>;
+/** The resolved config (the resource view's default columns read `rows`; a config without it is the task view's) */
+type ColumnConfig = Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'> & {
+  rows?: ResolvedGanttConfig['rows'] | undefined;
+};
 
 interface Visibility {
   all: Map<string, boolean>;
@@ -52,10 +57,17 @@ export interface Columns {
   toggleVisible(key: string, view?: ViewKey, config?: ColumnConfig): void;
 }
 
+/** What decides whether the catalogue has the resource columns: the `resources` property and the rows mode override */
+export interface ResourceColumnInputs {
+  readonly resourcesIn: ReadonlySignal<readonly unknown[]>;
+  readonly rowsOverride: ReadonlySignal<GanttRowsMode | null>;
+}
+
 export function createColumns(
   options: ReadonlySignal<GanttOptions>,
   columnsProp: ReadonlySignal<ColumnDef[] | null>,
   i18n: ReadonlySignal<GanttI18n>,
+  resourceInputs?: ResourceColumnInputs,
 ): Columns {
   // Mutated in place, then re-set to notify
   const widthOverrides = signal(new Map<string, number>(), { equals: false });
@@ -67,9 +79,19 @@ export function createColumns(
     return fromOptions?.length ? (fromOptions as ColumnDef[]) : columnsProp();
   });
 
+  // The resource columns (Phase 14) join the catalogue once the chart has resources or shows the resource view
+  const withResources = computed(() =>
+    resourceInputs
+      ? showsResourceColumns({
+          resources: resourceInputs.resourcesIn(),
+          rows: resourceInputs.rowsOverride() ?? options().rows,
+        })
+      : false,
+  );
+
   const catalogue = computed<ColumnCatalogue>(() => {
     const { labels, locale, formats } = i18n();
-    const builtins = buildBuiltinColumns(labels, locale, formats.dateFormat) as ColumnDef[];
+    const builtins = buildBuiltinColumns(labels, locale, formats.dateFormat, undefined, withResources()) as ColumnDef[];
     const defs = custom();
     const base = defs ? mergeColumnDefs(defs, builtins) : builtins;
     const widths = widthOverrides();

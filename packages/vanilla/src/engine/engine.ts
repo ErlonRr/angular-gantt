@@ -16,7 +16,7 @@
  *   inputs ──▶ chrome (i18n, theme, metrics) ──▶ config ──▶ rows ──▶ timeline ──▶ windows
  *                                                    │        └──▶ styles └──▶ markers ──▶ layout
  *                                                    └──▶ states         ├──▶ visuals ──▶ arrows
- *                                                                        ├──▶ horizontal
+ *                                                                        ├──▶ horizontal ──▶ resources
  *                                                                        └──▶ tasklist
  *   graph ──▶ region effects (engine/render.ts) ──▶ layers/* ──▶ DOM
  *
@@ -96,6 +96,7 @@ import { statesGraph, type StatesGraph } from './graph/states';
 import { visualsGraph, type VisualsGraph } from './graph/visuals';
 import { arrowsGraph, type ArrowsGraph } from './graph/arrows';
 import { horizontalGraph, type HorizontalGraph } from './graph/horizontal';
+import { resourcesGraph, type ResourcesGraph } from './graph/resources';
 import { tasklistGraph, type TasklistGraph } from './graph/tasklist';
 import { createLayers, disconnectLayers, registerRegions, REGIONS, type Layers, type Region } from './render';
 import { announceEffects, createLiveAnnouncer } from './announce';
@@ -116,7 +117,8 @@ export interface CoreGraph
 }
 
 /** Every node of the render model. */
-export interface Graph extends CoreGraph, VisualsGraph, ArrowsGraph, HorizontalGraph, TasklistGraph, StatesGraph {}
+export interface Graph
+  extends CoreGraph, VisualsGraph, ArrowsGraph, HorizontalGraph, ResourcesGraph, TasklistGraph, StatesGraph {}
 
 /** What the engine needs from the element. */
 export interface EngineHooks {
@@ -192,7 +194,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   const node = nodeFactory(runs);
   const inputs = createInputs();
   const chrome = chromeGraph(inputs, node);
-  const columns = createColumns(inputs.optionsIn, inputs.columnsIn, chrome.i18n);
+  const columns = createColumns(inputs.optionsIn, inputs.columnsIn, chrome.i18n, inputs);
   const config = configGraph(inputs, chrome, node);
   const rows = rowsGraph(inputs, chrome, config, columns, node);
   const styles = stylesGraph({ ...config, ...rows }, node);
@@ -202,10 +204,12 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   const base = { ...chrome, ...config, ...rows, ...styles, ...timeline, ...windows, ...markers };
   const core: CoreGraph = { ...base, ...layoutGraph(inputs, base, node), sort: inputs.sort, panelW: inputs.panelW };
   const visuals = { ...core, ...visualsGraph(inputs, core, node) };
+  const horizontal = horizontalGraph(inputs, core, node);
   const graph: Graph = {
     ...visuals,
     ...arrowsGraph(inputs, visuals, node),
-    ...horizontalGraph(inputs, core, node),
+    ...horizontal,
+    ...resourcesGraph({ ...core, ...horizontal }, node),
     ...tasklistGraph(inputs, core, columns, node),
     ...statesGraph(inputs, core, node),
   };

@@ -222,13 +222,17 @@ export function createBarsLayer(ctx: LayerContext): Layer {
     paint() {
       const cfg = G.config();
       const i18n = G.i18n();
-      // The listbox of the bars (in every view: its name never goes stale)
-      setAttr(dom.svg, 'aria-label', i18n.labels.ariaBars);
-      setAttr(dom.svg, 'aria-multiselectable', String(cfg.selection.enabled && cfg.selection.multi));
+      // The listbox of the bars (in every view: its name never goes stale); the resource view has no bar to list:
+      // the svg is presentational there (the viewport carries the group name)
+      const barless = cfg.rows === 'resources';
+      setAttr(dom.svg, 'role', barless ? 'presentation' : 'listbox');
+      setAttr(dom.svg, 'aria-orientation', barless ? null : 'vertical');
+      setAttr(dom.svg, 'aria-label', barless ? null : i18n.labels.ariaBars);
+      setAttr(dom.svg, 'aria-multiselectable', barless ? null : String(cfg.selection.enabled && cfg.selection.multi));
       // The table view hides the timeline: paint it once, then leave it until the view changes
       if (I.viewOverride() === 'table' && painted) return;
       painted = true;
-      const geos = G.mountedGeometries();
+      const geos = G.barGeometries();
       const visualOf = G.barVisual();
       const renderBar = I.renderBar();
       // Only custom renderers read the resolved theme (`ctx.theme`) and the scale: only they

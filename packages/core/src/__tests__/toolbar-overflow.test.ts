@@ -53,6 +53,7 @@ const ALL: ResolvedToolbar = {
   overflow: 'menu',
   undo: true,
   export: false,
+  rowsToggle: false,
 };
 const LEVELS: GanttZoomLevel[] = ['Day', 'Week', 'Month'].map(name => ({ name, scales: [] }));
 const small = (toolbar: ResolvedToolbar, view: GanttView = 'split'): ToolbarGroup[] =>

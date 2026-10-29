@@ -20,6 +20,11 @@
  * - **A press elsewhere**: a `pointerdown` outside the tooltip and off the bars dismisses it (a
  *   press on a bar is the canvas pointer handler's: a tap toggles that bar's tooltip). Bars are
  *   hit by geometry, as the pointer handler hits them (core `hitTestBar`).
+ * - **The resource view** (Phase 14): there are no bars, so a mouse or pen over a resource row's timeline cell
+ *   (core `hitTestLoad`: the row and the day) opens the resource tooltip (`tooltip.hoverLoad`), and
+ *   leaving the rows closes it (`unhover`). Touch and keyboard focus open none: the numbers are in the
+ *   Capacity and Peak load columns and the rows' accessible names. The open resource tooltip follows its
+ *   utilization and the i18n bundle (`tooltip.refreshLoad`) and goes when its row does.
  * - **Its row changes**: while a tooltip shows, its row's task object, critical flag, float,
  *   resolved style (field by field, core `sameTaskStyle`: the progress colour), the i18n bundle
  *   (labels, locale, formats), how dates are read (core `sameDateReading`: end-date rule,
@@ -39,6 +44,7 @@
 
 import {
   hitTestBar,
+  hitTestLoad,
   sameDateReading,
   sameTaskStyle,
   type DateReading,
@@ -186,8 +192,12 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
     I.tasksIn();
     I.collapsedIds();
     I.optionsIn();
+    // The resource view's rows come from the resources and the rows shown (a toggle changes no option)
+    I.resourcesIn();
+    I.rowsOverride();
     untracked(() => {
-      const id = tooltip.visibleId();
+      // A resource tooltip is for a row of the resource view, a task tooltip for a task's
+      const id = tooltip.visibleLoad()?.rowKey ?? tooltip.visibleId();
       if (id === null) return;
       try {
         if (!G.geoById.peek().has(id)) tooltip.dismiss();
@@ -236,6 +246,58 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
     { scheduler: opts.afterPaint },
   );
 
+  // ── The open resource tooltip follows its utilization and the labels ─────
+  // Read only while one shows; `utilization` already covers the tasks, the resources, the date reading
+  // (working calendar) and `resourceView.unassigned`, so the clock stays out
+  const openLoad = computed(
+    () => {
+      const target = tooltip.visibleLoad();
+      if (!target) return null;
+      try {
+        return { target, utilization: G.utilization(), i18n: G.i18n() };
+      } catch {
+        return null; // invalid options: nothing is rendered
+      }
+    },
+    {
+      equals: (a, b) =>
+        a === b || (!!a && !!b && a.target === b.target && a.utilization === b.utilization && a.i18n === b.i18n),
+    },
+  );
+  effect(
+    () => {
+      if (openLoad()) untracked(() => tooltip.refreshLoad());
+    },
+    { scheduler: opts.afterPaint },
+  );
+
+  // ── A mouse or pen over a resource row opens its tooltip ────────────────
+  // After the canvas pointer handler (bound first), which calls `unhover()` on every move off a bar: the
+  // resource view has none, so the hover below follows it on the same event
+  dom.canvasContainer.addEventListener(
+    'pointermove',
+    e => {
+      if (e.pointerType === 'touch' || !I.tooltipEnabled.peek() || !opts.hasRendered()) return;
+      try {
+        const utilization = G.utilization.peek();
+        if (!utilization) return;
+        const box = dom.canvasContainer.getBoundingClientRect();
+        const hit = hitTestLoad({
+          x: e.clientX - box.left,
+          y: e.clientY - box.top,
+          geos: G.mountedGeometries.peek(),
+          utilization,
+          dayOfX: G.dayOfX.peek(),
+          pxPerDay: G.timeline.peek().pxPerDay,
+        });
+        if (hit) tooltip.hoverLoad({ rowKey: hit.rowKey, day: hit.day }, e.clientX);
+      } catch {
+        // invalid options: nothing is rendered
+      }
+    },
+    { passive: true, signal },
+  );
+
   // ── Escape closes the tooltip first (D24) ───────────────────────────────
   host.addEventListener(
     'keydown',
@@ -280,6 +342,7 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
   // ── A press elsewhere dismisses it ──────────────────────────────────────
   /** A bar under the pointer, by geometry (the canvas pointer handler's hit test, without the edit targets). */
   const onBar = (e: PointerEvent): boolean => {
+    if (G.utilization.peek() !== null) return false; // the resource view has no bars
     try {
       const box = dom.canvasContainer.getBoundingClientRect();
       const y = e.clientY - box.top;

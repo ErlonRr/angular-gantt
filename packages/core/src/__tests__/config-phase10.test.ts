@@ -371,9 +371,9 @@ describe('resolveConfig: styles and rollup', () => {
 });
 
 describe('theme: row hover token', () => {
-  it('rowHoverBg is the last theme token, --gantt-row-hover-bg', () => {
-    expect(THEME_CSS_VARS).toHaveLength(40);
-    expect(THEME_CSS_VARS.at(-1)).toEqual(['rowHoverBg', '--gantt-row-hover-bg']);
+  it('rowHoverBg is the Phase 10 theme token, --gantt-row-hover-bg (overallocatedColor follows in Phase 14)', () => {
+    expect(THEME_CSS_VARS).toHaveLength(41);
+    expect(THEME_CSS_VARS.at(-2)).toEqual(['rowHoverBg', '--gantt-row-hover-bg']);
     expect(themeVar('rowHoverBg')).toBe('var(--gantt-row-hover-bg)');
   });
 

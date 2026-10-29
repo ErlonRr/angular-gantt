@@ -38,6 +38,14 @@ export const CASE_COMPONENTS: Readonly<Record<CaseId, CaseLoader>> = {
     import('./cases/shift-calendar/shift-calendar-example.component').then(m => m.ShiftCalendarExampleComponent),
   'critical-float': () =>
     import('./cases/critical-float/critical-float-example.component').then(m => m.CriticalFloatExampleComponent),
+  'resource-load': () =>
+    import('./cases/resource-load/resource-load-example.component').then(m => m.ResourceLoadExampleComponent),
+  'resource-panel': () =>
+    import('./cases/resource-panel/resource-panel-example.component').then(m => m.ResourcePanelExampleComponent),
+  'resource-capacity': () =>
+    import('./cases/resource-capacity/resource-capacity-example.component').then(
+      m => m.ResourceCapacityExampleComponent,
+    ),
   editing: () => import('./cases/editing/editing-example.component').then(m => m.EditingExampleComponent),
   'cell-editing': () =>
     import('./cases/cell-editing/cell-editing-example.component').then(m => m.CellEditingExampleComponent),

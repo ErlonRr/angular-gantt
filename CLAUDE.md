@@ -31,6 +31,10 @@ Working time (the `calendar` option) lives in `packages/core/src/calendar/` (`wo
 from the resolved `nonWorkingTime`, `durations` measures and formats, `edit` has the editing rules and task-date snaps);
 every duration that is read, typed or edited goes through it with a `DateReading` (a resolved config or a column
 context), so the bindings only pass the config along and never measure.
+The resource view (`rows: 'resources'` over the `resources` property) lives in `packages/core/src/resources/` (`model` indexes and parses
+assignments, `utilization` computes the daily load per resource and team, `rows` projects them into read-only synthetic task rows that
+every row consumer reuses, `visual` draws the load as paths and hit-tests it, `tooltip` words a day): the bindings only run the
+projection and paint `g.gantt-load`, they never compute a load.
 Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/src`) only
 **paint** that model. If two bindings disagree, the bug is in the one that computes instead of painting.
 

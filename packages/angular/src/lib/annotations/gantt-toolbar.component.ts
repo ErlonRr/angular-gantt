@@ -8,6 +8,8 @@
 //
 //    div.gantt-toolbar[role=toolbar][aria-label]
 //      div.gantt-tb-group.gantt-tb-panel-group   button.gantt-tb-btn.gantt-tb-panel[aria-pressed]   (`panelToggle`)
+//      div.gantt-tb-group.gantt-tb-rows-group  button.gantt-tb-btn.gantt-tb-rows[aria-pressed][aria-label][title]
+//                                               > svg.gantt-tb-icon   (`toolbar.rowsToggle` while the chart has `resources`)
 //      div.gantt-tb-group.gantt-tb-history     button.gantt-tb-btn.gantt-tb-undo|redo[aria-label][title][aria-disabled?]
 //                                               > svg.gantt-tb-icon   (`toolbar.undo` while the chart keeps history)
 //      div.gantt-tb-group                     button.gantt-tb-btn ×3 (zoom out, zoom in, fit)
@@ -151,9 +153,11 @@ import {
   toolbarMenuItems,
   toolbarMenuKey,
   toolbarTabStop,
+  toggleRowsMode,
   type Command,
   type GanttExportFormat,
   type GanttHistoryState,
+  type GanttRowsMode,
   type GanttView,
   type GanttZoomLevel,
   type MoveCommand,
@@ -577,6 +581,7 @@ export class GanttToolbarComponent {
     overflow: 'menu',
     undo: true,
     export: false,
+    rowsToggle: false,
   });
   readonly zoomLevels = input<readonly GanttZoomLevel[]>([]);
   /** Name of the zoom level shown (checks its radio) */
@@ -592,6 +597,8 @@ export class GanttToolbarComponent {
   readonly viewChange = output<GanttView>();
   /** The task list toggle (`toolbar.panelToggle`): GantryComponent runs `togglePanel()` */
   readonly togglePanel = output<void>();
+  /** The rows toggle (`toolbar.rowsToggle`): the rows to show now, one per task or one per resource */
+  readonly rowsChange = output<GanttRowsMode>();
 
   protected readonly labels = inject(GanttI18nService).labels;
   protected readonly layout = inject(GanttLayoutService);
@@ -657,6 +664,9 @@ export class GanttToolbarComponent {
     { equal: (a, b) => a === b || (!!a && !!b && a.canUndo === b.canUndo && a.canRedo === b.canRedo) },
   );
 
+  /** The rows shown (the resolved `rows`) */
+  private readonly rows = computed(() => this.layout.cfg().rows);
+
   /** Core `buildToolbar()`: the groups in display order, each with its controls */
   protected readonly groups = computed<ToolbarGroup[]>(() =>
     buildToolbar({
@@ -669,6 +679,9 @@ export class GanttToolbarComponent {
       history: this.history(),
       // The Export menu button and its formats (`toolbar.export`)
       export: this.exportInput(),
+      // The rows toggle: pressed in the resource view, shown only while the chart has resources
+      rows: this.rows(),
+      hasResources: this.layout.hasResources(),
     }),
   );
 
@@ -826,6 +839,8 @@ export class GanttToolbarComponent {
         return this.viewChange.emit(action.view);
       case 'togglePanel':
         return this.togglePanel.emit();
+      case 'rows':
+        return this.rowsChange.emit(toggleRowsMode(this.rows()));
       case 'menu':
       case 'exportMenu':
         // The More and Export buttons: their menus (see `activate`)

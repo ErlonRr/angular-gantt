@@ -24,6 +24,8 @@ import { resolvePaint, type Paint } from '../render/paint';
 import { todayLabelColor } from '../render/theme';
 import { todayX as todayXOf } from '../render/today';
 import type { ResolvedLine } from '../render/config';
+import { calendarDays } from '../gantt-math';
+import { computeLoadVisuals } from '../resources/visual';
 import { inlineThemeVars } from './xml';
 import { barReaches } from './extent';
 import type { ChartExportSource } from './source';
@@ -123,6 +125,28 @@ export interface ExportBar {
 }
 
 /**
+ * One resource row's load (Phase 14 D9 / D17): the stepped histogram of the daily load up to the
+ * capacity (`bars`), the part above it (`over`, hatched) and the capacity line (`cap`), as SVG path
+ * data in timeline px, body-relative; the fills are resolved colours.
+ */
+export interface ExportLoad {
+  /** The load up to the capacity; `''` when the row is idle */
+  bars: string;
+  /** The load above the capacity; `''` when there is none */
+  over: string;
+  /** The capacity line across the drawn range; `null` for the Unassigned row */
+  cap: string | null;
+  /** Fill of `bars` (the resource's colour, else the bar colour) */
+  barsFill: string;
+  /** Fill of `over` and stroke of its hatch (the over-allocation colour) */
+  overFill: string;
+  /** Stroke of `cap` */
+  capStroke: string;
+  /** Draw `over` with the hatch pattern as well (a colour is never the only cue) */
+  hatch: boolean;
+}
+
+/**
  * The timeline in timeline px; the serializer translates it by `x − x0` and clips it to `x0…x1`.
  * Header parts (`tiers`, `lane`) are header-relative, body parts body-relative. Lines are at
  * their boundary x: painters draw grid lines at `x + 0.5` and row separators at the row's bottom
@@ -151,8 +175,14 @@ export interface ExportTimeline {
   todayX: number | null;
   /** Annotations, body-relative, paints resolved */
   annotations: AnnotationVisual[];
-  /** Dependency arrows (critical ones too), body-relative, paints resolved */
+  /** Dependency arrows (critical ones too), body-relative, paints resolved; none in the resource view */
   arrows: ArrowVisual[];
+  /**
+   * The resource view's load per shown row (`rows: 'resources'`), aligned with `ChartExportSource.rows`
+   * (`null`: a row without load); empty in tasks mode (optional so hand-built models may leave it out).
+   * Drawn instead of the bars, which the resource view has none of.
+   */
+  load?: (ExportLoad | null)[] | undefined;
   /**
    * Bars in row order, body-relative: those that reach `x0…x1` (body, baseline or label, with
    * some slack); a bar the range leaves out is not drawn, and no custom bar is rendered for it
@@ -312,9 +342,11 @@ export function buildTimelinePart(input: ExportTimelineInput): ExportTimeline {
   // ── Bars: as both painters compute them, but not editable (no handles, grip or connectors) ──
   const { toX } = timeline;
   const geos = computeRowGeometries([...rows], timeline, cfg);
+  // The resource view draws each row's load; its rows have no bar and no link (Phase 14 D11)
+  const utilization = cfg.rows === 'resources' ? (source.utilization ?? null) : null;
   const visuals = new Map<RowGeometry, BarVisual>();
   const bars: ExportBar[] = [];
-  for (const geo of geos) {
+  for (const geo of utilization ? [] : geos) {
     const row = geo.row;
     const id = row.task.id;
     const critical = source.critical.has(id);
@@ -360,7 +392,7 @@ export function buildTimelinePart(input: ExportTimelineInput): ExportTimeline {
   // ── Arrows between shown rows, in the painters' order ──
   const geoById = new Map(geos.map(g => [g.row.task.id, g]));
   const arrows: ArrowVisual[] = [];
-  for (const link of arrowLinks(source.tasks, geoById)) {
+  for (const link of utilization ? [] : arrowLinks(source.tasks, geoById)) {
     const from = geoById.get(link.from);
     const to = geoById.get(link.to);
     const fromVisual = from && visuals.get(from);
@@ -378,6 +410,37 @@ export function buildTimelinePart(input: ExportTimelineInput): ExportTimeline {
     arrows.push({ ...a, paint: paint(a.paint) });
   }
 
+  // ── Resource view: the load paths of every row, over the drawn range ──
+  const load: (ExportLoad | null)[] = [];
+  if (utilization) {
+    const visualsByRow = new Map(
+      computeLoadVisuals({
+        geos,
+        utilization,
+        timeline,
+        window: { x0, x1 },
+        cfg,
+        dayOfX: px => calendarDays(timeline.toDate(px), false),
+      }).map(v => [v.rowKey, v]),
+    );
+    for (const geo of geos) {
+      const v = visualsByRow.get(geo.row.task.id);
+      load.push(
+        v
+          ? {
+              bars: v.bars,
+              over: v.over,
+              cap: v.cap,
+              barsFill: paint(v.barsPaint),
+              overFill: paint(v.overPaint),
+              capStroke: theme.textSecondary,
+              hatch: v.hatch,
+            }
+          : null,
+      );
+    }
+  }
+
   return {
     x,
     x0,
@@ -392,6 +455,7 @@ export function buildTimelinePart(input: ExportTimelineInput): ExportTimeline {
     todayX: todayAt,
     annotations,
     arrows,
+    load,
     bars,
   };
 }

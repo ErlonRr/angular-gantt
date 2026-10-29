@@ -32,7 +32,9 @@ import {
   playgroundCode,
   playgroundCommand,
   playgroundOptions,
+  playgroundResources,
   valueText,
+  withPlaygroundResources,
   withValue,
   type PlaygroundControl,
   type PlaygroundEditEvent,
@@ -130,6 +132,7 @@ function days(n: number): string {
             class="gs-chart pg-chart"
             [(series)]="tasks"
             [annotations]="demo.annotations"
+            [resources]="resources"
             [options]="options()"
             [viewMode]="state().viewMode"
             [darkMode]="theme.isDark()"
@@ -335,7 +338,9 @@ export class PlaygroundPageComponent {
   /** The sample plan, moved so today sits inside it. */
   protected readonly demo = createDemoData();
   /** The tasks the chart shows; it writes its edits back (`[(series)]`). */
-  protected readonly tasks = signal<GanttTask[]>(this.demo.tasks);
+  protected readonly tasks = signal<GanttTask[]>(withPlaygroundResources(this.demo.tasks));
+  /** The sample resources the Resources section works on. */
+  protected readonly resources = playgroundResources();
   private readonly today = new Date();
   private readonly names = computed(() => new Map(this.tasks().map(t => [t.id, t.name])));
 

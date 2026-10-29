@@ -79,6 +79,8 @@ bootstrapApplication(AppComponent, {
   (`keyboard.characterShortcuts`)
 - Editing (`options.editing`): cell editors (`<ng-template ganttCellEditor>` for your own), a progress grip, links drawn
   from a bar's connector, undo / redo, a cancelable `(beforeChange)` and `[(series)]`
+- Resource view: the `[resources]` input and `options.rows: 'resources'` (or the toolbar's rows toggle) show each person
+  and team's daily load against its capacity, the part over it hatched; an editable Resources column assigns tasks
 - Export and print: `exportSvg()`, `exportPng()`, `exportCsv()`, `download(format)` and `print()` (every row, the
   header and task list on every printed page), a toolbar Export menu (`toolbar.export`) and a cancelable
   `(beforeExport)` — see below

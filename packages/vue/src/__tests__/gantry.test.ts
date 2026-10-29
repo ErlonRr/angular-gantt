@@ -214,6 +214,8 @@ describe('object identity', () => {
     expect(el.options).toBe(options);
     expect(el.annotations).toBe(annotations);
     expect(el.renderBar).toBe(renderBar);
+    const resources = [{ id: 'ana', name: 'Ana' }];
+    expect(mount(() => h(Gantry, { resources })).el.resources).toBe(resources);
 
     // (a data source replaces `tasks`)
     const dataSource = new GanttDataSource({ fetcher: () => Promise.resolve([]), initialPage: 0 });

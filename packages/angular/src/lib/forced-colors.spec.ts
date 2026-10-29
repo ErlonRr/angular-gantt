@@ -18,13 +18,14 @@ import {
   type Type,
 } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ViewMode, type GanttAnnotation, type GanttOptions, type GanttTask } from '@gantryjs/core';
+import { ViewMode, type GanttAnnotation, type GanttOptions, type GanttResource, type GanttTask } from '@gantryjs/core';
 
 import { GantryComponent } from './gantt-component/gantry.component';
 import { GanttToolbarComponent } from './annotations/gantt-toolbar.component';
 import { GanttTaskListComponent } from './tasklist/gantt-tasklist.component';
 import { GanttCanvasComponent } from './layout/gantt-canvas.component';
 import { GanttAnnotationLabelsComponent, GanttAnnotationsComponent } from './layout/gantt-annotations.component';
+import { GanttResourceLoadComponent } from './layout/gantt-resource-load.component';
 import { GanttHeaderComponent } from './header/gantt-header.component';
 import { GanttTooltipComponent } from './tooltip/gantt-tooltip.component';
 import { GanttLegendComponent } from './legend/gantt-legend.component';
@@ -215,6 +216,16 @@ const EXPECTED: readonly [string, Type<unknown>, Record<string, Record<string, s
         'stroke-width': '2px',
         'stroke-dasharray': '4 2',
       },
+    },
+  ],
+  [
+    'resource load (histogram, over-capacity part, capacity line)',
+    GanttResourceLoadComponent,
+    {
+      '.gantt-load-bars': { fill: 'CanvasText !important', 'fill-opacity': '1' },
+      '.gantt-load-over': { fill: 'Highlight !important', 'fill-opacity': '1' },
+      '.gantt-load-cap': { stroke: 'GrayText !important' },
+      'pattern > line': { stroke: 'CanvasText !important' },
     },
   ],
   [
@@ -562,6 +573,17 @@ class EditingHost {
   readonly gantt = viewChild.required(GantryComponent);
 }
 
+/** The resource view with a person over capacity (the hatch pattern is drawn) */
+@Component({
+  imports: [GantryComponent],
+  template: `<gantry style="height: 400px" [series]="tasks" [resources]="resources" [options]="options" />`,
+})
+class ResourceHost {
+  readonly resources: GanttResource[] = [{ id: 'ana', name: 'Ana', capacity: 50 }];
+  readonly tasks: GanttTask[] = [{ id: 'a', name: 'Alpha', start: at(-2), end: at(4), resources: ['ana'] }];
+  readonly options: GanttOptions = { viewMode: ViewMode.Week, initialScroll: false, rows: 'resources' };
+}
+
 /** The forced-colors selectors of the document's style elements: as injected, and normalised. */
 function injectedForcedSelectors(): { real: string; norm: string }[] {
   const out: { real: string; norm: string }[] = [];
@@ -623,6 +645,19 @@ describe('forced-colors rules on a rendered chart', () => {
       const reals = injected
         .filter(s => s.norm === norm)
         .map(s => s.real.replace(/::before|:hover|:focus-visible/g, ''));
+      return !reals.some(sel => chart.querySelector(sel) !== null);
+    });
+    expect(missing).toEqual([]);
+  });
+
+  it('the resource view’s rules reach the load paths and the over-capacity hatch (Phase 14, D24)', async () => {
+    TestBed.configureTestingModule({ providers: [provideZonelessChangeDetection()] });
+    const f = TestBed.createComponent(ResourceHost);
+    await f.whenStable();
+    const chart = f.nativeElement as HTMLElement;
+    const injected = injectedForcedSelectors();
+    const missing = ['.gantt-load-bars', '.gantt-load-over', '.gantt-load-cap', 'pattern > line'].filter(norm => {
+      const reals = injected.filter(s => s.norm === norm).map(s => s.real);
       return !reals.some(sel => chart.querySelector(sel) !== null);
     });
     expect(missing).toEqual([]);

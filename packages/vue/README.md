@@ -47,7 +47,7 @@ function onDragged(e: TaskDragEvent) {
 ```
 
 - **Props** — every [`<gantry-element>` property](https://github.com/ErlonRr/gantryjs/tree/main/packages/vanilla#properties), in this order: `tasks`,
-  `columns`, `options`, `annotations`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
+  `columns`, `options`, `annotations`, `resources`, `darkMode`, `showToolbar`, `enableDrag`, `enableResize`,
   `tooltipEnabled`, `showLegend`, `dataSource`, `renderBar`, `loading`, `errorMessage`,
   `syncGroup`. An omitted prop keeps the element's default (booleans are not cast to `false`),
   and a prop that becomes `undefined` (or is dropped) restores it.
@@ -187,7 +187,7 @@ screen-reader semantics and forced colors behave as in every Gantry binding: see
   doesn't replace as proxies — becomes a new array of the raw items. Nested objects (inside
   `options`, inside a task) are passed as they are. The one exception is a reactive `options`
   object (below).
-- **Array props** (`tasks`, `columns`, `annotations`) are watched one level deep: replacing the
+- **Array props** (`tasks`, `columns`, `annotations`, `resources`) are watched one level deep: replacing the
   array, `push`, `splice` or `tasks.value[i] = …` re-render the chart. The element compares
   arrays by identity, so after such an in-place change it receives a shallow copy (the same
   items). Changing a field of an item (`task.name = …`) is not watched: replace the item or the

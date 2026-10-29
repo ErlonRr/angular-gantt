@@ -11,9 +11,9 @@ import {
   type ColumnContext,
   type ColumnDef,
   type ColumnSortValue,
-  type GanttDependency,
   type GanttFlatRow,
   type GanttLabels,
+  type GanttRowsMode,
   type GanttTask,
   type GanttView,
   type TaskStatus,
@@ -21,10 +21,16 @@ import {
 import { formatDate, toLocalDay } from '../gantt-math';
 import { formatDate as formatPattern } from '../format';
 import { formatDuration, measureBetween, measureVariance } from '../calendar/durations';
+import { round1 } from '../calendar/time';
+import { formatAssignments, indexResources, type ResourceIndex } from '../resources/model';
+import { RESOURCE_BAR_TYPE, resourceInfoOf, type ResourceRowInfo } from '../resources/rows';
 import { taskSpan } from './timeline';
 import type { DateReading, ResolvedGanttConfig } from './config';
 import { statusPaint, type Paint } from './paint';
 import { estimateTextWidth } from './bars';
+import { taskDependencies } from './task-dependencies';
+
+export { taskDependencies };
 
 // ─── Default column sets ──────────────────────────────────────
 
@@ -37,6 +43,35 @@ const BASELINE_COLUMNS = ['baselineStart', 'baselineEnd', 'variance'];
 /** Table view: every useful field (baseline columns when `baseline` is on). */
 export function defaultTableColumns(config: Pick<ResolvedGanttConfig, 'baseline'>): string[] {
   return config.baseline ? [...TABLE_COLUMNS, ...BASELINE_COLUMNS] : [...TABLE_COLUMNS];
+}
+
+/** Both views in the resource view (`rows: 'resources'`): the resource, its capacity and its peak load. */
+export const DEFAULT_RESOURCE_COLUMNS: readonly string[] = ['name', 'capacity', 'load'];
+
+/**
+ * The keys a view shows when nothing lists them: `DEFAULT_RESOURCE_COLUMNS` in the resource view,
+ * else `defaultTableColumns` (table view) or `DEFAULT_PANEL_COLUMNS` (split view).
+ */
+export function defaultColumnKeys(
+  view: Exclude<GanttView, 'chart'>,
+  config: Pick<ResolvedGanttConfig, 'baseline'> & { rows?: GanttRowsMode | undefined },
+): string[] {
+  if (config.rows === 'resources') return [...DEFAULT_RESOURCE_COLUMNS];
+  return view === 'table' ? defaultTableColumns(config) : [...DEFAULT_PANEL_COLUMNS];
+}
+
+/**
+ * Whether the resource columns (`resources`, `capacity`, `load`) belong to the catalogue: the chart has resources,
+ * or it shows the resource view. Without either they are left out, so an app's own column keyed `resources`,
+ * `capacity` or `load` keeps its plain `task[key] ?? task.data[key]` cells, sorting, CSV and width (Phase 14 D18).
+ */
+export function showsResourceColumns(input: {
+  /** The `resources` property (or its index list) */
+  resources?: readonly unknown[] | null | undefined;
+  /** The rows mode in force (option, runtime override or saved state) */
+  rows?: GanttRowsMode | undefined;
+}): boolean {
+  return input.rows === 'resources' || (input.resources?.length ?? 0) > 0;
 }
 
 // ─── Status, type, dependencies ───────────────────────────────
@@ -71,14 +106,6 @@ export function taskStatus(
   return 'notStarted';
 }
 
-/** A task's dependencies as a list, whatever shape `task.dependency` has. */
-export function taskDependencies(task: GanttTask): GanttDependency[] {
-  const raw = task.dependency;
-  if (!raw) return [];
-  if (Array.isArray(raw)) return raw;
-  return typeof raw === 'string' ? [{ taskId: raw }] : [raw];
-}
-
 /** Effective type of a row: `task.type`, else group when it has children, else its bar type. */
 function rowType(row: GanttFlatRow): string {
   return row.task.type ?? (row.hasChildren ? TaskType.Group : row.barType);
@@ -94,6 +121,10 @@ export function buildColumnContext(input: {
   config?: DateReading | null | undefined;
   now: Date;
   locale?: string | undefined;
+  /** The `resources` property indexed (`indexResources`), for the Resources column and its editor */
+  resources?: ResourceIndex | undefined;
+  /** What the rows are; unset: tasks */
+  rows?: GanttRowsMode | undefined;
 }): ColumnContext {
   let collator: Intl.Collator;
   try {
@@ -109,6 +140,9 @@ export function buildColumnContext(input: {
     locale: input.locale,
     taskById: new Map(input.tasks.map(t => [t.id, t])),
     collator,
+    // Left out when unset, so a context without resources keeps the shape it had
+    ...(input.resources ? { resources: input.resources } : {}),
+    ...(input.rows ? { rows: input.rows } : {}),
   };
 }
 
@@ -197,12 +231,16 @@ export function durationColumnWidth(
  * `BASELINE_DATE_COLUMN_WIDTH`, `DURATION_COLUMN_WIDTH`) or as their text needs at `fontPx`
  * (`dateColumnWidth`, `durationColumnWidth`), whichever is wider: English keeps the defaults,
  * long locales and formats don't truncate.
+ *
+ * The three resource columns (`buildResourceColumns`) are part of the catalogue only with `withResources`
+ * (`showsResourceColumns`): 12 columns without, 15 with.
  */
 export function buildBuiltinColumns(
   labels: GanttLabels,
   locale?: string,
   dateFormat = 'MMM D, YYYY',
   fontPx = 12,
+  withResources = false,
 ): ColumnDef[] {
   const fmt = (d: Date | undefined) => (d ? formatDate(d, dateFormat, locale) : '');
   const dateWidth = dateColumnWidth(dateFormat, locale, fontPx);
@@ -231,7 +269,6 @@ export function buildBuiltinColumns(
     return days === null ? null : Math.round(days * 10) / 10;
   };
 
-  const col = (def: ColumnDef): ColumnDef => ({ builtin: true, sortable: true, ...def });
   return [
     col({ key: 'id', label: labels.colId, width: 72, minWidth: 48, render: r => r.task.id, sortValue: r => r.task.id }),
     col({
@@ -349,6 +386,67 @@ export function buildBuiltinColumns(
       },
       sortValue: (r, ctx) => variance(r.task, ctx),
     }),
+    ...(withResources ? buildResourceColumns(labels) : []),
+  ];
+}
+
+// ─── Resource columns ─────────────────────────────────────────
+
+const col = (def: ColumnDef): ColumnDef => ({ builtin: true, sortable: true, ...def });
+
+/** The resource info of a row of the resource view (a synthetic task: `barType: 'resource'`), else `null`. */
+export function resourceRowInfo(task: Pick<GanttTask, 'barType' | 'data'>): ResourceRowInfo | null {
+  return task.barType === RESOURCE_BAR_TYPE ? resourceInfoOf(task) : null;
+}
+
+/** A percentage as the resource columns and names read it: at most one decimal, no trailing `.0`. */
+const percent = (n: number): string => `${round1(n)}%`;
+
+/**
+ * The columns of the resource view (also available in the task view): `resources` (the assignments of a task,
+ * `Ana, Bo 50%`; blank on resource rows), `capacity` (the percent of one person's time a resource, or a team's
+ * members together, has per working day; blank on task rows and on Unassigned) and `load` (the peak load, in
+ * percent). `capacity` and `load` sort by their numbers, empty cells last. Part of `buildBuiltinColumns` with
+ * `withResources`.
+ */
+export function buildResourceColumns(
+  labels: Pick<GanttLabels, 'colResources' | 'colCapacity' | 'colLoad'>,
+): ColumnDef[] {
+  return [
+    col({
+      key: 'resources',
+      label: labels.colResources,
+      width: 160,
+      minWidth: 80,
+      render: (r, ctx) =>
+        resourceRowInfo(r.task) ? '' : formatAssignments(r.task, ctx?.resources ?? indexResources(undefined)),
+      sortValue: (r, ctx) =>
+        resourceRowInfo(r.task) ? '' : formatAssignments(r.task, ctx.resources ?? indexResources(undefined)),
+    }),
+    col({
+      key: 'capacity',
+      label: labels.colCapacity,
+      width: 88,
+      minWidth: 56,
+      align: 'end',
+      render: r => {
+        const capacity = resourceRowInfo(r.task)?.capacity;
+        return capacity == null ? '' : percent(capacity);
+      },
+      sortValue: r => resourceRowInfo(r.task)?.capacity ?? null,
+    }),
+    col({
+      key: 'load',
+      label: labels.colLoad,
+      width: 96,
+      minWidth: 64,
+      align: 'end',
+      render: r => {
+        const info = resourceRowInfo(r.task);
+        return info ? percent(info.peak) : '';
+      },
+      sortValue: r => resourceRowInfo(r.task)?.peak ?? null,
+    }),
   ];
 }
 
@@ -412,7 +510,8 @@ const warned = new Set<string>();
  * Columns of `view`, in order.
  * - With `panel.columns` / `table.columns`: those keys, looked up in `columns` then in the built-ins.
  * - Else, with consumer `columns`: those (split view skips `tableOnly`), minus `visible: false`.
- * - Else the defaults: `DEFAULT_PANEL_COLUMNS` / `defaultTableColumns(config)`.
+ * - Else the defaults (`defaultColumnKeys`): `DEFAULT_PANEL_COLUMNS` / `defaultTableColumns(config)`, or
+ *   `DEFAULT_RESOURCE_COLUMNS` in the resource view (`config.rows`).
  * Then runtime visibility applies: per view, else global; a per-view `true` adds a missing key.
  */
 export function resolveViewColumns<T extends ColumnDef>(input: {
@@ -422,7 +521,7 @@ export function resolveViewColumns<T extends ColumnDef>(input: {
   /** `columns` came from the consumer */
   custom: boolean;
   view: GanttView;
-  config: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'>;
+  config: Pick<ResolvedGanttConfig, 'panel' | 'table' | 'baseline'> & { rows?: GanttRowsMode | undefined };
   visibility?: ColumnVisibility | undefined;
   /** Runtime edits applied to the default lists when there are no consumer columns / key lists */
   edits?: { added?: readonly ColumnDef[]; removed?: readonly string[]; order?: readonly string[] | null } | undefined;
@@ -439,7 +538,7 @@ export function resolveViewColumns<T extends ColumnDef>(input: {
   } else if (custom) {
     keys = columns.filter(c => c.visible !== false && (table || !c.tableOnly)).map(c => c.key);
   } else {
-    keys = table ? defaultTableColumns(config) : [...DEFAULT_PANEL_COLUMNS];
+    keys = defaultColumnKeys(table ? 'table' : 'split', config);
   }
 
   // Runtime additions / removals / order on top of the default lists (Angular `addColumn` …)

@@ -166,8 +166,8 @@ describe('labels: Phase 9', () => {
 
 describe('theme: focus ring and milestone colour', () => {
   it('focusRing is the last Phase 9 theme token, --gantt-focus-ring (rowHoverBg follows in Phase 10)', () => {
-    expect(THEME_CSS_VARS).toHaveLength(40);
-    expect(THEME_CSS_VARS.at(-2)).toEqual(['focusRing', '--gantt-focus-ring']);
+    expect(THEME_CSS_VARS).toHaveLength(41);
+    expect(THEME_CSS_VARS.at(-3)).toEqual(['focusRing', '--gantt-focus-ring']);
     expect(themeVar('focusRing')).toBe('var(--gantt-focus-ring)');
   });
 
