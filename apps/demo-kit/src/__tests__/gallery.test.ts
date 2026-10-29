@@ -13,18 +13,24 @@ import {
   TaskType,
   addDays,
   buildColumnContext,
+  calendarDays,
   commitCellValue,
+  computeCriticalPath,
   createBeforeChangeDetail,
   createExportSource,
+  createWorkingCalendar,
   editRules,
   exportChartCsv,
   exportChartPages,
   exportChartSvg,
   exportFileName,
   flattenTree,
+  formatDuration,
+  formatFloat,
   invertChange,
   linkChange,
   linkError,
+  parseDuration,
   prepareChange,
   resolveCellEditor,
   resolveConfig,
@@ -44,6 +50,9 @@ import {
   CELL_EDITING_VIEWS,
   CONTROLLED_INITIAL,
   CONTROLLED_OPTIONS,
+  CRITICAL_DURATIONS,
+  CRITICAL_FLOAT_HINT,
+  CRITICAL_FLOAT_INITIAL,
   CUSTOM_EDITORS_FIRST_TASK,
   CUSTOM_EDITORS_MILESTONE,
   CUSTOM_EDITORS_OPTIONS,
@@ -65,6 +74,7 @@ import {
   EXPORT_TOOLBAR_INITIAL,
   EXPORT_TOOLBAR_OPTIONS,
   FLAG_BAR,
+  FLOAT_COLUMN,
   FRAMEWORK_NOTES,
   GALLERY_CASES,
   GALLERY_CATEGORIES,
@@ -75,6 +85,15 @@ import {
   PRINT_OPTIONS,
   PRINT_ORIENTATIONS,
   PRINT_PAPERS,
+  SHIFT_FRIDAYS,
+  SHIFT_HINT,
+  SHIFT_HOURS_PER_DAY,
+  SHIFT_INITIAL,
+  SHIFT_VIEW_MODES,
+  WORKING_DAYS_HINT,
+  WORKING_DAYS_INITIAL,
+  WORKING_DURATIONS,
+  WORKING_SHADINGS,
   caseNeighbours,
   casesByCategory,
   cellEditingOptions,
@@ -82,6 +101,9 @@ import {
   controlledDecision,
   controlledTasks,
   createFakeTaskApi,
+  criticalFloatOptions,
+  criticalFloatTasks,
+  criticalSummary,
   csvExportOptions,
   csvPreviewLines,
   customEditorsTasks,
@@ -111,10 +133,18 @@ import {
   printTasks,
   pushLog,
   seededRandom,
+  shiftOptions,
+  shiftTasks,
+  shiftWorkingHours,
   statesProps,
   statesTasks,
   lazyStatus,
   treeTasks,
+  workWeekStart,
+  workingDaysHolidays,
+  workingDaysOptions,
+  workingDaysTasks,
+  workingSummary,
   type GalleryRoute,
 } from '../gallery';
 import { CASE_COVERAGE, CASE_SOURCES } from '../gallery/sources';
@@ -144,13 +174,18 @@ interface GeneratorModule {
 const loadGenerator = () =>
   import(/* @vite-ignore */ join(ROOT, 'scripts/gallery-sources.mjs')) as Promise<GeneratorModule>;
 
-/** Every task starts and ends on a local midnight, every parent and predecessor exists. */
-function expectSound(tasks: GanttTask[]): void {
+/**
+ * Every task starts and ends on a local midnight (unless `timed`: an hour calendar's tasks carry
+ * times of day), every parent and predecessor exists.
+ */
+function expectSound(tasks: GanttTask[], timed = false): void {
   const ids = new Set(tasks.map(t => t.id));
   expect(ids.size).toBe(tasks.length);
   for (const t of tasks) {
-    expect(t.start.getHours() + t.start.getMinutes(), t.id).toBe(0);
-    expect(t.end.getHours() + t.end.getMinutes(), t.id).toBe(0);
+    if (!timed) {
+      expect(t.start.getHours() + t.start.getMinutes(), t.id).toBe(0);
+      expect(t.end.getHours() + t.end.getMinutes(), t.id).toBe(0);
+    }
     expect(t.end.getTime(), t.id).toBeGreaterThanOrEqual(t.start.getTime());
     if (t.parentId) expect(ids.has(t.parentId), `${t.id} → parent ${t.parentId}`).toBe(true);
     for (const dep of dependenciesOf(t)) expect(ids.has(dep.taskId), `${t.id} → ${dep.taskId}`).toBe(true);
@@ -158,8 +193,8 @@ function expectSound(tasks: GanttTask[]): void {
 }
 
 describe('gallery catalog', () => {
-  it('has 29 unique kebab-case ids, in catalog order', () => {
-    expect(CASE_IDS).toHaveLength(29);
+  it('has 32 unique kebab-case ids, in catalog order', () => {
+    expect(CASE_IDS).toHaveLength(32);
     expect(new Set(CASE_IDS).size).toBe(CASE_IDS.length);
     for (const id of CASE_IDS) expect(id).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
     expect(GALLERY_CASES.map(c => c.id)).toEqual([...CASE_IDS]);
@@ -212,7 +247,7 @@ describe('gallery case modules', () => {
       const charts = CASE_DATA[c.id].charts(NOW);
       expect(charts, c.id).toHaveLength(c.ready.charts);
       for (const chart of charts) {
-        if (!chart.dataSource) expectSound(chart.tasks);
+        if (!chart.dataSource) expectSound(chart.tasks, c.id === 'shift-calendar');
         expect(chart.options.labels?.ariaChart, `${c.id}: accessible name`).toBeTruthy();
       }
       const first = charts[0];
@@ -978,6 +1013,357 @@ describe('export cases', () => {
       }),
     );
     expect(svg.match(/class="flag"/g)).toHaveLength(3);
+  });
+});
+
+describe('working calendar cases', () => {
+  /** Monday 12 October 2026: the week of `NOW` (a Wednesday) */
+  const MONDAY = new Date(2026, 9, 12);
+  const day = (offset: number, hour = 0) => new Date(2026, 9, 12 + offset, hour);
+  const caseOf = (id: string) => GALLERY_CASES.find(c => c.id === id)!;
+  const calendarOf = (options: GanttOptions) =>
+    createWorkingCalendar({ nonWorkingTime: options.nonWorkingTime, calendar: options.calendar })!;
+  const rowsOf = (tasks: GanttTask[]) => flattenTree(tasks);
+  const taskIn = (tasks: readonly GanttTask[], id: string) => tasks.find(t => t.id === id)!;
+
+  it('sit in Scheduling after week-numbering, as new one-chart cases', () => {
+    const ids = ['working-days', 'shift-calendar', 'critical-float'];
+    expect(CASE_IDS.indexOf('working-days')).toBe(CASE_IDS.indexOf('week-numbering') + 1);
+    expect(CASE_IDS.slice(CASE_IDS.indexOf('working-days'), CASE_IDS.indexOf('working-days') + 3)).toEqual(ids);
+    for (const id of ids) {
+      const c = caseOf(id);
+      expect(c.category, id).toBe('scheduling');
+      expect(c.isNew, id).toBe(true);
+      expect(c.ready, id).toEqual({ charts: 1 });
+    }
+    expect(caseOf('working-days').notes).toEqual(['series-model']);
+    expect(caseOf('shift-calendar').notes).toEqual([]);
+    expect(caseOf('critical-float').notes).toEqual(['series-model']);
+    expect(GALLERY_CATEGORIES.find(c => c.id === 'scheduling')!.summary).toBe(
+      'Dependencies, milestones, baselines, non-working time, week numbers and working calendars.',
+    );
+  });
+
+  it('workWeekStart is the Monday of the local week, a Sunday belonging to the week before', () => {
+    for (let i = 0; i < 7; i++) expect(workWeekStart(new Date(2026, 9, 12 + i, 15, 30))).toEqual(MONDAY);
+    expect(workWeekStart(new Date(2026, 9, 19, 0, 0))).toEqual(new Date(2026, 9, 19));
+    // Deterministic for the e2e clock: Wednesday 14 October 2026
+    expect(workWeekStart(NOW)).toEqual(MONDAY);
+  });
+
+  it('build the same sound tasks for the same now', () => {
+    expect(workingDaysTasks(NOW)).toEqual(workingDaysTasks(NOW));
+    expect(shiftTasks(NOW)).toEqual(shiftTasks(NOW));
+    expect(criticalFloatTasks(NOW)).toEqual(criticalFloatTasks(NOW));
+    expectSound(workingDaysTasks(NOW));
+    expectSound(shiftTasks(NOW), true);
+    expectSound(criticalFloatTasks(NOW));
+    // Anchored on the Monday of the week, whichever day `now` is
+    expect(workingDaysTasks(new Date(2026, 9, 18, 9))[0].start).toEqual(MONDAY);
+    expect(workingDaysTasks(new Date(2026, 9, 19, 9))[0].start).toEqual(day(7));
+    expect(shiftTasks(NOW)[0].start).toEqual(day(0, 8));
+    expect(criticalFloatTasks(NOW)[0].start).toEqual(MONDAY);
+  });
+
+  describe('working-days', () => {
+    const options = workingDaysOptions(WORKING_DAYS_INITIAL, NOW);
+    const tasks = workingDaysTasks(NOW);
+
+    it('has the controls’ choices and first values', () => {
+      expect(WORKING_DURATIONS).toEqual([
+        { value: 'working', label: 'Working days' },
+        { value: 'calendar', label: 'Calendar days' },
+      ]);
+      expect(WORKING_SHADINGS.map(c => c.value)).toEqual(['shade', 'hatch', 'none']);
+      expect(WORKING_SHADINGS.map(c => c.label)).toEqual(['Shade', 'Hatch', 'None']);
+      expect(WORKING_DAYS_INITIAL).toEqual({ durations: 'working', skipNonWorking: true, shading: 'shade' });
+      expect(WORKING_DAYS_HINT).toMatch(/^Drag a bar across a weekend/);
+    });
+
+    it('holds Founders’ day on Wednesday of week 2 and the bridge days on Wednesday and Thursday of week 3', () => {
+      expect(workingDaysHolidays(NOW)).toEqual([
+        { start: day(9), label: 'Founders’ day' },
+        { start: day(16), end: day(17), label: 'Bridge days' },
+      ]);
+      expect(day(9).getDay()).toBe(3);
+      expect(day(16).getDay()).toBe(3);
+      expect(day(17).getDay()).toBe(4);
+    });
+
+    it('lists eight date-only tasks, chained finish-to-start, over four weeks', () => {
+      expect(tasks.map(t => t.name)).toEqual([
+        'Survey',
+        'Floor plan',
+        'Network',
+        'Furniture',
+        'Packing',
+        'Move day',
+        'Unpacking',
+        'Snag list',
+      ]);
+      expect(tasks.filter(t => t.type === TaskType.Milestone).map(t => t.name)).toEqual(['Move day']);
+      expect(dependenciesOf(tasks[1])).toEqual([{ taskId: 'survey', type: DependencyType.FS }]);
+      const last = Math.max(...tasks.map(t => t.end.getTime()));
+      expect(last).toBeLessThanOrEqual(day(28).getTime());
+      // Every start is a working day at or after its predecessor's end
+      const calendar = calendarOf(options);
+      for (const t of tasks) {
+        expect(calendar.isWorking(t.start), t.id).toBe(true);
+        for (const dep of dependenciesOf(t))
+          expect(t.start.getTime(), t.id).toBeGreaterThanOrEqual(taskIn(tasks, dep.taskId).end.getTime());
+      }
+    });
+
+    it('draws a bar across a weekend and another across a holiday', () => {
+      const calendar = calendarOf(options);
+      const holidayDays = new Set([day(9).getTime(), day(16).getTime(), day(17).getTime()]);
+      const daysOf = (t: GanttTask) => {
+        const days: Date[] = [];
+        for (let d = new Date(t.start); d < t.end; d = addDays(d, 1)) days.push(d);
+        return days;
+      };
+      const crossesWeekend = tasks.filter(t => daysOf(t).some(d => d.getDay() === 0 || d.getDay() === 6));
+      const crossesHoliday = tasks.filter(t => daysOf(t).some(d => holidayDays.has(d.getTime())));
+      expect(crossesWeekend.map(t => t.id)).toEqual(expect.arrayContaining(['floor-plan']));
+      expect(crossesHoliday.map(t => t.id)).toEqual(['network', 'furniture']);
+      // Their bars are longer than their working days
+      const working = Object.fromEntries(tasks.map(t => [t.id, calendar.workingDuration(t.start, t.end)]));
+      expect(working).toEqual({
+        survey: 3,
+        'floor-plan': 3,
+        network: 3,
+        furniture: 3,
+        packing: 1,
+        'move-day': 0,
+        unpacking: 2,
+        'snag-list': 1,
+      });
+      expect(
+        calendarDays(taskIn(tasks, 'floor-plan').end, false) - calendarDays(taskIn(tasks, 'floor-plan').start, false),
+      ).toBe(5);
+    });
+
+    it('says how many working days the plan spans, whatever Durations and the shading say', () => {
+      expect(workingSummary(tasks, options)).toBe('16 working days over 25 calendar days');
+      for (const durations of ['working', 'calendar'] as const) {
+        for (const shading of ['shade', 'hatch', 'none'] as const) {
+          const o = workingDaysOptions({ durations, skipNonWorking: durations === 'working', shading }, NOW);
+          expect(workingSummary(tasks, o), `${durations} ${shading}`).toBe('16 working days over 25 calendar days');
+        }
+      }
+      // Singular, empty, and a plan shortened by an edit
+      expect(workingSummary([taskIn(tasks, 'packing')], options)).toBe('1 working day over 1 calendar day');
+      expect(workingSummary([], options)).toBe('0 working days');
+      expect(workingSummary(tasks.slice(0, 2), options)).toBe('6 working days over 8 calendar days');
+    });
+
+    it('maps the state to calendar and non-working options', () => {
+      const config = resolveConfig(options);
+      expect(config.calendar).toMatchObject({ durations: 'working', skipNonWorking: true, unit: 'day' });
+      expect(config.nonWorking?.style).toBe('shade');
+      expect(options).toMatchObject({
+        viewMode: 'Day',
+        panel: { columns: ['name', 'start', 'end', 'duration'], width: 420 },
+        initialScroll: 'start',
+        labels: { ariaChart: 'Office move plan' },
+      });
+      const calendarDaysState = resolveConfig(
+        workingDaysOptions({ durations: 'calendar', skipNonWorking: false, shading: 'none' }, NOW),
+      );
+      expect(calendarDaysState.calendar).toMatchObject({ durations: 'calendar', skipNonWorking: false });
+      expect(calendarDaysState.nonWorking?.style).toBe('none');
+    });
+
+    it('reads a bar’s Duration in working days, or in calendar days', () => {
+      const floorPlan = taskIn(tasks, 'floor-plan');
+      const text = (durations: 'working' | 'calendar') =>
+        formatDuration(floorPlan, resolveConfig(workingDaysOptions({ ...WORKING_DAYS_INITIAL, durations }, NOW)));
+      expect(text('working')).toBe('3 days');
+      expect(text('calendar')).toBe('5 days');
+    });
+  });
+
+  describe('shift-calendar', () => {
+    const tasks = shiftTasks(NOW);
+
+    it('has the controls’ choices and first values', () => {
+      expect(SHIFT_VIEW_MODES).toEqual([
+        { value: 'Hour', label: 'Hours' },
+        { value: 'Day', label: 'Days' },
+      ]);
+      expect(SHIFT_HOURS_PER_DAY).toEqual([
+        { value: 6, label: '6 hours' },
+        { value: 7.5, label: '7.5 hours' },
+        { value: 8, label: '8 hours' },
+      ]);
+      expect(SHIFT_FRIDAYS).toEqual([
+        { value: 'full', label: 'Full day' },
+        { value: 'half', label: 'Half day' },
+      ]);
+      expect(SHIFT_INITIAL).toEqual({ viewMode: 'Hour', hoursPerDay: 8, friday: 'half' });
+      expect(SHIFT_HINT).toMatch(/^Type 6h or 1\.5d in a Duration cell/);
+    });
+
+    it('works Monday to Thursday 8–12 and 13–17, and Friday as the control says', () => {
+      const half = shiftWorkingHours('half');
+      const full = shiftWorkingHours('full');
+      expect(Object.keys(half).sort()).toEqual(['1', '2', '3', '4', '5']);
+      for (const weekday of [1, 2, 3, 4]) {
+        expect(half[weekday]).toEqual([
+          { start: 8, end: 12 },
+          { start: 13, end: 17 },
+        ]);
+        expect(full[weekday]).toEqual(half[weekday]);
+      }
+      expect(half[5]).toEqual([{ start: 8, end: 12 }]);
+      expect(full[5]).toEqual(full[1]);
+      // Friday afternoon: off with the half day, working with the full one
+      const friday = (friday: 'full' | 'half') => calendarOf(shiftOptions({ ...SHIFT_INITIAL, friday }, NOW));
+      expect(friday('half').isWorking(day(4, 14))).toBe(false);
+      expect(friday('full').isWorking(day(4, 14))).toBe(true);
+      expect(friday('half').isWorking(day(0, 12))).toBe(false); // lunch
+    });
+
+    it('lists seven timed tasks from Monday 08:00 to a sign-off the next Monday at 13:00', () => {
+      expect(tasks.map(t => t.name)).toEqual([
+        'Kick-off',
+        'Prototype',
+        'Review',
+        'Fixes',
+        'Test run',
+        'Report',
+        'Sign-off',
+      ]);
+      expect(tasks[0].start).toEqual(day(0, 8));
+      const signOff = tasks[6];
+      expect(signOff.type).toBe(TaskType.Milestone);
+      expect(signOff.start).toEqual(day(7, 13));
+      expect(signOff.end).toEqual(signOff.start);
+      expect(tasks[5].end).toEqual(day(7, 12));
+    });
+
+    it('keeps every task on working time with a half or a full Friday, and its hours', () => {
+      for (const friday of ['half', 'full'] as const) {
+        const calendar = calendarOf(shiftOptions({ ...SHIFT_INITIAL, friday }, NOW));
+        for (const t of tasks) {
+          expect(calendar.snapStart(t.start), `${friday} ${t.id} start`).toBe(t.start);
+          // A milestone is a point on a start (13:00 is after lunch), not the end of working time
+          if (t.type !== TaskType.Milestone) expect(calendar.snapEnd(t.end), `${friday} ${t.id} end`).toBe(t.end);
+        }
+      }
+      const calendar = calendarOf(shiftOptions(SHIFT_INITIAL, NOW));
+      expect(tasks.map(t => calendar.workingDuration(t.start, t.end))).toEqual([2, 14, 4, 6, 6, 8, 0]);
+    });
+
+    it('changes Duration texts with the hours per day', () => {
+      const text = (id: string, hoursPerDay: number) =>
+        formatDuration(taskIn(tasks, id), resolveConfig(shiftOptions({ ...SHIFT_INITIAL, hoursPerDay }, NOW)));
+      expect(text('prototype', 8)).toBe('1.75 days');
+      expect(text('prototype', 6)).toBe('2.33 days');
+      expect(text('fixes', 8)).toBe('6 hours');
+      expect(text('fixes', 6)).toBe('1 day');
+      expect(text('report', 8)).toBe('1 day');
+      expect(text('report', 7.5)).toBe('1.07 days');
+      // What the hint types: 6h is 6 hours, 1.5d is a day and a half of the hours per day
+      const reading = resolveConfig(shiftOptions({ ...SHIFT_INITIAL, hoursPerDay: 6 }, NOW));
+      expect(parseDuration('6h', reading)).toBe(1);
+      expect(parseDuration('1.5d', reading)).toBe(1.5);
+    });
+
+    it('maps the state to an hour calendar with editable cells and no links or progress grip', () => {
+      const options = shiftOptions(SHIFT_INITIAL, NOW);
+      const config = resolveConfig(options);
+      expect(config.calendar).toMatchObject({ unit: 'hour', hoursPerDay: 8, durations: 'working' });
+      expect(config.editing.cells).toBe(true);
+      expect(options).toMatchObject({
+        viewMode: 'Hour',
+        editing: { progress: false, dependencies: false },
+        panel: { columns: ['name', 'start', 'duration'], width: 380 },
+        formats: { dateFormat: 'ddd D MMM HH:mm' },
+        initialScroll: 'start',
+        labels: { ariaChart: 'Workshop shift plan' },
+      });
+      // Times of day stay times of day, whatever the viewer's zone
+      expect(config.normalizeDateOnly).toBe(false);
+      expect(shiftOptions({ ...SHIFT_INITIAL, viewMode: 'Day' }, NOW).viewMode).toBe('Day');
+    });
+  });
+
+  describe('critical-float', () => {
+    const tasks = criticalFloatTasks(NOW);
+    const states = {
+      workingOff: { durations: 'working', saturdays: false },
+      calendarOff: { durations: 'calendar', saturdays: false },
+      workingOn: { durations: 'working', saturdays: true },
+      calendarOn: { durations: 'calendar', saturdays: true },
+    } as const;
+    const summary = (state: keyof typeof states) => criticalSummary(tasks, criticalFloatOptions(states[state], NOW));
+
+    it('has the control’s choices and first values', () => {
+      expect(CRITICAL_DURATIONS).toEqual([
+        { value: 'working', label: 'Working days' },
+        { value: 'calendar', label: 'Calendar days' },
+      ]);
+      expect(CRITICAL_FLOAT_INITIAL).toEqual({ durations: 'working', saturdays: false });
+      expect(CRITICAL_FLOAT_HINT).toMatch(/^Hover or focus a bar to see its float in the tooltip\./);
+    });
+
+    it('names the critical chain, which changes with Durations and with Saturdays', () => {
+      expect(summary('workingOff')).toBe('Critical path: Foundations → Framing → Roof → Inspection');
+      expect(summary('calendarOff')).toBe('Critical path: Permits → Utilities → Inspection');
+      expect(summary('workingOn')).toBe('Critical path: Permits → Utilities → Inspection');
+      expect(summary('calendarOn')).toBe('Critical path: Permits → Utilities → Inspection');
+      expect(summary('workingOff')).not.toBe(summary('calendarOff'));
+      expect(summary('workingOff')).not.toBe(summary('workingOn'));
+      expect(criticalSummary([], criticalFloatOptions(CRITICAL_FLOAT_INITIAL, NOW))).toBe('No critical path');
+    });
+
+    it('counts the float in working days, or in calendar days', () => {
+      const floatOf = (state: keyof typeof states) =>
+        computeCriticalPath(tasks, resolveConfig(criticalFloatOptions(states[state], NOW))).floatMap;
+      const working = floatOf('workingOff');
+      expect([working.get('permits'), working.get('utilities'), working.get('foundations')]).toEqual([1, 1, 0]);
+      const calendar = floatOf('calendarOff');
+      expect([calendar.get('foundations'), calendar.get('roof'), calendar.get('permits')]).toEqual([3, 3, 0]);
+    });
+
+    it('maps the state to a working calendar, the weekend and the Float column', () => {
+      const options = criticalFloatOptions(CRITICAL_FLOAT_INITIAL, NOW);
+      expect(options).toMatchObject({
+        viewMode: 'Day',
+        criticalPath: true,
+        calendar: { durations: 'working' },
+        nonWorkingTime: { weekends: [0, 6] },
+        panel: { columns: ['name', 'duration', 'float'], width: 360 },
+        initialScroll: 'start',
+        labels: { ariaChart: 'Fit-out schedule' },
+      });
+      expect(options.columns).toEqual([FLOAT_COLUMN]);
+      expect(criticalFloatOptions(states.workingOn, NOW)).toMatchObject({ nonWorkingTime: { weekends: [0] } });
+      expect(resolveConfig(criticalFloatOptions(states.calendarOff, NOW)).calendar?.durations).toBe('calendar');
+    });
+
+    it('FLOAT_COLUMN prints formatFloat of the CPM float, and nothing for parents', () => {
+      expect(FLOAT_COLUMN).toMatchObject({ key: 'float', label: 'Float', width: 72, align: 'end', sortable: false });
+      for (const state of Object.values(states)) {
+        const config = resolveConfig(criticalFloatOptions(state, NOW));
+        const ctx = buildColumnContext({ tasks, config, now: NOW });
+        const { floatMap } = computeCriticalPath(tasks, config);
+        for (const row of rowsOf(tasks)) {
+          expect(FLOAT_COLUMN.render?.(row, ctx), `${state.durations} ${state.saturdays} ${row.task.id}`).toBe(
+            formatFloat(floatMap.get(row.task.id)!, ctx),
+          );
+        }
+      }
+      const ctx = buildColumnContext({
+        tasks,
+        config: resolveConfig(criticalFloatOptions(CRITICAL_FLOAT_INITIAL, NOW)),
+        now: NOW,
+      });
+      const [row] = rowsOf(tasks);
+      expect(FLOAT_COLUMN.render?.({ ...row, hasChildren: true }, ctx)).toBe('');
+      expect(FLOAT_COLUMN.render?.(row)).toBe('');
+    });
   });
 });
 

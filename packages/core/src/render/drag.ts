@@ -6,8 +6,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { TaskDragEvent, TaskResizeEvent } from '../types';
-import { addDays } from '../gantt-math';
-import type { ResolvedGanttConfig } from './config';
+import type { DateReading, ResolvedCalendar, ResolvedGanttConfig } from './config';
+import { editCalendar, type EditCalendar } from '../calendar/edit';
+import { longEnough, pxPerUnit, shiftAmount, shiftBy, stepEdge } from './drag-steps';
 import { bottomScale } from './scales';
 import { taskSpan, type TimelineModel } from './timeline';
 
@@ -21,6 +22,10 @@ export interface DragTiming {
   span: (start: Date, end: Date) => { start: Date; end: Date };
   /** Snap to whole days, or whole hours on hour scales */
   snap: 'day' | 'hour';
+  /** How task dates are read and measured (the chart config): set by `editTiming` */
+  dates?: DateReading | undefined;
+  /** Working-calendar editing (`editCalendar`); `null` / unset: calendar-time editing */
+  calendar?: EditCalendar | null | undefined;
 }
 
 export interface DragPreview {
@@ -50,17 +55,30 @@ export type DragResult = { kind: 'drag'; event: TaskDragEvent } | { kind: 'resiz
  * The timing of a drag or keyboard edit that starts now (`DragSession`, `KeyboardEditSession`):
  * the scale of `timeline` (`pxPerDay`, `toX`), the span of task dates as drawn (`taskSpan`:
  * date-only normalisation, inclusive ends) and the snap unit — whole hours on hour scales (the
- * bottom tier's unit), whole days otherwise. Both bindings build their sessions with it.
+ * bottom tier's unit), whole days otherwise. With a working calendar (`cfg.calendar`) it also
+ * carries how task dates are read (`dates`) and the editing rules (`calendar`, `editCalendar`):
+ * edits then skip non-working time and keep the working length. Both bindings build their
+ * sessions with it.
  */
 export function editTiming(
   timeline: Pick<TimelineModel, 'pxPerDay' | 'toX'>,
-  cfg: Pick<ResolvedGanttConfig, 'scales' | 'endDateMode' | 'normalizeDateOnly'>,
+  cfg: Pick<ResolvedGanttConfig, 'scales' | 'endDateMode' | 'normalizeDateOnly'> & {
+    calendar?: ResolvedCalendar | null | undefined;
+  },
 ): DragTiming {
+  const snap = bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day';
+  const dates: DateReading = {
+    endDateMode: cfg.endDateMode,
+    normalizeDateOnly: cfg.normalizeDateOnly,
+    calendar: cfg.calendar ?? null,
+  };
   return {
     pxPerDay: timeline.pxPerDay,
     toX: timeline.toX,
     span: (start, end) => taskSpan({ start, end }, cfg),
-    snap: bottomScale(cfg.scales).unit === 'hour' ? 'hour' : 'day',
+    snap,
+    dates,
+    calendar: editCalendar(dates, snap),
   };
 }
 
@@ -68,8 +86,6 @@ export function editTiming(
 export function resizeEdge(handle: 'left' | 'right'): 'start' | 'end' {
   return handle === 'left' ? 'start' : 'end';
 }
-
-const addHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000);
 
 export class DragSession {
   readonly taskId: string;
@@ -98,35 +114,38 @@ export class DragSession {
     this.timing = timing;
   }
 
-  private get pxPerUnit(): number {
-    return this.timing.snap === 'hour' ? this.timing.pxPerDay / 24 : this.timing.pxPerDay;
+  /** The start moved by `units` snap units: shifted (and snapped past non-working time under a calendar). */
+  private startAt(units: number): Date {
+    return stepEdge(this.timing, 'start', this.origStart, units, 'pointer');
   }
 
-  private shift(d: Date, units: number): Date {
-    return this.timing.snap === 'hour' ? addHours(d, units) : addDays(d, units);
-  }
-
-  private longEnough(start: Date, end: Date): boolean {
-    const span = this.timing.span(start, end);
-    return this.timing.toX(span.end) - this.timing.toX(span.start) >= this.pxPerUnit - 0.5;
+  private endAt(units: number): Date {
+    return stepEdge(this.timing, 'end', this.origEnd, units, 'pointer');
   }
 
   /** New task dates (not drawn dates) and the units actually applied. */
   private rangeAt(clientX: number): [Date, Date, number] {
-    const units = Math.round((clientX - this.startX) / this.pxPerUnit);
+    const units = Math.round((clientX - this.startX) / pxPerUnit(this.timing));
     switch (this.handle) {
-      case 'bar':
-        return [this.shift(this.origStart, units), this.shift(this.origEnd, units), units];
+      case 'bar': {
+        const cal = this.timing.calendar;
+        if (!cal)
+          return [shiftBy(this.timing, this.origStart, units), shiftBy(this.timing, this.origEnd, units), units];
+        // The end follows the snapped start; a start that stays put leaves the task as it was
+        const start = this.startAt(units);
+        const unmoved = start.getTime() === this.origStart.getTime();
+        return [start, unmoved ? this.origEnd : cal.follow(this.origStart, this.origEnd, start), units];
+      }
       case 'left': {
         // Keep at least one unit: the drawn start can't reach the drawn end
         let u = units;
-        while (u > 0 && !this.longEnough(this.shift(this.origStart, u), this.origEnd)) u--;
-        return [this.shift(this.origStart, u), this.origEnd, u];
+        while (u > 0 && !longEnough(this.timing, this.startAt(u), this.origEnd)) u--;
+        return [this.startAt(u), this.origEnd, u];
       }
       case 'right': {
         let u = units;
-        while (u < 0 && !this.longEnough(this.origStart, this.shift(this.origEnd, u))) u++;
-        return [this.origStart, this.shift(this.origEnd, u), u];
+        while (u < 0 && !longEnough(this.timing, this.origStart, this.endAt(u))) u++;
+        return [this.origStart, this.endAt(u), u];
       }
     }
   }
@@ -153,7 +172,10 @@ export class DragSession {
   finish(clientX: number): DragResult {
     const [newStart, newEnd, units] = this.rangeAt(clientX);
     if (newStart.getTime() === this.origStart.getTime() && newEnd.getTime() === this.origEnd.getTime()) return null;
-    const days = this.timing.snap === 'hour' ? units / 24 : units;
+    // Without a calendar the amount counts the pointer's snap units; with one it is the edge's
+    // real calendar shift (a working move over a weekend is 3 days, not 1)
+    const [from, to]: [Date, Date] = this.handle === 'right' ? [this.origEnd, newEnd] : [this.origStart, newStart];
+    const days = shiftAmount(this.timing, units, from, to);
     const base = { taskId: this.taskId, oldStart: this.origStart, oldEnd: this.origEnd, newStart, newEnd };
     return this.handle === 'bar'
       ? { kind: 'drag', event: { ...base, daysMoved: days } }

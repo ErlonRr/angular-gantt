@@ -15,6 +15,7 @@ import {
   type DependencyChangeEvent,
   type GanttBeforeChangeEvent,
   type GanttBeforeExportEvent,
+  type GanttCalendarOptions,
   type GanttDensity,
   type GanttEditingOptions,
   type GanttExportEvent,
@@ -47,6 +48,11 @@ export interface PlaygroundState {
   workEnd: number;
   intensive: boolean;
   nwStyle: string;
+  /** `'off'`, `'days'` or `'hours'`: the switch of the Working calendar section, whose other controls apply only while it is on */
+  calendar: string;
+  calendarDurations: string;
+  skipNonWorking: boolean;
+  hoursPerDay: number;
   majorDash: boolean;
   rowHeight: number;
   barHeight: number;
@@ -112,6 +118,11 @@ export const PLAYGROUND_DEFAULTS: Readonly<PlaygroundState> = {
   workEnd: 18,
   intensive: true,
   nwStyle: 'shade',
+  // `calendar` (resolveCalendar): off by default; on, working durations that skip non-working time, 8-hour days
+  calendar: 'off',
+  calendarDurations: 'working',
+  skipNonWorking: true,
+  hoursPerDay: 8,
   majorDash: false,
   rowHeight: 36, // The rows of the default density: left out of the code at this value
   barHeight: 60,
@@ -247,6 +258,10 @@ const WEEK_FORMAT_NAMES = new Map<unknown, string>(Object.entries(WEEK_FORMATS).
 /** The Editing controls apply while editing is on. */
 const editingOn = (s: PlaygroundState): boolean => s.editing === 'on';
 
+/** The Working calendar controls apply while the calendar is on; the hours per day only in hours. */
+const calendarOn = (s: PlaygroundState): boolean => s.calendar !== 'off';
+const calendarInHours = (s: PlaygroundState): boolean => s.calendar === 'hours';
+
 export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
   {
     title: 'Timeline',
@@ -350,7 +365,57 @@ export const PLAYGROUND_SECTIONS: readonly PlaygroundSection[] = [
           ['shade', 'Shade'],
           ['hatch', 'Hatch'],
           ['disabled', 'Disabled'],
+          ['none', 'None'],
         ],
+        hint: 'None paints no shading; durations and the calendar still count the days off.',
+      },
+    ],
+  },
+  {
+    title: 'Working calendar',
+    controls: [
+      {
+        kind: 'segmented',
+        key: 'calendar',
+        label: 'Calendar',
+        option: 'calendar',
+        choices: [
+          ['off', 'Off'],
+          ['days', 'Days'],
+          ['hours', 'Hours'],
+        ],
+        hint: 'Durations, moves and the critical path count working time: pick the 1.x columns (Columns → Panel) to see the Duration column.',
+      },
+      {
+        kind: 'segmented',
+        key: 'calendarDurations',
+        label: 'Durations',
+        option: 'calendar.durations',
+        choices: [
+          ['working', 'Working'],
+          ['calendar', 'Calendar'],
+        ],
+        when: calendarOn,
+      },
+      {
+        kind: 'check',
+        key: 'skipNonWorking',
+        label: 'Skip non-working time',
+        option: 'calendar.skipNonWorking',
+        hint: 'Drags, resizes and cells start tasks on working time and end them before the days off.',
+        when: calendarOn,
+      },
+      {
+        kind: 'range',
+        key: 'hoursPerDay',
+        label: 'Hours per day',
+        option: 'calendar.hoursPerDay',
+        min: 4,
+        max: 12,
+        step: 0.5,
+        unit: 'h',
+        hint: 'What 1d means in a Duration cell.',
+        when: calendarInHours,
       },
     ],
   },
@@ -860,6 +925,21 @@ const ROLLUP_PROGRESS: Record<string, GanttRollupOptions['progress']> = {
 };
 
 /**
+ * `calendar` for the state: left out while the calendar is off, `true` with every choice at its
+ * default (working day durations that skip non-working time), else an object with the changed
+ * fields only (the hours per day count in the Hours calendar).
+ */
+function calendarOption(s: PlaygroundState): GanttOptions['calendar'] {
+  if (!calendarOn(s)) return undefined;
+  const calendar: GanttCalendarOptions = {};
+  if (calendarInHours(s)) calendar.unit = 'hour';
+  if (s.calendarDurations !== PLAYGROUND_DEFAULTS.calendarDurations) calendar.durations = 'calendar';
+  if (!s.skipNonWorking) calendar.skipNonWorking = false;
+  if (calendarInHours(s) && s.hoursPerDay !== PLAYGROUND_DEFAULTS.hoursPerDay) calendar.hoursPerDay = s.hoursPerDay;
+  return Object.keys(calendar).length ? calendar : true;
+}
+
+/**
  * `rollup` for the state: left out while parents don't roll up, `true` with every rollup choice at
  * its default, else an object with the changed ones (the colour, progress and segments only count
  * while parents roll up).
@@ -952,8 +1032,9 @@ export function playgroundOptions(s: PlaygroundState, today: Date): GanttOptions
         : [],
       workingHours: { start: s.workStart, end: s.workEnd },
       intensiveHours: s.intensive ? [{ start: 10, end: 12, label: 'Focus' }] : [],
-      style: s.nwStyle as 'shade' | 'hatch' | 'disabled',
+      style: s.nwStyle as 'shade' | 'hatch' | 'disabled' | 'none',
     },
+    calendar: calendarOption(s),
     bar: {
       height: `${s.barHeight}%`,
       radius: s.radius,
@@ -1011,7 +1092,8 @@ export function valueText(value: number, unit: string | undefined): string {
 
 /**
  * Whether `control` applies in `state`: the Editing controls only while editing is on (the
- * progress step also needs the progress grip). Playgrounds show the others disabled; their values
+ * progress step also needs the progress grip), the Working calendar ones while the calendar is on
+ * (the hours per day in Hours). Playgrounds show the others disabled; their values
  * stay in the state and the link, and count again once the control applies.
  */
 export function controlEnabled(control: PlaygroundControl, state: PlaygroundState): boolean {

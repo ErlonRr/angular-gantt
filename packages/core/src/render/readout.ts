@@ -8,11 +8,12 @@
 //  region announces the result instead).
 // ─────────────────────────────────────────────────────────────
 
-import { durationLabel, formatDate } from '../gantt-math';
+import { formatDate } from '../gantt-math';
+import { formatDuration } from '../calendar/durations';
 import { resolveFormatLocale } from '../format';
 import type { GanttLabels } from '../types';
 import { estimateTextWidth } from './bars';
-import type { ResolvedGanttConfig } from './config';
+import type { DateReading } from './config';
 import type { GhostLabel, GhostVisual } from './ghost';
 import { taskSpan } from './timeline';
 
@@ -42,14 +43,23 @@ export const DRAG_READOUT_EDGE = 4;
 /** The labels the readout reads: its template and the duration words (the Duration column's). */
 export type DragReadoutLabels = Pick<
   GanttLabels,
-  'dragReadout' | 'durationLessThanDay' | 'durationDay' | 'durationDays' | 'durationWeeks' | 'durationWeeksDays'
+  | 'dragReadout'
+  | 'durationLessThanDay'
+  | 'durationDay'
+  | 'durationDays'
+  | 'durationHours'
+  | 'durationWeeks'
+  | 'durationWeeksDays'
 >;
 
 export interface DragReadoutOptions {
   labels: DragReadoutLabels;
   locale?: string | undefined;
-  /** How task dates are read (the duration counts an inclusive end's last day, like the bar) */
-  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
+  /**
+   * How task dates are read and measured (the chart's config): the duration counts an inclusive
+   * end's last day, like the bar, and working time with a working calendar
+   */
+  dates: DateReading;
   /** Snap unit of the drag (`DragPreview.unit`): hour scales show the time */
   unit: 'day' | 'hour';
   /** Format of each date; default `DRAG_READOUT_FORMAT`, or `DRAG_READOUT_HOUR_FORMAT` on hour scales */
@@ -82,7 +92,7 @@ export function formatDragReadout(
   }
   const text = to === from ? from : `${from}${DRAG_READOUT_RANGE_SEPARATOR}${to}`;
   const span = taskSpan({ start, end }, options.dates);
-  return labels.dragReadout(text, durationLabel(span.start, span.end, labels));
+  return labels.dragReadout(text, formatDuration(span, options.dates, labels));
 }
 
 const percentFormats = new Map<string, Intl.NumberFormat>();

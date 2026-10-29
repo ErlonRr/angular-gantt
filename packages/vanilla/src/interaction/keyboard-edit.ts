@@ -94,6 +94,7 @@ export function createKeyboardEdit(ctx: LayerContext): KeyboardEdit {
     if (!proposed || !raw || raw === task) return proposed;
     const change = taskChange(raw, proposed.updates[0]?.after ?? {}, 'keyboard', {
       coalesceKey: proposed.coalesceKey,
+      dates: G.config.peek(),
     });
     return isEmptyChange(change) ? null : change;
   };

@@ -9,10 +9,11 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { GanttFlatRow, GanttRollupInfo, GanttTask, GanttTaskStyle, TaskStatus } from './types';
-import type { ResolvedGanttConfig, ResolvedRollupOptions } from './render/config';
+import type { DateReading, ResolvedGanttConfig, ResolvedRollupOptions } from './render/config';
 import type { BarSegment } from './render/bars';
 import { calendarDays } from './gantt-math';
 import { normalizeTasks } from './gantt-data';
+import { durationFactor } from './calendar/durations';
 import { taskSpan } from './render/timeline';
 import { taskStatus } from './render/columns';
 import { statusPaint, themeVar } from './render/paint';
@@ -21,8 +22,8 @@ import { statusPaint, themeVar } from './render/paint';
 export interface RollupContext {
   /** The instant statuses are evaluated at (the bindings' clock) */
   now: Date;
-  /** How task dates are read */
-  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
+  /** How task dates are read and measured (a config, a column context; without `calendar`: calendar days) */
+  dates: DateReading;
 }
 
 /** A computed parent: its info, its rolled-up task copy and the span it occupies as drawn. */
@@ -116,8 +117,9 @@ function makeCopy(task: GanttTask, info: GanttRollupInfo): GanttTask {
  * `parentId`s make roots, as in `normalizeTasks`) and walked bottom-up without recursion, in O(n):
  *
  * - **progress** (`'duration'`): the mean of the direct children's progress (a child parent's
- *   rolled-up one), weighted by their drawn length in calendar days; milestones weigh 0, and with a
- *   total weight of 0 the plain mean is used. `'count'`: the plain mean. Rounded to a whole percent,
+ *   rolled-up one), weighted by their drawn length in measured days (calendar days, or working
+ *   days with a working calendar); milestones weigh 0, and with a total weight of 0 the plain mean
+ *   is used. `'count'`: the plain mean. Rounded to a whole percent,
  *   0 and 100 only when exact. `false`: `null` (the parent keeps its own).
  * - **dates**: the earliest child start and the latest child end, compared as drawn (`taskSpan`, so
  *   an inclusive midnight end covers its day) and returned as the children's own values, so the
@@ -142,14 +144,17 @@ export function computeRollups(
   const { byId, childrenOf, order } = readTree(tasks);
   if (order.length === 0) return out;
 
-  // Task dates repeat a lot (days of one project): read each instant's calendar day once
+  // Task dates repeat a lot (days of one project): read each instant's position once, in calendar
+  // days or, with working durations, in working time (the difference of two is `measureBetween`)
+  const working = dates.calendar?.durations === 'working' ? dates.calendar.working : null;
+  const factor = durationFactor(dates);
   const dayMemo = new Map<number, number>();
   const dayOf = (d: Date): number => {
     const t = d.getTime();
     let day = dayMemo.get(t);
     if (day === undefined) {
       // Span dates are already local: no date-only normalisation
-      day = calendarDays(d, false);
+      day = working ? working.toWorking(d) : calendarDays(d, false);
       dayMemo.set(t, day);
     }
     return day;
@@ -183,7 +188,7 @@ export function computeRollups(
         const p = sub?.info.progress ?? clampProgress(c.progress);
         sum += p;
         if (byDuration && !isMilestone(c)) {
-          const w = Math.max(0, dayOf(span.end) - dayOf(span.start));
+          const w = Math.max(0, (dayOf(span.end) - dayOf(span.start)) / factor);
           weightSum += w;
           weighted += w * p;
         }

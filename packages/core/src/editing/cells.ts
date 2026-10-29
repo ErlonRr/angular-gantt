@@ -10,19 +10,23 @@
 //  name (text, required), start and end (`date`, or `datetime-local` on
 //  hour scales or when the value has a time; start keeps the duration,
 //  end ≥ start), duration (text), progress (number 0–100, step = the
-//  progress step), predecessors (text, ids or unique names). Other
+//  progress step), predecessors (text, ids or unique names). With a
+//  working calendar (Phase 13) a start moves forward and an end back
+//  off non-working time, a start keeps the working length, and
+//  durations and lags are typed in working units. Other
 //  built-ins are read-only. A custom column without `parse` gets a text
 //  editor over `exportValue ?? render ?? task[key] ?? task.data[key]`
 //  and writes `task[key]` (a `GanttTask` field) or `data[key]`.
 // ─────────────────────────────────────────────────────────────
 
-import { addDays, calendarDays, toLocalDay } from '../gantt-math';
+import { followTaskEnd, snapTaskEnd, snapTaskStart } from '../calendar/edit';
+import { msOfDay } from '../calendar/time';
+import { calendarDays, toLocalDay } from '../gantt-math';
 import { DEFAULT_PROGRESS_STEP } from '../interaction/keyboard-edit';
 import type { KeyLike } from '../interaction/keymap';
 import { taskDependencies, valueToText } from '../render/columns';
 import type { ResolvedGanttConfig } from '../render/config';
 import { bottomScale } from '../render/scales';
-import { spanEndToTaskEnd, taskSpan } from '../render/timeline';
 import {
   DependencyType,
   type CellEditorKind,
@@ -168,41 +172,9 @@ function readDate(text: string, like: Date, labels: GanttLabels): Date {
   }
 }
 
-/** The local reading of a task date (`normalizeDateOnly`: a UTC date-only value is its local day). */
-const localOf = (d: Date, config: Pick<ResolvedGanttConfig, 'normalizeDateOnly'>): Date =>
-  config.normalizeDateOnly ? toLocalDay(d) : d;
-
-const msOfDay = (d: Date): number =>
-  ((d.getHours() * 60 + d.getMinutes()) * 60 + d.getSeconds()) * 1000 + d.getMilliseconds();
-
 /** The editor kind of a date cell: `datetime-local` on hour scales or when the value has a time. */
 function dateKind(date: Date, config: ResolvedGanttConfig): DateInputKind {
   return bottomScale(config.scales).unit === 'hour' || msOfDay(toLocalDay(date)) !== 0 ? 'datetime-local' : 'date';
-}
-
-/**
- * The end that keeps `task`'s duration when its start becomes `start`: shifted by the same local
- * calendar days and time of day. A whole-day shift moves the stored end with `addDays` (its shape
- * kept); a time shift moves the drawn end, which becomes a task end through `endDateMode`.
- */
-function endKeepingDuration(task: GanttTask, start: Date, config: ResolvedGanttConfig): Date {
-  const before = localOf(task.start, config);
-  const after = localOf(start, config);
-  const days = Math.floor(calendarDays(after, false)) - Math.floor(calendarDays(before, false));
-  const ms = msOfDay(after) - msOfDay(before);
-  const end = task.end ?? task.start;
-  if (ms === 0) return addDays(end, days);
-  const e = taskSpan(task, config).end;
-  const drawn = new Date(
-    e.getFullYear(),
-    e.getMonth(),
-    e.getDate() + days,
-    e.getHours(),
-    e.getMinutes(),
-    e.getSeconds(),
-    e.getMilliseconds() + ms,
-  );
-  return spanEndToTaskEnd(drawn, config);
 }
 
 /** The settings of `editorOptions` that are set. */
@@ -285,7 +257,11 @@ function builtinSpec(
         value: formatDateInput(like, shown),
         parse: v => {
           const date = readDate(v, like, labels);
-          return key === 'start' ? { start: date, end: endKeepingDuration(task, date, config) } : { end: date };
+          if (key === 'end') return { end: snapTaskEnd(date, config) };
+          const start = snapTaskStart(date, config);
+          // A start that snaps back onto the current one changes nothing (the end stays as it is)
+          if (config.calendar && start.getTime() === task.start.getTime()) return {};
+          return { start, end: followTaskEnd(task, start, config) };
         },
       };
     }
@@ -297,7 +273,7 @@ function builtinSpec(
         parse: v => {
           let days: number;
           try {
-            days = parseDuration(v);
+            days = parseDuration(v, config);
           } catch {
             return fail(labels.errorDuration);
           }
@@ -319,11 +295,15 @@ function builtinSpec(
       return {
         kind,
         input: input('text'),
-        value: formatPredecessors(task),
+        value: formatPredecessors(task, config),
         parse: v => {
           let deps: GanttDependency[];
           try {
-            deps = parsePredecessors(v, { tasks: [...ctx.taskById.values()], selfId: task.id });
+            deps = parsePredecessors(v, {
+              tasks: [...ctx.taskById.values()],
+              selfId: task.id,
+              dates: config,
+            });
           } catch (error) {
             // An entry without a task (`+2d`) reads as an unknown task
             if (error instanceof ParseError && error.code === 'syntax') fail(labels.errorUnknownTask(error.ref));
@@ -427,12 +407,18 @@ function fieldCheck(
  *   - `start` / `end`: `date`, or `datetime-local` on hour scales or when the value has a time
  *     (`formatDateInput`). The value is the stored date (an inclusive end shows its last day, as
  *     the cell does). A new start keeps the duration (the end moves with it); an end must not be
- *     before the start. Date-only values stay date-only (`parseDateInput`);
+ *     before the start. Date-only values stay date-only (`parseDateInput`). With a working
+ *     calendar (`skipNonWorking`) a start on non-working time moves forward to the next working
+ *     time and an end back to the end of the last working time; with working durations a new
+ *     start keeps the working length (the bar widens over the days off). A date that snaps back
+ *     onto the current one commits nothing;
  *   - `duration`: text (`5`, `5d`, `2w`, `4h`, `1.5d`) as drawn; it sets the end
- *     (`endForDuration`) and must be more than 0;
+ *     (`endForDuration`) and must be more than 0. With working durations it is measured days
+ *     (`w` = the working week, `h` an hour of the working day) counted in working time;
  *   - `progress`: number 0–100 (`45` or `45%`), step = `editing.progress.step`;
  *   - `predecessors`: text by id (`formatPredecessors`), read by `parsePredecessors` (ids, else
- *     unique names); an empty text removes every link (`dependency: undefined`).
+ *     unique names; lags in the units of the chart's durations); an empty text removes every link
+ *     (`dependency: undefined`).
  * - **Custom columns** (and any column with `parse`): `editor` (default `'text'`) over
  *   `exportValue`, else (date editors) the date field, else `render`, else `task[key]` /
  *   `task.data[key]`. Without `parse`, the trimmed text (a number for `'number'`, a date for the

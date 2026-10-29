@@ -313,7 +313,14 @@ export const SSR_NOTES: { label: string; text: string }[] = [
 ];
 
 export const SERVER_CODE = `// server.ts — @gantryjs/core has no DOM and no framework: it runs in Node
-import { computeCriticalPath, createExportSource, exportChartCsv, exportChartSvg, DependencyType } from '@gantryjs/core';
+import {
+  computeCriticalPath,
+  createExportSource,
+  exportChartCsv,
+  exportChartSvg,
+  resolveConfig,
+  DependencyType,
+} from '@gantryjs/core';
 
 const tasks = [
   { id: 'a', name: 'Design', start: new Date('2026-01-05'), end: new Date('2026-01-20') },
@@ -325,10 +332,12 @@ const tasks = [
     dependency: { taskId: 'a', type: DependencyType.FS },
   },
 ];
-const { criticalIds } = computeCriticalPath(tasks);
+// The options a chart gets (add calendar: true and the path counts working days)
+const options = { viewMode: 'Week', criticalPath: true } as const;
+const { criticalIds } = computeCriticalPath(tasks, resolveConfig(options));
 
 // The same SVG and CSV the charts' exportSvg() and exportCsv() give in the browser
-const source = createExportSource({ tasks, options: { viewMode: 'Week', criticalPath: true } });
+const source = createExportSource({ tasks, options });
 const svg = exportChartSvg(source, { theme: 'light' });
 const csv = exportChartCsv(source, { columns: 'all' });`;
 

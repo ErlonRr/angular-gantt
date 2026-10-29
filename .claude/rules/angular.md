@@ -140,6 +140,10 @@ paths:
   `rect.gantt-bar-segment`s (after the bar body), the toolbar's More menu. Bars carry `visual.className` (custom bars
   too, through the outlet). When you change one painter, change the other (the `gantry-reviewer` agent checks
   this).
+- Working calendar (Phase 13): the same cut-off in `GanttLayoutService` (`dateReading`, `cpmConfig`, `rollupInput`
+  equal on `sameDateReading`); `dragChange(…, untracked(layout.cfg))`; `taskChange(…, { dates })` in
+  `drag/keyboard-edit.ts` and `editing/cell-edit.ts`; the tooltip's config `Pick` includes `'calendar'` and its
+  refresh key the float and the date reading, like the WC's.
 - `e2e/paint.spec.ts` compares the colours both bindings paint. Its keys are the first non-`ng-` class plus the
   sibling index: adding a class to a class-less element, reordering children or adding a wrapper changes keys.
 - Accessibility follows the WC's model: the host is `role=region` with `aria-label` (`labels.ariaChart`),

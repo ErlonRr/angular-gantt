@@ -1573,6 +1573,13 @@ a.gs-card:hover {
   color: var(--gs-muted);
   font-size: 14px;
 }
+/* A line of text that follows the chart's state (the working-days and critical-float cases) */
+p.gs-case-status {
+  margin: 0;
+  color: var(--gs-text);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
 .gs-case-legend {
   display: flex;
   flex-wrap: wrap;

@@ -17,18 +17,20 @@ import {
   columnComparator,
   computeCriticalPath,
   computeRollups,
+  dateReadingOf,
   filterVisible,
   findColumn,
   flattenTree,
   normalizeTasks,
   reindexVisible,
+  sameDateReading,
   sortTree,
   type ColumnContext,
   type CPMResult,
+  type DateReading,
   type GanttFlatRow,
   type GanttRollupInfo,
   type GanttTask,
-  type ResolvedGanttConfig,
   type ResolvedRollupOptions,
 } from '@gantryjs/core';
 import type { ReadonlySignal } from '../../reactive';
@@ -37,9 +39,6 @@ import { structuralEqual, type Inputs } from '../inputs';
 import type { ChromeGraph } from './chrome';
 import type { ConfigGraph } from './config';
 import type { NodeFactory } from './node';
-
-/** How task dates are read: the only part of the config CPM and the cell context depend on. */
-export type DateReading = Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>;
 
 /** Rolled-up values by parent id (empty without `options.rollup`). */
 export type Rollups = ReadonlyMap<string, GanttRollupInfo>;
@@ -73,14 +72,9 @@ export function rowsGraph(
   node: NodeFactory,
 ): RowsGraph {
   const tasks = node('tasks', () => normalizeTasks(I.tasksIn()));
-  const dateReading = node(
-    'dateReading',
-    (): DateReading => {
-      const { endDateMode, normalizeDateOnly } = cfg.config();
-      return { endDateMode, normalizeDateOnly };
-    },
-    { equals: (a, b) => a.endDateMode === b.endDateMode && a.normalizeDateOnly === b.normalizeDateOnly },
-  );
+  // The only part of the config CPM, the rollups and the cell context depend on (end mode, date-only
+  // values, working calendar); compared by value, so a zoom, a label or a theme change cuts them off
+  const dateReading = node('dateReading', () => dateReadingOf(cfg.config()), { equals: sameDateReading });
   const criticalOn = node('criticalOn', () => cfg.config().criticalPath);
   const critical = node('critical', () => (criticalOn() ? computeCriticalPath(tasks(), dateReading()) : null));
   const rollupConfig = node('rollupConfig', () => cfg.config().rollup, { equals: structuralEqual });

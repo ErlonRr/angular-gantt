@@ -3,7 +3,9 @@
 //  Critical Path Method engine — pure functions, no Angular.
 //
 //  Supports: FS, FF, SF, SS dependency types + lag/lead.
-//  Returns the Set of task IDs on the critical path.
+//  Returns the Set of task IDs on the critical path. Durations, lags
+//  and float are measured days: calendar days, or working days with a
+//  working calendar (`calendar.durations: 'working'`).
 //
 //  Algorithm:
 //    1. Build a DAG from task dependencies
@@ -15,15 +17,15 @@
 
 import { type GanttTask, DependencyType } from './types';
 import { taskDependencies } from './render/columns';
-import { calendarDays } from './gantt-math';
 import { taskSpan } from './render/timeline';
-import type { ResolvedGanttConfig } from './render/config';
+import { spanDuration } from './calendar/durations';
+import type { DateReading, ResolvedGanttConfig } from './render/config';
 
 // ─── Internal graph node ──────────────────────────────────────
 
 interface CPMNode {
   id: string;
-  duration: number; // calendar days (fractional for hour-level tasks)
+  duration: number; // measured days (fractional for hour-level tasks)
   es: number; // Early Start  (days from project start)
   ef: number; // Early Finish
   ls: number; // Late Start
@@ -37,7 +39,7 @@ interface CPMEdge {
   fromId: string;
   toId: string;
   type: DependencyType;
-  lag: number; // days (positive = delay, negative = lead)
+  lag: number; // measured days (positive = delay, negative = lead)
 }
 
 // ─── Parse dependency field ───────────────────────────────────
@@ -53,23 +55,25 @@ function parseDeps(task: GanttTask): CPMEdge[] {
 
 // ─── Durations ────────────────────────────────────────────────
 
-/** How task dates are read — the same fields as the resolved chart config. */
-export type CPMOptions = Partial<Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>>;
+/**
+ * How task dates are read and measured — the same fields as the resolved chart config, so
+ * `resolveConfig(options)` is the documented argument. `calendar` makes durations, lags and float
+ * working days (`calendar.durations: 'working'`); unset or `null`: calendar days.
+ */
+export type CPMOptions = {
+  [K in 'endDateMode' | 'normalizeDateOnly' | 'calendar']?: ResolvedGanttConfig[K] | undefined;
+};
 
 /** Tolerance for fractional-day arithmetic (≈ 0.1 s). */
 const EPS = 1e-6;
 
-/** Rendered span of a task, read exactly like the bars are drawn. */
-function spanOf(task: GanttTask, options: CPMOptions) {
-  return taskSpan(task, {
+/** The reading `options` stand for (defaults: exclusive, normalised, no calendar). */
+function readingOf(options: CPMOptions): DateReading {
+  return {
     endDateMode: options.endDateMode ?? 'exclusive',
     normalizeDateOnly: options.normalizeDateOnly ?? true,
-  });
-}
-
-/** Duration in calendar days of the rendered span (an inclusive end counts its last day). */
-function spanDays(span: { start: Date; end: Date }): number {
-  return Math.max(calendarDays(span.end, false) - calendarDays(span.start, false), 0);
+    calendar: options.calendar ?? null,
+  };
 }
 
 // ─── Main entry point ─────────────────────────────────────────
@@ -77,8 +81,10 @@ function spanDays(span: { start: Date; end: Date }): number {
 export interface CPMResult {
   /** Task IDs on the critical path (float === 0) */
   criticalIds: Set<string>;
-  /** Float per task ID (days) */
+  /** Float per task ID in measured days (working days with a working calendar) */
   floatMap: Map<string, number>;
+  /** What the days of `floatMap` count: `'working'` with a working calendar, else `'calendar'` */
+  durations: 'calendar' | 'working';
   /** Warning messages (cycles, missing predecessors) */
   warnings: string[];
 }
@@ -88,21 +94,25 @@ export interface CPMResult {
  *
  * @param tasks    Array of GanttTask with dependency fields set.
  *                 Missing predecessors are silently ignored (with a warning).
- * @param options  `endDateMode` / `normalizeDateOnly` as in the chart config, so an
- *                 inclusive end counts its last day (defaults: exclusive, normalised).
+ * @param options  `endDateMode` / `normalizeDateOnly` / `calendar` as in the chart config
+ *                 (`resolveConfig(options)`), so an inclusive end counts its last day and, with
+ *                 a working calendar, durations, lags and float are working days (defaults:
+ *                 exclusive, normalised, calendar days).
  */
 export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}): CPMResult {
   const warnings: string[] = [];
+  const dates = readingOf(options);
+  const durations = dates.calendar?.durations === 'working' ? 'working' : 'calendar';
 
   if (!tasks.length) {
-    return { criticalIds: new Set(), floatMap: new Map(), warnings };
+    return { criticalIds: new Set(), floatMap: new Map(), durations, warnings };
   }
 
   // ── 1. Build nodes ──────────────────────────────────────────
   const nodeMap = new Map<string, CPMNode>();
 
   for (const t of tasks) {
-    const duration = spanDays(spanOf(t, options));
+    const duration = spanDuration(taskSpan(t, dates), dates);
     nodeMap.set(t.id, {
       id: t.id,
       duration,
@@ -249,27 +259,28 @@ export function computeCriticalPath(tasks: GanttTask[], options: CPMOptions = {}
     if (node.float <= 0) criticalIds.add(id);
   }
 
-  return { criticalIds, floatMap, warnings };
+  return { criticalIds, floatMap, durations, warnings };
 }
 
 // ─── Utility: find longest path (no dependencies needed) ─────
 
 /**
  * Returns the IDs of tasks forming the longest chain
- * (by total duration days). Useful as a simple fallback
+ * (by total measured days: working days with a working calendar). Useful as a simple fallback
  * when no dependency data is available.
  */
 export function longestChain(tasks: GanttTask[], options: CPMOptions = {}): string[] {
   if (!tasks.length) return [];
 
+  const dates = readingOf(options);
   const sorted = tasks
-    .map(task => ({ id: task.id, ...spanOf(task, options) }))
+    .map(task => ({ id: task.id, ...taskSpan(task, dates) }))
     .sort((a, b) => a.start.getTime() - b.start.getTime());
   const dp = new Map<string, number>(); // taskId → cumulative days
   const prev = new Map<string, string>(); // taskId → predecessor
 
   for (const t of sorted) {
-    const dur = spanDays(t);
+    const dur = spanDuration(t, dates);
     let best = dur;
     let bestPred: string | undefined;
 

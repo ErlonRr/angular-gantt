@@ -18,9 +18,9 @@ import {
   type GanttFlatRow,
   type GanttTask,
 } from '../types';
-import { calendarDays, toLocalDay } from '../gantt-math';
+import { toLocalDay } from '../gantt-math';
+import { measureVariance, measuresWorkingTime, taskDuration } from '../calendar/durations';
 import { computeCellVisual, findColumn, taskStatus, valueToText } from '../render/columns';
-import { taskSpan } from '../render/timeline';
 import { formatDurationInput, formatPredecessors, parseDuration } from '../editing/parse';
 import { resolveExportCall } from './files';
 import type { ChartExportSource } from './source';
@@ -80,15 +80,18 @@ const RAW_TASK_FIELDS: ReadonlySet<string> = new Set<keyof GanttTask>([
 /**
  * A raw task field as a CSV column (`columns: ['parentId', …]`): the key as its header, the field
  * as stored in both `values` modes — a date as local ISO, a number or a boolean as is, `dependency`
- * as predecessor ids (`a FS+2d; b SS`, what the Predecessors cell reads back), unset `''`.
+ * as predecessor ids (`a FS+2d; b SS`, what the Predecessors cell reads back: lags in working days
+ * or hours with a working calendar), unset `''`.
  */
 function rawFieldColumn(key: string): ColumnDef {
   return {
     key,
     label: key,
     width: 0,
-    exportValue: ({ task }) =>
-      key === 'dependency' ? formatPredecessors(task) : dataText((task as unknown as Record<string, unknown>)[key]),
+    exportValue: ({ task }, ctx) =>
+      key === 'dependency'
+        ? formatPredecessors(task, ctx)
+        : dataText((task as unknown as Record<string, unknown>)[key]),
   };
 }
 
@@ -142,7 +145,7 @@ export function isPlainNumber(text: string): boolean {
  * - `'data'`, a built-in column: `id` / `name` as is; dates as local ISO (`YYYY-MM-DD` at
  *   midnight, else `YYYY-MM-DDTHH:mm`, `:ss` when not zero) of the date the cell shows;
  *   `duration` the days of the drawn span and `variance` the signed days (numbers, `.` decimal,
- *   at most 2 decimals); `progress` the number; `predecessors` by id (`a FS+2d; b SS`); `status`
+ *   at most 2 decimals; working days with a working calendar); `progress` the number; `predecessors` by id (`a FS+2d; b SS`); `status`
  *   and `type` their keys.
  * - `'data'`, another column: its `render` text, else the task's field (`task[key]`, else
  *   `task.data[key]`): a date as local ISO, a number as is, an object as JSON.
@@ -200,27 +203,27 @@ function builtinData(key: BuiltinColumnKey, row: GanttFlatRow, ctx: ColumnContex
     case 'progress':
       return numberText(task.progress ?? 0);
     case 'predecessors':
-      return formatPredecessors(task);
+      return formatPredecessors(task, ctx);
     case 'baselineStart':
       return task.baseline ? localIso(task.baseline.start) : '';
     case 'baselineEnd':
       return task.baseline ? localIso(task.baseline.end) : '';
     case 'variance': {
-      // As the Variance column: the drawn end against the baseline's, in local calendar days
-      if (!task.baseline) return '';
-      const actual = calendarDays(taskSpan(task, ctx).end, false);
-      const planned = calendarDays(taskSpan(task.baseline, ctx).end, false);
-      return numberText(actual - planned);
+      // As the Variance column: the drawn end against the baseline's, in measured days
+      const days = measureVariance(task, ctx);
+      return days === null ? '' : numberText(days);
     }
   }
 }
 
 /**
- * The days of a row's drawn span as the built-in duration editor reads them (whole local calendar
- * days, then the real time left, to the minute), as a number; `''` when the dates are not valid.
+ * The days of a row's drawn span as a number: working days with working durations, else as the
+ * built-in duration editor reads them (whole local calendar days, then the real time left, to the
+ * minute); `''` when the dates are not valid.
  */
 function durationDays(row: GanttFlatRow, ctx: ColumnContext): string {
   try {
+    if (measuresWorkingTime(ctx)) return numberText(taskDuration(row.task, ctx));
     return numberText(parseDuration(formatDurationInput(row.task, ctx)));
   } catch {
     return '';

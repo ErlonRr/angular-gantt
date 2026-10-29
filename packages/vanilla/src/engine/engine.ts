@@ -234,7 +234,7 @@ export function createEngine(host: HostApi, shadow: ShadowRoot, hooks: EngineHoo
   /** A pointer drop: the change of the raw task (undo restores the app's values) through the pipeline */
   const dropped = (e: TaskDragEvent | TaskResizeEvent, source: 'drag' | 'resize'): void => {
     const task = edit.rawTask(e.taskId) ?? graph.tasks.peek().find(t => t.id === e.taskId);
-    if (task) edit.commit(dragChange(e, task, source));
+    if (task) edit.commit(dragChange(e, task, source, graph.config.peek()));
   };
   const drag = createDrag({
     preview: inputs.dragPreview,

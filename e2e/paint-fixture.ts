@@ -289,6 +289,11 @@ export const STYLED_OPTIONS: Record<string, unknown> = {
  * hovers a bar (its grips, progress grip and link connectors). Hover opens no tooltip there.
  * `export` (phase 12) is the light week with `toolbar.export: true`; paint.spec.ts opens the
  * toolbar's Export menu by keyboard (the export group, its open button and the menu's items).
+ * `calendar` (phase 13) is the light week with a working calendar (`calendar: true`), the critical
+ * path, `nonWorkingTime: { style: 'none' }` (the definition stays, no weekend, holiday or off-hours
+ * band is painted) and a Duration column. Its records hold no weekend, holiday or off-hours band:
+ * the only `gantt-band` / `g-band` keys left are the two `highlightTime` days of the shared fixture,
+ * which `style: 'none'` keeps painting.
  */
 export type Scenario =
   | 'light-week'
@@ -302,7 +307,8 @@ export type Scenario =
   | 'styled'
   | 'narrow'
   | 'editing'
-  | 'export';
+  | 'export'
+  | 'calendar';
 
 export const SCENARIOS: readonly Scenario[] = [
   'light-week',
@@ -317,6 +323,7 @@ export const SCENARIOS: readonly Scenario[] = [
   'narrow',
   'editing',
   'export',
+  'calendar',
 ];
 
 /** The `narrow` scenario's box */
@@ -352,6 +359,17 @@ export function paintFixture(scenario: Scenario): PaintFixture {
       return { ...base, options: { ...PAINT_OPTIONS, editing: true, tooltip: { trigger: 'focus' } } };
     case 'export':
       return { ...base, options: { ...PAINT_OPTIONS, toolbar: { export: true } } };
+    case 'calendar':
+      return {
+        ...base,
+        options: {
+          ...PAINT_OPTIONS,
+          calendar: true,
+          criticalPath: true,
+          nonWorkingTime: { style: 'none' },
+          panel: { columns: ['name', 'duration'] },
+        },
+      };
     default:
       return base;
   }

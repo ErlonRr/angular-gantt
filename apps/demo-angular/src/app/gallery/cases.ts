@@ -32,6 +32,12 @@ export const CASE_COMPONENTS: Readonly<Record<CaseId, CaseLoader>> = {
     import('./cases/non-working/non-working-example.component').then(m => m.NonWorkingExampleComponent),
   'week-numbering': () =>
     import('./cases/week-numbering/week-numbering-example.component').then(m => m.WeekNumberingExampleComponent),
+  'working-days': () =>
+    import('./cases/working-days/working-days-example.component').then(m => m.WorkingDaysExampleComponent),
+  'shift-calendar': () =>
+    import('./cases/shift-calendar/shift-calendar-example.component').then(m => m.ShiftCalendarExampleComponent),
+  'critical-float': () =>
+    import('./cases/critical-float/critical-float-example.component').then(m => m.CriticalFloatExampleComponent),
   editing: () => import('./cases/editing/editing-example.component').then(m => m.EditingExampleComponent),
   'cell-editing': () =>
     import('./cases/cell-editing/cell-editing-example.component').then(m => m.CellEditingExampleComponent),

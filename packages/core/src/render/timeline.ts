@@ -267,6 +267,8 @@ const DISABLED = themeVar('borderColor');
 /**
  * Shaded bands for weekends, holidays, off-hours, intensive hours and the
  * `highlightTime` callback. Contiguous bands of the same kind and paint merge.
+ * `nonWorkingTime.style: 'none'` keeps the definition (and the days it excludes from
+ * `highlightTime`) but paints no weekend, holiday or off-hours band.
  */
 export function computeTimeBands(
   start: Date,
@@ -309,6 +311,7 @@ export function computeTimeBands(
   const days = unitBoundaries(start, end, 'day', 1, 1);
   // 'disabled' greys out weekends, holidays (unless they have their own colour) and off-hours alike
   const greyed = nw?.style === 'disabled';
+  const hidden = nw?.style === 'none';
 
   for (const day of days) {
     const next = unitAdd(day, 'day', 1);
@@ -317,11 +320,11 @@ export function computeTimeBands(
     const custom = cfg.highlightTime?.(day, 'day');
 
     if (holiday) {
-      push(day, next, 'holiday', holiday.color ?? (greyed ? DISABLED : HOLIDAY), { label: holiday.label });
+      if (!hidden) push(day, next, 'holiday', holiday.color ?? (greyed ? DISABLED : HOLIDAY), { label: holiday.label });
       continue;
     }
     if (nw?.weekends.has(day.getDay())) {
-      push(day, next, 'weekend', greyed ? DISABLED : WEEKEND);
+      if (!hidden) push(day, next, 'weekend', greyed ? DISABLED : WEEKEND);
       continue;
     }
     if (custom)
@@ -332,7 +335,7 @@ export function computeTimeBands(
 
     if (!hourScale || !nw) continue;
     // Off-hours = complement of the working ranges for this weekday
-    if (nw.workingHours) {
+    if (nw.workingHours && !hidden) {
       const ranges = nw.workingHours(day.getDay());
       let cursor = 0;
       for (const r of ranges) {

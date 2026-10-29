@@ -27,6 +27,10 @@ checked in `packages/core/src/editing/` (`changes`, `pipeline` → `prepareChang
 Exports (SVG, PNG, CSV, print) are re-rendered from the model in `packages/core/src/export/` (`createExportSource` →
 `buildExportModel` → `exportChartSvg` / `exportChartCsv` / `exportChartPages`); the bindings only build the source from
 their graph and run the DOM helpers (download, rasterize, print frame, serialize custom bars).
+Working time (the `calendar` option) lives in `packages/core/src/calendar/` (`working-calendar` builds a `WorkingCalendar`
+from the resolved `nonWorkingTime`, `durations` measures and formats, `edit` has the editing rules and task-date snaps);
+every duration that is read, typed or edited goes through it with a `DateReading` (a resolved config or a column
+context), so the bindings only pass the config along and never measure.
 Angular (`packages/angular/src/lib`) and the Web Component (`packages/vanilla/src`) only
 **paint** that model. If two bindings disagree, the bug is in the one that computes instead of painting.
 
@@ -64,7 +68,9 @@ calling UI work done.
 - Never compute positions, sizes or defaults in a painter; add them to `packages/core/src/render`.
 - Dates: the x axis is local calendar days. Use `calendarDays` / `dateToPixel` / `timeline.toX`,
   `addDays` (keeps date-only values date-only) and `toLocalDay`; never `ms / 86_400_000` for
-  positions. Date code needs tests that pass under `pnpm test:tz`.
+  positions. Durations are `measureBetween` / `spanDuration` / `taskDuration` with the config as `DateReading`
+  (working days when a calendar is on), never a difference of `calendarDays`. Date code needs tests that pass under
+  `pnpm test:tz`.
 - Public API changes need a changeset with the right bump (`major` for breaking changes) and
   an update to the README "Configuration" section.
 - Accessibility is part of done: roles, `aria-*`, keyboard paths and focus styles for anything interactive.

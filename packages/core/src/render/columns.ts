@@ -18,10 +18,11 @@ import {
   type GanttView,
   type TaskStatus,
 } from '../types';
-import { calendarDays, durationLabel, formatDate, toLocalDay } from '../gantt-math';
+import { formatDate, toLocalDay } from '../gantt-math';
 import { formatDate as formatPattern } from '../format';
+import { formatDuration, measureBetween, measureVariance } from '../calendar/durations';
 import { taskSpan } from './timeline';
-import type { ResolvedGanttConfig } from './config';
+import type { DateReading, ResolvedGanttConfig } from './config';
 import { statusPaint, type Paint } from './paint';
 import { estimateTextWidth } from './bars';
 
@@ -90,7 +91,7 @@ const TYPE_RANK: Record<string, number> = { [TaskType.Group]: 0, [TaskType.Task]
 /** Per-render values for time- and data-dependent cells. Pure: pass the binding's clock as `now`. */
 export function buildColumnContext(input: {
   tasks: readonly GanttTask[];
-  config?: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'> | null | undefined;
+  config?: DateReading | null | undefined;
   now: Date;
   locale?: string | undefined;
 }): ColumnContext {
@@ -104,6 +105,7 @@ export function buildColumnContext(input: {
     now: input.now,
     endDateMode: input.config?.endDateMode ?? 'exclusive',
     normalizeDateOnly: input.config?.normalizeDateOnly ?? true,
+    calendar: input.config?.calendar ?? null,
     locale: input.locale,
     taskById: new Map(input.tasks.map(t => [t.id, t])),
     collator,
@@ -165,6 +167,8 @@ export function dateColumnWidth(format: string, locale?: string, fontPx = 12): n
 /**
  * Width (px) the duration column needs for `labels`: the longest of its texts (less than a day,
  * one day, 6 days, 52 weeks, 52 weeks 6 days) estimated at `fontPx`, plus `COLUMN_CELL_INSET`.
+ * The same with and without a working calendar (its hours, "7.5 hours", fit the 96 px default), so
+ * a chart's column widths never depend on `calendar`.
  */
 export function durationColumnWidth(
   labels: Pick<
@@ -223,10 +227,8 @@ export function buildBuiltinColumns(
       }) as Record<string, string>
     )[t] ?? t;
   const variance = (t: GanttTask, ctx: ColumnContext): number | null => {
-    if (!t.baseline) return null;
-    const actual = calendarDays(span(t, ctx).end, false);
-    const planned = calendarDays(taskSpan(t.baseline, ctx).end, false);
-    return Math.round((actual - planned) * 10) / 10;
+    const days = measureVariance(t, ctx);
+    return days === null ? null : Math.round(days * 10) / 10;
   };
 
   const col = (def: ColumnDef): ColumnDef => ({ builtin: true, sortable: true, ...def });
@@ -292,7 +294,7 @@ export function buildBuiltinColumns(
       render: (r, ctx) => taskDurationLabel(r.task, contextOf(ctx, r.task), labels),
       sortValue: (r, ctx) => {
         const s = span(r.task, ctx);
-        return calendarDays(s.end, false) - calendarDays(s.start, false);
+        return measureBetween(s.start, s.end, ctx);
       },
     }),
     col({
@@ -497,14 +499,16 @@ export function valueToText(v: unknown): string {
   return String(v);
 }
 
-/** Duration label of the drawn span — the Duration column and the tooltips use the same rule. */
+/**
+ * Duration label of the drawn span — the Duration column, the tooltip and the drag readout use
+ * the same rule (`formatDuration`: calendar days, or working time with a working calendar).
+ */
 export function taskDurationLabel(
   task: Pick<GanttTask, 'start' | 'end'>,
-  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>,
+  dates: DateReading,
   labels?: Partial<GanttLabels>,
 ): string {
-  const s = taskSpan(task, dates);
-  return durationLabel(s.start, s.end, labels);
+  return formatDuration(taskSpan(task, dates), dates, labels);
 }
 
 /**

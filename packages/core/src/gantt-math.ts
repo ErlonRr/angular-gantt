@@ -8,6 +8,7 @@
 import { type GanttTask, type GanttLabels, type TimeUnit, type WeekStart } from './types';
 import { unitStart, periodNext } from './render/scales';
 import { formatDate as formatPattern } from './format/format';
+import { HOUR_MS } from './calendar/time';
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -121,6 +122,18 @@ export function addDays(date: Date, days: number): Date {
     date.getSeconds(),
     date.getMilliseconds(),
   );
+}
+
+/**
+ * The shift from `from` to `to` in days: whole local calendar days when the time of day is kept
+ * (date-only values, day snapping, across DST), else the elapsed hours / 24 (hour snapping). The
+ * amount of `daysMoved` and `daysDelta`, also under a working calendar (the real calendar shift).
+ */
+export function dateShiftDays(from: Date, to: Date): number {
+  const days = calendarDays(to) - calendarDays(from);
+  const whole = Math.round(days);
+  if (Math.abs(days - whole) < 1e-9) return whole + 0;
+  return (to.getTime() - from.getTime()) / HOUR_MS / 24;
 }
 
 /**

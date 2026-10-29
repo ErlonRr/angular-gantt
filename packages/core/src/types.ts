@@ -7,6 +7,8 @@
 
 import type { BarVisual } from './render/bars';
 import type { TooltipModel } from './state/tooltip';
+import type { ResolvedCalendar } from './render/config';
+import type { WorkingCalendar } from './calendar/working-calendar';
 
 // ─── Enums ───────────────────────────────────────────────────
 
@@ -324,6 +326,11 @@ export interface ColumnContext {
   taskById: ReadonlyMap<string, GanttTask>;
   /** Numeric, locale-aware string comparison ("Task 2" < "Task 10") */
   collator: Intl.Collator;
+  /**
+   * The chart's working calendar (`ResolvedGanttConfig.calendar`), or `null` / unset without
+   * one: a context is a `DateReading`, so `formatDuration(span, ctx)` measures like the chart
+   */
+  calendar?: ResolvedCalendar | null | undefined;
 }
 
 /** Cell text. `ctx` carries "now", the date reading and the task index (always passed by the bindings). */
@@ -610,6 +617,8 @@ export interface GanttLabels {
   durationDays: (n: number) => string;
   durationWeeks: (w: number) => string;
   durationWeeksDays: (w: number, d: number) => string;
+  /** A working duration under one working day of an hour calendar (`calendar.unit: 'hour'`): "6 hours" */
+  durationHours: (hours: number) => string;
   // Default column headers
   colName: string;
   colStart: string;
@@ -728,6 +737,8 @@ export interface GanttLabels {
   ttFloat: string;
   /** Total float in days, e.g. "2d" */
   ttFloatDays: (days: number) => string;
+  /** Total float under one working day of an hour calendar (`calendar.unit: 'hour'`), e.g. "4h" */
+  ttFloatHours: (hours: number) => string;
   /** Label of the successors row */
   ttSuccessors: string;
   // Legend
@@ -847,6 +858,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   durationDays: n => `${n} days`,
   durationWeeks: w => `${w}w`,
   durationWeeksDays: (w, d) => `${w}w ${d}d`,
+  durationHours: h => (h === 1 ? '1 hour' : `${h} hours`),
   colName: 'Task Name',
   colStart: 'Start',
   colEnd: 'End',
@@ -921,6 +933,7 @@ export const DEFAULT_LABELS: GanttLabels = {
   ttCriticalValue: 'Yes',
   ttFloat: 'Float',
   ttFloatDays: days => `${days}d`,
+  ttFloatHours: hours => `${hours}h`,
   ttSuccessors: 'Successors',
   legendCritical: 'Critical path',
   legendBaseline: 'Baseline',
@@ -1099,13 +1112,47 @@ export interface GanttNonWorkingTime {
   /**
    * `'shade'` = tinted by kind (`weekendBg`, `holidayBg`, `offHoursBg`), `'hatch'` = the tint plus
    * diagonal stripes, `'disabled'` = greyed out: weekends, holidays without their own colour and
-   * off-hours in one neutral grey (`borderColor`, `--gantt-border`). Default `'shade'`.
+   * off-hours in one neutral grey (`borderColor`, `--gantt-border`), `'none'` = no weekend, holiday
+   * or off-hours band (the non-working time still counts for `calendar`; intensive hours and
+   * `highlightTime` still paint). Default `'shade'`; an unknown value reads as `'shade'`.
    */
-  style?: 'shade' | 'hatch' | 'disabled' | undefined;
+  style?: 'shade' | 'hatch' | 'disabled' | 'none' | undefined;
   /** Tint the matching header cells too (default true) */
   showInHeader?: boolean | undefined;
   /** Hide day shading below this density (default 12 px/day: shown in Day / Week views) */
   minPxPerDay?: number | undefined;
+}
+
+/** What durations count: working time (`'working'`) or calendar time (`'calendar'`). */
+export type GanttDurationMode = 'calendar' | 'working';
+
+/** The unit of working time: whole working days, or the working hours of each day. */
+export type GanttCalendarUnit = 'day' | 'hour';
+
+/** `options.calendar`: how working time is counted and edited. */
+export interface GanttCalendarOptions {
+  /**
+   * What durations count — the Duration column, tooltip, drag readout, duration cells, CSV
+   * values, rollup weights, the critical path, lags and float: working time (`'working'`) or
+   * calendar days (`'calendar'`, the texts of a chart without a calendar). Default `'working'`
+   */
+  durations?: GanttDurationMode | undefined;
+  /**
+   * Working time in whole days (`'day'`: a working day counts all day), or the hours of
+   * `nonWorkingTime.workingHours` (`'hour'`; 09:00–17:00 when they are not set). Default `'day'`
+   */
+  unit?: GanttCalendarUnit | undefined;
+  /**
+   * Edits (drag, resize, move mode, date and duration cells) never start or end a task on
+   * non-working time: starts move forward, ends back. The app's own data is never moved.
+   * Default true
+   */
+  skipNonWorking?: boolean | undefined;
+  /**
+   * Working hours in one day with `unit: 'hour'`: what `1d` means in a duration (more than 0, at
+   * most 24). Default 8
+   */
+  hoursPerDay?: number | undefined;
 }
 
 export interface GanttTimeHighlight {
@@ -1345,6 +1392,11 @@ export interface GanttValidateContext {
   tasks: readonly GanttTask[];
   /** The tasks with the change applied */
   proposed: readonly GanttTask[];
+  /**
+   * The chart's working calendar (`options.calendar`), `null` without one: for rules such as "no
+   * task starts on a holiday" (`calendar.isWorkingDay(task.start)`)
+   */
+  calendar?: WorkingCalendar | null | undefined;
 }
 
 /** UI state that can be persisted (`stateKey`) or restored (`setState`). */
@@ -1583,8 +1635,18 @@ export interface GanttOptions {
    */
   initialScroll?: 'auto' | 'today' | 'start' | Date | false | undefined;
   gridLines?: GanttGridLines | undefined;
-  /** Weekends, holidays, working / intensive hours (visual only) */
+  /**
+   * Weekends, holidays, working / intensive hours: shaded on the timeline, and the working time
+   * `calendar` counts (Saturday and Sunday off when unset; `false` = no non-working time)
+   */
   nonWorkingTime?: GanttNonWorkingTime | false | undefined;
+  /**
+   * Working calendar: durations, lags, float and the critical path count working time (the
+   * weekends, holidays and — with `unit: 'hour'` — working hours of `nonWorkingTime`), and edits
+   * skip non-working time. `true` = `{}` (working days, skipping on). A week without working time
+   * turns it off. Default off: every duration counts calendar days.
+   */
+  calendar?: boolean | GanttCalendarOptions | undefined;
   /** Custom shading per day / hour cell */
   highlightTime?: ((start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined) | undefined;
   /**

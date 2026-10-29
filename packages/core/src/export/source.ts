@@ -28,7 +28,7 @@ import {
   type GanttView,
   type ResolvedTaskStyle,
 } from '../types';
-import { resolveConfig, type ResolvedGanttConfig } from '../render/config';
+import { dateReadingOf, resolveConfig, type ResolvedGanttConfig } from '../render/config';
 import type { BarSegment } from '../render/bars';
 import { bottomScale, periodNext, unitStart } from '../render/scales';
 import { buildTimeline, type SharedTimelineRange, type TimelineModel } from '../render/timeline';
@@ -234,7 +234,7 @@ export function createExportSource(input: GanttHeadlessInput): ChartExportSource
   const config = resolveConfig(options, i18n, { barRadius: themeMetrics(theme).barRadius });
   // Rollup statuses and style rules read the day (`quantizeNow`), the cells the exact tick
   const nowDay = quantizeNow(now, bottomScale(config.scales).unit);
-  const dates = { endDateMode: config.endDateMode, normalizeDateOnly: config.normalizeDateOnly };
+  const dates = dateReadingOf(config);
 
   const tasks = normalizeTasks([...input.tasks]);
   const critical = config.criticalPath ? computeCriticalPath(tasks, dates).criticalIds : null;

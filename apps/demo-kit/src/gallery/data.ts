@@ -37,6 +37,15 @@ export function dayAt(now: Date, offset: number): Date {
   return addDays(snapToDay(now), offset);
 }
 
+/**
+ * Monday 00:00 of `now`'s local week (a Sunday belongs to the week before it), so the working-week
+ * cases land their weekends on the same days whatever `now` is.
+ */
+export function workWeekStart(now: Date): Date {
+  const weekday = snapToDay(now).getDay();
+  return dayAt(now, weekday === 0 ? -6 : 1 - weekday);
+}
+
 /** Progress of a task from its dates at `now`: 100 when it ended, 0 before it starts, else the elapsed share. */
 function progressAt(start: Date, end: Date, now: Date): number {
   const total = end.getTime() - start.getTime();

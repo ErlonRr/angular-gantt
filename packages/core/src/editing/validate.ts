@@ -192,8 +192,9 @@ interface NewLink {
  * A link is new when the successor had no dependency on that predecessor before; links come from
  * the dependency field of the updates and from the `link` ops. The checks hold whatever the source
  * (`'api'`, `'undo'` and `'redo'` included). Then `config.editing.validate(change, { tasks,
- * proposed })`: `false` rejects with `labels.errorRejected`, a string rejects with that string
- * (empty: `errorRejected`), anything else accepts; an exception it throws propagates.
+ * proposed, calendar })` (`calendar`: the chart's working calendar, `null` without one): `false`
+ * rejects with `labels.errorRejected`, a string rejects with that string (empty: `errorRejected`),
+ * anything else accepts; an exception it throws propagates.
  */
 export function validateChange(change: GanttChange, ctx: ValidateChangeContext): ChangeError | null {
   const { tasks, proposed, config } = ctx;
@@ -316,7 +317,7 @@ export function validateChange(change: GanttChange, ctx: ValidateChangeContext):
   for (const l of newLinks) if (locked(l.fromId) || locked(l.toId)) return readOnly;
 
   // Then the app's own check
-  const verdict = config.editing.validate?.(change, { tasks, proposed });
+  const verdict = config.editing.validate?.(change, { tasks, proposed, calendar: config.calendar?.working ?? null });
   if (verdict === false) return error('custom', labels.errorRejected);
   if (typeof verdict === 'string') return error('custom', verdict || labels.errorRejected);
   return null;

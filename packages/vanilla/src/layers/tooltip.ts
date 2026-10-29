@@ -35,9 +35,10 @@
  * on the console).
  *
  * While it shows, the content follows its row: `refresh(row)` writes it again when the row's task
- * object, its critical flag, its resolved style (field by field, core `sameTaskStyle`) or the i18n
- * bundle (labels, locale, formats) differ from what it was written from, then measures and places
- * it again. `render` runs again only then: never on a clock tick.
+ * object, its critical flag, its float, its resolved style (field by field, core `sameTaskStyle`),
+ * the i18n bundle (labels, locale, formats), how dates are read (core `sameDateReading`: end-date
+ * rule, date-only normalisation, working calendar) or the baseline switch differ from what it was
+ * written from, then measures and places it again. `render` runs again only then: never on a clock tick.
  *
  *   div.gantt-tooltip[popover=manual][role=tooltip][id]
  *     div.gantt-tooltip-title            built-in content
@@ -49,11 +50,14 @@ import {
   TOOLTIP_HIDE_DELAY,
   TOOLTIP_SHOW_DELAY,
   buildTooltipModel,
+  dateReadingOf,
   initialTooltipState,
   placeTooltip,
   reduceTooltip,
+  sameDateReading,
   sameTaskStyle,
   tooltipVisibleId,
+  type DateReading,
   type GanttFlatRow,
   type GanttI18n,
   type GanttTask,
@@ -101,9 +105,10 @@ export interface TooltipLayer {
   visibleId(): string | null;
   /**
    * The open tooltip's row as the chart has it now: writes the content again (the custom `render`
-   * included), measures and places it, when the task object, the critical flag, the resolved style
-   * (its fields) or the i18n bundle differ from what the content was written from. No-op for
-   * another task or while closed.
+   * included), measures and places it, when the task object, the critical flag, the float, the
+   * resolved style (its fields), the i18n bundle, the date reading (working calendar, end-date
+   * rule) or the baseline switch differ from what the content was written from. No-op for another
+   * task or while closed.
    */
   refresh(row: GanttFlatRow): void;
   /** Places the open tooltip by its bar again (scroll, resize): no size measurement; closes it when the bar is gone. */
@@ -143,9 +148,14 @@ interface Shown {
 interface Painted {
   readonly task: GanttTask;
   readonly critical: boolean;
+  /** Total float in measured days (`undefined`: not in the critical-path result) */
+  readonly float: number | undefined;
   /** The row's resolved style (`undefined`: the task's own, while a `styles.rule` throws) */
   readonly style: ResolvedTaskStyle | undefined;
   readonly i18n: GanttI18n;
+  /** How the duration, float and variance were read */
+  readonly dates: DateReading;
+  readonly baseline: boolean;
 }
 
 /** Stable keys for the rows: kind plus occurrence (`date:0`, `date:1`, `progress:0`…). */
@@ -265,7 +275,15 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
       tasksById: G.columnCtx.peek().taskById,
       style,
     });
-    painted = { task: row.task, critical: model.critical, style, i18n };
+    painted = {
+      task: row.task,
+      critical: model.critical,
+      float: cpm?.floatMap.get(row.task.id),
+      style,
+      i18n,
+      dates: dateReadingOf(config),
+      baseline: config.baseline,
+    };
     let content: Node | string | null = null;
     const render = config.tooltip.render;
     if (render) {
@@ -459,9 +477,11 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
     refresh(row) {
       const id = row.task.id;
       if (destroyed || shown?.id !== id) return;
-      let critical: boolean;
+      let cpm: ReturnType<typeof G.critical.peek>;
+      let config: ReturnType<typeof G.config.peek>;
       try {
-        critical = G.critical.peek()?.criticalIds.has(id) ?? false;
+        cpm = G.critical.peek();
+        config = G.config.peek();
       } catch {
         return; // invalid options: nothing is rendered
       }
@@ -469,9 +489,12 @@ export function createTooltipLayer(ctx: LayerContext): TooltipLayer {
       if (
         painted &&
         painted.task === row.task &&
-        painted.critical === critical &&
+        painted.critical === (cpm?.criticalIds.has(id) ?? false) &&
+        Object.is(painted.float, cpm?.floatMap.get(id)) &&
         sameTaskStyle(painted.style, styleOf(row)) &&
-        painted.i18n === i18n
+        painted.i18n === i18n &&
+        sameDateReading(painted.dates, config) &&
+        painted.baseline === config.baseline
       ) {
         return;
       }

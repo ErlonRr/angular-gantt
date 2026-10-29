@@ -116,6 +116,8 @@ import {
   LightTheme,
   computeCriticalPath,
   computeRollups,
+  dateReadingOf,
+  sameDateReading,
   applyRollups,
   rollupSegments,
   createStyleResolver,
@@ -133,6 +135,7 @@ import {
   type LinkPreview,
   type LinkSide,
   type CPMResult,
+  type DateReading,
   type GanttRollupInfo,
   type NaturalTimelineRange,
   type ResolvedRollupOptions,
@@ -281,11 +284,12 @@ const sameNaturalRange = (a: NaturalTimelineRange, b: NaturalTimelineRange): boo
 const sameShared = (a: SharedTimelineRange | null, b: SharedTimelineRange | null): boolean =>
   a === b || (!!a && !!b && sameRange(a.range, b.range) && sameRange(a.extent, b.extent));
 
-/** The config fields the rollups depend on */
-interface RollupInput {
+/** How task dates are read before any options are bound */
+const NO_READING: DateReading = { endDateMode: 'exclusive', normalizeDateOnly: true, calendar: null };
+
+/** The config fields the rollups depend on: the rollup options and the date reading (end rule, date-only, calendar) */
+interface RollupInput extends DateReading {
   readonly rollup: ResolvedRollupOptions | false;
-  readonly endDateMode: ResolvedGanttConfig['endDateMode'];
-  readonly normalizeDateOnly: boolean;
 }
 
 /** Same rollup options, field by field (a callback colour by reference) */
@@ -555,11 +559,23 @@ export class GanttLayoutService {
   //  Derived: tree processing
   // ══════════════════════════════════════════════════════════
 
-  /** Values time- and data-dependent cells read (status, predecessors, sort order) */
+  /**
+   * How task dates are read and measured (core `dateReadingOf`): the column context, rollups and critical
+   * path follow it, so a zoom, a theme or a labels change keeps them (the WC's `dateReading` node).
+   */
+  private readonly dateReading = computed<DateReading | null>(
+    () => {
+      const c = this.boundConfig();
+      return c ? dateReadingOf(c) : null;
+    },
+    { equal: (a, b) => a === b || (!!a && !!b && sameDateReading(a, b)) },
+  );
+
+  /** Values time- and data-dependent cells read (status, predecessors, durations, sort order) */
   readonly columnContext = computed<ColumnContext>(() =>
     buildColumnContext({
       tasks: this.tasks(),
-      config: this.configSource()?.() ?? this.config(),
+      config: this.dateReading(),
       now: new Date(this.now()),
       locale: (this.i18nSource()?.() ?? this.i18n())?.locale,
     }),
@@ -569,18 +585,9 @@ export class GanttLayoutService {
   private readonly rollupInput = computed<RollupInput>(
     () => {
       const c = this.boundConfig();
-      return {
-        rollup: c?.rollup ?? false,
-        endDateMode: c?.endDateMode ?? 'exclusive',
-        normalizeDateOnly: c?.normalizeDateOnly ?? true,
-      };
+      return { rollup: c?.rollup ?? false, ...(c ? dateReadingOf(c) : NO_READING) };
     },
-    {
-      equal: (a, b) =>
-        sameRollup(a.rollup, b.rollup) &&
-        a.endDateMode === b.endDateMode &&
-        a.normalizeDateOnly === b.normalizeDateOnly,
-    },
+    { equal: (a, b) => sameRollup(a.rollup, b.rollup) && sameDateReading(a, b) },
   );
 
   /**
@@ -589,9 +596,9 @@ export class GanttLayoutService {
    * the rollups are rebuilt once a day, not on every clock tick.
    */
   readonly rollups = computed<ReadonlyMap<string, GanttRollupInfo>>(() => {
-    const { rollup, endDateMode, normalizeDateOnly } = this.rollupInput();
-    if (!rollup) return NO_ROLLUPS;
-    return computeRollups(this.tasks(), rollup, { now: this.nowDay(), dates: { endDateMode, normalizeDateOnly } });
+    const input = this.rollupInput();
+    if (!input.rollup) return NO_ROLLUPS;
+    return computeRollups(this.tasks(), input.rollup, { now: this.nowDay(), dates: dateReadingOf(input) });
   });
 
   /**
@@ -665,15 +672,10 @@ export class GanttLayoutService {
   /** Only these config fields affect the critical path (the config itself changes with the zoom, labels, metrics…) */
   private readonly cpmConfig = computed(
     () => {
-      const { criticalPath, endDateMode, normalizeDateOnly } = this.cfg();
-      return { criticalPath, endDateMode, normalizeDateOnly };
+      const cfg = this.cfg();
+      return { criticalPath: cfg.criticalPath, ...dateReadingOf(cfg) };
     },
-    {
-      equal: (a, b) =>
-        a.criticalPath === b.criticalPath &&
-        a.endDateMode === b.endDateMode &&
-        a.normalizeDateOnly === b.normalizeDateOnly,
-    },
+    { equal: (a, b) => a.criticalPath === b.criticalPath && sameDateReading(a, b) },
   );
 
   /** CPM result (critical ids, float), `null` while `options.criticalPath` is off */

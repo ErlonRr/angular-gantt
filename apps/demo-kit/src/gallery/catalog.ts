@@ -20,6 +20,9 @@ export const CASE_IDS = [
   'milestones-baselines',
   'non-working',
   'week-numbering',
+  'working-days',
+  'shift-calendar',
+  'critical-float',
   'editing',
   'cell-editing',
   'custom-editors',
@@ -67,7 +70,7 @@ export const GALLERY_CATEGORIES: readonly GalleryCategoryInfo[] = [
   {
     id: 'scheduling',
     label: 'Scheduling',
-    summary: 'Dependencies, milestones, baselines, non-working time and week numbers.',
+    summary: 'Dependencies, milestones, baselines, non-working time, week numbers and working calendars.',
   },
   {
     id: 'editing',
@@ -276,6 +279,39 @@ export const GALLERY_CASES: readonly GalleryCase[] = [
     tags: ['weekNumbering', 'weekStart', 'WEEK_FORMATS'],
     ready: { charts: 1 },
     notes: [],
+    isNew: true,
+  },
+  {
+    id: 'working-days',
+    title: 'Working days and holidays',
+    summary:
+      'Durations count working days: drag a bar across a weekend or a holiday and it keeps its working days, stretching over the days off; starts and ends skip non-working time.',
+    category: 'scheduling',
+    tags: ['calendar', 'durations', 'skipNonWorking', 'nonWorkingTime.style'],
+    ready: { charts: 1 },
+    notes: ['series-model'],
+    isNew: true,
+  },
+  {
+    id: 'shift-calendar',
+    title: 'Shift calendar in hours',
+    summary:
+      'Working hours with a lunch break and a short Friday: bars skip the hours off, and durations read and parse in hours with the hours per day you choose.',
+    category: 'scheduling',
+    tags: ['calendar.unit', 'hoursPerDay', 'workingHours', 'editing.cells'],
+    ready: { charts: 1 },
+    notes: [],
+    isNew: true,
+  },
+  {
+    id: 'critical-float',
+    title: 'Critical path in working time',
+    summary:
+      'The critical path, lags and float in working days: count calendar days instead, or work on Saturdays, and the critical chain changes.',
+    category: 'scheduling',
+    tags: ['criticalPath', 'computeCriticalPath()', 'float', 'calendar.durations'],
+    ready: { charts: 1 },
+    notes: ['series-model'],
     isNew: true,
   },
 

@@ -10,7 +10,9 @@
 // responsive timeline-only view and the toolbar's More button). Phase 11 adds `editing`: the
 // toolbar's history group, a selected link, an invalid cell editor with its message and a hovered
 // bar's grips, progress grip and link connectors. Phase 12 adds `export`: the toolbar's Export group
-// (`toolbar.export`) with its menu open (the open button and the four format items).
+// (`toolbar.export`) with its menu open (the open button and the four format items). Phase 13 adds
+// `calendar`: a working calendar with `nonWorkingTime.style: 'none'` (no band records) and a Duration
+// column that reads working days.
 import { test, expect, arrowPoint, collectPaints, type Chart, type PaintRecords } from './fixtures';
 import { SCENARIOS, paintFixture, renderFixture, type Scenario, type Target } from './paint-fixture';
 
@@ -146,7 +148,8 @@ const paritySide = (records: PaintRecords): PaintRecords =>
  * compare the canvas and the chrome like the light week; `editing` (phase 11) adds the bar overlay
  * and the link preview (`EDIT_SHAPES`): the selected arrow, the history group and the open editor
  * are in the canvas and the chrome already. `export` (phase 12) compares the toolbar: the Export
- * group, its open button and the open menu (`tb-` keys).
+ * group, its open button and the open menu (`tb-` keys). `calendar` (phase 13) compares the canvas
+ * and the chrome like the light week: no band records, a Duration column in working days.
  */
 const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'light-week', keys: COMPARED },
@@ -160,6 +163,7 @@ const PARITY: readonly { scenario: Scenario; keys: RegExp }[] = [
   { scenario: 'narrow', keys: COMPARED },
   { scenario: 'editing', keys: new RegExp(`${COMPARED.source}|${EDIT_SHAPES.source}`) },
   { scenario: 'export', keys: /tb-/ },
+  { scenario: 'calendar', keys: COMPARED },
 ];
 
 /**

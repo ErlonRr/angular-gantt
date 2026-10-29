@@ -81,7 +81,7 @@ see [Keyboard and focus](#keyboard-and-focus), [Touch and pointer](#touch-and-po
 
 On this page: [Timeline](#timeline-header-tiers-and-zoom) · [Week numbering](#week-numbering) ·
 [Non-working time](#non-working-time-weekends-holidays-working--intensive-hours) ·
-[Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
+[Working calendar](#working-calendar) · [Bars](#bars-milestones-arrows) · [Task styles](#task-styles) · [Rollup](#parents-rollup-and-collapsed-groups) ·
 [Panel and table](#task-list-panel-table-view-and-saved-state) · [Responsive and density](#responsive-layout-and-density) ·
 [Toolbar](#toolbar-legend-and-markers) · [Tooltip](#tooltip) · [States](#loading-error-and-empty-states) ·
 [Synchronised charts](#synchronised-charts) · [Editing](#editing) · [Export and print](#export-and-print) ·
@@ -173,7 +173,7 @@ options = {
     holidays: [new Date(2026, 11, 25), { start: d1, end: d2, label: 'Shutdown', color: '#fee2e2' }],
     workingHours: { start: 9, end: 18 }, // or per weekday: { 1: [{ start: 9, end: 13 }, { start: 14, end: 18 }] }
     intensiveHours: [{ start: 10, end: 12, label: 'Focus', color: 'rgba(245,158,11,.2)' }],
-    style: 'shade', // 'shade' (tinted by kind) | 'hatch' (+ stripes) | 'disabled' (one neutral grey)
+    style: 'shade', // 'shade' (tinted by kind) | 'hatch' (+ stripes) | 'disabled' (one neutral grey) | 'none' (no band)
     showInHeader: true,
     minPxPerDay: 12, // hide day shading in dense zoom levels
   },
@@ -181,8 +181,129 @@ options = {
 };
 ```
 
-Shading is visual only — durations stay in calendar days. Colours default to the theme
+Shading is visual only until you turn on the [working calendar](#working-calendar), which counts durations in the
+same working time; without it durations stay in calendar days. Colours default to the theme
 (`weekendBg`, `holidayBg`, `offHoursBg`, `intensiveBg`). `nonWorkingTime: false` turns it off.
+`style: 'none'` keeps the definition but paints no weekend, holiday or off-hours band (intensive hours and
+`highlightTime` still paint), so a chart can count working time without the stripes.
+
+### Working calendar
+
+Durations count calendar days unless you turn on `calendar`. Then the same weekends, holidays and working hours
+that `nonWorkingTime` shades also drive the arithmetic: durations, drags, cells, the critical path and its float
+count **working time**, so a bar dragged across a weekend keeps its working days and stretches over the days off.
+
+```ts
+options = {
+  calendar: true, // = { durations: 'working', unit: 'day', skipNonWorking: true, hoursPerDay: 8 }
+  nonWorkingTime: { holidays: [new Date(2026, 11, 25)] }, // Saturday and Sunday are off unless you say otherwise
+  panel: { columns: ['name', 'start', 'end', 'duration'] },
+};
+```
+
+| Option                    | Default     | Effect                                                                                                                                         |
+| ------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `calendar`                | off         | `true` is `{}`. Off (unset or `false`) is today's behaviour exactly: calendar days, nothing snapped                                            |
+| `calendar.durations`      | `'working'` | What durations count: `'working'` time, or `'calendar'` days (texts as without a calendar; `skipNonWorking` still applies)                     |
+| `calendar.unit`           | `'day'`     | `'day'`: a working day is a whole day. `'hour'`: working time is the hours of `nonWorkingTime.workingHours`, 09:00–17:00 when you set none     |
+| `calendar.skipNonWorking` | `true`      | Edits never start or end a task on non-working time: starts move forward, ends back                                                            |
+| `calendar.hoursPerDay`    | `8`         | With `unit: 'hour'`: the working hours that make `1d` in texts and typed durations (above 0, up to 24). It doesn't change the hours themselves |
+
+- **One definition.** The calendar is built from the resolved `nonWorkingTime` — the weekends (Saturday and Sunday
+  by default), holidays and `workingHours` the chart shades — so shading and arithmetic can't disagree.
+  `nonWorkingTime: false` with a calendar means no non-working time at all (every day, and with `unit: 'hour'` every
+  hour). A week with no working time (every weekday a weekend, or `unit: 'hour'` with no hours) turns the calendar off.
+- **Hours.** With `unit: 'hour'` a working day is its `workingHours` ranges (one range, a list, or a per-weekday map;
+  a weekday missing from the map has no hours; weekends and holidays always win), counted on the wall clock. The
+  default 09:00–17:00 is the hours that are shaded too.
+
+#### What counts working time
+
+A "measured day" is a working day (with `unit: 'hour'`: working hours ÷ `hoursPerDay`). With
+`durations: 'working'` they are what these show and use:
+
+- the Duration column (text and sort), the tooltip's duration, the drag readout, and the variance column and
+  tooltip row (signed, from the planned to the actual end);
+- the duration cell (its text, what you type and the end it writes), the start cell (it keeps the working length)
+  and predecessor lags;
+- `rollup.progress: 'duration'` weights, and the CSV `duration` and `variance` data values;
+- the critical path: durations, `GanttDependency.lag` and float.
+
+Texts read "1 day", "5 days" (never weeks: a working week isn't 7 days) and, in an hour calendar, "6 hours" under
+one day (`labels.durationHours`); the tooltip's float reads "2d" or "5h" (`labels.ttFloatDays`, `labels.ttFloatHours`).
+A typed duration or lag takes `d` (a measured day), `w` (the working week: the weekdays with working time, 5 by
+default, 7 with `durations: 'calendar'`) and `h` (an hour of the working day: 1 / `hoursPerDay` with `unit: 'hour'`,
+else 1 / 24). The cell shows it back as `5d`, `1.5d` or `12h` (in an hour calendar whole days `2d`, else hours `20h`).
+
+**Not changed:** the bars (a bar covers the days off it spans), the arrow lag labels (`+2d`), the event amounts
+(`daysMoved` is the real calendar shift of the start) and the announcements ("Design moved 3 days later").
+
+#### Editing
+
+Only gestures and cells are snapped (`skipNonWorking`), never your data: `tasks`, `updateTask()`, `appendTasks()`,
+the API, undo and redo draw what you give, a task that starts on a holiday keeps it until it is edited, and
+validation never rejects a non-working date (do that in `editing.validate`, whose context has `calendar`: a
+`WorkingCalendar` or `null`).
+
+| Edit                         | What happens                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Drag a bar                   | The start moves by the pointer's snap units and snaps forward to where working time begins; the end keeps the **working length** (the bar widens over days off)                                                                                                                                                                                    |
+| Resize an edge               | The edge moves by the snap units; a start snaps forward, an end back to right after working time. With working durations the task never gets shorter than one snap unit of working time (on a day scale of an hour calendar: the working hours of the edges' weekdays, up to `hoursPerDay`; `durations: 'calendar'`: only the usual minimum width) |
+| Move mode (← →, Shift / Alt) | Each key press moves, or resizes, by one unit of working time (a working day; an hour on hour scales): no dead key over a weekend                                                                                                                                                                                                                  |
+| Start cell                   | The start snaps forward; the end follows the working length                                                                                                                                                                                                                                                                                        |
+| End cell                     | The end snaps back; an end before the start is an error, as before                                                                                                                                                                                                                                                                                 |
+| Duration cell                | Sets the end from the start, **not** snapped: `3d` reads `3d`                                                                                                                                                                                                                                                                                      |
+
+With `durations: 'calendar'` a moved bar keeps its calendar length, and with `skipNonWorking` its end snaps back so
+it never ends on a day off (Monday–Tuesday moved to Friday ends on Saturday 00:00). With `durations: 'calendar'`
+and `skipNonWorking: false` nothing is snapped, as without a calendar. A move that keeps the working length is **one** `task-dragged` (no `task-resized`) and one undo step.
+
+**Dates.** A bar is measured on what it draws: date-only values are local days, and with the default
+`endDateMode: 'exclusive'` a Monday–Friday task ends on Saturday 00:00 (`'inclusive'`: on Friday). Edited dates keep
+the task's own form: a date-only value stays date-only and an inclusive end stays inclusive. In an hour calendar
+the results carry times, so a date-only task edited there gains its working hours.
+
+#### Critical path, float and Node
+
+`criticalPath: true` computes the path in working time, so its chain can differ from the calendar-day one (the
+gallery's _Critical path in working time_ case flips it with its Durations control). The tooltip shows the float of the tasks off
+the path. Headless, pass the resolved config:
+
+```ts
+import { computeCriticalPath, createWorkingCalendar, formatDuration, resolveConfig } from '@gantryjs/core';
+
+const options = { calendar: true, nonWorkingTime: { holidays: [new Date(2026, 9, 21)] } }; // Wed 21 Oct 2026
+const calendar = createWorkingCalendar(options)!; // null when the week has no working time
+
+const friday = new Date(2026, 9, 16);
+calendar.addWorking(friday, 1); // Sat 17 Oct 00:00: right after Friday's working time
+calendar.addWorking(friday, 2); // Tue 20 Oct 00:00: Friday, then Monday
+calendar.snapStart(new Date(2026, 9, 17)); // Mon 19 Oct 00:00: a start moves forward
+calendar.snapEnd(new Date(2026, 9, 19)); // Sat 17 Oct 00:00: an end moves back
+calendar.workingDuration(new Date(2026, 9, 19), new Date(2026, 9, 24)); // 4: Wednesday is a holiday
+
+const config = resolveConfig(options); // what the charts read
+formatDuration({ start: friday, end: new Date(2026, 9, 20) }, config); // '2 days'
+const { criticalIds, floatMap } = computeCriticalPath(tasks, config); // working days
+```
+
+`WorkingCalendar` also has `isWorkingDay()`, `isWorking()`, `toWorking()`, `fromWorkingStart()` and `fromWorkingEnd()`.
+The measuring helpers `formatDuration()`, `formatFloat()`, `taskDuration()`, `spanDuration()`, `measureBetween()`,
+`measureVariance()` and `addDuration()`, and the snaps `snapTaskStart()`, `snapTaskEnd()` and `followTaskEnd()`,
+take the same config; `DEFAULT_WORKING_HOURS` and `DEFAULT_HOURS_PER_DAY` are the defaults.
+
+#### Limits
+
+- Hours count on the wall clock, so 09:00–17:00 is 8 hours on a daylight-saving day too. Where an hour calendar's
+  hours include the hour that repeats when the clocks go back (a night shift), the working-time count steps back
+  there.
+- A timed task whose time is exactly midnight UTC in the viewer's zone is read as a date-only day (the
+  [`normalizeDateOnly`](#dates-locales-and-format-tokens) rule): set `normalizeDateOnly: false` for timed tasks in an
+  hour calendar.
+- `hoursPerDay` is what `1d` means, even when a shift is shorter or longer.
+- The event amounts (`daysMoved`, `daysDelta`) and the announcements stay calendar shifts, and `labels` gain the
+  required `durationHours` and `ttFloatHours` (only a full `GanttLabels` object must list them: `options.labels` is
+  partial).
 
 ### Bars, milestones, arrows
 
@@ -544,17 +665,17 @@ every change — a drag, a resize, move mode, the progress grip, a cell, a link,
 through the same pipeline once, so the events, the validation and the undo history are the same in
 every binding. Try it in the **Editing** cases of the [gallery](#examples-gallery).
 
-| Option                             | Default                                  | What it does                                                                                                                    |
-| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `editing.cells`                    | `true`                                   | The cells of editable columns open an editor ([Cells](#cells))                                                                  |
-| `editing.progress`                 | `true` (`step: 5`)                       | The progress grip on bars and ↑ / ↓ in move mode, snapped to `step` %                                                           |
-| `editing.dependencies.create`      | `true`                                   | Draw links from a bar's connector, or with **L**; the `predecessors` cell ([Links](#links))                                     |
-| `editing.dependencies.delete`      | `true`                                   | Click an arrow, then Delete                                                                                                     |
-| `editing.dependencies.parentChild` | `false`                                  | Allow links between a task and its own ancestors or descendants                                                                 |
-| `editing.validate`                 | none                                     | Your own check, after the built-in ones: return `false` or a message to reject the change                                       |
-| `editing.history`                  | `true` (`limit: 100`, `coalesceMs: 800`) | Undo / redo: at most `limit` steps; consecutive keyboard, progress or cell changes of one task within `coalesceMs` are one step |
-| `editing.controlled`               | `false`                                  | The app owns the tasks: the chart applies nothing and keeps no history ([Controlled mode](#controlled-mode))                    |
-| `toolbar.undo`                     | `true`                                   | The toolbar's Undo / Redo buttons (shown while a history is kept)                                                               |
+| Option                             | Default                                  | What it does                                                                                                                                                                                     |
+| ---------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `editing.cells`                    | `true`                                   | The cells of editable columns open an editor ([Cells](#cells))                                                                                                                                   |
+| `editing.progress`                 | `true` (`step: 5`)                       | The progress grip on bars and ↑ / ↓ in move mode, snapped to `step` %                                                                                                                            |
+| `editing.dependencies.create`      | `true`                                   | Draw links from a bar's connector, or with **L**; the `predecessors` cell ([Links](#links))                                                                                                      |
+| `editing.dependencies.delete`      | `true`                                   | Click an arrow, then Delete                                                                                                                                                                      |
+| `editing.dependencies.parentChild` | `false`                                  | Allow links between a task and its own ancestors or descendants                                                                                                                                  |
+| `editing.validate`                 | none                                     | Your own check, after the built-in ones: return `false` or a message to reject the change; its context has `{ tasks, proposed, calendar }` (the [working calendar](#working-calendar) or `null`) |
+| `editing.history`                  | `true` (`limit: 100`, `coalesceMs: 800`) | Undo / redo: at most `limit` steps; consecutive keyboard, progress or cell changes of one task within `coalesceMs` are one step                                                                  |
+| `editing.controlled`               | `false`                                  | The app owns the tasks: the chart applies nothing and keeps no history ([Controlled mode](#controlled-mode))                                                                                     |
+| `toolbar.undo`                     | `true`                                   | The toolbar's Undo / Redo buttons (shown while a history is kept)                                                                                                                                |
 
 #### The pipeline and its events
 
@@ -576,7 +697,9 @@ task's `before` and `after` fields), and runs through these steps:
 
 Ops come from what changed, not from the gesture: a date typed in a Start cell fires `task-dragged` as a
 drag does, an End cell `task-resized`, the predecessors cell `dependency-created` / `dependency-deleted`,
-and an undo fires the inverse events (`source: 'undo'`). A change that changes nothing fires nothing.
+and an undo fires the inverse events (`source: 'undo'`). A change that changes nothing fires nothing. With a
+[working calendar](#working-calendar) a move that keeps the working length is one `task-dragged` (no
+`task-resized`) and one undo step, and `daysMoved` is the real calendar shift of the start.
 A change started from inside one of these listeners (`addDependency()`, `undo()`…) is refused (`false`).
 
 | Event (Angular output · React / Svelte callback · Vue)                                                                                                                                      | `detail`                                                                                                              |
@@ -719,13 +842,13 @@ it and Undo reverts it). An invalid value keeps the editor open: the field gets 
 shows under the cell and is read from the alert region. While cell editing is on, every cell has `aria-readonly`
 (`"false"` on the ones you can edit). The editor is named `labels.ariaCellEditor(column, task)`.
 
-| Built-in column | Editor and accepted text                                                                                                                                              |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`          | Text, required (trimmed)                                                                                                                                              |
-| `start`, `end`  | `date`, or `datetime-local` on hour scales and for dates with a time. A new start keeps the duration; an end can't precede the start. Date-only values stay date-only |
-| `duration`      | `5`, `5d`, `2w`, `4h`, `1.5d` (`1,5d` too): more than 0; sets the end. Whole local calendar days plus real hours                                                      |
-| `progress`      | Number from 0 to 100 (`45` or `45%`), step `editing.progress.step`                                                                                                    |
-| `predecessors`  | Text, see below. The editor shows task **ids** (`research FS+2d; scope SS`); the cell shows names                                                                     |
+| Built-in column | Editor and accepted text                                                                                                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `name`          | Text, required (trimmed)                                                                                                                                                                                                                                                       |
+| `start`, `end`  | `date`, or `datetime-local` on hour scales and for dates with a time. A new start keeps the duration; an end can't precede the start. Date-only values stay date-only. With a [working calendar](#working-calendar) a start snaps forward and an end back off non-working time |
+| `duration`      | `5`, `5d`, `2w`, `4h`, `1.5d` (`1,5d` too): more than 0; sets the end. Whole local calendar days plus real hours; with a [working calendar](#working-calendar), working days, the working week and hours of the working day                                                    |
+| `progress`      | Number from 0 to 100 (`45` or `45%`), step `editing.progress.step`                                                                                                                                                                                                             |
+| `predecessors`  | Text, see below. The editor shows task **ids** (`research FS+2d; scope SS`); the cell shows names                                                                                                                                                                              |
 
 `name`, `start`, `end`, `duration`, `progress` and `predecessors` are editable by default (your own column over one
 of those keys too: the key says which field it edits); every other column isn't, and `id` never is. The
@@ -734,7 +857,8 @@ Predecessors `editing.dependencies.create`.
 
 **Predecessors.** Entries are separated by `;` or `,`. Each is `<task> [FS|SS|FF|SF] [±n[d|w|h]]`, case-insensitive: `research`,
 `research FS+2d`, `scope SS`, `a+2d`, `2FS-1w`. A task is an id, else a name that matches exactly one task (exact first,
-then ignoring case). The type defaults to FS, the lag to 0 and its unit to days (`w` = 7 days, `h` = 1/24). Empty text
+then ignoring case). The type defaults to FS, the lag to 0 and its unit to days (`w` = 7 days, `h` = 1/24; with a
+[working calendar](#working-calendar) the lag counts working days, `w` is the working week and `h` an hour of the working day). Empty text
 removes every link. An unknown task, a name shared by several tasks, a repeated link, a loop or a parent ↔ child link is
 an error with its message. Ids that contain `;` or `,` can't be referenced.
 
@@ -1065,17 +1189,17 @@ chart.addEventListener('export', e => console.log(e.detail.fileName, e.detail.si
 RFC 4180: `\r\n` between records (none after the last), fields that hold the delimiter, `"`, CR or LF quoted, `"`
 doubled. Values per column (`values`; a column's `exportValue(row, ctx)` wins in both modes):
 
-| Column                                         | `'data'` (default)                                                                           | `'display'`     |
-| ---------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------- |
-| `id`, `name`                                   | the text                                                                                     | the cell text   |
-| `start`, `end`, `baselineStart`, `baselineEnd` | local ISO: `2026-03-02` at midnight, else `2026-03-02T09:30` (`:ss` when not zero)           | the cell text   |
-| `duration`                                     | days of the drawn span, a number (`.` decimal, at most 2 decimals)                           | the cell text   |
-| `progress`                                     | 0–100, a number                                                                              | `45%`           |
-| `predecessors`                                 | ids: `research FS+2d; scope SS`                                                              | names, as shown |
-| `status`, `type`                               | the key (`inProgress`, `milestone`; a custom status as it is)                                | the label       |
-| `variance`                                     | signed days, a number                                                                        | the cell text   |
-| your columns                                   | `render` text, else `task[key]` or `task.data[key]` (a date as local ISO, an object as JSON) | the cell text   |
-| a raw task field (no column has the key)       | the field as the chart holds it, under the key (below)                                       | the same        |
+| Column                                         | `'data'` (default)                                                                               | `'display'`     |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ | --------------- |
+| `id`, `name`                                   | the text                                                                                         | the cell text   |
+| `start`, `end`, `baselineStart`, `baselineEnd` | local ISO: `2026-03-02` at midnight, else `2026-03-02T09:30` (`:ss` when not zero)               | the cell text   |
+| `duration`                                     | days of the drawn span, a number (`.` decimal, at most 2 decimals); working days with a calendar | the cell text   |
+| `progress`                                     | 0–100, a number                                                                                  | `45%`           |
+| `predecessors`                                 | ids: `research FS+2d; scope SS` (lags in working units with a calendar)                          | names, as shown |
+| `status`, `type`                               | the key (`inProgress`, `milestone`; a custom status as it is)                                    | the label       |
+| `variance`                                     | signed days, a number (working days with a calendar)                                             | the cell text   |
+| your columns                                   | `render` text, else `task[key]` or `task.data[key]` (a date as local ISO, an object as JSON)     | the cell text   |
+| a raw task field (no column has the key)       | the field as the chart holds it, under the key (below)                                           | the same        |
 
 **Raw task fields.** A key of `columns` that no column has but that is a task field — `parentId`, `dependency`,
 `collapsed`, `barType`, `status`, `editable`, `draggable`, `barColor`, `rowColor`, `textColor`, `progressColor`,
@@ -1341,8 +1465,8 @@ React, Vue and Svelte render a `<gantry-element>`, so they use the Web Component
 
 ### Examples gallery
 
-Twenty-nine runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing, export
-and print…),
+Thirty-two runnable cases (styles, rollup, synced charts, responsive layouts, theming, lazy loading, editing, export
+and print, working calendars…),
 each in **all five** frameworks with the same controls and a code tab. A "Known differences"
 section on the Frameworks page lists what a framework does differently.
 
@@ -1383,40 +1507,40 @@ to the bars' tab stop (the viewport while no bar is mounted; in the table view, 
 tab-stop row; while a state box covers the body, its Retry, else the toolbar). Pressing a draggable bar with the
 mouse focuses the timeline viewport, so <kbd>Escape</kbd> cancels the drag.
 
-| Focus on       | Key                                                         | Action                                                                                                                       |
-| -------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Toolbar        | `←` / `→` (wrapping), `Home` / `End`                        | Move between the controls                                                                                                    |
-|                | `Enter` / `Space`                                           | Press the button, check the radio                                                                                            |
-| Task-list row  | `↑` / `↓`                                                   | Previous / next row (the header row is above the first row)                                                                  |
-|                | `PgUp` / `PgDn` · `Home` / `End`                            | One page up / down · first / last row                                                                                        |
-|                | `→`                                                         | Collapsed group: expand it; otherwise move into the row's first cell                                                         |
-|                | `←`                                                         | Expanded group: collapse it; otherwise go to the parent row                                                                  |
-|                | `Enter`                                                     | Select only this row and fire `row-click`                                                                                    |
-|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | Select (toggles with `multiSelect`) · extend the range · toggle                                                              |
-| Task-list cell | `←` / `→`                                                   | Previous / next cell; `←` on the first cell goes back to the row                                                             |
-|                | `↑` / `↓` · `PgUp` / `PgDn`                                 | Same column, other row                                                                                                       |
-|                | `Home` / `End` · `Ctrl/⌘+Home` / `End`                      | First / last cell · same column, first / last row                                                                            |
-|                | `Enter`, `Space`                                            | As on the row (a button or link inside a cell keeps them)                                                                    |
-| Header cell    | `←` / `→` · `↓`                                             | Previous / next header cell · the first row, same column                                                                     |
-|                | `Enter` / `Space`                                           | Sort by the column                                                                                                           |
-| Bar            | `↑` / `↓` · `PgUp` / `PgDn` · `Home` / `End` (`Ctrl/⌘` too) | Focus the bar of the previous / next row, one page away, the first / last row (scrolled into view)                           |
-|                | `←` / `→`                                                   | Pan the timeline by one bottom-tier header cell                                                                              |
-|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | As in the task list                                                                                                          |
-|                | `Enter` / `F2`                                              | **Move mode** on a bar that can move, resize or change progress; otherwise select only this row and fire `row-click`         |
-|                | `L`                                                         | With `editing.dependencies`: start a [link](#links) from this bar; `Enter` / `L` on another bar creates it, `Escape` cancels |
-| Move mode      | `←` / `→`                                                   | Move the bar one unit earlier / later (a day; an hour on hour scales)                                                        |
-|                | `↑` / `↓`                                                   | With `editing.progress`: progress up / down by `step` %                                                                      |
-|                | `Shift+←` / `→` · `Alt+←` / `→`                             | Resize the end · the start (task bars, with `enableResize`)                                                                  |
-|                | `Enter` / `F2`                                              | Commit: `task-dragged` / `task-resized` / `task-progress-changed` as after a pointer drop, then the change is announced      |
-|                | `Escape`, `Tab`, leaving the bar, a pointer press           | Cancel (announced)                                                                                                           |
-| Task-list cell | `F2` · `Enter` · a character                                | With `editing.cells`: open the [cell's editor](#cells) (a character starts the text)                                         |
-| Cell editor    | `Enter` · `Tab` / `Shift+Tab` · `Escape`                    | Commit · commit and edit the next / previous cell · cancel                                                                   |
-| Selected arrow | `Delete` / `Backspace` · `Escape`                           | Remove the link · deselect it                                                                                                |
-| Splitter       | `←` / `→` · `Enter` / `Space`                               | Resize the panel · collapse / expand it                                                                                      |
-| Anywhere       | `Escape`                                                    | Cancel move mode, a drag, a link or a cell edit, else close the tooltip, else clear the selection                            |
-|                | `Ctrl/⌘+Z` · `Ctrl/⌘+Shift+Z` / `Ctrl+Y`                    | With an [editing history](#history): undo · redo (not in text entry or move mode)                                            |
-|                | `Ctrl/⌘+A` (also with `Shift`)                              | Select all visible rows                                                                                                      |
-|                | `+` (or `=`) · `-` · `T` · `F`                              | Zoom in · zoom out · scroll to today · [fit to screen](#zoom) — off with `characterShortcuts: false`                         |
+| Focus on       | Key                                                         | Action                                                                                                                            |
+| -------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Toolbar        | `←` / `→` (wrapping), `Home` / `End`                        | Move between the controls                                                                                                         |
+|                | `Enter` / `Space`                                           | Press the button, check the radio                                                                                                 |
+| Task-list row  | `↑` / `↓`                                                   | Previous / next row (the header row is above the first row)                                                                       |
+|                | `PgUp` / `PgDn` · `Home` / `End`                            | One page up / down · first / last row                                                                                             |
+|                | `→`                                                         | Collapsed group: expand it; otherwise move into the row's first cell                                                              |
+|                | `←`                                                         | Expanded group: collapse it; otherwise go to the parent row                                                                       |
+|                | `Enter`                                                     | Select only this row and fire `row-click`                                                                                         |
+|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | Select (toggles with `multiSelect`) · extend the range · toggle                                                                   |
+| Task-list cell | `←` / `→`                                                   | Previous / next cell; `←` on the first cell goes back to the row                                                                  |
+|                | `↑` / `↓` · `PgUp` / `PgDn`                                 | Same column, other row                                                                                                            |
+|                | `Home` / `End` · `Ctrl/⌘+Home` / `End`                      | First / last cell · same column, first / last row                                                                                 |
+|                | `Enter`, `Space`                                            | As on the row (a button or link inside a cell keeps them)                                                                         |
+| Header cell    | `←` / `→` · `↓`                                             | Previous / next header cell · the first row, same column                                                                          |
+|                | `Enter` / `Space`                                           | Sort by the column                                                                                                                |
+| Bar            | `↑` / `↓` · `PgUp` / `PgDn` · `Home` / `End` (`Ctrl/⌘` too) | Focus the bar of the previous / next row, one page away, the first / last row (scrolled into view)                                |
+|                | `←` / `→`                                                   | Pan the timeline by one bottom-tier header cell                                                                                   |
+|                | `Space` · `Shift+Space` · `Ctrl/⌘+Space`                    | As in the task list                                                                                                               |
+|                | `Enter` / `F2`                                              | **Move mode** on a bar that can move, resize or change progress; otherwise select only this row and fire `row-click`              |
+|                | `L`                                                         | With `editing.dependencies`: start a [link](#links) from this bar; `Enter` / `L` on another bar creates it, `Escape` cancels      |
+| Move mode      | `←` / `→`                                                   | Move the bar one unit earlier / later (a day; an hour on hour scales; a working day with a [working calendar](#working-calendar)) |
+|                | `↑` / `↓`                                                   | With `editing.progress`: progress up / down by `step` %                                                                           |
+|                | `Shift+←` / `→` · `Alt+←` / `→`                             | Resize the end · the start (task bars, with `enableResize`)                                                                       |
+|                | `Enter` / `F2`                                              | Commit: `task-dragged` / `task-resized` / `task-progress-changed` as after a pointer drop, then the change is announced           |
+|                | `Escape`, `Tab`, leaving the bar, a pointer press           | Cancel (announced)                                                                                                                |
+| Task-list cell | `F2` · `Enter` · a character                                | With `editing.cells`: open the [cell's editor](#cells) (a character starts the text)                                              |
+| Cell editor    | `Enter` · `Tab` / `Shift+Tab` · `Escape`                    | Commit · commit and edit the next / previous cell · cancel                                                                        |
+| Selected arrow | `Delete` / `Backspace` · `Escape`                           | Remove the link · deselect it                                                                                                     |
+| Splitter       | `←` / `→` · `Enter` / `Space`                               | Resize the panel · collapse / expand it                                                                                           |
+| Anywhere       | `Escape`                                                    | Cancel move mode, a drag, a link or a cell edit, else close the tooltip, else clear the selection                                 |
+|                | `Ctrl/⌘+Z` · `Ctrl/⌘+Shift+Z` / `Ctrl+Y`                    | With an [editing history](#history): undo · redo (not in text entry or move mode)                                                 |
+|                | `Ctrl/⌘+A` (also with `Shift`)                              | Select all visible rows                                                                                                           |
+|                | `+` (or `=`) · `-` · `T` · `F`                              | Zoom in · zoom out · scroll to today · [fit to screen](#zoom) — off with `characterShortcuts: false`                              |
 
 - Move mode works like a pointer drag: the same snapping and minimum length, the drag ghost, the
   readout chip with the new dates, and an announcement of each step; a movable bar is one with

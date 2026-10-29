@@ -34,10 +34,12 @@
 //  `refresh(row)`): it is built again — the template's context and
 //  `render` included — for a new opening and when the row's task object
 //  (looked up by id in the layout as it is now), its critical flag, its
-//  resolved style (field by field, core `sameTaskStyle`: the progress
-//  colour) or the i18n bundle (labels, locale, formats) change. The
-//  clock, the task index, the float and the config are read when it is
-//  built, never followed: a clock tick builds nothing.
+//  float, its resolved style (field by field, core `sameTaskStyle`: the
+//  progress colour), the i18n bundle (labels, locale, formats), how dates
+//  are read (core `sameDateReading`: end-date rule, date-only
+//  normalisation, working calendar) or the baseline switch change. The
+//  clock and the task index are read when it is built, never followed: a
+//  clock tick builds nothing.
 //
 //  Where it goes is core's `placeTooltip`: below its bar (above it
 //  without room), centred on the pointer while hovering, on the visible
@@ -80,9 +82,12 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import {
   buildTooltipModel,
+  dateReadingOf,
   hitTestBar,
   placeTooltip,
+  sameDateReading,
   sameTaskStyle,
+  type DateReading,
   type GanttFlatRow,
   type GanttI18n,
   type GanttTask,
@@ -104,13 +109,13 @@ import { GanttTooltipState, type ShownTooltip } from './tooltip-state';
  * content is built.
  */
 export interface TooltipContext {
-  /** Date reading (`endDateMode`, `normalizeDateOnly`), the baseline rows (`baseline`) and `tooltip.render` */
-  readonly config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline' | 'tooltip'>;
+  /** Date reading (`endDateMode`, `normalizeDateOnly`, `calendar`), the baseline rows (`baseline`) and `tooltip.render` */
+  readonly config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'calendar' | 'baseline' | 'tooltip'>;
   /** Clock for the status (the timeline's `now`) */
   readonly now: Date;
   /** Critical task ids — adds the critical-path row */
   readonly criticalIds?: ReadonlySet<string> | undefined;
-  /** Total float per task id in days (CPM `floatMap`) — adds the float row */
+  /** Total float per task id in measured days (CPM `floatMap`) — adds the float row */
   readonly floatDays?: ReadonlyMap<string, number> | undefined;
   /** Every task by id — names predecessors and finds successors */
   readonly tasksById?: ReadonlyMap<string, GanttTask> | undefined;
@@ -134,15 +139,22 @@ interface TooltipSource {
   /** Its row as the layout has it now (the row it opened with once it is gone: the state dismisses it) */
   readonly row: GanttFlatRow;
   readonly critical: boolean;
+  /** Its total float in measured days (`undefined`: not in the critical-path result) */
+  readonly float: number | undefined;
   /** Its row's resolved style (`undefined` while a `styles.rule` throws: the task's own) */
   readonly style: ResolvedTaskStyle | undefined;
   /** Labels, locale and formats */
   readonly i18n: GanttI18n;
+  /** How the duration, float and variance are read: end-date rule, date-only normalisation, working calendar */
+  readonly dates: DateReading;
+  /** Whether baseline rows show */
+  readonly baseline: boolean;
 }
 
 /**
- * Same content: the same opening, task object, critical flag, style fields and i18n bundle (a new
- * row object alone is not a change, nor a new style object with the same fields).
+ * Same content: the same opening, task object, critical flag, float, style fields, i18n bundle,
+ * date reading and baseline switch (a new row object alone is not a change, nor a new style
+ * object with the same fields).
  */
 const sameSource = (a: TooltipSource | null, b: TooltipSource | null): boolean =>
   a === b ||
@@ -151,8 +163,11 @@ const sameSource = (a: TooltipSource | null, b: TooltipSource | null): boolean =
     a.shown === b.shown &&
     a.row.task === b.row.task &&
     a.critical === b.critical &&
+    Object.is(a.float, b.float) &&
     sameTaskStyle(a.style, b.style) &&
-    a.i18n === b.i18n);
+    a.i18n === b.i18n &&
+    sameDateReading(a.dates, b.dates) &&
+    a.baseline === b.baseline);
 
 /** The opening the popover shows, its row and its model */
 interface TooltipView {
@@ -347,22 +362,26 @@ export class GanttTooltipComponent {
 
   /**
    * What the open tooltip's content follows: the opening, its row as the layout has it now, its
-   * critical flag, its resolved style and the i18n bundle. The cut-off keeps the clock out: a tick
-   * may rebuild the rows (a sort by status) and the context, but not the task, the critical set, the
-   * style fields or the labels (a rolled-up parent gets a new copy only when the day of `now` moves
-   * on).
+   * critical flag and float, its resolved style, the i18n bundle, the date reading and the baseline
+   * switch. The cut-off keeps the clock out: a tick may rebuild the rows (a sort by status) and the
+   * context, but not the task, the critical set, the style fields, the labels or the date reading (a
+   * rolled-up parent gets a new copy only when the day of `now` moves on).
    */
   private readonly source = computed<TooltipSource | null>(
     () => {
       const shown = this.state.shown();
       if (!shown) return null;
       const row = this.layout.geometryById().get(shown.id)?.row ?? shown.row;
+      const ctx = this.context();
       return {
         shown,
         row,
-        critical: this.context().criticalIds?.has(shown.id) ?? false,
+        critical: ctx.criticalIds?.has(shown.id) ?? false,
+        float: ctx.floatDays?.get(shown.id),
         style: this.styleOf(row),
         i18n: this.i18n.bundle(),
+        dates: dateReadingOf(ctx.config),
+        baseline: ctx.config.baseline,
       };
     },
     { equal: sameSource },
@@ -373,7 +392,7 @@ export class GanttTooltipComponent {
     const src = this.source();
     if (!src) return null;
     const { shown, row, style, i18n } = src;
-    // Read when the content is built, never followed: the clock, the task index, the float, the config
+    // Read when the content is built, never followed: the clock, the task index and the rest of the config
     return untracked(() => {
       const ctx = this.context();
       const model = buildTooltipModel({

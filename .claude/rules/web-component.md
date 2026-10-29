@@ -24,8 +24,13 @@ paths:
     connection's owner whenever `syncGroup` changes) and the narrow-width switch
     (`layers/responsive.ts`, `onWidth()` on every measured width and after `setState`, core
     `reduceResponsive`, whose state also keeps the view shown; a responsive view change never saves
-    state). The open tooltip's refresh key is task object, critical flag, i18n bundle and the row's
-    resolved style (core `sameTaskStyle`).
+    state). The open tooltip's refresh key is task object, critical flag, float, i18n bundle, the row's
+    resolved style (core `sameTaskStyle`) and the date reading (core `sameDateReading`: calendar key, end-date
+    rule, date-only normalisation).
+  - Date reading: `graph/rows.ts` builds `dateReading = node('dateReading', () => dateReadingOf(cfg.config()), { equals: sameDateReading })`,
+    never a hand-made `{ endDateMode, normalizeDateOnly }` (it drops the calendar); CPM, rollups and the column
+    context read it, so a zoom / theme / label change recomputes none of them. Change builders (`dragChange` in
+    `engine.ts`, `taskChange` in `interaction/{keyboard-edit,cell-edit}.ts`) pass `dates: G.config.peek()` / `session.dates`.
   - Styles: `graph/styles.ts` builds core `createStyleResolver` (`rowStyle(row)`, memoised per row
     object) and `barSegments`; rows, task list, bars and tooltip read the row's resolved style
     from it, never `task.style` or the flat colour fields. Rollups (`applyRollups`) run in

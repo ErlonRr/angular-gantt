@@ -17,10 +17,11 @@ import {
   type ResolvedTaskStyle,
   type TaskStatus,
 } from '../types';
-import { calendarDays, clamp, formatDate } from '../gantt-math';
-import { taskSpan } from '../render/timeline';
+import { clamp, formatDate } from '../gantt-math';
+import { formatFloat, measureVariance } from '../calendar/durations';
+import { round1 } from '../calendar/time';
 import { taskDependencies, taskDurationLabel, taskStatus } from '../render/columns';
-import type { ResolvedGanttConfig } from '../render/config';
+import type { DateReading, ResolvedGanttConfig } from '../render/config';
 import { themeVar, type Paint } from '../render/paint';
 import { taskOwnStyle } from '../render/task-style';
 
@@ -355,7 +356,7 @@ function delayOf(ms: number): number {
 /** Tooltip-only strings (part of `GanttLabels`). */
 export type TooltipExtraLabels = Pick<
   GanttLabels,
-  'ttCritical' | 'ttCriticalValue' | 'ttFloat' | 'ttFloatDays' | 'ttSuccessors'
+  'ttCritical' | 'ttCriticalValue' | 'ttFloat' | 'ttFloatDays' | 'ttFloatHours' | 'ttSuccessors'
 >;
 
 export const DEFAULT_TOOLTIP_LABELS: TooltipExtraLabels = {
@@ -363,6 +364,7 @@ export const DEFAULT_TOOLTIP_LABELS: TooltipExtraLabels = {
   ttCriticalValue: DEFAULT_LABELS.ttCriticalValue,
   ttFloat: DEFAULT_LABELS.ttFloat,
   ttFloatDays: DEFAULT_LABELS.ttFloatDays,
+  ttFloatHours: DEFAULT_LABELS.ttFloatHours,
   ttSuccessors: DEFAULT_LABELS.ttSuccessors,
 };
 
@@ -412,8 +414,11 @@ export interface TooltipPaint {
 
 export interface TooltipInput {
   task: GanttTask;
-  /** How dates are read and whether baseline rows are shown (`baseline`, like the bars) */
-  config: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly' | 'baseline'>;
+  /**
+   * How dates are read and measured (the chart's config: the working calendar changes the
+   * duration, float and variance) and whether baseline rows are shown (`baseline`, like the bars)
+   */
+  config: Pick<ResolvedGanttConfig, 'baseline'> & DateReading;
   labels: TooltipLabels;
   locale?: string | undefined;
   /** Format of the dates (`formats.dateFormat`) */
@@ -422,7 +427,10 @@ export interface TooltipInput {
   now: Date;
   /** Critical task ids (`computeCriticalPath(...).criticalIds`) — omit when the critical path is off */
   criticalIds?: ReadonlySet<string> | undefined;
-  /** Total float per task id in days (`computeCriticalPath(...).floatMap`); not shown for a group */
+  /**
+   * Total float per task id in measured days (`computeCriticalPath(...).floatMap`: working days
+   * with a working calendar); not shown for a group
+   */
   floatDays?: ReadonlyMap<string, number> | undefined;
   /** All tasks by id: resolves predecessor names and finds successors */
   tasksById?: ReadonlyMap<string, GanttTask> | undefined;
@@ -441,15 +449,16 @@ export interface TooltipInput {
 
 // ─── Builder ──────────────────────────────────────────────────
 
-/** Finish variance in days (actual end − baseline end), rounded to 0.1 — like the `variance` column. */
+/**
+ * Finish variance in measured days (actual end − baseline end; working days with a working
+ * calendar), rounded to 0.1 — like the `variance` column.
+ */
 export function baselineVarianceDays(
   task: Pick<GanttTask, 'start' | 'end' | 'baseline'>,
-  dates: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>,
+  dates: DateReading,
 ): number | null {
-  if (!task.baseline) return null;
-  const actual = calendarDays(taskSpan(task, dates).end, false);
-  const planned = calendarDays(taskSpan(task.baseline, dates).end, false);
-  return round1(actual - planned);
+  const days = measureVariance(task, dates);
+  return days === null ? null : round1(days);
 }
 
 /** Everything the task tooltip shows, as plain data. Pure: same input, same model. */
@@ -484,7 +493,7 @@ export function buildTooltipModel(input: TooltipInput): TooltipModel {
   // A summary's float says little about the summary itself, so groups leave it out
   const float = kind === 'group' ? undefined : floatDays?.get(task.id);
   if (float !== undefined) {
-    rows.push({ label: extra.ttFloat, value: extra.ttFloatDays(round1(float)), kind: 'float' });
+    rows.push({ label: extra.ttFloat, value: formatFloat(float, config, extra), kind: 'float' });
   }
 
   let baselineVariance: string | null = null;
@@ -540,11 +549,6 @@ export function buildTooltipModel(input: TooltipInput): TooltipModel {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
-
-/** Rounds to 0.1 and turns `-0` into `0` (so -0.04 never reads "-0d"). */
-function round1(value: number): number {
-  return Math.round(value * 10) / 10 || 0;
-}
 
 /** Same mapping as the `status` column (render/columns.ts) and a11y/describe.ts — to be shared. */
 

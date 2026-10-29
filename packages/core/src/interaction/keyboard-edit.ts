@@ -22,9 +22,9 @@
 
 import { isEmptyChange, taskChange } from '../editing/changes';
 import type { EditRules } from '../editing/permissions';
-import { addDays } from '../gantt-math';
-import type { ResolvedEditing } from '../render/config';
+import type { DateReading, ResolvedEditing } from '../render/config';
 import { resizeEdge, type DragPreview, type DragResult, type DragTiming } from '../render/drag';
+import { longEnough, shiftAmount, shiftBy, stepEdge } from '../render/drag-steps';
 import type { GanttChange, GanttLabels, GanttTask, TaskDragEvent, TaskProgressEvent, TaskResizeEvent } from '../types';
 import { logicalArrow, type KeyLike } from './keymap';
 
@@ -95,8 +95,6 @@ export type KeyboardEditKeyResult =
   | { type: 'cancel' };
 
 export const DEFAULT_PROGRESS_STEP = 5;
-
-const addHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000);
 
 /** The edit step for a key while a bar is in keyboard-edit mode, or `null` (key not used). */
 export function keyboardEditAction(
@@ -170,27 +168,32 @@ export class KeyboardEditSession {
     return this.done;
   }
 
-  private get pxPerUnit(): number {
-    return this.timing.snap === 'hour' ? this.timing.pxPerDay / 24 : this.timing.pxPerDay;
+  /** How task dates are read: set under a working calendar (`editTiming`), `undefined` otherwise. */
+  get dates(): DateReading | undefined {
+    return this.timing.dates;
   }
 
-  private shift(d: Date, units: number): Date {
-    return this.timing.snap === 'hour' ? addHours(d, units) : addDays(d, units);
+  /** The start after `a` steps. Under a calendar each step is one snap unit of working time. */
+  private startAt(a: number): Date {
+    return stepEdge(this.timing, 'start', this.origStart, a, 'keyboard');
   }
 
-  private toDays(units: number): number {
-    return this.timing.snap === 'hour' ? units / 24 : units;
-  }
-
-  /** Same rule as `DragSession`: the drawn bar keeps at least one snap unit. */
-  private longEnough(start: Date, end: Date): boolean {
-    const span = this.timing.span(start, end);
-    return this.timing.toX(span.end) - this.timing.toX(span.start) >= this.pxPerUnit - 0.5;
+  /**
+   * The end after the start's `a` steps and its own `b`. Under a calendar it keeps the working
+   * length from the moved start (`b === a`), stays put when `b` is 0, and else steps from the
+   * followed end by the difference.
+   */
+  private endAt(a: number, b: number): Date {
+    const cal = this.timing.calendar;
+    if (!cal) return shiftBy(this.timing, this.origEnd, b);
+    if (b === 0) return this.origEnd;
+    const followed = a === 0 ? this.origEnd : cal.follow(this.origStart, this.origEnd, this.startAt(a));
+    return cal.end(followed, b - a, 'keyboard');
   }
 
   get state(): KeyboardEditState {
-    const start = this.shift(this.origStart, this.startUnits);
-    const end = this.shift(this.origEnd, this.endUnits);
+    const start = this.startAt(this.startUnits);
+    const end = this.endAt(this.startUnits, this.endUnits);
     return {
       start,
       end,
@@ -218,9 +221,9 @@ export class KeyboardEditSession {
         return true;
       case 'resizeEnd': {
         if (!this.resizable) return false;
-        const start = this.shift(this.origStart, this.startUnits);
+        const start = this.startAt(this.startUnits);
         let u = this.endUnits + n;
-        while (u < this.endUnits && !this.longEnough(start, this.shift(this.origEnd, u))) u++;
+        while (u < this.endUnits && !longEnough(this.timing, start, this.endAt(this.startUnits, u))) u++;
         if (u === this.endUnits) return false;
         this.endUnits = u;
         this.lastMode = 'resizeEnd';
@@ -228,9 +231,8 @@ export class KeyboardEditSession {
       }
       case 'resizeStart': {
         if (!this.resizable) return false;
-        const end = this.shift(this.origEnd, this.endUnits);
         let u = this.startUnits + n;
-        while (u > this.startUnits && !this.longEnough(this.shift(this.origStart, u), end)) u--;
+        while (u > this.startUnits && !longEnough(this.timing, this.startAt(u), this.endAt(u, this.endUnits))) u--;
         if (u === this.startUnits) return false;
         this.startUnits = u;
         this.lastMode = 'resizeStart';
@@ -293,6 +295,7 @@ export class KeyboardEditSession {
    * `resize` left; both by different amounts → a `drag` by the start shift, then a `resize`
    * right for the rest (each event's old dates are the previous event's new dates; a resizable
    * session is always movable, so the `drag` is allowed). A progress change comes last.
+   * Amounts count the snap unit, or under a working calendar are the edge's calendar shift.
    */
   commit(): KeyboardEditEvent[] {
     if (this.done) return [];
@@ -302,14 +305,17 @@ export class KeyboardEditSession {
     const s0 = this.origStart;
     const e0 = this.origEnd;
     const events: KeyboardEditEvent[] = [];
-    const drag = (units: number): TaskDragEvent => ({
-      taskId: this.taskId,
-      oldStart: s0,
-      oldEnd: e0,
-      newStart: this.shift(s0, units),
-      newEnd: this.shift(e0, units),
-      daysMoved: this.toDays(units),
-    });
+    const drag = (units: number): TaskDragEvent => {
+      const newStart = this.startAt(units);
+      return {
+        taskId: this.taskId,
+        oldStart: s0,
+        oldEnd: e0,
+        newStart,
+        newEnd: this.endAt(units, units),
+        daysMoved: shiftAmount(this.timing, units, s0, newStart),
+      };
+    };
     const resize = (
       handle: 'left' | 'right',
       oldStart: Date,
@@ -325,20 +331,23 @@ export class KeyboardEditSession {
       oldEnd,
       newStart,
       newEnd,
-      daysDelta: this.toDays(units),
+      daysDelta:
+        handle === 'left'
+          ? shiftAmount(this.timing, units, oldStart, newStart)
+          : shiftAmount(this.timing, units, oldEnd, newEnd),
     });
 
     if (a !== 0 && a === b) events.push({ kind: 'drag', event: drag(a) });
-    else if (a === 0 && b !== 0)
-      events.push({ kind: 'resize', event: resize('right', s0, e0, s0, this.shift(e0, b), b) });
-    else if (b === 0 && a !== 0)
-      events.push({ kind: 'resize', event: resize('left', s0, e0, this.shift(s0, a), e0, a) });
-    else if (a !== 0 && b !== 0) {
+    else if (a === 0 && b !== 0) {
+      events.push({ kind: 'resize', event: resize('right', s0, e0, s0, this.endAt(0, b), b) });
+    } else if (b === 0 && a !== 0) {
+      events.push({ kind: 'resize', event: resize('left', s0, e0, this.startAt(a), e0, a) });
+    } else if (a !== 0 && b !== 0) {
       const moved = drag(a);
       events.push({ kind: 'drag', event: moved });
       events.push({
         kind: 'resize',
-        event: resize('right', moved.newStart, moved.newEnd, moved.newStart, this.shift(e0, b), b - a),
+        event: resize('right', moved.newStart, moved.newEnd, moved.newStart, this.endAt(a, b), b - a),
       });
     }
     if (this.progress !== this.origProgress) {
@@ -406,6 +415,6 @@ export function keyboardEditChange(session: KeyboardEditSession, task: GanttTask
   if (state.startUnits !== 0) after.start = state.start;
   if (state.endUnits !== 0) after.end = state.end;
   if (state.progress !== (task.progress ?? 0)) after.progress = state.progress;
-  const change = taskChange(task, after, 'keyboard', { coalesceKey: `kbd:${task.id}` });
+  const change = taskChange(task, after, 'keyboard', { coalesceKey: `kbd:${task.id}`, dates: session.dates });
   return isEmptyChange(change) ? null : change;
 }

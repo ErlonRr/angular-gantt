@@ -1468,7 +1468,7 @@ export class GantryComponent {
   /** New dates of a task as one change of its raw task (`taskDragged` / `taskResized` come from the pipeline). */
   private commitDates(event: TaskDragEvent | TaskResizeEvent, source: GanttChangeSource): void {
     const task = this.editor.rawTask(event.taskId);
-    if (task) this.editor.commit(dragChange(event, task, source));
+    if (task) this.editor.commit(dragChange(event, task, source, untracked(this.layout.cfg)));
   }
 
   /**

@@ -94,6 +94,10 @@ export * from './export/paginate';
 export * from './export/csv';
 export * from './export/files';
 export * from './export/raster';
+// Working calendar (Phase 13): working-time arithmetic, measured durations, task-date snaps
+export { buildWorkingCalendar, type WorkingCalendar } from './calendar/working-calendar';
+export * from './calendar/durations';
+export * from './calendar/edit';
 // Engine helpers: arrow window index, drag ghost, quantised clock
 export { buildArrowIndex, type ArrowIndex, type ArrowLink } from './render/arrow-index';
 export { computeDragGhostVisual, DRAG_SOURCE_OPACITY, type GhostVisual, type GhostLabel } from './render/ghost';

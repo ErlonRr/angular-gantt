@@ -10,10 +10,17 @@
 //  from a start is "the same time the next day, then 4 hours later",
 //  which is how the x axis (local calendar days) and the hour-scale
 //  drags (`DragSession`) measure them, daylight-saving days included.
+//  With a working calendar (`DateReading.calendar`, `durations:
+//  'working'`) durations and lags are measured days instead: `w` is the
+//  working week, `h` an hour of the working day, and an end counts
+//  working time from the start (`calendar/durations`).
 // ─────────────────────────────────────────────────────────────
 
+import { addDayAmount, addDuration, measuresWorkingTime, spanDuration } from '../calendar/durations';
+import { taskDateLike } from '../calendar/edit';
+import { round2 } from '../calendar/time';
 import { addDays, calendarDays, isUtcDateOnly, toLocalDay } from '../gantt-math';
-import type { ResolvedGanttConfig } from '../render/config';
+import type { DateReading } from '../render/config';
 import { taskDependencies } from '../render/columns';
 import { spanEndToTaskEnd, taskSpan } from '../render/timeline';
 import { DependencyType, type GanttDependency, type GanttTask } from '../types';
@@ -39,15 +46,18 @@ export class ParseError extends Error {
 const MINUTE_MS = 60_000;
 const MINUTES_PER_DAY = 1440;
 
-/** `n` rounded to 2 decimals, without trailing zeros (`1.5`, `4`, `0.33`). */
-const round2 = (n: number): number => Math.round(n * 100) / 100 || 0;
-
 /**
  * An amount of days as editable text: whole days `5d`; sub-day amounts in hours (`4h`); other
  * amounts in days when two decimals hold them to the minute (`1.5d`), else in hours (`28h`).
- * Negative amounts keep their sign (`-2d`). Exact to the minute.
+ * Negative amounts keep their sign (`-2d`). Exact to the minute. Working durations of an hour
+ * calendar count the hours of a working day (`hoursPerDay`): whole days `2d`, else hours (`20h`).
  */
-function formatDayAmount(days: number): string {
+function formatDayAmount(days: number, dates?: DateReading): string {
+  const c = dates?.calendar;
+  if (c?.durations === 'working' && c.unit === 'hour') {
+    const whole = Math.round(days);
+    return Math.abs(days - whole) < 1e-6 ? `${whole || 0}d` : `${round2(days * c.hoursPerDay)}h`;
+  }
   const minutes = Math.round(days * MINUTES_PER_DAY);
   if (minutes % MINUTES_PER_DAY === 0) return `${minutes / MINUTES_PER_DAY || 0}d`;
   const hours = `${round2(minutes / 60)}h`;
@@ -58,22 +68,23 @@ function formatDayAmount(days: number): string {
 
 const UNIT_DAYS: Readonly<Record<string, number>> = { d: 1, w: 7, h: 1 / 24 };
 
+/**
+ * `value` of `unit` (`d`, `w`, `h`) as measured days. Calendar durations (no reading, no calendar,
+ * or `durations: 'calendar'`): a week is 7 days and an hour 1/24 day. Working durations: a week is
+ * the weekdays with working time (`daysPerWeek`) and, with `unit: 'hour'`, an hour is
+ * 1/`hoursPerDay` of a day.
+ */
+function amountDays(value: number, unit: string, dates?: DateReading): number {
+  const c = dates?.calendar;
+  if (c?.durations !== 'working') return value * UNIT_DAYS[unit]!;
+  if (unit === 'w') return value * c.daysPerWeek;
+  return unit === 'h' && c.unit === 'hour' ? value / c.hoursPerDay : value * UNIT_DAYS[unit]!;
+}
+
 /** A positive decimal (`5`, `1.5`, `.5`; `decimalComma` also takes `1,5`), or `NaN`. */
 function readDecimal(text: string, decimalComma: boolean): number {
   const t = decimalComma && !text.includes('.') ? text.replace(',', '.') : text;
   return /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(t) ? Number(t) : NaN;
-}
-
-/**
- * `date` plus `days`: the whole days through `addDays` (local calendar days, date-only values stay
- * date-only), the rest as real time rounded to the minute. A date-only value that gains a time is
- * read as its local day first (`toLocalDay`).
- */
-function addDayAmount(date: Date, days: number): Date {
-  const whole = Math.floor(days + 1e-9);
-  const restMs = Math.round((days - whole) * MINUTES_PER_DAY) * MINUTE_MS;
-  const shifted = addDays(date, whole);
-  return restMs === 0 ? shifted : new Date(toLocalDay(shifted).getTime() + restMs);
 }
 
 /**
@@ -97,6 +108,8 @@ export interface ParsePredecessorsContext {
   tasks: readonly GanttTask[];
   /** The task being edited (a reference to it is a self link, left to validation) */
   selfId: string;
+  /** How lags are measured (`w`, `h` units): the chart's config; unset: calendar days */
+  dates?: DateReading | undefined;
 }
 
 const LINK_TYPES: Readonly<Record<string, DependencyType>> = {
@@ -158,7 +171,10 @@ interface EntryReading {
  * The readings of one entry, most literal first: the whole text as a ref; the ref before a lag;
  * the ref before a spaced type (and lag); the ref joined to a type (`2FS`). Empty refs are left out.
  */
-function entryReadings(entry: string): { readings: EntryReading[]; errorRef: string | null; onlyLag: boolean } {
+function entryReadings(
+  entry: string,
+  dates?: DateReading,
+): { readings: EntryReading[]; errorRef: string | null; onlyLag: boolean } {
   const readings: EntryReading[] = [{ ref: entry, type: DependencyType.FS, lag: 0 }];
   let rest = entry;
   let lag = 0;
@@ -167,7 +183,7 @@ function entryReadings(entry: string): { readings: EntryReading[]; errorRef: str
   let errorRef: string | null = null;
   const m = LAG_RE.exec(entry);
   if (m) {
-    const value = Number(m[3]) * UNIT_DAYS[(m[4] ?? 'd').toLowerCase()]!;
+    const value = amountDays(Number(m[3]), (m[4] ?? 'd').toLowerCase(), dates);
     lag = m[2] === '-' ? -value : value;
     rest = m[1]!.trim();
     if (rest) readings.push({ ref: rest, type: DependencyType.FS, lag });
@@ -190,7 +206,8 @@ function entryReadings(entry: string): { readings: EntryReading[]; errorRef: str
 /**
  * The `predecessors` cell's text as dependencies. Entries are separated by `;` or `,`; each is
  * `<ref>[ <FS|SS|FF|SF>][±n[d|w|h]]` (case-insensitive; the lag unit defaults to days, `w` = 7
- * days, `h` = 1/24). A ref is a task id, else the name of exactly one task (exact first, then
+ * days, `h` = 1/24; in working days `w` is the working week and `h` an hour of the working day,
+ * `ctx.dates`). A ref is a task id, else the name of exactly one task (exact first, then
  * ignoring case). Empty text, or only separators: `[]`.
  *
  * Each entry is read most literally first, so ids such as `task-2` or names with spaces stay
@@ -209,7 +226,7 @@ export function parsePredecessors(text: string, ctx: ParsePredecessorsContext): 
   for (const raw of text.split(/[;,]/)) {
     const entry = raw.trim();
     if (!entry) continue;
-    const { readings, errorRef, onlyLag } = entryReadings(entry);
+    const { readings, errorRef, onlyLag } = entryReadings(entry, ctx.dates);
     let found: GanttDependency | null = null;
     for (const r of readings) {
       const hit = resolve(r.ref);
@@ -232,15 +249,16 @@ export function parsePredecessors(text: string, ctx: ParsePredecessorsContext): 
 /**
  * The predecessors of `task` as editable text, by id (`a; b SS+2d`): what `parsePredecessors`
  * reads back. The type shows when it isn't FS or a lag follows (`a FS+2d`); lags are whole days
- * (`+2d`), hours under a day (`-4h`), or days with up to two decimals (`+1.5d`).
+ * (`+2d`), hours under a day (`-4h`), or days with up to two decimals (`+1.5d`). With working
+ * durations of an hour calendar (`dates`) the hours are those of a working day (`-4h`, `+20h`).
  */
-export function formatPredecessors(task: GanttTask): string {
+export function formatPredecessors(task: GanttTask, dates?: DateReading): string {
   return taskDependencies(task)
     .map(d => {
       const type = d.type ?? DependencyType.FS;
       const lag = d.lag ?? 0;
       const typed = type !== DependencyType.FS || lag ? ` ${type}` : '';
-      const lagText = lag ? `${lag > 0 ? '+' : ''}${formatDayAmount(lag)}` : '';
+      const lagText = lag ? `${lag > 0 ? '+' : ''}${formatDayAmount(lag, dates)}` : '';
       return `${d.taskId}${typed}${lagText}`;
     })
     .join('; ');
@@ -251,45 +269,48 @@ export function formatPredecessors(task: GanttTask): string {
 /**
  * A duration text in days: `5` and `5d` (days), `2w` (weeks), `4h` (hours), decimals allowed
  * (`1.5d`, `1,5d`), case-insensitive, spaces around the unit ignored. Not negative. Throws
- * `ParseError` (`syntax`) on anything else, empty text included.
+ * `ParseError` (`syntax`) on anything else, empty text included. `dates` (the chart's config)
+ * sets what the units measure: with working durations a week is the working week and, in an hour
+ * calendar, an hour is 1/`hoursPerDay` of a day; without it, 7 days and 1/24.
  */
-export function parseDuration(text: string): number {
+export function parseDuration(text: string, dates?: DateReading): number {
   const m = /^\s*([\d.,]+)\s*([dwh]?)\s*$/i.exec(text);
   const value = m ? readDecimal(m[1]!, true) : NaN;
   if (!m || !Number.isFinite(value)) throw new ParseError('syntax', text);
-  return value * UNIT_DAYS[(m[2] || 'd').toLowerCase()]!;
+  return amountDays(value, (m[2] || 'd').toLowerCase(), dates);
 }
 
 /**
  * The duration of `task` as editable text, as drawn (`taskSpan`: date-only normalisation,
  * inclusive ends): whole days `5d`, sub-day durations in hours (`6h`), others in days when two
- * decimals hold them (`1.5d`), else in hours (`28h`). What `parseDuration` reads back.
+ * decimals hold them (`1.5d`), else in hours (`28h`). With working durations the days are
+ * measured days (`spanDuration`), and in an hour calendar the hours are those of a working day:
+ * whole days `2d`, else hours (`20h`). What `parseDuration` reads back.
  */
-export function formatDurationInput(
-  task: Pick<GanttTask, 'start' | 'end'>,
-  cfg: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>,
-): string {
-  const span = taskSpan(task, cfg);
-  return formatDayAmount(dayAmountBetween(span.start, span.end));
+export function formatDurationInput(task: Pick<GanttTask, 'start' | 'end'>, dates: DateReading): string {
+  const span = taskSpan(task, dates);
+  const days = measuresWorkingTime(dates) ? spanDuration(span, dates) : dayAmountBetween(span.start, span.end);
+  return formatDayAmount(days, dates);
 }
 
 /**
  * The end that gives `task` a drawn duration of `days` (`parseDuration`) from its drawn start.
  * Whole days on a whole-day task move the stored end with `addDays` (a date-only end stays
  * date-only, an inclusive end stays inclusive); otherwise the drawn end is the start plus the
- * amount and becomes a task end through the `endDateMode` rule (`spanEndToTaskEnd`). What the
- * built-in duration editor writes.
+ * amount and becomes a task end through the `endDateMode` rule (`spanEndToTaskEnd`). With working
+ * durations the amount is working time counted from the start (from the next working time when
+ * the start is off), the end sits right after it, and it is written in the task's own form
+ * (`taskDateLike`). What the built-in duration editor writes.
  */
-export function endForDuration(
-  task: Pick<GanttTask, 'start' | 'end'>,
-  days: number,
-  cfg: Pick<ResolvedGanttConfig, 'endDateMode' | 'normalizeDateOnly'>,
-): Date {
-  const span = taskSpan(task, cfg);
-  const current = dayAmountBetween(span.start, span.end);
+export function endForDuration(task: Pick<GanttTask, 'start' | 'end'>, days: number, dates: DateReading): Date {
+  const span = taskSpan(task, dates);
   const end = task.end ?? task.start;
+  if (measuresWorkingTime(dates)) {
+    return taskDateLike(end, spanEndToTaskEnd(addDuration(span.start, days, dates), dates), dates);
+  }
+  const current = dayAmountBetween(span.start, span.end);
   if (Number.isInteger(days) && Number.isInteger(current)) return addDays(end, days - current);
-  return spanEndToTaskEnd(addDayAmount(span.start, days), cfg);
+  return spanEndToTaskEnd(addDayAmount(span.start, days), dates);
 }
 
 // ─── Date inputs ──────────────────────────────────────────────

@@ -11,7 +11,7 @@
  *   flush (`focus.request` of its `editor:<id>:<column>` key). The task-list region mounts it
  *   (`layers/tasklist.ts`, §3d). An editor already open elsewhere is finished first, as a blur.
  * - `commit()` parses and validates the text (`commitCellValue`), then commits
- *   `taskChange(edit.rawTask(id), patch, 'cell', { column, coalesceKey: 'cell:<id>:<column>' })`
+ *   `taskChange(edit.rawTask(id), patch, 'cell', { column, coalesceKey: 'cell:<id>:<column>', dates })`
  *   through `edit.commit(change, 'record', { announceRejection: false })`. The unchanged text
  *   (or values) closes the editor with no change. An error, or the pipeline's rejection
  *   (`edit.rejection`: a loop, a vetoed change…), keeps it open: `aria-invalid`, the message
@@ -211,6 +211,7 @@ export function createCellEdit(ctx: LayerContext): CellEditApi {
         const change = taskChange(raw, result.patch, 'cell', {
           column: state.columnKey,
           coalesceKey: `cell:${state.taskId}:${state.columnKey}`,
+          dates: G.config.peek(),
         });
         if (!isEmptyChange(change) && !ctx.edit.commit(change, 'record', { announceRejection: false })) {
           const why = ctx.edit.rejection;

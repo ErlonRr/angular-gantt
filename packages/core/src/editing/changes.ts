@@ -8,7 +8,10 @@
 //  `task-dragged` as a drag.
 // ─────────────────────────────────────────────────────────────
 
-import { addDays, calendarDays } from '../gantt-math';
+import { measuresWorkingTime, taskDuration } from '../calendar/durations';
+import { HOUR_MS } from '../calendar/time';
+import { addDays, calendarDays, dateShiftDays } from '../gantt-math';
+import type { DateReading } from '../render/config';
 import {
   DependencyType,
   type DependencyChangeEvent,
@@ -32,6 +35,12 @@ export interface TaskChangeOptions {
    * except a cell edit (source `'cell'` with a `column`), which gets `cell:<taskId>:<column>`.
    */
   coalesceKey?: string | undefined;
+  /**
+   * How task dates are read and measured (the chart config): under working durations a change
+   * that keeps the working length of both edges is one `move`, whatever the days off between them
+   * (`deriveOps`). Pass the config of every change a gesture or cell builds.
+   */
+  dates?: DateReading | undefined;
 }
 
 /** A link to add or remove (`linkChange`): `fromId` is the predecessor, `toId` the successor. */
@@ -48,8 +57,9 @@ export interface LinkChangeSpec {
 
 type Fields = Record<string, unknown>;
 
-const HOUR_MS = 3_600_000;
 const EPS = 1e-9;
+/** Measured lengths (working days) closer than this are the same length */
+const LENGTH_EPS = 1e-6;
 /** Plain objects and arrays deeper than this compare by identity (and cycles end) */
 const MAX_DEPTH = 8;
 
@@ -133,17 +143,6 @@ function sameField(key: string, a: unknown, b: unknown): boolean {
   return sameValue(a, b);
 }
 
-/**
- * The shift from `from` to `to` in days: whole local calendar days when the time of day is kept
- * (date-only values, day snapping, across DST), else the elapsed hours / 24 (hour snapping).
- */
-function shiftDays(from: Date, to: Date): number {
-  const days = calendarDays(to) - calendarDays(from);
-  const whole = Math.round(days);
-  if (Math.abs(days - whole) < EPS) return whole + 0;
-  return (to.getTime() - from.getTime()) / HOUR_MS / 24;
-}
-
 /** `date` shifted the way `from` → `to` is (`addDays` for whole calendar days, else by the elapsed time). */
 function shiftLike(date: Date, from: Date, to: Date): Date {
   const days = calendarDays(to) - calendarDays(from);
@@ -172,25 +171,39 @@ function makeChange(
   return change;
 }
 
-/** The date ops of one task: move, resize, or move + resize of the end (D4). */
-function dateOps(taskId: string, oldStart: Date, oldEnd: Date, newStart: Date, newEnd: Date): GanttChangeOp[] {
+/**
+ * The date ops of one task: move, resize, or move + resize of the end (D4). Under working durations
+ * (`dates`) both edges moving with the measured length unchanged is a move, as equal shifts are.
+ */
+function dateOps(
+  taskId: string,
+  oldStart: Date,
+  oldEnd: Date,
+  newStart: Date,
+  newEnd: Date,
+  dates?: DateReading,
+): GanttChangeOp[] {
   const startMoved = oldStart.getTime() !== newStart.getTime();
   const endMoved = oldEnd.getTime() !== newEnd.getTime();
   if (!startMoved && !endMoved) return [];
   const base = { taskId, oldStart, oldEnd, newStart, newEnd };
   if (!startMoved) {
-    return [{ op: 'resize', event: { ...base, edge: 'end', handle: 'right', daysDelta: shiftDays(oldEnd, newEnd) } }];
+    return [
+      { op: 'resize', event: { ...base, edge: 'end', handle: 'right', daysDelta: dateShiftDays(oldEnd, newEnd) } },
+    ];
   }
   if (!endMoved) {
     return [
-      { op: 'resize', event: { ...base, edge: 'start', handle: 'left', daysDelta: shiftDays(oldStart, newStart) } },
+      { op: 'resize', event: { ...base, edge: 'start', handle: 'left', daysDelta: dateShiftDays(oldStart, newStart) } },
     ];
   }
-  const startShift = shiftDays(oldStart, newStart);
-  const endShift = shiftDays(oldEnd, newEnd);
+  const startShift = dateShiftDays(oldStart, newStart);
+  const endShift = dateShiftDays(oldEnd, newEnd);
   const startMs = newStart.getTime() - oldStart.getTime();
   const endMs = newEnd.getTime() - oldEnd.getTime();
-  if (Math.abs(startShift - endShift) < EPS) return [{ op: 'move', event: { ...base, daysMoved: startShift } }];
+  if (Math.abs(startShift - endShift) < EPS || sameLength(oldStart, oldEnd, newStart, newEnd, dates)) {
+    return [{ op: 'move', event: { ...base, daysMoved: startShift } }];
+  }
   // Equal elapsed time read as different calendar days (an hour drag across a DST change): a move
   if (startMs === endMs) return [{ op: 'move', event: { ...base, daysMoved: startMs / HOUR_MS / 24 } }];
   // Both edges by different amounts: a move by the start's shift, then a resize of the end
@@ -205,12 +218,19 @@ function dateOps(taskId: string, oldStart: Date, oldEnd: Date, newStart: Date, n
     oldEnd: midEnd,
     newStart,
     newEnd,
-    daysDelta: shiftDays(midEnd, newEnd),
+    daysDelta: dateShiftDays(midEnd, newEnd),
   };
   return [
     { op: 'move', event: move },
     { op: 'resize', event: resize },
   ];
+}
+
+/** Working durations only: the measured length of the task is the same before and after. */
+function sameLength(oldStart: Date, oldEnd: Date, newStart: Date, newEnd: Date, dates?: DateReading): boolean {
+  if (!dates || !measuresWorkingTime(dates)) return false;
+  const before = taskDuration({ start: oldStart, end: oldEnd }, dates);
+  return Math.abs(before - taskDuration({ start: newStart, end: newEnd }, dates)) < LENGTH_EPS;
 }
 
 // ─── Building changes ─────────────────────────────────────────
@@ -254,7 +274,7 @@ export function taskChange(
   const column = options.column;
   const coalesceKey =
     options.coalesceKey ?? (source === 'cell' && column !== undefined ? `cell:${task.id}:${column}` : undefined);
-  return makeChange(source, updates, deriveOps(updates, [task]), column, coalesceKey);
+  return makeChange(source, updates, deriveOps(updates, [task], options.dates), column, coalesceKey);
 }
 
 /**
@@ -299,14 +319,26 @@ export function linkChange(
 /**
  * The change of a pointer or keyboard drop (`DragSession.finish`): the new `start` / `end` of
  * `task`. When the derived op is the event's kind (a move, or a resize of the same edge), it keeps
- * the event's `daysMoved` / `daysDelta`, which count in the session's snap unit.
+ * the event's `daysMoved` / `daysDelta`, which count in the session's snap unit — or, with a
+ * working calendar, the edge's calendar shift. Pass the chart config as `dates` under a working
+ * calendar: a drag is known to be a move, so it is always one `move` (never a move + resize because
+ * the days off between the edges changed), and fires one `task-dragged`.
  */
 export function dragChange(
   event: TaskDragEvent | TaskResizeEvent,
   task: GanttTask,
   source: GanttChangeSource,
+  dates?: DateReading,
 ): GanttChange {
-  const change = taskChange(task, { start: event.newStart, end: event.newEnd }, source);
+  const change = taskChange(task, { start: event.newStart, end: event.newEnd }, source, dates ? { dates } : {});
+  if (dates?.calendar && 'daysMoved' in event) {
+    const steps = change.ops.flatMap(op => (op.op === 'move' || op.op === 'resize' ? [op.event] : []));
+    const first = steps[0];
+    const last = steps.at(-1);
+    if (first && last && steps.length === change.ops.length) {
+      return { ...change, ops: [mergedMove(task.id, first, last, event.daysMoved)] };
+    }
+  }
   const [only, ...rest] = change.ops;
   if (!only || rest.length > 0) return change;
   if (only.op === 'move' && 'daysMoved' in event) {
@@ -341,8 +373,16 @@ export function progressChange(event: TaskProgressEvent, task: GanttTask, source
  *
  * Amounts: whole local calendar days when the time of day is kept (date-only values, across DST),
  * else elapsed hours / 24. A task without an `end` is read as ending at its start.
+ *
+ * Under working durations (`dates`, the chart config) both edges moving with the measured length
+ * unchanged is also a `move`: a Friday bar dropped on Monday keeps its working days while the days
+ * off it spans change, and is not a move + resize. Without `dates` (or a calendar) nothing differs.
  */
-export function deriveOps(updates: readonly GanttTaskUpdate[], tasksBefore: readonly GanttTask[]): GanttChangeOp[] {
+export function deriveOps(
+  updates: readonly GanttTaskUpdate[],
+  tasksBefore: readonly GanttTask[],
+  dates?: DateReading,
+): GanttChangeOp[] {
   const byId = new Map<string, Fields>();
   for (const t of tasksBefore) if (!byId.has(t.id)) byId.set(t.id, fields(t));
   const ops: GanttChangeOp[] = [];
@@ -359,7 +399,7 @@ export function deriveOps(updates: readonly GanttTaskUpdate[], tasksBefore: read
       if (oldStart && newStart) {
         const oldEnd = asDate(old('end')) ?? oldStart;
         const newEnd = asDate(now('end')) ?? newStart;
-        ops.push(...dateOps(u.taskId, oldStart, oldEnd, newStart, newEnd));
+        ops.push(...dateOps(u.taskId, oldStart, oldEnd, newStart, newEnd, dates));
       }
     }
     if (hasOwn(after, 'progress')) {
@@ -474,8 +514,10 @@ export function invertChange(change: GanttChange, source: 'undo' | 'redo'): Gant
  * are dropped (an update with nothing left goes too). The ops are derived again from the merged
  * updates (`deriveOps`), so consecutive moves of one task fold into one, a move then a resize of
  * the end read as their net change, a link added then removed disappears, and no-ops are dropped.
- * Ops without an update (a link to a missing task) are not kept. Keeps `a`'s source, `b`'s
- * coalesce key, and `b`'s column (else `a`'s).
+ * Moves are folded without reading the dates again: a task whose date ops in `a` and `b` are all
+ * moves stays one move whatever the days off between its edges (a working-calendar move, also when
+ * `b` changes something else), from the first old dates to the last new ones. Ops without an update (a link to a missing task) are not
+ * kept. Keeps `a`'s source, `b`'s coalesce key, and `b`'s column (else `a`'s).
  */
 export function mergeChanges(a: GanttChange, b: GanttChange): GanttChange {
   const merged = new Map<string, { before: Fields; after: Fields }>();
@@ -513,13 +555,56 @@ export function mergeChanges(a: GanttChange, b: GanttChange): GanttChange {
       datesBefore.set(e.taskId, { id: e.taskId, name: '', start: e.oldStart, end: e.oldEnd });
     }
   }
-  return makeChange(
-    a.source,
-    updates,
-    deriveOps(updates, [...datesBefore.values()]),
-    b.column ?? a.column,
-    b.coalesceKey,
-  );
+  const ops = foldMoves(deriveOps(updates, [...datesBefore.values()]), [...a.ops, ...b.ops]);
+  return makeChange(a.source, updates, ops, b.column ?? a.column, b.coalesceKey);
+}
+
+/**
+ * `derived` (the merged updates' ops) with a task's `move` + `resize` replaced by one `move` when
+ * every date op of that task in `source` (the merged changes' ops, in order) is a move: one or
+ * several moves are one move, from the first old dates to the last new ones (`daysMoved` the
+ * start's shift) — a working move widens the bar over days off, which the dates alone read as a
+ * resize on top of the move (and as one when the move is merged with a non-date change). Anything
+ * else is left as derived.
+ */
+function foldMoves(derived: GanttChangeOp[], source: readonly GanttChangeOp[]): GanttChangeOp[] {
+  const moves = new Map<string, { first: TaskDragEvent; last: TaskDragEvent }>();
+  const resized = new Set<string>();
+  for (const op of source) {
+    if (op.op === 'move')
+      moves.set(op.event.taskId, { first: moves.get(op.event.taskId)?.first ?? op.event, last: op.event });
+    else if (op.op === 'resize') resized.add(op.event.taskId);
+  }
+  const dropped = new Set<GanttChangeOp>();
+  return derived.flatMap((op, i): GanttChangeOp[] => {
+    if (dropped.has(op)) return [];
+    const next = derived[i + 1];
+    if (op.op !== 'move' || next?.op !== 'resize' || next.event.taskId !== op.event.taskId) return [op];
+    const m = moves.get(op.event.taskId);
+    if (!m || resized.has(op.event.taskId)) return [op];
+    dropped.add(next);
+    return [mergedMove(op.event.taskId, m.first, m.last, dateShiftDays(m.first.oldStart, m.last.newStart))];
+  });
+}
+
+/** One `move` of a task from the old dates of `first` to the new dates of `last`. */
+function mergedMove(
+  taskId: string,
+  first: Pick<TaskDragEvent, 'oldStart' | 'oldEnd'>,
+  last: Pick<TaskDragEvent, 'newStart' | 'newEnd'>,
+  daysMoved: number,
+): GanttChangeOp {
+  return {
+    op: 'move',
+    event: {
+      taskId,
+      oldStart: first.oldStart,
+      oldEnd: first.oldEnd,
+      newStart: last.newStart,
+      newEnd: last.newEnd,
+      daysMoved,
+    },
+  };
 }
 
 /** The change has no update and no op (nothing to apply, nothing to record). */

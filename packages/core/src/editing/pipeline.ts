@@ -128,8 +128,9 @@ const scaleUnit = (config: Pick<ResolvedGanttConfig, 'scales'>): AnnounceUnit =>
  * - Undo / redo (source `'undo'` / `'redo'`) skip the tasks that are gone (`applicableChange`, D8);
  *   nothing left rejects with `missing-task` (bindings check `applicableChange` first and drop the
  *   history entry). Any other change that refers to a missing task is rejected by validation.
- * - A change with updates and no ops gets its ops derived (`deriveOps`); a change with ops keeps
- *   them (an inverse keeps its reversed order).
+ * - A change with updates and no ops gets its ops derived (`deriveOps`, reading dates as the chart
+ *   config does: under a working calendar a change that keeps the working length is one move); a
+ *   change with ops keeps them (an inverse keeps its reversed order).
  * - An empty change (`isEmptyChange`) passes with no events and an empty announcement: callers
  *   skip it before `before-change`.
  *
@@ -164,7 +165,7 @@ export function prepareChange(change: GanttChange, ctx: PrepareChangeContext): P
     c = kept;
   }
   if (c.ops.length === 0 && c.updates.length > 0) {
-    const ops = deriveOps(c.updates, tasks);
+    const ops = deriveOps(c.updates, tasks, config);
     if (ops.length > 0) c = { ...c, ops };
   }
 

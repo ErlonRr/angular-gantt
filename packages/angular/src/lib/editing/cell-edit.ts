@@ -373,6 +373,7 @@ export class GanttCellEditService {
         const change = taskChange(raw, result.patch, 'cell', {
           column: state.columnKey,
           coalesceKey: `cell:${state.taskId}:${state.columnKey}`,
+          dates: untracked(this.layout.cfg),
         });
         if (!isEmptyChange(change) && !this.editor.commit(change, 'record', { announceRejection: false })) {
           const why = this.editor.rejection;

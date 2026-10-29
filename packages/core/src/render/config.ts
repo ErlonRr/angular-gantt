@@ -6,6 +6,9 @@
 // ─────────────────────────────────────────────────────────────
 
 import type {
+  GanttCalendarOptions,
+  GanttCalendarUnit,
+  GanttDurationMode,
   GanttEditingOptions,
   GanttExportFormat,
   GanttExportOptions,
@@ -16,6 +19,7 @@ import type {
   GanttLength,
   GanttLineStyle,
   GanttHourRange,
+  GanttNonWorkingTime,
   GanttTimeHighlight,
   GanttView,
   GanttTask,
@@ -39,6 +43,7 @@ import type { InitialScroll } from './viewport';
 import { calendarDays } from '../gantt-math';
 import { resolveWeek } from '../format/week';
 import { DEFAULT_PROGRESS_STEP } from '../interaction/keyboard-edit';
+import { buildWorkingTime, type WorkingCalendar } from '../calendar/working-calendar';
 
 export interface ResolvedLine {
   /** Explicit `GanttLineStyle.color`, else the theme token (`var(--gantt-grid-line)`…) */
@@ -63,9 +68,55 @@ export interface ResolvedNonWorking {
   /** Working hours for a weekday, sorted by start (null = no hour shading) */
   workingHours: ((weekday: number) => readonly GanttHourRange[]) | null;
   intensive: (GanttHourRange & { color?: string | undefined; label?: string | undefined })[];
-  style: 'shade' | 'hatch' | 'disabled';
+  /** `'none'`: no weekend, holiday or off-hours band (the time still counts for the calendar) */
+  style: 'shade' | 'hatch' | 'disabled' | 'none';
   showInHeader: boolean;
   minPxPerDay: number;
+}
+
+// ─── Working calendar (`options.calendar`) ───────────────────
+
+/** Working hours in a day of an hour calendar when `calendar.hoursPerDay` is not set. */
+export const DEFAULT_HOURS_PER_DAY = 8;
+
+/**
+ * The working hours of an hour calendar (`calendar.unit: 'hour'`) when
+ * `nonWorkingTime.workingHours` is not set: 09:00–17:00 (resolved into
+ * `ResolvedNonWorking.workingHours`, so the off-hours shading shows the same hours).
+ */
+export const DEFAULT_WORKING_HOURS: readonly GanttHourRange[] = Object.freeze([Object.freeze({ start: 9, end: 17 })]);
+
+/** `options.calendar` with every default filled (`ResolvedGanttConfig.calendar`). */
+export interface ResolvedCalendar {
+  /** What durations count (`calendar.durations`, default `'working'`) */
+  durations: GanttDurationMode;
+  /** Working days or working hours (`calendar.unit`, default `'day'`) */
+  unit: GanttCalendarUnit;
+  /** Edits skip non-working time (`calendar.skipNonWorking`, default true) */
+  skipNonWorking: boolean;
+  /** Working hours in a day with `unit: 'hour'` (default 8) */
+  hoursPerDay: number;
+  /** Weekdays with working time: what `1w` means in a working duration */
+  daysPerWeek: number;
+  /** The working-time arithmetic, built from the resolved `nonWorkingTime` (`buildWorkingCalendar`) */
+  working: WorkingCalendar;
+  /**
+   * A stable text of everything that changes a measure (durations, unit, skipping, hours per
+   * day, the working weekdays, the holidays on them and, with `unit: 'hour'`, each weekday's
+   * merged hours): equal keys, equal calendars (`sameDateReading`)
+   */
+  key: string;
+}
+
+/**
+ * How task dates are read and measured: the end-date rule, date-only normalisation and the
+ * working calendar. A `ResolvedGanttConfig` and a `ColumnContext` are `DateReading`s.
+ */
+export interface DateReading {
+  endDateMode: 'exclusive' | 'inclusive';
+  normalizeDateOnly: boolean;
+  /** The working calendar; `null` / unset: calendar time */
+  calendar?: ResolvedCalendar | null | undefined;
 }
 
 export interface ResolvedToolbar {
@@ -269,6 +320,8 @@ export interface ResolvedGanttConfig {
   highlightTime?: ((start: Date, unit: 'day' | 'hour') => GanttTimeHighlight | null | undefined) | undefined;
   endDateMode: 'exclusive' | 'inclusive';
   normalizeDateOnly: boolean;
+  /** Working calendar (`options.calendar`), or `null` when off (the default) */
+  calendar: ResolvedCalendar | null;
   bar: {
     height: GanttLength;
     radius: number;
@@ -593,7 +646,17 @@ const densityOf = (d: GanttDensity | undefined): GanttDensity =>
 /** Epoch day of a date (local calendar). */
 const epochDay = (d: Date) => Math.floor(calendarDays(d));
 
-export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): ResolvedNonWorking | null {
+const NON_WORKING_STYLES: readonly ResolvedNonWorking['style'][] = ['shade', 'hatch', 'disabled', 'none'];
+
+/**
+ * `options.nonWorkingTime` resolved (`null` for `false`). `defaultHours` are the working hours
+ * used when `workingHours` is not set (`resolveConfig` passes `DEFAULT_WORKING_HOURS` for an hour
+ * calendar; otherwise unset hours mean no off-hours shading). An unknown `style` reads as `'shade'`.
+ */
+export function resolveNonWorking(
+  opts: GanttOptions['nonWorkingTime'],
+  defaultHours?: readonly GanttHourRange[] | null,
+): ResolvedNonWorking | null {
   if (opts === false) return null;
   const o = opts ?? {};
   const weekends = new Set<number>(o.weekends === false ? [] : Array.isArray(o.weekends) ? o.weekends : [0, 6]);
@@ -609,7 +672,8 @@ export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): Resolve
   }
 
   let workingHours: ResolvedNonWorking['workingHours'] = null;
-  const wh = o.workingHours;
+  // The defaults only stand in for unset hours (an empty list keeps meaning "no working hours")
+  const wh = o.workingHours || (defaultHours ? [...defaultHours] : undefined);
   if (wh) {
     // Sorted once per weekday, not on every painted day
     const sorted = (ranges: readonly GanttHourRange[]) => [...ranges].sort((a, b) => a.start - b.start);
@@ -631,10 +695,92 @@ export function resolveNonWorking(opts: GanttOptions['nonWorkingTime']): Resolve
     holidayByDay,
     workingHours,
     intensive: o.intensiveHours ?? [],
-    style: o.style ?? 'shade',
+    style: o.style && NON_WORKING_STYLES.includes(o.style) ? o.style : 'shade',
     showInHeader: o.showInHeader ?? true,
     minPxPerDay: o.minPxPerDay ?? 12,
   };
+}
+
+/** `options.calendar` turns on an hour calendar (`unit: 'hour'`). */
+const isHourCalendar = (c: GanttOptions['calendar']): boolean =>
+  typeof c === 'object' && c !== null && c.unit === 'hour';
+
+/** The working hours to resolve `nonWorkingTime` with: the defaults for an hour calendar without its own. */
+const defaultHoursFor = (
+  calendar: GanttOptions['calendar'],
+  nonWorking: GanttNonWorkingTime | false | undefined,
+): readonly GanttHourRange[] | null =>
+  isHourCalendar(calendar) && !(nonWorking && nonWorking.workingHours) ? DEFAULT_WORKING_HOURS : null;
+
+/**
+ * `options.calendar` resolved over the resolved `nonWorkingTime` (`null` there: no non-working
+ * time, every day — and with `unit: 'hour'` every hour — works). Off (`null`) unless `true` or
+ * an object, and when the week has no working time. Unknown `durations` / `unit` values read as
+ * the defaults; `hoursPerDay` must be finite, more than 0 and at most 24, else 8.
+ */
+export function resolveCalendar(
+  opts: GanttOptions['calendar'],
+  nonWorking: ResolvedNonWorking | null,
+): ResolvedCalendar | null {
+  if (opts !== true && (typeof opts !== 'object' || opts === null)) return null;
+  const o: GanttCalendarOptions = opts === true ? {} : opts;
+  const unit: GanttCalendarUnit = o.unit === 'hour' ? 'hour' : 'day';
+  const built = buildWorkingTime(nonWorking, unit);
+  if (!built) return null;
+  const { working } = built;
+  const durations: GanttDurationMode = o.durations === 'calendar' ? 'calendar' : 'working';
+  const skipNonWorking = o.skipNonWorking !== false;
+  const hoursPerDay = checked(o.hoursPerDay, n => n > 0 && n <= 24, DEFAULT_HOURS_PER_DAY);
+  let daysPerWeek = 0;
+  for (let day = 0; day < 7; day++) if (working.hoursOn(day) > 0) daysPerWeek++;
+  return {
+    durations,
+    unit,
+    skipNonWorking,
+    hoursPerDay,
+    daysPerWeek,
+    working,
+    key: [durations, unit, skipNonWorking ? 'skip' : 'keep', hoursPerDay, built.key].join('|'),
+  };
+}
+
+/**
+ * The working calendar of `options` (`calendar` and `nonWorkingTime`), resolved as the chart
+ * resolves them, for scheduling in an app or in Node: `calendar` unset (or `false`) reads as
+ * `true` (working days, Saturday and Sunday off). `null` when the week has no working time.
+ *
+ * ```ts
+ * const cal = createWorkingCalendar({ nonWorkingTime: { holidays: [new Date(2026, 11, 25)] } });
+ * // Thu 24 Dec is the first working day, Fri 25 is the holiday, Mon 28 is the second: it ends
+ * // right after it, at Tue 29 Dec 00:00
+ * cal?.addWorking(new Date(2026, 11, 24), 2);
+ * ```
+ */
+export function createWorkingCalendar(
+  options: Pick<GanttOptions, 'nonWorkingTime' | 'calendar'> = {},
+): WorkingCalendar | null {
+  const calendar = options.calendar || true;
+  const nonWorking = resolveNonWorking(options.nonWorkingTime, defaultHoursFor(calendar, options.nonWorkingTime));
+  return resolveCalendar(calendar, nonWorking)?.working ?? null;
+}
+
+/** Just the date reading of `r` (a config, a column context): what `sameDateReading` compares. */
+export function dateReadingOf(r: DateReading): DateReading {
+  return { endDateMode: r.endDateMode, normalizeDateOnly: r.normalizeDateOnly, calendar: r.calendar ?? null };
+}
+
+/**
+ * Whether two readings measure task dates the same way: equal end-date rules, equal date-only
+ * normalisation and equal calendar keys (`null` and unset are equal). The bindings' cut-off for
+ * the critical path, rollups and the column context.
+ */
+export function sameDateReading(a: DateReading, b: DateReading): boolean {
+  return (
+    a === b ||
+    (a.endDateMode === b.endDateMode &&
+      a.normalizeDateOnly === b.normalizeDateOnly &&
+      (a.calendar?.key ?? null) === (b.calendar?.key ?? null))
+  );
 }
 
 /**
@@ -655,6 +801,10 @@ export function resolveConfig(
   const sizes = DENSITY_METRICS[density];
   const week = resolveWeek(options.weekNumbering, options.weekStart, i18n?.locale ?? options.locale);
   const responsive = options.responsive;
+  const nonWorking = resolveNonWorking(
+    options.nonWorkingTime,
+    defaultHoursFor(options.calendar, options.nonWorkingTime),
+  );
 
   return {
     zoomLevels,
@@ -677,10 +827,11 @@ export function resolveConfig(
       horizontal: line(options.gridLines?.horizontal, { paint: themeVar('borderColor'), width: 1 }),
       majorUnit: options.gridLines?.majorUnit,
     },
-    nonWorking: resolveNonWorking(options.nonWorkingTime),
+    nonWorking,
     highlightTime: options.highlightTime,
     endDateMode: options.endDateMode ?? 'exclusive',
     normalizeDateOnly: options.normalizeDateOnly ?? true,
+    calendar: resolveCalendar(options.calendar, nonWorking),
     bar: {
       height: options.bar?.height ?? '60%',
       radius: options.bar?.radius ?? metrics?.barRadius ?? DEFAULT_BAR_RADIUS,

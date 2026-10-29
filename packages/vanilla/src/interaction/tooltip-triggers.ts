@@ -20,11 +20,13 @@
  * - **A press elsewhere**: a `pointerdown` outside the tooltip and off the bars dismisses it (a
  *   press on a bar is the canvas pointer handler's: a tap toggles that bar's tooltip). Bars are
  *   hit by geometry, as the pointer handler hits them (core `hitTestBar`).
- * - **Its row changes**: while a tooltip shows, its row's task object, critical flag, resolved
- *   style (field by field, core `sameTaskStyle`: the progress colour) and the i18n bundle (labels,
- *   locale, formats) are followed; when one changes, `tooltip.refresh(row)` writes the content
- *   again in the next frame, after the bars are painted, so it is placed by the moved bar (a
- *   custom `render` runs again only then: the clock alone changes none of them).
+ * - **Its row changes**: while a tooltip shows, its row's task object, critical flag, float,
+ *   resolved style (field by field, core `sameTaskStyle`: the progress colour), the i18n bundle
+ *   (labels, locale, formats), how dates are read (core `sameDateReading`: end-date rule,
+ *   date-only normalisation, working calendar) and the baseline switch are followed; when one
+ *   changes, `tooltip.refresh(row)` writes the content again in the next frame, after the bars
+ *   are painted, so it is placed by the moved bar (a custom `render` runs again only then: the
+ *   clock alone changes none of them).
  * - **Dismiss / reset** without a user gesture: a drag or move mode starts (`dragPreview`),
  *   the bar's row goes away (checked when the tasks, the collapsed rows or the options change),
  *   and `tooltipEnabled` or the resolved rules (`config.tooltip`: `trigger`, `showDelay`,
@@ -37,7 +39,9 @@
 
 import {
   hitTestBar,
+  sameDateReading,
   sameTaskStyle,
+  type DateReading,
   type GanttFlatRow,
   type GanttI18n,
   type ResolvedGanttConfig,
@@ -68,14 +72,21 @@ const sameValues = (a: readonly unknown[], b: readonly unknown[]) =>
 interface OpenContent {
   readonly row: GanttFlatRow;
   readonly critical: boolean;
+  /** Total float in measured days (`undefined`: off the critical-path result) */
+  readonly float: number | undefined;
   /** The row's resolved style (`undefined` while a `styles.rule` throws: the task's own) */
   readonly style: ResolvedTaskStyle | undefined;
   readonly i18n: GanttI18n;
+  /** How the duration, float and variance are read: end-date rule, date-only normalisation, working calendar */
+  readonly dates: DateReading;
+  /** Whether baseline rows show */
+  readonly baseline: boolean;
 }
 
 /**
- * Same content: the same task object, critical flag, style fields and i18n bundle (a new row
- * object alone is not a change, nor a new style object with the same fields).
+ * Same content: the same task object, critical flag, float, style fields, i18n bundle, date
+ * reading and baseline switch (a new row object alone is not a change, nor a new style object
+ * with the same fields).
  */
 const sameContent = (a: OpenContent | null, b: OpenContent | null): boolean =>
   a === b ||
@@ -83,8 +94,11 @@ const sameContent = (a: OpenContent | null, b: OpenContent | null): boolean =>
     !!b &&
     a.row.task === b.row.task &&
     a.critical === b.critical &&
+    Object.is(a.float, b.float) &&
     sameTaskStyle(a.style, b.style) &&
-    a.i18n === b.i18n);
+    a.i18n === b.i18n &&
+    sameDateReading(a.dates, b.dates) &&
+    a.baseline === b.baseline);
 
 /** `row`'s resolved style, `undefined` while a `styles.rule` throws (the bars region reports it). */
 function styleOf(resolve: (row: GanttFlatRow) => ResolvedTaskStyle, row: GanttFlatRow): ResolvedTaskStyle | undefined {
@@ -187,7 +201,8 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
   // Graph nodes are read only while a tooltip shows. The cut-off keeps the clock out: a tick may
   // rebuild the rows (a sort by status) but not their tasks, the critical set, the style fields or
   // the labels (a rolled-up parent gets a new copy only when `nowDay` moves on: its status may
-  // change then).
+  // change then). The date reading is already cut off on the calendar key, end-date rule and
+  // date-only normalisation, so the clock stays out of it too.
   const openContent = computed(
     (): OpenContent | null => {
       const id = tooltip.visibleId();
@@ -196,8 +211,16 @@ export function bindTooltipTriggers(ctx: LayerContext, opts: TooltipTriggerOptio
         const row = G.geoById().get(id)?.row;
         // A row gone is the dismiss rule's (above)
         if (!row) return null;
-        const critical = G.critical()?.criticalIds.has(id) ?? false;
-        return { row, critical, style: styleOf(G.rowStyle(), row), i18n: G.i18n() };
+        const cpm = G.critical();
+        return {
+          row,
+          critical: cpm?.criticalIds.has(id) ?? false,
+          float: cpm?.floatMap.get(id),
+          style: styleOf(G.rowStyle(), row),
+          i18n: G.i18n(),
+          dates: G.dateReading(),
+          baseline: G.config().baseline,
+        };
       } catch {
         return null; // invalid options: nothing is rendered
       }

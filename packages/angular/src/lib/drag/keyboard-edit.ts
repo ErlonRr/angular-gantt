@@ -108,6 +108,8 @@ export function createKeyboardEdit(ctx: GanttKeyContext): KeyboardEdit {
     if (!proposed || !raw || raw === task) return proposed;
     const change = taskChange(raw, proposed.updates[0]?.after ?? {}, 'keyboard', {
       coalesceKey: proposed.coalesceKey,
+      // The chart's date reading (as the Web Component): a working move stays one `move` op
+      dates: layout.cfg(),
     });
     return isEmptyChange(change) ? null : change;
   };
